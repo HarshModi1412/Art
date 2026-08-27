@@ -1,0 +1,36 @@
+# Render blueprint for Cafe_X.
+# This file lets Render auto-configure the service when you use
+# "New +" -> "Blueprint" instead of clicking through settings manually.
+# (The step-by-step guide also covers doing this by hand, in case
+#  you'd rather see every setting yourself first.)
+
+services:
+  - type: web
+    name: cafe-x
+    runtime: python
+    plan: starter                # $7/mo — no spin-down, unlike free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false               # set manually in the dashboard — never store secrets in git
+      - key: SUPABASE_URL
+        sync: false               # https://<project>.supabase.co
+      - key: SUPABASE_SECRET_KEY
+        sync: false               # sb_secret_... key — server-side only
+      - key: CS_SECRET_KEY
+        sync: false               # Fernet key (stable) — encrypts creds + dataset blobs
+      - key: CAFEX_DATA_DIR
+        value: /var/data
+      - key: LAUNCH_MODE
+        value: "true"             # everything free. Flip to "false" to turn pricing on (target: 30-50 active cafes)
+      - key: RAZORPAY_KEY_ID
+        sync: false               # only needed once LAUNCH_MODE=false — use rzp_test_... keys first
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.9
+    disk:
+      name: cafex-data
+      mountPath: /var/data        # only needed for the local-file fallback; with Supabase set, persistence lives in Supabase
+      sizeGB: 1

@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.env
+data/usage_logs.csv
+data/user_data/
+data/feedback.csv
+*.egg-info/
+.DS_Store
+
+# runtime outputs / local secrets (never commit)
+data/generated_images/
+.fernet_key
+*.tmp

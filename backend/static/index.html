@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Content Seller · Classic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;600&family=Noto+Sans+Tamil:wght@400;600&family=Noto+Sans+Kannada:wght@400;600&display=swap" rel="stylesheet">
+<meta name="color-scheme" content="light dark" />
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem("cx_theme"); } catch (e) {}
+    var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.setAttribute("data-theme", saved || (prefersDark ? "dark" : "light"));
+  })();
+</script>
+<link rel="stylesheet" href="/static/styles.css?v=23" />
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script>if (!window.Plotly) { var s=document.createElement("script"); s.src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"; document.head.appendChild(s); }</script>
+</head>
+<body>
+
+<!-- Mobile top bar (shown only on phones/tablets via CSS) -->
+<header class="mobile-topbar">
+  <button class="hamburger" id="menuToggle" aria-label="Open menu" aria-expanded="false">☰</button>
+  <span class="mobile-brand"><span class="brand-mark">CS</span> Content Seller</span>
+  <button class="hamburger" id="mobileThemeToggle" aria-label="Toggle light/dark theme">🌓</button>
+</header>
+<div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
+
+<aside class="sidebar" id="sidebar">
+  <div class="brand">
+    <span class="brand-mark">CS</span>
+    <div>
+      <div class="brand-name">Content Seller</div>
+      <div class="brand-sub">Seller Intelligence</div>
+    </div>
+  </div>
+
+  <nav class="mode-toggle" aria-label="Interface mode">
+    <a href="/app" data-mode="classic" class="active">📊 Classic</a>
+    <a href="/smart" data-mode="smart">✨ Smart</a>
+  </nav>
+
+  <div class="theme-toggle" role="group" aria-label="Colour theme">
+    <button type="button" id="themeLight" aria-pressed="false">☀️ Light</button>
+    <button type="button" id="themeDark" aria-pressed="false">🌙 Dark</button>
+  </div>
+
+  <div class="card user-card" id="userCard">
+    <div class="subtle">Mode</div>
+    <div id="userLabel">Guest</div>
+    <div class="subtle" id="userHint">Login to unlock AI</div>
+  </div>
+
+  <div class="lang-row">
+    <label class="subtle" for="langSelect" style="font-size:11.5px;">🌐 Language</label>
+    <select id="langSelect">
+      <option value="en">English</option>
+      <option value="hi">हिंदी</option>
+      <option value="ta">தமிழ்</option>
+      <option value="kn">ಕನ್ನಡ</option>
+    </select>
+  </div>
+
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept=".csv,.tsv,.txt,.xlsx,.xls,.json" multiple hidden />
+    <div class="upload-icon">⇪</div>
+    <div>Drop your data file or <span class="link">browse</span></div>
+    <div class="subtle" style="font-size:11px;">CSV · TSV · Excel · JSON</div>
+    <div class="subtle" style="font-size:10.5px; margin-top:4px;">🔒 Your data is safe with us — it stays in your private session, never shared or sold.</div>
+    <div class="subtle" id="fileCount"></div>
+  </div>
+  <button class="ghost-btn" id="demoBtn" style="font-size:12.5px;">✨ No file handy? Try with sample data</button>
+  <button class="ghost-btn" id="posConnectBtn" style="font-size:12.5px;">🔌 Connect a source</button>
+
+  <div class="file-list" id="fileList"></div>
+
+  <nav id="nav">
+    <button class="nav-item active" data-page="instructions">Instructions</button>
+    <button class="nav-item" data-page="mapping">Mapping</button>
+    <button class="nav-item" data-page="analytics">Analytics</button>
+    <button class="nav-item" data-page="subcategory">SubCategory</button>
+    <button class="nav-item" data-page="rfm">Win Back</button>
+    <button class="nav-item" data-page="positioning">Positioning</button>
+    <button class="nav-item" data-page="strategy">🧭 Position Strategy <span class="pro-pill">🔒</span></button>
+    <button class="nav-item" data-page="complaints">😤 Complaint Trends <span class="pro-pill">💎</span></button>
+    <button class="nav-item ai" data-page="analyst">Analyst AI <span class="pill" id="usageAnalyst"></span></button>
+    <button class="nav-item ai" data-page="chatbot">Chatbot <span class="pill" id="usageChatbot"></span></button>
+  </nav>
+
+  <button class="primary-btn" id="upgradeBtn">💳 Plans &amp; pricing</button>
+  <button class="ghost-btn" id="logoutBtn" hidden>Log out</button>
+  <a class="ghost-btn" href="/" style="text-align:center; text-decoration:none;">← Website</a>
+</aside>
+
+<main id="main">
+
+  <!-- INSTRUCTIONS -->
+  <section class="page active" id="page-instructions">
+    <div class="hero">
+      <h1>🛍️ Content Seller</h1>
+      <p>Turn your sales and reviews into decision-ready moves for your product brand</p>
+    </div>
+    <div class="grid-3">
+      <div class="card"><h4>📊 Sales Analytics</h4><p class="subtle">Track orders, revenue, trends and forecast</p></div>
+      <div class="card"><h4>⭐ Brand Positioning</h4><p class="subtle">See what customers come to you for</p></div>
+      <div class="card"><h4>🤖 AI Analyst</h4><p class="subtle">Get consulting-style recommendations</p></div>
+    </div>
+    <div class="card">
+      <h3>⚙️ How It Works</h3>
+      <ol class="steps">
+        <li>Upload your orders &amp; reviews</li>
+        <li>Map columns</li>
+        <li>See analytics &amp; positioning</li>
+        <li>Act on the ranked to-dos</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>💡 Why Content Seller?</h3>
+      <p class="subtle">Dashboards show numbers.</p>
+      <p><b>Content Seller tells you what actions to take to sell more.</b></p>
+    </div>
+  </section>
+
+  <!-- MAPPING -->
+  <section class="page" id="page-mapping">
+    <h2>Column Mapping</h2>
+    <p class="subtle">Confirm which columns play which role. Date and Amount are required.</p>
+    <div id="mappingArea"><div class="card empty">Upload files first — use the panel on the left.</div></div>
+  </section>
+
+  <!-- ANALYTICS -->
+  <section class="page" id="page-analytics">
+    <h2>Sales Analytics</h2>
+    <div id="analyticsArea"><div class="card empty">Confirm a mapping first.</div></div>
+  </section>
+
+  <!-- SUBCATEGORY -->
+  <section class="page" id="page-subcategory">
+    <h2>SubCategory Trends</h2>
+    <div class="filter-row" id="subcatFilterRow" hidden>
+      <label class="subtle" style="font-size:13px;">View:</label>
+      <select id="subcatFilterSelect"></select>
+    </div>
+    <div id="subcatArea"><div class="card empty">Confirm a mapping first.</div></div>
+  </section>
+
+  <!-- WIN BACK (RFM-powered) -->
+  <section class="page" id="page-rfm">
+    <h2>Win Back Customers</h2>
+    <p class="subtle" style="margin-top:-2px;">Customer segments (Recency · Frequency · Monetary) — see who's slipping away, and win them back.</p>
+    <div id="rfmArea"><div class="card empty">Confirm a mapping first.</div></div>
+
+    <div class="card" id="winbackCard" hidden>
+      <h3>💌 Win-back messages for At-Risk customers</h3>
+      <p class="subtle">Your at-risk list above is free forever. Generate the campaign — a personalized message and coupon per customer — then <b>review and edit it in a popup</b> before exporting to Excel.</p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+        <button class="primary-btn" id="genWinbackBtn">Generate messages</button>
+      </div>
+      <div id="winbackArea" style="margin-top:16px;"></div>
+    </div>
+  </section>
+
+  <!-- POSITIONING -->
+  <section class="page" id="page-positioning">
+    <h2>Brand Positioning</h2>
+    <p class="subtle" style="margin-top:-2px;">Upload your reviews and see what your customers come to you for — your position, strengths and soft spots, read from your own reviews.</p>
+    <div class="pt-row">
+      <label class="subtle" style="font-size:12.5px;">What do you sell?</label>
+      <select class="pt-select" aria-label="Product type">
+        <option value="">Choose…</option>
+        <option value="jewellery">💍 Jewellery</option>
+        <option value="clothes">👗 Clothes</option>
+        <option value="perfumes">🧴 Perfumes</option>
+        <option value="generic">🛍️ Other products</option>
+      </select>
+    </div>
+    <div class="upload-zone" id="posZone" style="max-width:520px; margin:16px 0 20px;">
+      <input type="file" id="posFileInput" accept=".csv,.tsv,.txt,.xlsx,.xls,.json" hidden />
+      <div class="upload-icon">⇪</div>
+      <div>Drop your reviews file or <span class="link">browse</span></div>
+      <div class="subtle" style="font-size:11px;">Needs a column of review text (a rating column helps too)</div>
+      <div class="subtle" style="font-size:10.5px;">🔒 Your data is safe with us — private to your session.</div>
+    </div>
+    <div id="posArea"></div>
+  </section>
+
+  <!-- POSITION STRATEGY (login required, state saved to account) -->
+  <section class="page" id="page-strategy">
+    <h2>🧭 Position Strategy</h2>
+    <p class="subtle" style="margin-top:-2px;">Find where your brand sits today, then either strengthen that position or plan a move — with a levelled checklist that unlocks step by step. Saved to your account, so you resume any time.</p>
+
+    <!-- guest gate -->
+    <div class="locked-wrap" id="strategyLock" hidden>
+      <div class="locked-blur">
+        <div class="card"><h4>You are here: Affordable trendy brand → target: Premium quality brand</h4><p class="subtle">A levelled checklist appears here: what to keep, what to change, and the exact steps — ticked off and saved as you go.</p></div>
+      </div>
+      <div class="locked-overlay">
+        <div class="locked-msg">
+          <b>Position Strategy is a saved, login-only tool</b>
+          <div class="subtle" style="margin:6px 0 12px;">Free account · your position &amp; checklist are stored so you resume later.</div>
+          <button class="primary-btn" id="strategyLockLogin">Log in free to unlock</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="strategyApp" hidden>
+      <div id="strategyArea"></div>
+    </div>
+  </section>
+
+  <!-- COMPLAINT TRENDS (premium) -->
+  <section class="page" id="page-complaints">
+    <h2>😤 Complaint Trends <span class="subtle" style="font-size:13px;">Premium — free during launch</span></h2>
+    <p class="subtle" style="margin-top:-2px;">Upload your reviews (raw text — no cleaning needed). Get a fix-first action plan, complaint trends over time, and a severity quadrant tuned to what you sell.</p>
+    <div class="pt-row">
+      <label class="subtle" style="font-size:12.5px;">What do you sell?</label>
+      <select class="pt-select" aria-label="Product type">
+        <option value="">Choose…</option>
+        <option value="jewellery">💍 Jewellery</option>
+        <option value="clothes">👗 Clothes</option>
+        <option value="perfumes">🧴 Perfumes</option>
+        <option value="generic">🛍️ Other products</option>
+      </select>
+    </div>
+    <div class="upload-zone" id="compZone" style="max-width:520px; margin:16px 0 20px;">
+      <input type="file" id="compFileInput" accept=".csv,.tsv,.txt,.xlsx,.xls,.json" hidden />
+      <div class="upload-icon">⇪</div>
+      <div>Drop your reviews file or <span class="link">browse</span></div>
+      <div class="subtle" style="font-size:11px;">Needs a column of review text · rating & date columns make it sharper</div>
+      <div class="subtle" style="font-size:10.5px;">🔒 Your data is safe with us — private to your session.</div>
+    </div>
+    <div id="compArea"></div>
+  </section>
+
+  <!-- ANALYST AI -->
+  <section class="page" id="page-analyst">
+    <h2>🤖 AI Business Analyst</h2>
+
+    <!-- Guest preview: blurred sample so people see what login unlocks -->
+    <div class="locked-wrap" id="analystLock" hidden>
+      <div class="locked-blur">
+        <div class="card"><h4>📈 Push your Friday evening combo</h4><p class="subtle">Beverage + snack pairs drive 34% of weekend revenue. Bundling your top pair at a 10% discount could add ≈ ₹8,400/month based on current attach rates.</p></div>
+        <div class="card"><h4>⏰ Your 4–6 PM window is underpriced</h4><p class="subtle">Footfall peaks but average ticket dips 22% vs mornings. A limited evening menu at slightly higher margin recovers an estimated ₹5,100/month.</p></div>
+        <div class="card"><h4>🥤 One SKU is quietly bleeding margin</h4><p class="subtle">Cold beverages grew 18% in volume but margin per unit fell — supplier cost drift. Renegotiating or a ₹10 price bump protects ₹3,200/month.</p></div>
+      </div>
+      <div class="locked-overlay">
+        <div class="locked-msg">
+          <b>This is what the AI Analyst gives you</b> — consulting-style actions with impact estimates, from your own data.
+          <div class="subtle" style="margin:6px 0 12px;">Free account · 5 AI runs per day · no card needed</div>
+          <button class="primary-btn" id="analystLockLogin">Log in free to unlock</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="analystArea">
+      <div class="card empty">You get 5 free AI runs per day (top-ups available if you need more). Upload your data, then run the analysis.</div>
+    </div>
+    <button class="primary-btn" id="runAnalystBtn">Run analysis</button>
+  </section>
+
+  <!-- CHATBOT -->
+  <section class="page" id="page-chatbot">
+    <h2>💬 Business Consultant Chat</h2>
+
+    <div class="locked-wrap" id="chatbotLock" hidden>
+      <div class="locked-blur">
+        <div class="card"><p class="subtle" style="margin:0;"><b>You:</b> Which of my items should I stop selling?</p></div>
+        <div class="card"><p class="subtle" style="margin:0;"><b>Content Seller:</b> Three products sold under 12 units last month with below-average margin. Dropping them frees inventory and ≈ ₹2,900/month tied up in dead stock…</p></div>
+        <div class="card"><p class="subtle" style="margin:0;"><b>You:</b> Compare weekday vs weekend sales</p></div>
+      </div>
+      <div class="locked-overlay">
+        <div class="locked-msg">
+          <b>Ask your data anything</b> — the chat answers with numbers and charts from your own uploads.
+          <div class="subtle" style="margin:6px 0 12px;">Free account · 5 messages per day · no card needed</div>
+          <button class="primary-btn" id="chatbotLockLogin">Log in free to unlock</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-window" id="chatWindow">
+      <div class="chat-empty subtle">Ask something about your business — the first reply includes 3 quick profit tips based on your data.</div>
+    </div>
+    <div class="chat-input-row">
+      <input id="chatInput" type="text" placeholder="Ask something about your business..." />
+      <button class="primary-btn" id="chatSendBtn">Send</button>
+    </div>
+  </section>
+
+  <div class="page-disclaimer subtle">💡 Content Seller insights, forecasts and suggestions are generated from your data to support your judgment — not to replace it. Actual results depend on many real-world factors, and business decisions remain yours. We're here to inform, not to guarantee.</div>
+
+  <!-- WIN-BACK EDITABLE POPUP -->
+  <div id="winbackModal" class="chart-modal">
+    <div class="chart-modal-inner" style="max-width:900px;">
+      <div class="chart-modal-bar">
+        <b style="font-size:16px;">💌 Win-back list — edit before you export</b>
+        <button class="ghost-btn" id="winbackClose" style="font-size:12.5px;">✕ Close</button>
+      </div>
+      <p class="subtle" style="margin:2px 0 10px;">Edit any field, remove a row, or add your own. Then export to Excel.</p>
+      <div class="table-wrap" id="winbackTable" style="max-height:52vh; overflow:auto;"></div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; align-items:center;">
+        <button class="ghost-btn" id="winbackAddRow">➕ Add row</button>
+        <span style="flex:1"></span>
+        <button class="ghost-btn" id="winbackCancel">Cancel</button>
+        <button class="primary-btn" id="winbackExport">⬇ Export to Excel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Connect your POS -->
+  <div id="posModal" class="chart-modal">
+    <div class="chart-modal-inner" style="max-width:560px;">
+      <div class="chart-modal-bar">
+        <b style="font-size:16px;">🔌 Connect your POS</b>
+        <button class="ghost-btn" id="posModalClose" style="font-size:12.5px;">✕ Close</button>
+      </div>
+      <div id="posModalBody"></div>
+    </div>
+  </div>
+
+  <!-- Fullscreen chart analysis modal -->
+  <div id="chartModal" class="chart-modal">
+    <div class="chart-modal-inner">
+      <div class="chart-modal-bar">
+        <div id="chartModalTitle"></div>
+        <button class="ghost-btn" id="chartModalClose" style="font-size:12.5px;">✕ Close</button>
+      </div>
+      <div class="chart-tools">
+        <div class="tool-group" role="group" aria-label="Drag tool">
+          <button type="button" id="chartZoomBtn" aria-pressed="true">Drag to zoom</button>
+          <button type="button" id="chartPanBtn" aria-pressed="false">Drag to move</button>
+        </div>
+        <button class="ghost-btn" id="chartResetBtn">↺ Reset view</button>
+        <button class="ghost-btn" id="chartDownloadBtn">⭳ Save as image</button>
+        <span class="subtle tool-hint">Double-click the chart to reset it too</span>
+      </div>
+      <div id="chartModalPlot" style="width:100%;"></div>
+    </div>
+  </div>
+</main>
+
+<!-- LOGIN / SIGNUP MODAL -->
+<div class="modal-backdrop" id="loginModal" hidden>
+  <div class="modal card">
+    <h3 id="authTitle">👋 Welcome back</h3>
+    <p class="subtle" id="authSub">Log in to your Content Seller account — your data and insights stay private to you.</p>
+    <label>Email <input type="email" id="loginEmail" autocomplete="username" placeholder="you@yourshop.com" /></label>
+    <label>Password <input type="password" id="loginPassword" autocomplete="current-password" placeholder="Your password" /></label>
+    <label id="pw2Row" hidden>Confirm password <span class="subtle" style="font-size:11px;">(typed twice for double protection)</span>
+      <input type="password" id="loginPassword2" autocomplete="new-password" placeholder="Type it again" />
+    </label>
+    <div class="subtle" id="authSecurityNote" style="font-size:11px;" hidden>🔒 Stored encrypted (salted hash) — never in plain text.</div>
+    <div class="modal-actions">
+      <button class="ghost-btn" id="loginCancel">Cancel</button>
+      <button class="primary-btn" id="loginSubmit">Log in</button>
+    </div>
+    <div class="subtle" style="font-size:12.5px; margin-top:10px; text-align:center;">
+      <span id="authToggleText">New to Content Seller?</span>
+      <a href="#" class="link" id="authToggle">Create a free account</a>
+    </div>
+    <div class="error" id="loginError" hidden></div>
+  </div>
+</div>
+
+<!-- PRICING MODAL -->
+<div class="modal-backdrop" id="pricingModal" hidden>
+  <div class="modal card" style="max-width:560px; max-height:86vh; overflow-y:auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h3 style="margin:0;">💳 Plans &amp; pricing</h3>
+      <button class="ghost-btn" id="pricingClose" style="padding:4px 12px;">✕</button>
+    </div>
+    <p class="subtle" id="pricingIntro"></p>
+    <div id="pricingList"></div>
+    <p class="subtle" style="font-size:12px; margin-top:12px;">Analytics, category trends, RFM segments and your at-risk list are free forever.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="/static/app.js?v=23"></script>
+</body>
+</html>

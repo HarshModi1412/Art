@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Content Seller — Smart</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="color-scheme" content="light dark" />
+<script>
+  // Apply theme before first paint to avoid a flash of the wrong colour.
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem("cx_theme"); } catch (e) {}
+    var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.setAttribute("data-theme", saved || (prefersDark ? "dark" : "light"));
+  })();
+</script>
+<link rel="stylesheet" href="/smart-static/smart.css?v=14" />
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginView" class="login-view">
+  <div class="login-card">
+    <div class="login-brand"><span class="logo-chip">CS</span> Content Seller · Smart</div>
+    <p class="muted">Your product-selling command centre. Log in to load your workspace — data, tasks and approvals are saved to your account and shared with Classic mode.</p>
+    <label>Email <input type="email" id="email" autocomplete="username" placeholder="you@yourbrand.com" /></label>
+    <label>Password <input type="password" id="password" autocomplete="current-password" placeholder="Your password" /></label>
+    <button class="btn primary block" id="loginBtn">Log in</button>
+    <div class="err" id="loginErr" hidden></div>
+    <p class="muted tiny">One login works across Classic and Smart.</p>
+    <div style="display:flex; justify-content:center; gap:10px; margin-top:14px;">
+      <div class="theme-switch" role="group" aria-label="Colour theme">
+        <button type="button" data-theme-set="light" aria-pressed="false">☀️ <span class="tlabel">Light</span></button>
+        <button type="button" data-theme-set="dark" aria-pressed="false">🌙 <span class="tlabel">Dark</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- APP SHELL -->
+<div id="appShell" hidden>
+  <header class="topbar">
+    <div class="tb-left">
+      <button class="tb-apps" id="homeBtn" title="Apps home" aria-label="Apps home">⊞</button>
+      <span class="tb-brand"><span class="logo-chip sm">CS</span><span>Content Seller</span></span>
+      <span class="tb-crumb" id="crumb"></span>
+    </div>
+    <div class="tb-right">
+      <nav class="mode-switch" aria-label="Interface mode">
+        <a href="/app" data-mode="classic"><span>📊</span><span class="mode-label">Classic</span></a>
+        <a href="/smart" data-mode="smart" class="active"><span>✨</span><span class="mode-label">Smart</span></a>
+      </nav>
+      <div class="theme-switch" role="group" aria-label="Colour theme">
+        <button type="button" data-theme-set="light" aria-pressed="false">☀️<span class="tlabel"> Light</span></button>
+        <button type="button" data-theme-set="dark" aria-pressed="false">🌙<span class="tlabel"> Dark</span></button>
+      </div>
+      <span class="tb-user" id="tbUser"></span>
+      <button class="btn ghost sm" id="logoutBtn">Log out</button>
+    </div>
+  </header>
+
+  <div class="shell-body">
+    <main class="main" id="view"></main>
+    <aside class="approvals" id="approvalPanel">
+      <div class="ap-head">
+        <span>✅ Approval panel</span>
+        <span class="ap-head-actions">
+          <button class="btn ghost tiny" id="historyBtn" title="Show approved &amp; dismissed">🕘 History</button>
+          <button class="btn ghost tiny" id="refreshApprovals" title="Refresh">↻</button>
+        </span>
+      </div>
+      <p class="muted tiny ap-sub">Actionable insights from your data. Approve to execute, dismiss to hide, or open details.</p>
+      <div id="approvalList"></div>
+    </aside>
+  </div>
+</div>
+
+<!-- MAPPING MODAL -->
+<div class="modal-back" id="mapModal" hidden>
+  <div class="modal">
+    <div class="modal-head"><b id="mapTitle">Map your columns</b><button class="btn ghost tiny" id="mapClose">✕</button></div>
+    <p class="muted tiny" id="mapHint"></p>
+    <div id="mapGrid" class="map-grid"></div>
+    <div class="table-scroll" id="mapPreview"></div>
+    <div id="mapMode" class="map-mode" hidden>
+      <p class="muted tiny" id="mapModeHint"></p>
+      <div class="map-mode-opts">
+        <label><input type="radio" name="mapMode" value="append" checked> ➕ Add to existing</label>
+        <label><input type="radio" name="mapMode" value="replace"> ♻ Replace everything</label>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="mapCancel">Cancel</button>
+      <button class="btn primary" id="mapConfirm">Confirm &amp; save</button>
+    </div>
+    <div class="err" id="mapErr" hidden></div>
+  </div>
+</div>
+
+<!-- PRODUCT TYPE PICKER -->
+<div class="modal-back" id="ptModal" hidden>
+  <div class="modal">
+    <div class="modal-head"><b>What do you sell?</b><button class="btn ghost tiny" id="ptClose">✕</button></div>
+    <p class="muted tiny">We use this to track the right keywords in your reviews and complaints.</p>
+    <div class="pt-grid" id="ptGrid"></div>
+  </div>
+</div>
+
+<!-- WIN-BACK EDITABLE POPUP -->
+<div class="modal-back" id="wbModal" hidden>
+  <div class="modal wide">
+    <div class="modal-head"><b>💌 Win-back list — edit before you export</b><button class="btn ghost tiny" id="wbClose">✕</button></div>
+    <p class="muted tiny">Edit any field, remove a row, or add your own. Then export to Excel.</p>
+    <div class="wb-table-wrap"><div class="table-scroll" id="wbTable"></div></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="wbAddRow">➕ Add row</button>
+      <span style="flex:1"></span>
+      <button class="btn ghost" id="wbCancel">Cancel</button>
+      <button class="btn primary" id="wbExport">⬇ Export &amp; approve</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONTENT CREATOR — editor popup -->
+<div class="modal-back" id="ccModal" hidden>
+  <div class="modal wide">
+    <div class="modal-head"><b>✨ Suggested post — edit before you post</b><button class="btn ghost tiny" id="ccClose">✕</button></div>
+    <div id="ccBody"></div>
+  </div>
+</div>
+
+<!-- STORE CONNECT MODAL (Shopify / Amazon) -->
+<div class="modal-back" id="coModal" hidden>
+  <div class="modal">
+    <div class="modal-head"><b id="coTitle">Connect store</b><button class="btn ghost tiny" id="coClose">✕</button></div>
+    <p class="muted tiny" id="coHelp"></p>
+    <div id="coGrid" class="map-grid"></div>
+    <p class="muted tiny">🔒 Your credentials are encrypted and linked to your account — we never store them in plain text.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" id="coCancel">Cancel</button>
+      <button class="btn primary" id="coConfirm">Connect</button>
+    </div>
+    <div class="err" id="coErr" hidden></div>
+  </div>
+</div>
+
+<!-- CHART MAXIMIZE MODAL -->
+<div class="chart-modal" id="chartModal">
+  <div class="chart-modal-inner">
+    <div class="chart-modal-head">
+      <b id="chartModalTitle">Chart</b>
+      <div class="chart-modal-tools">
+        <button class="btn ghost tiny" id="chartZoomBtn" aria-pressed="true">🔍 Zoom</button>
+        <button class="btn ghost tiny" id="chartPanBtn" aria-pressed="false">✋ Pan</button>
+        <button class="btn ghost tiny" id="chartResetBtn">⟲ Reset</button>
+        <button class="btn ghost tiny" id="chartDownloadBtn">⬇ PNG</button>
+        <button class="btn ghost tiny" id="chartModalClose">✕</button>
+      </div>
+    </div>
+    <div id="chartModalPlot" class="chart-modal-plot"></div>
+  </div>
+</div>
+
+<!-- HISTORY DRAWER -->
+<div class="drawer-back" id="drawerBack" hidden></div>
+<aside class="drawer" id="historyDrawer" hidden>
+  <div class="drawer-head">
+    <h3>🕘 Approval history</h3>
+    <button class="btn ghost tiny" id="historyClose">✕</button>
+  </div>
+  <div class="hist-tabs" role="tablist">
+    <button data-tab="approved" aria-pressed="true">✓ Approved</button>
+    <button data-tab="dismissed" aria-pressed="false">✕ Dismissed</button>
+  </div>
+  <div class="hist-list" id="historyList"></div>
+</aside>
+
+<div class="toast" id="toast" hidden></div>
+
+<div class="modal-back" id="addModal" hidden>
+  <div class="modal">
+    <div class="modal-head"><b id="addTitle">Add records</b><button class="btn ghost tiny" id="addClose">✕</button></div>
+    <p class="muted tiny" id="addHint">Type new rows below — they'll be added to your saved data.</p>
+    <div class="table-scroll" id="addGridWrap"><table id="addGrid"></table></div>
+    <div class="modal-actions" style="justify-content:space-between">
+      <button class="btn ghost sm" id="addRowBtn">＋ Add another row</button>
+      <span><button class="btn ghost" id="addCancel">Cancel</button>
+      <button class="btn primary" id="addSave">Save records</button></span>
+    </div>
+    <div class="err" id="addErr" hidden></div>
+  </div>
+</div>
+<script src="/smart-static/smart.js?v=14"></script>
+</body>
+</html>

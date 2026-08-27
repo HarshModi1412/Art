@@ -1,0 +1,232 @@
+Theme,Keyword,Reviews_Matched,Global_Doc_Freq_Pct,Weight,Classification
+Food Destination,food,1774,44.15,0.272,Generic
+Service Quality,service,1291,32.13,0.373,Generic
+Coffee Focused,coffee,822,20.46,0.587,Generic
+Ambience Led,ambience,560,13.94,0.861,Generic
+Service Quality,staff,428,10.65,1.0,Specific
+Food Destination,delicious,275,6.84,1.0,Specific
+Work Friendly,work,200,4.98,1.0,Specific
+Ambience Led,atmosphere,177,4.41,1.0,Specific
+Ambience Led,vibe,165,4.11,1.0,Specific
+Food Destination,must try,152,3.78,1.0,Specific
+Ambience Led,ambiance,150,3.73,1.0,Specific
+Food Destination,desserts,140,3.48,1.0,Specific
+Cozy Comfort,cozy,136,3.38,1.0,Specific
+Social Hangout,friends,133,3.31,1.0,Specific
+Service Quality,hospitality,132,3.29,1.0,Specific
+Food Destination,tasty,130,3.24,1.0,Specific
+Loyalty & Advocacy,recommend,130,3.24,1.0,Specific
+Coffee Focused,latte,129,3.21,1.0,Specific
+Instagrammable,beautiful,97,2.41,1.0,Specific
+Value For Money,worth,95,2.36,1.0,Specific
+Service Quality,attentive,94,2.34,1.0,Specific
+Food Destination,dessert,89,2.22,1.0,Specific
+Loyalty & Advocacy,highly recommend,89,2.22,1.0,Specific
+Food Destination,pasta,88,2.19,1.0,Specific
+Food Destination,cake,82,2.04,1.0,Specific
+Food Destination,pizza,78,1.94,1.0,Specific
+Service Quality,server,77,1.92,1.0,Specific
+Cleanliness & Hygiene,clean,59,1.47,1.0,Specific
+Instagrammable,pretty,58,1.44,1.0,Specific
+Ambience Led,vibes,57,1.42,1.0,Specific
+Cozy Comfort,calm,57,1.42,1.0,Specific
+Service Quality,courteous,53,1.32,1.0,Specific
+Cozy Comfort,peaceful,52,1.29,1.0,Specific
+Cozy Comfort,comfortable,51,1.27,1.0,Specific
+Speed & Efficiency,waiting,50,1.24,1.0,Specific
+Coffee Focused,cappuccino,49,1.22,1.0,Specific
+Work Friendly,working,48,1.19,1.0,Specific
+Coffee Focused,cold brew,46,1.14,1.0,Specific
+Food Destination,sandwich,43,1.07,1.0,Specific
+Social Hangout,date,39,0.97,1.0,Specific
+Ambience Led,music,38,0.95,1.0,Specific
+Cozy Comfort,relaxed,37,0.92,1.0,Specific
+Service Quality,waiter,37,0.92,1.0,Specific
+Coffee Focused,brew,36,0.9,1.0,Specific
+Premium Experience,fine,36,0.9,1.0,Specific
+Coffee Focused,mocha,36,0.9,1.0,Specific
+Coffee Focused,coffees,36,0.9,1.0,Specific
+Value For Money,not worth,35,0.87,1.0,Specific
+Food Destination,starters,35,0.87,1.0,Specific
+Food Destination,burger,34,0.85,1.0,Specific
+Food Destination,pastries,34,0.85,1.0,Specific
+Social Hangout,hangout,33,0.82,1.0,Specific
+Service Quality,friendly staff,32,0.8,1.0,Specific
+Food Destination,brunch,32,0.8,1.0,Specific
+Work Friendly,meeting,31,0.77,1.0,Specific
+Instagrammable,aesthetic,31,0.77,1.0,Specific
+Value For Money,worth it,28,0.7,1.0,Specific
+Loyalty & Advocacy,regular,28,0.7,1.0,Specific
+Instagrammable,interiors,27,0.67,1.0,Specific
+Cozy Comfort,cosy,27,0.67,1.0,Specific
+Value For Money,overpriced,27,0.67,1.0,Specific
+Work Friendly,laptop,27,0.67,1.0,Specific
+Food Destination,flavourful,26,0.65,1.0,Specific
+Work Friendly,wifi,26,0.65,1.0,Specific
+Value For Money,affordable,26,0.65,1.0,Specific
+Instagrammable,aesthetics,25,0.62,1.0,Specific
+Loyalty & Advocacy,come back,24,0.6,1.0,Specific
+Work Friendly,meetings,23,0.57,1.0,Specific
+Value For Money,pricey,23,0.57,1.0,Specific
+Social Hangout,catch up,22,0.55,1.0,Specific
+Cozy Comfort,relaxing,22,0.55,1.0,Specific
+Coffee Focused,americano,22,0.55,1.0,Specific
+Premium Experience,premium,21,0.52,1.0,Specific
+Coffee Focused,espresso,21,0.52,1.0,Specific
+Value For Money,reasonable,20,0.5,1.0,Specific
+Service Quality,customer service,19,0.47,1.0,Specific
+Instagrammable,decor,19,0.47,1.0,Specific
+Social Hangout,hang out,19,0.47,1.0,Specific
+Work Friendly,laptops,19,0.47,1.0,Specific
+Food Destination,cuisine,18,0.45,1.0,Specific
+Ambience Led,setting,18,0.45,1.0,Specific
+Ambience Led,outdoor seating,18,0.45,1.0,Specific
+Food Destination,flavorful,18,0.45,1.0,Specific
+Cozy Comfort,unwind,17,0.42,1.0,Specific
+Value For Money,value for money,17,0.42,1.0,Specific
+Cleanliness & Hygiene,hygiene,17,0.42,1.0,Specific
+Coffee Focused,brewed,17,0.42,1.0,Specific
+Food Destination,bakery,15,0.37,1.0,Specific
+Loyalty & Advocacy,will visit again,15,0.37,1.0,Specific
+Food Destination,cakes,15,0.37,1.0,Specific
+Coffee Focused,barista,15,0.37,1.0,Specific
+Social Hangout,group,15,0.37,1.0,Specific
+Speed & Efficiency,quick service,14,0.35,1.0,Specific
+Instagrammable,interior,14,0.35,1.0,Specific
+Food Destination,snacks,14,0.35,1.0,Specific
+Cleanliness & Hygiene,dirty,14,0.35,1.0,Specific
+Service Quality,quick service,14,0.35,1.0,Specific
+Food Destination,croissant,13,0.32,1.0,Specific
+Cozy Comfort,soothing,13,0.32,1.0,Specific
+Food Destination,sandwiches,13,0.32,1.0,Specific
+Food Destination,milkshake,13,0.32,1.0,Specific
+Speed & Efficiency,slow service,13,0.32,1.0,Specific
+Speed & Efficiency,efficient,13,0.32,1.0,Specific
+Social Hangout,dates,13,0.32,1.0,Specific
+Instagrammable,cute cafe,12,0.3,1.0,Specific
+Premium Experience,elegant,12,0.3,1.0,Specific
+Cozy Comfort,calming,12,0.3,1.0,Specific
+Speed & Efficiency,delay,11,0.27,1.0,Specific
+Food Destination,pastry,11,0.27,1.0,Specific
+Ambience Led,lighting,11,0.27,1.0,Specific
+Coffee Focused,roasted,11,0.27,1.0,Specific
+Cozy Comfort,quiet place,10,0.25,1.0,Specific
+Food Destination,burgers,10,0.25,1.0,Specific
+Coffee Focused,beans,10,0.25,1.0,Specific
+Value For Money,value,10,0.25,1.0,Specific
+Food Destination,waffles,10,0.25,1.0,Specific
+Social Hangout,catching up,10,0.25,1.0,Specific
+Value For Money,cheap,8,0.2,1.0,Specific
+Premium Experience,fine dining,8,0.2,1.0,Specific
+Speed & Efficiency,fast service,8,0.2,1.0,Specific
+Service Quality,servers,8,0.2,1.0,Specific
+Cozy Comfort,comfy,8,0.2,1.0,Specific
+Premium Experience,chic,8,0.2,1.0,Specific
+Cleanliness & Hygiene,washroom,8,0.2,1.0,Specific
+Coffee Focused,iced coffee,8,0.2,1.0,Specific
+Value For Money,budget friendly,7,0.17,1.0,Specific
+Work Friendly,wi-fi,7,0.17,1.0,Specific
+Instagrammable,instagram,7,0.17,1.0,Specific
+Speed & Efficiency,wait time,7,0.17,1.0,Specific
+Coffee Focused,lattes,7,0.17,1.0,Specific
+Work Friendly,productive,7,0.17,1.0,Specific
+Loyalty & Advocacy,been coming here,6,0.15,1.0,Specific
+Coffee Focused,roast,6,0.15,1.0,Specific
+Cleanliness & Hygiene,hygienic,6,0.15,1.0,Specific
+Premium Experience,sophisticated,6,0.15,1.0,Specific
+Value For Money,pocket friendly,6,0.15,1.0,Specific
+Speed & Efficiency,delayed,6,0.15,1.0,Specific
+Cleanliness & Hygiene,cleanliness,6,0.15,1.0,Specific
+Premium Experience,classy,6,0.15,1.0,Specific
+Work Friendly,study,5,0.12,1.0,Specific
+Service Quality,helpful staff,5,0.12,1.0,Specific
+Service Quality,waitress,5,0.12,1.0,Specific
+Social Hangout,meet friends,5,0.12,1.0,Specific
+Instagrammable,gorgeous,5,0.12,1.0,Specific
+Speed & Efficiency,prompt service,5,0.12,1.0,Specific
+Social Hangout,celebration,5,0.12,1.0,Specific
+Work Friendly,remote work,4,0.1,1.0,Specific
+Social Hangout,hanging out,4,0.1,1.0,Specific
+Premium Experience,5 star,4,0.1,1.0,Specific
+Service Quality,ignored,4,0.1,1.0,Specific
+Cozy Comfort,homely,4,0.1,1.0,Specific
+Service Quality,polite staff,4,0.1,1.0,Specific
+Social Hangout,party,4,0.1,1.0,Specific
+Cozy Comfort,coz,4,0.1,1.0,Specific
+Value For Money,reasonably priced,4,0.1,1.0,Specific
+Coffee Focused,filter coffee,4,0.1,1.0,Specific
+Coffee Focused,flat white,4,0.1,1.0,Specific
+Coffee Focused,pour over,4,0.1,1.0,Specific
+Work Friendly,internet,4,0.1,1.0,Specific
+Service Quality,rude staff,4,0.1,1.0,Specific
+Premium Experience,upscale,4,0.1,1.0,Specific
+Ambience Led,background music,3,0.07,1.0,Specific
+Work Friendly,co-working,3,0.07,1.0,Specific
+Social Hangout,birthday celebration,3,0.07,1.0,Specific
+Cleanliness & Hygiene,stained,3,0.07,1.0,Specific
+Premium Experience,impeccable service,3,0.07,1.0,Specific
+Cozy Comfort,cushions,3,0.07,1.0,Specific
+Cozy Comfort,chilled out,3,0.07,1.0,Specific
+Service Quality,attentiveness,3,0.07,1.0,Specific
+Premium Experience,top notch service,3,0.07,1.0,Specific
+Cleanliness & Hygiene,restroom,3,0.07,1.0,Specific
+Food Destination,shakes,3,0.07,1.0,Specific
+Social Hangout,groups,3,0.07,1.0,Specific
+Premium Experience,high end,3,0.07,1.0,Specific
+Cozy Comfort,warm ambience,2,0.05,1.0,Specific
+Coffee Focused,cortado,2,0.05,1.0,Specific
+Speed & Efficiency,took too long,2,0.05,1.0,Specific
+Cozy Comfort,sofa,2,0.05,1.0,Specific
+Value For Money,good deal,2,0.05,1.0,Specific
+Coffee Focused,coffee beans,2,0.05,1.0,Specific
+Premium Experience,luxury,2,0.05,1.0,Specific
+Food Destination,foodie,2,0.05,1.0,Specific
+Value For Money,budget-friendly,2,0.05,1.0,Specific
+Work Friendly,coworking,2,0.05,1.0,Specific
+Cleanliness & Hygiene,smelly,2,0.05,1.0,Specific
+Cozy Comfort,tranquil,2,0.05,1.0,Specific
+Work Friendly,workspace,2,0.05,1.0,Specific
+Food Destination,waffle,2,0.05,1.0,Specific
+Ambience Led,playlist,2,0.05,1.0,Specific
+Speed & Efficiency,queue,2,0.05,1.0,Specific
+Loyalty & Advocacy,go-to place,2,0.05,1.0,Specific
+Ambience Led,open air,2,0.05,1.0,Specific
+Loyalty & Advocacy,favorite spot,2,0.05,1.0,Specific
+Coffee Focused,specialty coffee,2,0.05,1.0,Specific
+Cleanliness & Hygiene,spotless,1,0.02,1.0,Specific
+Premium Experience,lavish,1,0.02,1.0,Specific
+Service Quality,staff behavior,1,0.02,1.0,Specific
+Speed & Efficiency,long wait,1,0.02,1.0,Specific
+Social Hangout,bunch of friends,1,0.02,1.0,Specific
+Speed & Efficiency,speedy,1,0.02,1.0,Specific
+Loyalty & Advocacy,loyal customer,1,0.02,1.0,Specific
+Instagrammable,photoshoot,1,0.02,1.0,Specific
+Instagrammable,reels,1,0.02,1.0,Specific
+Loyalty & Advocacy,regulars,1,0.02,1.0,Specific
+Cleanliness & Hygiene,food safety,1,0.02,1.0,Specific
+Work Friendly,wfh,1,0.02,1.0,Specific
+Loyalty & Advocacy,favourite spot,1,0.02,1.0,Specific
+Ambience Led,rooftop,1,0.02,1.0,Specific
+Service Quality,welcoming staff,1,0.02,1.0,Specific
+Instagrammable,insta,1,0.02,1.0,Specific
+Cleanliness & Hygiene,dirty tables,1,0.02,1.0,Specific
+Social Hangout,gathering,1,0.02,1.0,Specific
+Social Hangout,bestie,1,0.02,1.0,Specific
+Value For Money,economical,1,0.02,1.0,Specific
+Food Destination,signature dish,1,0.02,1.0,Specific
+Premium Experience,exclusive,1,0.02,1.0,Specific
+Instagrammable,instaworthy,1,0.02,1.0,Specific
+Loyalty & Advocacy,coming back for years,1,0.02,1.0,Specific
+Loyalty & Advocacy,must visit again,1,0.02,1.0,Specific
+Premium Experience,posh,1,0.02,1.0,Specific
+Instagrammable,photogenic,1,0.02,1.0,Specific
+Social Hangout,get together,1,0.02,1.0,Specific
+Service Quality,staff behaviour,1,0.02,1.0,Specific
+Work Friendly,plug point,1,0.02,1.0,Specific
+Cleanliness & Hygiene,unclean,1,0.02,1.0,Specific
+Loyalty & Advocacy,frequent visitor,1,0.02,1.0,Specific
+Work Friendly,work from home,1,0.02,1.0,Specific
+Work Friendly,quiet corner,1,0.02,1.0,Specific
+Work Friendly,long hours,1,0.02,1.0,Specific
+Ambience Led,themed,1,0.02,1.0,Specific
+Work Friendly,studying,1,0.02,1.0,Specific

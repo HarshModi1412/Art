@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Content Seller — Your data already knows how to grow your business</title>
+<meta name="description" content="Content Seller turns the sales data Indian MSMEs already have into plain-language actions: what to stock, when to push, which customers to win back. Free forever for analytics; pay per action (₹99–349) only when you use it." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;600&family=Noto+Sans+Tamil:wght@400;600&family=Noto+Sans+Bengali:wght@400;600&family=Noto+Sans+Telugu:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #F7F5EF;
+  --paper-2: #EFECE3;
+  --ink: #101828;
+  --ink-soft: #475467;
+  --line: #DCD8CC;
+  --violet: #6D28D9;
+  --indigo: #1E3A8A;
+  --marigold: #F5A623;
+  --card-dark: #111827;
+  --card-dark-border: #273449;
+  --card-text: #E5E7EB;
+  --card-muted: #9CA3AF;
+  --green: #34D399;
+  --font-display: "Sora", sans-serif;
+  --font-body: "Inter", "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Bengali", "Noto Sans Telugu", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.6; }
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.02em; line-height: 1.15; }
+a { color: inherit; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--violet); }
+
+/* nav */
+.nav { position: sticky; top: 0; z-index: 10; background: rgba(247,245,239,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1120px; margin: 0 auto; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 800; font-size: 18px; text-decoration: none; }
+.brand-mark { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, var(--indigo), var(--violet)); color: #fff; display: grid; place-items: center; font-family: var(--font-mono); font-size: 13px; }
+.nav-links { display: flex; gap: 26px; align-items: center; font-size: 14.5px; }
+.nav-links a { text-decoration: none; color: var(--ink-soft); }
+.nav-links a:hover { color: var(--ink); }
+.btn { display: inline-block; text-decoration: none; border-radius: 10px; padding: 11px 22px; font-weight: 600; font-size: 15px; border: none; cursor: pointer; font-family: var(--font-body); }
+.btn-primary { background: linear-gradient(135deg, var(--indigo), var(--violet)); color: #fff; }
+.btn-primary:hover { filter: brightness(1.12); }
+.btn-ghost { border: 1.5px solid var(--ink); color: var(--ink); background: none; }
+.btn-ghost:hover { background: var(--ink); color: var(--paper); }
+
+/* hero */
+.hero { display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; padding: 72px 0 80px; }
+.hero h1 { font-size: 46px; margin: 14px 0 18px; }
+.hero h1 em { font-style: normal; color: var(--violet); }
+.hero p.lead { font-size: 18px; color: var(--ink-soft); max-width: 46ch; margin: 0 0 28px; }
+.hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.hero-note { font-size: 13px; color: var(--ink-soft); margin-top: 12px; }
+
+/* signature: dark insight tickets floating on light paper */
+.tickets { position: relative; min-height: 380px; }
+.ticket {
+  position: absolute; width: 88%;
+  background: var(--card-dark); color: var(--card-text);
+  border: 1px solid var(--card-dark-border); border-radius: 14px;
+  padding: 18px 20px; box-shadow: 0 24px 48px -18px rgba(16,24,40,.45);
+}
+.ticket .t-tag { font-family: var(--font-mono); font-size: 11px; color: var(--marigold); letter-spacing: .1em; }
+.ticket h4 { margin: 6px 0 6px; font-size: 16px; }
+.ticket p { margin: 0; font-size: 13.5px; color: var(--card-muted); }
+.ticket .t-metric { font-family: var(--font-mono); color: var(--green); font-size: 13px; margin-top: 10px; }
+.ticket:nth-child(1) { top: 0; left: 0; transform: rotate(-2deg); }
+.ticket:nth-child(2) { top: 128px; right: 0; transform: rotate(1.5deg); }
+.ticket:nth-child(3) { top: 258px; left: 6%; transform: rotate(-1deg); }
+
+/* sections */
+section { padding: 72px 0; }
+.section-head { max-width: 640px; margin-bottom: 40px; }
+.section-head h2 { font-size: 32px; margin: 10px 0 10px; }
+.section-head p { color: var(--ink-soft); margin: 0; }
+.alt { background: var(--paper-2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+
+/* problem strip */
+.miss { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.miss-card { border-left: 3px solid var(--marigold); padding: 4px 0 4px 18px; }
+.miss-card h3 { font-size: 17px; margin: 0 0 6px; }
+.miss-card p { font-size: 14.5px; color: var(--ink-soft); margin: 0; }
+
+/* features */
+.features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+.feature { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 24px; }
+.feature .f-icon { font-size: 22px; }
+.feature h3 { font-size: 18px; margin: 10px 0 8px; }
+.feature p { font-size: 14.5px; color: var(--ink-soft); margin: 0; }
+
+/* how it works */
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; counter-reset: step; }
+.step { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+.step::before { counter-increment: step; content: counter(step, decimal-leading-zero); font-family: var(--font-mono); color: var(--violet); font-size: 13px; }
+.step h3 { font-size: 16px; margin: 8px 0 6px; }
+.step p { font-size: 13.5px; color: var(--ink-soft); margin: 0; }
+
+/* story wall */
+.stories-note {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #fff; border: 1px dashed var(--marigold); border-radius: 99px;
+  padding: 7px 16px; font-size: 13.5px; color: var(--ink-soft); margin-top: 14px;
+}
+.stories { columns: 3; column-gap: 18px; margin-top: 36px; }
+.story { break-inside: avoid; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; margin-bottom: 18px; }
+.story .s-chip { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em; color: var(--violet); border: 1px solid var(--violet); border-radius: 99px; padding: 2px 9px; display: inline-block; }
+.story blockquote { margin: 12px 0 12px; font-size: 15px; }
+.story .s-who { font-size: 13px; color: var(--ink-soft); }
+.story .s-lang { font-family: var(--font-mono); font-size: 11px; color: var(--marigold); float: right; }
+
+/* pricing */
+.plans { display: grid; grid-template-columns: repeat(2, minmax(0, 420px)); gap: 22px; justify-content: center; }
+.plans-3 { grid-template-columns: repeat(3, minmax(0, 360px)); }
+@media (max-width: 1024px) { .plans-3 { grid-template-columns: 1fr; } }
+.plan { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 30px; position: relative; }
+.plan.pro { border: 2px solid var(--violet); box-shadow: 0 24px 48px -24px rgba(109,40,217,.35); }
+.plan .badge { position: absolute; top: -13px; left: 30px; background: var(--violet); color: #fff; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 3px 12px; }
+.plan h3 { margin: 0 0 4px; font-size: 20px; }
+.plan .price { font-family: var(--font-display); font-size: 38px; font-weight: 800; margin: 10px 0 2px; }
+.plan .price span { font-size: 15px; font-weight: 500; color: var(--ink-soft); font-family: var(--font-body); }
+.plan ul { list-style: none; padding: 0; margin: 20px 0 26px; }
+.plan li { padding: 7px 0; font-size: 14.5px; border-bottom: 1px dashed var(--line); }
+.plan li::before { content: "✓  "; color: var(--green); font-weight: 700; }
+.plan li.no::before { content: "—  "; color: var(--line); }
+.plan li.no { color: #98A2B3; }
+.plan .btn { width: 100%; text-align: center; }
+
+/* footer */
+footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.5px; color: var(--ink-soft); }
+.foot { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+
+@media (max-width: 900px) {
+  .hero { grid-template-columns: 1fr; padding-top: 40px; }
+  .hero h1 { font-size: 34px; }
+  .tickets { min-height: 420px; }
+  .miss, .features, .steps { grid-template-columns: 1fr; }
+  .stories { columns: 1; }
+  .plans { grid-template-columns: 1fr; }
+  .nav-links a:not(.btn) { display: none; }
+}
+@media (min-width: 901px) and (max-width: 1100px) { .stories { columns: 2; } }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/"><span class="brand-mark">CX</span> Content Seller</a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#stories">Stories</a>
+      <a href="#pricing">Pricing</a>
+      <a class="btn btn-primary" href="/smart">Open the app</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="wrap hero">
+  <div>
+    <span class="eyebrow">Built for India's MSMEs · दुकानों से लेकर कैफ़े तक</span>
+    <h1>Your sales data already knows <em>how to grow your business.</em> Content Seller makes it speak.</h1>
+    <p class="lead">Big companies have analytics teams. You have Content Seller. Upload the sales file you already keep — get back plain-language answers: what to stock more, which day is leaking money, and which customers to win back this week.</p>
+    <div class="hero-ctas">
+      <button class="btn btn-primary" onclick="openSignup('free')">Start free — no card needed</button>
+      <a class="btn btn-ghost" href="#pricing">See pricing</a>
+    </div>
+    <p class="hero-note">Works with a simple CSV export from your billing app, POS, or Excel. Nothing to install.</p>
+  </div>
+  <div class="tickets" aria-label="Examples of insights Content Seller produces">
+    <div class="ticket">
+      <div class="t-tag">INSIGHT · ANALYTICS</div>
+      <h4>Tuesdays are your weakest day — by 41%</h4>
+      <p>Footfall holds steady, but average bill drops. A Tuesday-only combo could recover most of the gap.</p>
+      <div class="t-metric">↑ potential: ₹9,800 / month</div>
+    </div>
+    <div class="ticket">
+      <div class="t-tag">INSIGHT · RFM</div>
+      <h4>38 regulars haven't returned in 45+ days</h4>
+      <p>They used to spend above average. One WhatsApp offer to this exact list beats discounting everyone.</p>
+      <div class="t-metric">segment: "At Risk" · high value</div>
+    </div>
+    <div class="ticket">
+      <div class="t-tag">AI ANALYST</div>
+      <h4>Cold beverages carry 61% of your margin</h4>
+      <p>Stock-outs on 6 evenings last month. Fixing supply on Fri–Sun alone protects your best margin line.</p>
+      <div class="t-metric">action: reorder trigger at 20 units</div>
+    </div>
+  </div>
+</header>
+
+<!-- WHAT MSMEs MISS -->
+<section class="alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">The gap</span>
+      <h2>You're not short on data. You're short on someone who reads it.</h2>
+      <p>Every bill you print is a clue. Most small businesses never get to use them — that's the growth they're missing.</p>
+    </div>
+    <div class="miss">
+      <div class="miss-card"><h3>Which day quietly loses money</h3><p>Weekly dips look normal until you see them measured. Then they look fixable.</p></div>
+      <div class="miss-card"><h3>Which customers are slipping away</h3><p>Your best customers rarely complain — they just stop coming. RFM catches them before they're gone.</p></div>
+      <div class="miss-card"><h3>Which products deserve the shelf</h3><p>Bestsellers by count aren't always bestsellers by profit. Content Seller shows both.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">What you get</span>
+      <h2>An analytics team in a browser tab</h2>
+    </div>
+    <div class="features">
+      <div class="feature"><div class="f-icon">📊</div><h3>Sales Analytics</h3><p>Revenue trends, weekday patterns, category performance, top products — from the CSV you already have. No setup, no jargon.</p></div>
+      <div class="feature"><div class="f-icon">🧭</div><h3>RFM Customer Segments</h3><p>Champions, loyal, at-risk, hibernating — every customer scored on recency, frequency and spend, so offers go to the right people.</p></div>
+      <div class="feature"><div class="f-icon">🤖</div><h3>AI Business Analyst</h3><p>Consulting-style recommendations: the observation, why it matters, the action to take, and the expected impact — each with its own chart.</p></div>
+      <div class="feature"><div class="f-icon">💬</div><h3>Ask-Your-Data Chat</h3><p>Type a question in plain language — "why did October dip?" — and get short, practical, data-backed answers.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="alt" id="how">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Four steps</span>
+      <h2>From spreadsheet to strategy in minutes</h2>
+    </div>
+    <div class="steps">
+      <div class="step"><h3>Upload your data</h3><p>Export sales from your billing app or Excel as CSV and drop it in.</p></div>
+      <div class="step"><h3>Confirm columns</h3><p>Content Seller auto-detects date, amount, customer, product — you just confirm.</p></div>
+      <div class="step"><h3>See the analysis</h3><p>Dashboards, trends and customer segments appear instantly.</p></div>
+      <div class="step"><h3>Act on AI advice</h3><p>The AI Analyst turns numbers into this-week actions.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- STORY WALL -->
+<section id="stories">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">The wall we're building</span>
+      <h2>Stories we're waiting to hear — from you</h2>
+      <p>Content Seller is new, and we'd rather earn stories than invent them. These sample cards show the kind of result the tool is built to create — in your language.</p>
+      <div class="stories-note">✍️ Illustrative examples, not customer quotes — after your first month, send us yours and it goes up here with your shop's name.</div>
+    </div>
+    <div class="stories">
+      <div class="story">
+        <span class="s-chip">SAMPLE STORY</span><span class="s-lang">EN</span>
+        <blockquote>"I always felt Tuesdays were slow, but seeing it measured at 41% below average changed everything. One combo offer later, Tuesdays pay their rent."</blockquote>
+        <div class="s-who">— A seller's story, the kind we're building for</div>
+      </div>
+      <div class="story" lang="hi">
+        <span class="s-chip">SAMPLE STORY</span><span class="s-lang">हिंदी</span>
+        <blockquote>"पहले लगता था कि सब ठीक चल रहा है। Content Seller ने दिखाया कि 38 पुराने ग्राहक 45 दिनों से नहीं आए। एक WhatsApp ऑफ़र भेजा — आधे लौट आए।"</blockquote>
+        <div class="s-who">— एक किराना स्टोर की कहानी, जैसी हम आपके लिए बनाना चाहते हैं</div>
+      </div>
+      <div class="story" lang="ta">
+        <span class="s-chip">SAMPLE STORY</span><span class="s-lang">தமிழ்</span>
+        <blockquote>"எந்தப் பொருள் லாபம் தருகிறது என்று யூகத்தில் இருந்தேன். Content Seller காட்டியது — குளிர்பானங்கள்தான் 61% லாபம். இப்போது சரக்கு தீர்ந்து போவதே இல்லை."</blockquote>
+        <div class="s-who">— ஒரு உணவகத்தின் கதை — அடுத்தது உங்களுடையதாக இருக்கட்டும்</div>
+      </div>
+      <div class="story" lang="bn">
+        <span class="s-chip">SAMPLE STORY</span><span class="s-lang">বাংলা</span>
+        <blockquote>"খাতায় সব লিখতাম, কিন্তু কখনো পড়া হতো না। Content Seller-এ ফাইল তুলে দিলাম — কোন ক্রেতা ফিরে আসছে না, সেটাই প্রথম চোখে পড়ল।"</blockquote>
+        <div class="s-who">— একটি বুটিক দোকানের গল্প, যেমনটা আমরা তৈরি করতে চাই</div>
+      </div>
+      <div class="story" lang="te">
+        <span class="s-chip">SAMPLE STORY</span><span class="s-lang">తెలుగు</span>
+        <blockquote>"అమ్మకాలు పెరుగుతున్నాయి, కానీ లాభం ఎందుకు పెరగడం లేదో అర్థమయ్యేది కాదు. Content Seller చూపించింది — ఎక్కువ అమ్ముడయ్యేవి తక్కువ మార్జిన్ వస్తువులు."</blockquote>
+        <div class="s-who">— ఒక చిన్న వ్యాపారి కథ — తర్వాతది మీదే కావాలి</div>
+      </div>
+      <div class="story" lang="mr">
+        <span class="s-chip">SAMPLE STORY</span><span class="s-lang">मराठी</span>
+        <blockquote>"डेटा म्हणजे मोठ्या कंपन्यांचं काम वाटायचं. Content Seller ने माझ्या साध्या Excel मधून आठवड्याचा नफ्याचा नकाशा काढला — आता निर्णय अंदाजावर नाही."</blockquote>
+        <div class="s-who">— एका दुकानदाराची गोष्ट, अशीच तुमचीही असू शकते</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="alt" id="pricing">
+  <div class="wrap">
+    <div class="section-head" style="text-align:center; margin-inline:auto;">
+      <span class="eyebrow">Pricing</span>
+      <h2>Free forever for the basics. Pay only when you act.</h2>
+      <p><b>Everything is free during launch.</b> No card, no trial clock. Here's what pricing will look like after — so there are no surprises.</p>
+    </div>
+    <div class="plans plans-3">
+      <div class="plan">
+        <h3>Free forever</h3>
+        <div class="price">₹0 <span>always</span></div>
+        <ul>
+          <li>Unlimited uploads &amp; column mapping</li>
+          <li>Full sales analytics dashboard</li>
+          <li>Category &amp; subcategory trends</li>
+          <li>RFM segmentation + at-risk customer list</li>
+          <li>5 AI Analyst / Chatbot uses per day</li>
+        </ul>
+        <button class="btn btn-ghost" onclick="openSignup('free')">Start free</button>
+      </div>
+      <div class="plan pro">
+        <div class="badge">FREE DURING LAUNCH</div>
+        <h3>Pay-per-action</h3>
+        <div class="price">₹99–349 <span>only when you use it</span></div>
+        <ul>
+          <li><b>Win-Back Campaign — ₹199</b>: ready-to-send messages + coupons for every at-risk customer, Excel export</li>
+          <li><b>Market Position Report — ₹349</b>: what your customers come to you for, from your own review language</li>
+          <li><b>AI Top-Up — ₹99</b>: 10 extra AI uses when you need a deep-dive day</li>
+          <li>No subscription. No dead months. Open it when something feels off.</li>
+        </ul>
+        <button class="btn btn-primary" onclick="openSignup('free')">Try it free now</button>
+      </div>
+      <div class="plan">
+        <h3>Chain</h3>
+        <div class="price">₹999 <span>/ month</span></div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">For growing multi-channel brands</div>
+        <ul>
+          <li>Everything included — unlimited</li>
+          <li>Unlimited AI Analyst &amp; Chatbot</li>
+          <li>All campaigns &amp; reports, every outlet</li>
+          <li>Compare outlet performance month over month</li>
+          <li>Priority support on WhatsApp</li>
+        </ul>
+        <button class="btn btn-ghost" onclick="openSignup('free')">Start free, upgrade in-app</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section>
+  <div class="wrap" style="text-align:center;">
+    <h2 style="font-size:30px;">The insight you're missing is already in your files.</h2>
+    <p style="color:var(--ink-soft); max-width:52ch; margin:10px auto 26px;">Upload one month of sales. If Content Seller doesn't show you something you didn't know, it cost you nothing.</p>
+    <a class="btn btn-primary" href="/smart">Open Content Seller free</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div><b>Content Seller</b> · Intelligence for India's MSMEs</div>
+    <div>Sample stories on this page are illustrative, clearly labelled, and not customer endorsements.</div>
+    <div><a href="/smart">Open app</a> · <a href="#pricing">Pricing</a></div>
+  </div>
+</footer>
+
+
+<!-- SIGNUP MODAL -->
+<div class="su-backdrop" id="signupModal" style="display:none;">
+  <div class="su-card">
+    <button class="su-close" onclick="closeSignup()" aria-label="Close">✕</button>
+    <span class="eyebrow" id="suEyebrow">FREE TRIAL · NO CARD NEEDED</span>
+    <h3 id="suTitle">Create your Content Seller account</h3>
+    <p class="su-sub">Pick an email and create a password — you'll use these same credentials to log in to the web app.</p>
+    <label>Email address
+      <input type="email" id="suEmail" placeholder="you@yourshop.com" autocomplete="email" />
+    </label>
+    <label>Create a password <span class="su-hint">(minimum 6 characters)</span>
+      <input type="password" id="suPassword" placeholder="Choose a password" autocomplete="new-password" />
+    </label>
+    <label>Confirm password <span class="su-hint">(typed twice for double protection)</span>
+      <input type="password" id="suPassword2" placeholder="Type it again" autocomplete="new-password" />
+    </label>
+    <div class="su-hint" style="margin:-4px 0 8px;">🔒 Your password is stored encrypted (salted hash) — we never keep it in plain text.</div>
+    <button class="btn btn-primary su-submit" id="suSubmit" onclick="submitSignup()">Create account &amp; open the app</button>
+    <div class="su-error" id="suError" style="display:none;"></div>
+    <p class="su-foot">Already have an account? <a href="/smart">Just log in from the app →</a></p>
+  </div>
+</div>
+
+<style>
+.su-backdrop { position: fixed; inset: 0; background: rgba(16,24,40,.55); backdrop-filter: blur(3px); display: grid; place-items: center; z-index: 50; padding: 20px; }
+.su-card { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 30px 32px; width: 100%; max-width: 420px; box-shadow: 0 32px 64px -24px rgba(16,24,40,.4); }
+.su-card h3 { font-size: 22px; margin: 8px 0 6px; }
+.su-sub { font-size: 14px; color: var(--ink-soft); margin: 0 0 18px; }
+.su-card label { display: block; font-size: 13.5px; font-weight: 600; margin: 12px 0 0; }
+.su-hint { font-weight: 400; color: var(--ink-soft); }
+.su-card input { width: 100%; margin-top: 5px; padding: 11px 13px; border: 1.5px solid var(--line); border-radius: 10px; font: inherit; font-size: 15px; background: var(--paper); }
+.su-card input:focus { outline: 2px solid var(--violet); border-color: var(--violet); }
+.su-submit { width: 100%; margin-top: 20px; }
+.su-error { margin-top: 12px; font-size: 13.5px; color: #DC2626; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 9px 12px; }
+.su-foot { font-size: 13px; color: var(--ink-soft); margin: 16px 0 0; text-align: center; }
+.su-close { position: absolute; top: 14px; right: 16px; background: none; border: none; font-size: 15px; color: var(--ink-soft); cursor: pointer; }
+.su-close:hover { color: var(--ink); }
+</style>
+
+<script>
+let suPlan = "free";
+function openSignup(plan) {
+  suPlan = plan;
+  document.getElementById("suEyebrow").textContent = "FREE DURING LAUNCH · NO CARD NEEDED";
+  document.getElementById("suTitle").textContent = "Create your free account";
+  document.getElementById("suError").style.display = "none";
+  document.getElementById("signupModal").style.display = "grid";
+  document.getElementById("suEmail").focus();
+}
+function closeSignup() { document.getElementById("signupModal").style.display = "none"; }
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSignup(); });
+document.getElementById("signupModal").addEventListener("click", (e) => { if (e.target.id === "signupModal") closeSignup(); });
+document.getElementById("suPassword").addEventListener("keydown", (e) => { if (e.key === "Enter") submitSignup(); });
+document.getElementById("suPassword2").addEventListener("keydown", (e) => { if (e.key === "Enter") submitSignup(); });
+
+async function submitSignup() {
+  const btn = document.getElementById("suSubmit");
+  const err = document.getElementById("suError");
+  err.style.display = "none";
+  const pw = document.getElementById("suPassword").value;
+  const pw2 = document.getElementById("suPassword2").value;
+  if (pw !== pw2) {
+    err.textContent = "Passwords don't match — please type the same password in both boxes.";
+    err.style.display = "block";
+    return;
+  }
+  btn.disabled = true; btn.textContent = "Creating your account…";
+  try {
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: document.getElementById("suEmail").value,
+        password: document.getElementById("suPassword").value,
+        plan: suPlan,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "Could not create the account");
+    // hand the session to the app so they land already logged in (shared
+    // localStorage keys → logged in across Classic and Smart)
+    localStorage.setItem("cx_token", data.token);
+    localStorage.setItem("cx_email", data.email);
+    btn.textContent = "✓ Account created — opening the app…";
+    setTimeout(() => (window.location.href = "/smart"), 600);
+  } catch (e) {
+    err.textContent = e.message;
+    err.style.display = "block";
+    btn.disabled = false; btn.textContent = "Create account & open the app";
+  }
+}
+</script>
+
+</body>
+</html>

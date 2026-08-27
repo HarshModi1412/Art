@@ -1,0 +1,2616 @@
+date,order_id,customer_id,customer_name,product,category,subcategory,quantity,amount
+2026-04-21 11:33,ORD5001,C129,Neha,Croissant,Desserts,Baked,2,190
+2026-04-21 09:43,ORD5002,C100,Aarav,Croissant,Desserts,Baked,1,95
+2026-04-21 09:43,ORD5002,C100,Aarav,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-21 19:27,ORD5003,C118,Farhan,Cappuccino,Beverages,Hot Coffee,2,280
+2026-04-21 11:46,ORD5004,C156,Naveen,Cheesecake Slice,Desserts,Cakes,1,180
+2026-04-21 10:58,ORD5005,C132,Gaurav,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-04-21 18:38,ORD5006,C132,Gaurav,Fries,Food,Snacks,1,110
+2026-04-21 12:49,ORD5007,C134,Harsh,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-21 12:49,ORD5007,C134,Harsh,Chicken Sandwich,Food,Sandwiches,2,360
+2026-04-21 12:49,ORD5007,C134,Harsh,Blueberry Muffin,Desserts,Baked,2,220
+2026-04-21 20:51,ORD5008,C153,Rekha,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-21 14:05,ORD5009,C136,Yash,Blueberry Muffin,Desserts,Baked,2,220
+2026-04-21 09:34,ORD5010,C148,Sameer,Iced Americano,Beverages,Cold Beverages,2,280
+2026-04-21 09:34,ORD5010,C148,Sameer,Blueberry Muffin,Desserts,Baked,1,110
+2026-04-21 13:55,ORD5011,C133,Anjali,Green Tea,Beverages,Tea,1,80
+2026-04-21 13:55,ORD5011,C133,Anjali,Croissant,Desserts,Baked,1,95
+2026-04-21 14:41,ORD5012,C142,Rajat,Cheesecake Slice,Desserts,Cakes,1,180
+2026-04-21 14:14,ORD5013,C115,Ritu,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-21 14:37,ORD5014,C114,Sanjay,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-21 18:14,ORD5015,C103,Priya,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-04-21 14:32,ORD5016,C104,Kiran,Blueberry Muffin,Desserts,Baked,1,110
+2026-04-21 16:46,ORD5017,C108,Arjun,Blueberry Muffin,Desserts,Baked,2,220
+2026-04-21 16:46,ORD5017,C108,Arjun,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-21 16:46,ORD5017,C108,Arjun,Croissant,Desserts,Baked,1,95
+2026-04-21 18:22,ORD5018,C127,Kavya,Chocolate Brownie,Desserts,Baked,2,260
+2026-04-21 11:43,ORD5019,C103,Priya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-21 11:43,ORD5019,C103,Priya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-21 09:06,ORD5020,C155,Payal,Green Tea,Beverages,Tea,1,80
+2026-04-22 17:27,ORD5021,C108,Arjun,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-22 18:04,ORD5022,C159,Aditi,Croissant,Desserts,Baked,1,95
+2026-04-22 16:34,ORD5023,C141,Bhavna,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-22 16:34,ORD5023,C141,Bhavna,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-22 11:55,ORD5024,C113,Nisha,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-22 14:24,ORD5025,C100,Aarav,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-22 18:46,ORD5026,C144,Mohit,Croissant,Desserts,Baked,1,95
+2026-04-22 18:46,ORD5026,C144,Mohit,Blueberry Muffin,Desserts,Baked,1,110
+2026-04-22 18:46,ORD5026,C144,Mohit,Iced Americano,Beverages,Cold Beverages,1,140
+2026-04-22 17:34,ORD5027,C147,Ira,Chicken Sandwich,Food,Sandwiches,1,180
+2026-04-22 16:30,ORD5028,C137,Deepa,Cheesecake Slice,Desserts,Cakes,1,180
+2026-04-22 16:30,ORD5028,C137,Deepa,Masala Chai,Beverages,Tea,1,60
+2026-04-22 21:11,ORD5029,C154,Dhruv,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-22 17:25,ORD5030,C115,Ritu,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-22 19:39,ORD5031,C102,Rohan,Cheesecake Slice,Desserts,Cakes,1,180
+2026-04-22 17:13,ORD5032,C116,Aditya,Chicken Sandwich,Food,Sandwiches,1,180
+2026-04-22 17:13,ORD5032,C116,Aditya,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-22 09:19,ORD5033,C141,Bhavna,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-22 17:36,ORD5034,C139,Swati,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-22 17:36,ORD5034,C139,Swati,Green Tea,Beverages,Tea,1,80
+2026-04-22 17:36,ORD5034,C139,Swati,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-23 13:23,ORD5035,C115,Ritu,Chocolate Brownie,Desserts,Baked,2,260
+2026-04-23 16:19,ORD5036,C145,Zoya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-04-23 16:19,ORD5036,C145,Zoya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-23 14:42,ORD5037,C159,Aditi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-04-23 13:06,ORD5038,C156,Naveen,Iced Americano,Beverages,Cold Beverages,1,140
+2026-04-23 13:06,ORD5038,C156,Naveen,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-23 18:13,ORD5039,C121,Isha,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-23 18:13,ORD5039,C121,Isha,Cheesecake Slice,Desserts,Cakes,2,360
+2026-04-23 09:03,ORD5040,C154,Dhruv,Maggi,Food,Snacks,2,160
+2026-04-23 18:00,ORD5041,C102,Rohan,Iced Americano,Beverages,Cold Beverages,1,140
+2026-04-23 13:10,ORD5042,C116,Aditya,Croissant,Desserts,Baked,1,95
+2026-04-23 13:10,ORD5042,C116,Aditya,Maggi,Food,Snacks,1,80
+2026-04-23 18:44,ORD5043,C156,Naveen,Croissant,Desserts,Baked,1,95
+2026-04-23 18:44,ORD5043,C156,Naveen,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-23 18:44,ORD5043,C156,Naveen,Fries,Food,Snacks,1,110
+2026-04-23 17:23,ORD5044,C119,Tara,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-23 17:23,ORD5044,C119,Tara,Fries,Food,Snacks,1,110
+2026-04-23 17:23,ORD5044,C119,Tara,Green Tea,Beverages,Tea,1,80
+2026-04-23 17:56,ORD5045,C135,Simran,Iced Americano,Beverages,Cold Beverages,2,280
+2026-04-23 17:56,ORD5045,C135,Simran,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-04-23 17:56,ORD5045,C135,Simran,Masala Chai,Beverages,Tea,2,120
+2026-04-23 21:11,ORD5046,C101,Ananya,Chicken Sandwich,Food,Sandwiches,2,360
+2026-04-23 21:11,ORD5046,C101,Ananya,Maggi,Food,Snacks,2,160
+2026-04-23 11:15,ORD5047,C151,Mansi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-23 19:54,ORD5048,C102,Rohan,Green Tea,Beverages,Tea,2,160
+2026-04-23 14:22,ORD5049,C129,Neha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-24 18:12,ORD5050,C142,Rajat,Veg Sandwich,Food,Sandwiches,2,240
+2026-04-24 17:17,ORD5051,C149,Juhi,Cheesecake Slice,Desserts,Cakes,1,180
+2026-04-24 16:34,ORD5052,C153,Rekha,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-24 12:11,ORD5053,C116,Aditya,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-24 12:11,ORD5053,C116,Aditya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-24 18:50,ORD5054,C146,Pranav,Cheesecake Slice,Desserts,Cakes,1,180
+2026-04-24 16:36,ORD5055,C157,Sonali,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-24 13:33,ORD5056,C100,Aarav,Croissant,Desserts,Baked,1,95
+2026-04-24 13:33,ORD5056,C100,Aarav,Green Tea,Beverages,Tea,2,160
+2026-04-24 13:33,ORD5056,C100,Aarav,Fries,Food,Snacks,2,220
+2026-04-24 16:20,ORD5057,C139,Swati,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-24 16:20,ORD5057,C139,Swati,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-24 12:25,ORD5058,C120,Dev,Croissant,Desserts,Baked,1,95
+2026-04-24 12:25,ORD5058,C120,Dev,Iced Americano,Beverages,Cold Beverages,1,140
+2026-04-24 11:43,ORD5059,C124,Manav,Masala Chai,Beverages,Tea,1,60
+2026-04-24 11:43,ORD5059,C124,Manav,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-04-24 18:18,ORD5060,C119,Tara,Chicken Sandwich,Food,Sandwiches,1,180
+2026-04-24 14:43,ORD5061,C128,Imran,Blueberry Muffin,Desserts,Baked,1,110
+2026-04-24 17:47,ORD5062,C150,Vivek,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-24 13:40,ORD5063,C142,Rajat,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-24 13:40,ORD5063,C142,Rajat,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-24 16:09,ORD5064,C112,Karthik,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-04-25 14:54,ORD5065,C139,Swati,Chocolate Brownie,Desserts,Baked,2,260
+2026-04-25 14:54,ORD5065,C139,Swati,Maggi,Food,Snacks,1,80
+2026-04-25 19:44,ORD5066,C145,Zoya,Samosa (2 pc),Food,Snacks,1,50
+2026-04-25 18:44,ORD5067,C141,Bhavna,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-25 12:11,ORD5068,C114,Sanjay,Cheesecake Slice,Desserts,Cakes,1,180
+2026-04-25 12:11,ORD5068,C114,Sanjay,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-25 19:07,ORD5069,C154,Dhruv,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-25 17:38,ORD5070,C135,Simran,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-25 17:57,ORD5071,C146,Pranav,Croissant,Desserts,Baked,2,190
+2026-04-25 17:57,ORD5071,C146,Pranav,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-25 11:28,ORD5072,C130,Siddharth,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-04-25 13:49,ORD5073,C117,Lakshmi,Blueberry Muffin,Desserts,Baked,1,110
+2026-04-25 13:49,ORD5073,C117,Lakshmi,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-25 13:15,ORD5074,C118,Farhan,Chicken Sandwich,Food,Sandwiches,2,360
+2026-04-25 17:08,ORD5075,C105,Sneha,Samosa (2 pc),Food,Snacks,1,50
+2026-04-25 13:13,ORD5076,C145,Zoya,Maggi,Food,Snacks,1,80
+2026-04-25 10:26,ORD5077,C129,Neha,Maggi,Food,Snacks,1,80
+2026-04-25 17:37,ORD5078,C149,Juhi,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-25 17:37,ORD5078,C149,Juhi,Samosa (2 pc),Food,Snacks,1,50
+2026-04-25 17:37,ORD5078,C149,Juhi,Blueberry Muffin,Desserts,Baked,1,110
+2026-04-25 13:57,ORD5079,C154,Dhruv,Maggi,Food,Snacks,1,80
+2026-04-25 13:57,ORD5079,C154,Dhruv,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-25 13:57,ORD5079,C154,Dhruv,Blueberry Muffin,Desserts,Baked,1,110
+2026-04-25 14:42,ORD5080,C121,Isha,Samosa (2 pc),Food,Snacks,2,100
+2026-04-25 14:42,ORD5080,C121,Isha,Masala Chai,Beverages,Tea,2,120
+2026-04-25 21:34,ORD5081,C139,Swati,Samosa (2 pc),Food,Snacks,1,50
+2026-04-25 12:01,ORD5082,C142,Rajat,Maggi,Food,Snacks,1,80
+2026-04-25 17:11,ORD5083,C129,Neha,Samosa (2 pc),Food,Snacks,1,50
+2026-04-25 10:20,ORD5084,C129,Neha,Samosa (2 pc),Food,Snacks,1,50
+2026-04-25 21:26,ORD5085,C153,Rekha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-25 17:34,ORD5086,C147,Ira,Fries,Food,Snacks,1,110
+2026-04-26 09:49,ORD5087,C104,Kiran,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-26 09:49,ORD5087,C104,Kiran,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-26 09:49,ORD5087,C104,Kiran,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-26 21:30,ORD5088,C108,Arjun,Green Tea,Beverages,Tea,1,80
+2026-04-26 21:30,ORD5088,C108,Arjun,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-26 09:38,ORD5089,C110,Rahul,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-04-26 09:38,ORD5089,C110,Rahul,Masala Chai,Beverages,Tea,1,60
+2026-04-26 13:59,ORD5090,C101,Ananya,Samosa (2 pc),Food,Snacks,1,50
+2026-04-26 14:12,ORD5091,C145,Zoya,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-26 17:19,ORD5092,C149,Juhi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-26 17:19,ORD5092,C149,Juhi,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-26 17:19,ORD5092,C149,Juhi,Fries,Food,Snacks,1,110
+2026-04-26 21:21,ORD5093,C141,Bhavna,Maggi,Food,Snacks,2,160
+2026-04-26 16:27,ORD5094,C106,Vikram,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-26 16:27,ORD5094,C106,Vikram,Iced Americano,Beverages,Cold Beverages,1,140
+2026-04-26 16:27,ORD5094,C106,Vikram,Maggi,Food,Snacks,1,80
+2026-04-26 17:51,ORD5095,C139,Swati,Blueberry Muffin,Desserts,Baked,2,220
+2026-04-26 17:51,ORD5095,C139,Swati,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-26 17:51,ORD5095,C139,Swati,Maggi,Food,Snacks,1,80
+2026-04-26 14:53,ORD5096,C115,Ritu,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-26 14:53,ORD5096,C115,Ritu,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-26 14:53,ORD5096,C115,Ritu,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-26 14:01,ORD5097,C121,Isha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-04-26 21:22,ORD5098,C113,Nisha,Chicken Sandwich,Food,Sandwiches,2,360
+2026-04-26 21:22,ORD5098,C113,Nisha,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-26 17:35,ORD5099,C117,Lakshmi,Green Tea,Beverages,Tea,1,80
+2026-04-26 18:26,ORD5100,C146,Pranav,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-26 14:45,ORD5101,C141,Bhavna,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-26 17:25,ORD5102,C114,Sanjay,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-26 17:25,ORD5102,C114,Sanjay,Fries,Food,Snacks,1,110
+2026-04-26 16:47,ORD5103,C127,Kavya,Fries,Food,Snacks,1,110
+2026-04-26 16:47,ORD5103,C127,Kavya,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-26 14:46,ORD5104,C107,Divya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-26 16:44,ORD5105,C148,Sameer,Green Tea,Beverages,Tea,1,80
+2026-04-26 13:46,ORD5106,C117,Lakshmi,Cheesecake Slice,Desserts,Cakes,2,360
+2026-04-26 13:46,ORD5106,C117,Lakshmi,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-04-26 11:14,ORD5107,C118,Farhan,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-26 13:08,ORD5108,C134,Harsh,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-26 20:08,ORD5109,C144,Mohit,Blueberry Muffin,Desserts,Baked,2,220
+2026-04-26 20:08,ORD5109,C144,Mohit,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-27 11:30,ORD5110,C130,Siddharth,Masala Chai,Beverages,Tea,2,120
+2026-04-27 18:55,ORD5111,C116,Aditya,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-27 14:36,ORD5112,C104,Kiran,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-27 14:36,ORD5112,C104,Kiran,Iced Americano,Beverages,Cold Beverages,1,140
+2026-04-27 18:05,ORD5113,C119,Tara,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-27 18:05,ORD5113,C119,Tara,Maggi,Food,Snacks,1,80
+2026-04-27 18:05,ORD5113,C119,Tara,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-04-27 16:55,ORD5114,C119,Tara,Maggi,Food,Snacks,1,80
+2026-04-27 16:55,ORD5114,C119,Tara,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-27 14:06,ORD5115,C147,Ira,Green Tea,Beverages,Tea,1,80
+2026-04-27 14:06,ORD5115,C147,Ira,Croissant,Desserts,Baked,1,95
+2026-04-27 14:06,ORD5115,C147,Ira,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-27 20:10,ORD5116,C104,Kiran,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-27 20:18,ORD5117,C130,Siddharth,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-27 11:55,ORD5118,C144,Mohit,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-04-27 14:50,ORD5119,C150,Vivek,Green Tea,Beverages,Tea,1,80
+2026-04-27 14:50,ORD5119,C150,Vivek,Maggi,Food,Snacks,1,80
+2026-04-27 19:58,ORD5120,C109,Meera,Iced Americano,Beverages,Cold Beverages,1,140
+2026-04-27 19:50,ORD5121,C110,Rahul,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-27 19:44,ORD5122,C129,Neha,Samosa (2 pc),Food,Snacks,2,100
+2026-04-27 10:34,ORD5123,C132,Gaurav,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-27 19:27,ORD5124,C156,Naveen,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-27 19:27,ORD5124,C156,Naveen,Cappuccino,Beverages,Hot Coffee,2,280
+2026-04-27 17:55,ORD5125,C153,Rekha,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-27 17:55,ORD5125,C153,Rekha,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-27 13:30,ORD5126,C111,Pooja,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-27 13:30,ORD5126,C111,Pooja,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-27 17:52,ORD5127,C140,Aman,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-27 14:21,ORD5128,C126,Varun,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-04-28 17:26,ORD5129,C121,Isha,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-04-28 17:26,ORD5129,C121,Isha,Samosa (2 pc),Food,Snacks,1,50
+2026-04-28 12:05,ORD5130,C129,Neha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-04-28 13:25,ORD5131,C149,Juhi,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-28 13:25,ORD5131,C149,Juhi,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-28 13:25,ORD5131,C149,Juhi,Maggi,Food,Snacks,1,80
+2026-04-28 12:40,ORD5132,C131,Riya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-28 17:08,ORD5133,C135,Simran,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-28 17:08,ORD5133,C135,Simran,Blueberry Muffin,Desserts,Baked,1,110
+2026-04-28 17:08,ORD5133,C135,Simran,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-28 18:10,ORD5134,C145,Zoya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-28 17:14,ORD5135,C105,Sneha,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-28 17:14,ORD5135,C105,Sneha,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-28 17:14,ORD5135,C105,Sneha,Croissant,Desserts,Baked,2,190
+2026-04-28 17:32,ORD5136,C118,Farhan,Maggi,Food,Snacks,2,160
+2026-04-28 17:32,ORD5136,C118,Farhan,Blueberry Muffin,Desserts,Baked,1,110
+2026-04-28 14:09,ORD5137,C135,Simran,Cheesecake Slice,Desserts,Cakes,1,180
+2026-04-28 17:55,ORD5138,C108,Arjun,Maggi,Food,Snacks,1,80
+2026-04-28 14:32,ORD5139,C150,Vivek,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-28 20:53,ORD5140,C119,Tara,Blueberry Muffin,Desserts,Baked,1,110
+2026-04-28 20:53,ORD5140,C119,Tara,Iced Americano,Beverages,Cold Beverages,1,140
+2026-04-28 19:35,ORD5141,C121,Isha,Samosa (2 pc),Food,Snacks,2,100
+2026-04-28 19:35,ORD5141,C121,Isha,Chocolate Brownie,Desserts,Baked,2,260
+2026-04-28 17:15,ORD5142,C144,Mohit,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-28 17:15,ORD5142,C144,Mohit,Maggi,Food,Snacks,1,80
+2026-04-28 16:58,ORD5143,C145,Zoya,Samosa (2 pc),Food,Snacks,1,50
+2026-04-28 16:58,ORD5143,C145,Zoya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-04-28 14:37,ORD5144,C132,Gaurav,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-04-28 13:06,ORD5145,C128,Imran,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-28 13:06,ORD5145,C128,Imran,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-28 18:09,ORD5146,C141,Bhavna,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-29 13:25,ORD5147,C144,Mohit,Chicken Sandwich,Food,Sandwiches,2,360
+2026-04-29 13:25,ORD5147,C144,Mohit,Samosa (2 pc),Food,Snacks,1,50
+2026-04-29 20:48,ORD5148,C156,Naveen,Croissant,Desserts,Baked,1,95
+2026-04-29 16:15,ORD5149,C104,Kiran,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-29 16:15,ORD5149,C104,Kiran,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-29 17:48,ORD5150,C106,Vikram,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-29 17:48,ORD5150,C106,Vikram,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-29 18:02,ORD5151,C101,Ananya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-04-29 14:27,ORD5152,C123,Shreya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-04-29 19:50,ORD5153,C143,Tanvi,Masala Chai,Beverages,Tea,1,60
+2026-04-29 17:24,ORD5154,C155,Payal,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-04-29 17:24,ORD5154,C155,Payal,Blueberry Muffin,Desserts,Baked,1,110
+2026-04-29 16:40,ORD5155,C129,Neha,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-29 18:51,ORD5156,C157,Sonali,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-29 17:04,ORD5157,C110,Rahul,Fries,Food,Snacks,2,220
+2026-04-29 11:40,ORD5158,C119,Tara,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-29 11:40,ORD5158,C119,Tara,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-29 11:40,ORD5158,C119,Tara,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-29 21:24,ORD5159,C115,Ritu,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-29 21:24,ORD5159,C115,Ritu,Croissant,Desserts,Baked,2,190
+2026-04-29 14:17,ORD5160,C125,Ayesha,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-04-29 18:31,ORD5161,C147,Ira,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-29 18:31,ORD5161,C147,Ira,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-29 18:12,ORD5162,C140,Aman,Iced Americano,Beverages,Cold Beverages,2,280
+2026-04-29 18:12,ORD5162,C140,Aman,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-29 18:50,ORD5163,C119,Tara,Fries,Food,Snacks,1,110
+2026-04-29 17:58,ORD5164,C105,Sneha,Maggi,Food,Snacks,1,80
+2026-04-29 18:50,ORD5165,C108,Arjun,Fries,Food,Snacks,1,110
+2026-04-29 18:50,ORD5165,C108,Arjun,Cheesecake Slice,Desserts,Cakes,1,180
+2026-04-29 14:16,ORD5166,C110,Rahul,Blueberry Muffin,Desserts,Baked,2,220
+2026-04-29 14:16,ORD5166,C110,Rahul,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-29 14:16,ORD5166,C110,Rahul,Chicken Sandwich,Food,Sandwiches,1,180
+2026-04-29 21:14,ORD5167,C148,Sameer,Samosa (2 pc),Food,Snacks,1,50
+2026-04-29 21:14,ORD5167,C148,Sameer,Fries,Food,Snacks,1,110
+2026-04-29 21:14,ORD5167,C148,Sameer,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-29 10:23,ORD5168,C129,Neha,Veg Sandwich,Food,Sandwiches,2,240
+2026-04-29 10:23,ORD5168,C129,Neha,Samosa (2 pc),Food,Snacks,2,100
+2026-04-29 18:43,ORD5169,C106,Vikram,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-29 10:20,ORD5170,C135,Simran,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-04-29 10:20,ORD5170,C135,Simran,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-29 10:20,ORD5170,C135,Simran,Chocolate Brownie,Desserts,Baked,1,130
+2026-04-29 19:02,ORD5171,C108,Arjun,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-04-29 19:02,ORD5171,C108,Arjun,Blueberry Muffin,Desserts,Baked,2,220
+2026-04-29 19:02,ORD5171,C108,Arjun,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-29 18:23,ORD5172,C129,Neha,Croissant,Desserts,Baked,1,95
+2026-04-29 18:23,ORD5172,C129,Neha,Maggi,Food,Snacks,1,80
+2026-04-30 17:26,ORD5173,C156,Naveen,Blueberry Muffin,Desserts,Baked,2,220
+2026-04-30 17:26,ORD5173,C156,Naveen,Maggi,Food,Snacks,1,80
+2026-04-30 14:23,ORD5174,C144,Mohit,Chocolate Brownie,Desserts,Baked,2,260
+2026-04-30 16:23,ORD5175,C154,Dhruv,Fries,Food,Snacks,1,110
+2026-04-30 19:22,ORD5176,C141,Bhavna,Veg Sandwich,Food,Sandwiches,1,120
+2026-04-30 10:54,ORD5177,C107,Divya,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-30 10:54,ORD5177,C107,Divya,Green Tea,Beverages,Tea,1,80
+2026-04-30 09:03,ORD5178,C101,Ananya,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-30 09:03,ORD5178,C101,Ananya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-04-30 14:48,ORD5179,C153,Rekha,Green Tea,Beverages,Tea,1,80
+2026-04-30 14:48,ORD5179,C153,Rekha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-04-30 14:38,ORD5180,C157,Sonali,Iced Americano,Beverages,Cold Beverages,2,280
+2026-04-30 18:16,ORD5181,C134,Harsh,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-30 18:16,ORD5181,C134,Harsh,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-30 20:15,ORD5182,C150,Vivek,Cappuccino,Beverages,Hot Coffee,1,140
+2026-04-30 20:15,ORD5182,C150,Vivek,Masala Chai,Beverages,Tea,1,60
+2026-04-30 09:33,ORD5183,C126,Varun,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-04-30 12:23,ORD5184,C149,Juhi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-04-30 12:23,ORD5184,C149,Juhi,Chocolate Brownie,Desserts,Baked,2,260
+2026-04-30 16:46,ORD5185,C102,Rohan,Cheesecake Slice,Desserts,Cakes,1,180
+2026-04-30 16:46,ORD5185,C102,Rohan,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-04-30 12:30,ORD5186,C103,Priya,Maggi,Food,Snacks,1,80
+2026-04-30 12:30,ORD5186,C103,Priya,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-04-30 21:57,ORD5187,C104,Kiran,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-01 13:39,ORD5188,C117,Lakshmi,Croissant,Desserts,Baked,1,95
+2026-05-01 13:39,ORD5188,C117,Lakshmi,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-01 16:29,ORD5189,C118,Farhan,Maggi,Food,Snacks,1,80
+2026-05-01 16:29,ORD5189,C118,Farhan,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-01 14:41,ORD5190,C141,Bhavna,Croissant,Desserts,Baked,1,95
+2026-05-01 14:41,ORD5190,C141,Bhavna,Green Tea,Beverages,Tea,1,80
+2026-05-01 14:41,ORD5190,C141,Bhavna,Maggi,Food,Snacks,1,80
+2026-05-01 20:25,ORD5191,C129,Neha,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-01 17:42,ORD5192,C120,Dev,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-01 17:04,ORD5193,C130,Siddharth,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-01 20:47,ORD5194,C106,Vikram,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-01 20:47,ORD5194,C106,Vikram,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-01 14:42,ORD5195,C121,Isha,Fries,Food,Snacks,2,220
+2026-05-01 09:27,ORD5196,C148,Sameer,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-01 09:27,ORD5196,C148,Sameer,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-01 09:27,ORD5196,C148,Sameer,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-01 17:30,ORD5197,C142,Rajat,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-01 17:23,ORD5198,C135,Simran,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-01 17:27,ORD5199,C151,Mansi,Croissant,Desserts,Baked,1,95
+2026-05-01 17:27,ORD5199,C151,Mansi,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-01 16:17,ORD5200,C144,Mohit,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-01 17:58,ORD5201,C119,Tara,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-01 16:36,ORD5202,C109,Meera,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-01 16:36,ORD5202,C109,Meera,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-01 17:47,ORD5203,C105,Sneha,Samosa (2 pc),Food,Snacks,1,50
+2026-05-01 17:47,ORD5203,C105,Sneha,Maggi,Food,Snacks,1,80
+2026-05-01 14:46,ORD5204,C119,Tara,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-05-01 09:10,ORD5205,C109,Meera,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-01 09:10,ORD5205,C109,Meera,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-01 14:38,ORD5206,C131,Riya,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-01 18:07,ORD5207,C132,Gaurav,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-02 16:37,ORD5208,C143,Tanvi,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-02 14:38,ORD5209,C125,Ayesha,Green Tea,Beverages,Tea,1,80
+2026-05-02 21:49,ORD5210,C113,Nisha,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-02 09:00,ORD5211,C107,Divya,Maggi,Food,Snacks,1,80
+2026-05-02 09:34,ORD5212,C124,Manav,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-02 09:34,ORD5212,C124,Manav,Fries,Food,Snacks,2,220
+2026-05-02 16:27,ORD5213,C102,Rohan,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-05-02 16:27,ORD5214,C136,Yash,Maggi,Food,Snacks,1,80
+2026-05-02 16:27,ORD5214,C136,Yash,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-02 12:10,ORD5215,C120,Dev,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-02 12:10,ORD5215,C120,Dev,Fries,Food,Snacks,2,220
+2026-05-02 21:27,ORD5216,C115,Ritu,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-02 21:27,ORD5216,C115,Ritu,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-02 10:14,ORD5217,C121,Isha,Masala Chai,Beverages,Tea,1,60
+2026-05-02 18:07,ORD5218,C140,Aman,Green Tea,Beverages,Tea,1,80
+2026-05-02 18:07,ORD5218,C140,Aman,Fries,Food,Snacks,2,220
+2026-05-02 17:52,ORD5219,C141,Bhavna,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-02 16:11,ORD5220,C112,Karthik,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-05-02 16:11,ORD5220,C112,Karthik,Masala Chai,Beverages,Tea,1,60
+2026-05-02 16:48,ORD5221,C129,Neha,Chocolate Brownie,Desserts,Baked,2,260
+2026-05-02 16:48,ORD5221,C129,Neha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-02 19:28,ORD5222,C109,Meera,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-02 13:17,ORD5223,C150,Vivek,Fries,Food,Snacks,1,110
+2026-05-02 13:17,ORD5223,C150,Vivek,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-02 17:03,ORD5224,C102,Rohan,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-02 11:54,ORD5225,C155,Payal,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-02 12:35,ORD5226,C137,Deepa,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-02 12:35,ORD5226,C137,Deepa,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-02 12:35,ORD5226,C137,Deepa,Green Tea,Beverages,Tea,1,80
+2026-05-02 09:28,ORD5227,C103,Priya,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-02 17:32,ORD5228,C105,Sneha,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-02 17:32,ORD5228,C105,Sneha,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-05-02 10:33,ORD5229,C133,Anjali,Fries,Food,Snacks,2,220
+2026-05-02 10:33,ORD5229,C133,Anjali,Croissant,Desserts,Baked,1,95
+2026-05-02 14:21,ORD5230,C149,Juhi,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-02 14:21,ORD5230,C149,Juhi,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-02 10:24,ORD5231,C143,Tanvi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-02 13:42,ORD5232,C137,Deepa,Fries,Food,Snacks,1,110
+2026-05-02 11:44,ORD5233,C141,Bhavna,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-02 11:44,ORD5233,C141,Bhavna,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-02 13:21,ORD5234,C150,Vivek,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-02 13:21,ORD5234,C150,Vivek,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-02 19:01,ORD5235,C123,Shreya,Masala Chai,Beverages,Tea,2,120
+2026-05-02 16:49,ORD5236,C121,Isha,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-05-02 14:04,ORD5237,C109,Meera,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-02 17:53,ORD5238,C134,Harsh,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-02 17:53,ORD5238,C134,Harsh,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-03 18:08,ORD5239,C139,Swati,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-03 18:08,ORD5239,C139,Swati,Masala Chai,Beverages,Tea,1,60
+2026-05-03 19:51,ORD5240,C139,Swati,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-03 19:51,ORD5240,C139,Swati,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-03 19:51,ORD5240,C139,Swati,Maggi,Food,Snacks,2,160
+2026-05-03 18:18,ORD5241,C139,Swati,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-03 18:18,ORD5241,C139,Swati,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-03 17:50,ORD5242,C151,Mansi,Green Tea,Beverages,Tea,1,80
+2026-05-03 17:28,ORD5243,C136,Yash,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-03 13:33,ORD5244,C132,Gaurav,Masala Chai,Beverages,Tea,2,120
+2026-05-03 17:38,ORD5245,C151,Mansi,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-03 13:55,ORD5246,C130,Siddharth,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-03 18:54,ORD5247,C133,Anjali,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-03 09:28,ORD5248,C117,Lakshmi,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-03 09:28,ORD5248,C117,Lakshmi,Maggi,Food,Snacks,1,80
+2026-05-03 09:28,ORD5248,C117,Lakshmi,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-03 21:59,ORD5249,C122,Nikhil,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-03 14:15,ORD5250,C123,Shreya,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-03 21:20,ORD5251,C101,Ananya,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-03 21:20,ORD5251,C101,Ananya,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-03 21:20,ORD5251,C101,Ananya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-03 17:08,ORD5252,C153,Rekha,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-03 17:08,ORD5252,C153,Rekha,Chocolate Brownie,Desserts,Baked,2,260
+2026-05-03 17:16,ORD5253,C101,Ananya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-03 10:38,ORD5254,C146,Pranav,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-03 10:38,ORD5254,C146,Pranav,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-03 13:26,ORD5255,C115,Ritu,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-03 13:26,ORD5255,C115,Ritu,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-05-03 11:34,ORD5256,C138,Kunal,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-03 18:09,ORD5257,C145,Zoya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-03 11:36,ORD5258,C115,Ritu,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-03 16:04,ORD5259,C123,Shreya,Croissant,Desserts,Baked,1,95
+2026-05-03 16:04,ORD5259,C123,Shreya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-03 16:04,ORD5259,C123,Shreya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-03 21:16,ORD5260,C123,Shreya,Fries,Food,Snacks,1,110
+2026-05-03 21:16,ORD5260,C123,Shreya,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-03 16:06,ORD5261,C140,Aman,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-03 16:06,ORD5261,C140,Aman,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-03 16:41,ORD5262,C152,Ashwin,Chocolate Brownie,Desserts,Baked,2,260
+2026-05-03 12:40,ORD5263,C130,Siddharth,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-04 19:29,ORD5264,C149,Juhi,Green Tea,Beverages,Tea,1,80
+2026-05-04 09:56,ORD5265,C112,Karthik,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-04 13:34,ORD5266,C152,Ashwin,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-04 19:18,ORD5267,C112,Karthik,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-04 11:17,ORD5268,C121,Isha,Fries,Food,Snacks,1,110
+2026-05-04 09:47,ORD5269,C125,Ayesha,Samosa (2 pc),Food,Snacks,1,50
+2026-05-04 16:31,ORD5270,C111,Pooja,Fries,Food,Snacks,1,110
+2026-05-04 16:31,ORD5270,C111,Pooja,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-04 14:05,ORD5271,C127,Kavya,Masala Chai,Beverages,Tea,1,60
+2026-05-04 13:06,ORD5272,C120,Dev,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-04 21:45,ORD5273,C138,Kunal,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-04 14:46,ORD5274,C102,Rohan,Fries,Food,Snacks,1,110
+2026-05-04 14:46,ORD5274,C102,Rohan,Maggi,Food,Snacks,1,80
+2026-05-04 14:46,ORD5274,C102,Rohan,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-04 09:40,ORD5275,C142,Rajat,Cheesecake Slice,Desserts,Cakes,2,360
+2026-05-04 13:10,ORD5276,C143,Tanvi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-04 13:10,ORD5276,C143,Tanvi,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-04 13:10,ORD5276,C143,Tanvi,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-04 17:24,ORD5277,C123,Shreya,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-04 17:24,ORD5277,C123,Shreya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-04 17:24,ORD5277,C123,Shreya,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-04 14:08,ORD5278,C136,Yash,Samosa (2 pc),Food,Snacks,1,50
+2026-05-04 14:08,ORD5278,C136,Yash,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-04 16:01,ORD5279,C107,Divya,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-04 16:01,ORD5279,C107,Divya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-04 17:49,ORD5280,C116,Aditya,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-04 10:18,ORD5281,C139,Swati,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-04 10:18,ORD5281,C139,Swati,Green Tea,Beverages,Tea,2,160
+2026-05-04 17:11,ORD5282,C128,Imran,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-04 17:11,ORD5282,C128,Imran,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-04 17:11,ORD5282,C128,Imran,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-05 17:57,ORD5283,C118,Farhan,Masala Chai,Beverages,Tea,1,60
+2026-05-05 17:44,ORD5284,C159,Aditi,Fries,Food,Snacks,1,110
+2026-05-05 17:44,ORD5284,C159,Aditi,Cheesecake Slice,Desserts,Cakes,2,360
+2026-05-05 14:08,ORD5285,C150,Vivek,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-05 16:36,ORD5286,C135,Simran,Croissant,Desserts,Baked,1,95
+2026-05-05 21:05,ORD5287,C156,Naveen,Samosa (2 pc),Food,Snacks,2,100
+2026-05-05 20:30,ORD5288,C146,Pranav,Maggi,Food,Snacks,1,80
+2026-05-05 20:30,ORD5288,C146,Pranav,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-05 09:28,ORD5289,C104,Kiran,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-05 09:53,ORD5290,C156,Naveen,Masala Chai,Beverages,Tea,1,60
+2026-05-05 09:53,ORD5290,C156,Naveen,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-05 20:53,ORD5291,C103,Priya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-05 13:20,ORD5292,C110,Rahul,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-05-05 13:20,ORD5292,C110,Rahul,Fries,Food,Snacks,1,110
+2026-05-05 13:20,ORD5292,C110,Rahul,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-05 21:17,ORD5293,C135,Simran,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-05 11:32,ORD5294,C105,Sneha,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-05 11:32,ORD5294,C105,Sneha,Masala Chai,Beverages,Tea,1,60
+2026-05-05 17:21,ORD5295,C138,Kunal,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-05 17:21,ORD5295,C138,Kunal,Cappuccino,Beverages,Hot Coffee,2,280
+2026-05-05 21:36,ORD5296,C149,Juhi,Green Tea,Beverages,Tea,1,80
+2026-05-05 17:39,ORD5297,C126,Varun,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-05 17:39,ORD5297,C126,Varun,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-05 17:51,ORD5298,C115,Ritu,Samosa (2 pc),Food,Snacks,1,50
+2026-05-05 17:51,ORD5298,C115,Ritu,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-05 14:28,ORD5299,C110,Rahul,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-05 10:09,ORD5300,C138,Kunal,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-05 17:22,ORD5301,C155,Payal,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-05 17:22,ORD5301,C155,Payal,Fries,Food,Snacks,1,110
+2026-05-05 17:22,ORD5301,C155,Payal,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-06 18:09,ORD5302,C115,Ritu,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-05-06 14:39,ORD5303,C155,Payal,Masala Chai,Beverages,Tea,2,120
+2026-05-06 13:36,ORD5304,C159,Aditi,Green Tea,Beverages,Tea,1,80
+2026-05-06 13:36,ORD5304,C159,Aditi,Masala Chai,Beverages,Tea,1,60
+2026-05-06 21:56,ORD5305,C131,Riya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-06 16:32,ORD5306,C125,Ayesha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-06 16:03,ORD5307,C122,Nikhil,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-06 16:41,ORD5308,C153,Rekha,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-05-06 16:41,ORD5308,C153,Rekha,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-06 17:16,ORD5309,C156,Naveen,Samosa (2 pc),Food,Snacks,1,50
+2026-05-06 17:16,ORD5309,C156,Naveen,Fries,Food,Snacks,1,110
+2026-05-06 11:12,ORD5310,C135,Simran,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-06 19:28,ORD5311,C132,Gaurav,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-06 19:28,ORD5311,C132,Gaurav,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-06 16:50,ORD5312,C123,Shreya,Croissant,Desserts,Baked,1,95
+2026-05-06 16:50,ORD5312,C123,Shreya,Fries,Food,Snacks,1,110
+2026-05-06 16:50,ORD5312,C123,Shreya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-06 18:02,ORD5313,C102,Rohan,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-06 10:29,ORD5314,C133,Anjali,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-06 18:39,ORD5315,C159,Aditi,Samosa (2 pc),Food,Snacks,2,100
+2026-05-06 12:53,ORD5316,C147,Ira,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-07 20:34,ORD5317,C132,Gaurav,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-07 14:23,ORD5318,C101,Ananya,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-05-07 14:19,ORD5319,C137,Deepa,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-07 14:19,ORD5319,C137,Deepa,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-07 18:37,ORD5320,C149,Juhi,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-07 18:37,ORD5320,C149,Juhi,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-07 19:49,ORD5321,C139,Swati,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-07 19:49,ORD5321,C139,Swati,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-05-07 09:12,ORD5322,C107,Divya,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-07 14:44,ORD5323,C126,Varun,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-07 10:30,ORD5324,C158,Kabir,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-07 10:30,ORD5324,C158,Kabir,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-07 10:30,ORD5324,C158,Kabir,Green Tea,Beverages,Tea,1,80
+2026-05-07 18:20,ORD5325,C124,Manav,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-07 18:20,ORD5325,C124,Manav,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-07 18:20,ORD5325,C124,Manav,Fries,Food,Snacks,1,110
+2026-05-07 17:44,ORD5326,C151,Mansi,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-07 16:17,ORD5327,C115,Ritu,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-07 16:17,ORD5327,C115,Ritu,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-07 18:45,ORD5328,C144,Mohit,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-07 18:59,ORD5329,C159,Aditi,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-07 18:59,ORD5329,C159,Aditi,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-07 13:57,ORD5330,C124,Manav,Fries,Food,Snacks,1,110
+2026-05-07 13:57,ORD5330,C124,Manav,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-07 13:57,ORD5330,C124,Manav,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-07 11:28,ORD5331,C159,Aditi,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-07 11:28,ORD5331,C159,Aditi,Green Tea,Beverages,Tea,1,80
+2026-05-08 19:35,ORD5332,C159,Aditi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-08 19:35,ORD5332,C159,Aditi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-08 18:03,ORD5333,C115,Ritu,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-08 18:03,ORD5333,C115,Ritu,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-08 13:21,ORD5334,C126,Varun,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-08 13:21,ORD5334,C126,Varun,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-08 18:10,ORD5335,C159,Aditi,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-08 16:48,ORD5336,C112,Karthik,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-08 16:48,ORD5336,C112,Karthik,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-08 16:48,ORD5336,C112,Karthik,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-08 17:47,ORD5337,C134,Harsh,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-08 17:47,ORD5337,C134,Harsh,Masala Chai,Beverages,Tea,2,120
+2026-05-08 19:58,ORD5338,C159,Aditi,Samosa (2 pc),Food,Snacks,1,50
+2026-05-08 17:59,ORD5339,C111,Pooja,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-08 17:59,ORD5339,C111,Pooja,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-08 18:59,ORD5340,C106,Vikram,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-05-08 18:59,ORD5340,C106,Vikram,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-08 18:59,ORD5340,C106,Vikram,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-08 11:12,ORD5341,C117,Lakshmi,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-08 11:12,ORD5341,C117,Lakshmi,Masala Chai,Beverages,Tea,1,60
+2026-05-08 16:11,ORD5342,C145,Zoya,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-08 18:43,ORD5343,C136,Yash,Masala Chai,Beverages,Tea,2,120
+2026-05-08 18:43,ORD5343,C136,Yash,Samosa (2 pc),Food,Snacks,1,50
+2026-05-08 18:25,ORD5344,C105,Sneha,Masala Chai,Beverages,Tea,1,60
+2026-05-08 18:25,ORD5344,C105,Sneha,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-08 12:16,ORD5345,C100,Aarav,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-09 10:19,ORD5346,C121,Isha,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-09 10:19,ORD5346,C121,Isha,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-09 14:42,ORD5347,C103,Priya,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-09 16:32,ORD5348,C143,Tanvi,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-09 16:32,ORD5348,C143,Tanvi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-09 16:32,ORD5348,C143,Tanvi,Croissant,Desserts,Baked,2,190
+2026-05-09 13:09,ORD5349,C130,Siddharth,Fries,Food,Snacks,1,110
+2026-05-09 16:58,ORD5350,C135,Simran,Croissant,Desserts,Baked,2,190
+2026-05-09 21:13,ORD5351,C152,Ashwin,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-09 21:13,ORD5351,C152,Ashwin,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-09 16:58,ORD5352,C104,Kiran,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-09 16:58,ORD5352,C104,Kiran,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-09 17:20,ORD5353,C110,Rahul,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-09 17:20,ORD5353,C110,Rahul,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-09 17:20,ORD5353,C110,Rahul,Green Tea,Beverages,Tea,2,160
+2026-05-09 09:51,ORD5354,C128,Imran,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-09 20:36,ORD5355,C129,Neha,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-09 14:46,ORD5356,C119,Tara,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-09 18:13,ORD5357,C147,Ira,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-09 18:13,ORD5357,C147,Ira,Maggi,Food,Snacks,1,80
+2026-05-09 13:59,ORD5358,C103,Priya,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-09 13:59,ORD5358,C103,Priya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-09 13:59,ORD5358,C103,Priya,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-09 11:41,ORD5359,C146,Pranav,Fries,Food,Snacks,2,220
+2026-05-09 11:41,ORD5359,C146,Pranav,Samosa (2 pc),Food,Snacks,2,100
+2026-05-09 11:41,ORD5359,C146,Pranav,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-09 16:42,ORD5360,C143,Tanvi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-09 16:42,ORD5360,C143,Tanvi,Fries,Food,Snacks,1,110
+2026-05-09 16:42,ORD5360,C143,Tanvi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-09 12:14,ORD5361,C146,Pranav,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-09 12:14,ORD5361,C146,Pranav,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-09 12:34,ORD5362,C127,Kavya,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-09 13:09,ORD5363,C122,Nikhil,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-09 18:26,ORD5364,C142,Rajat,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-09 18:26,ORD5364,C142,Rajat,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-09 18:28,ORD5365,C102,Rohan,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-09 18:28,ORD5365,C102,Rohan,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-09 17:34,ORD5366,C114,Sanjay,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-09 09:14,ORD5367,C118,Farhan,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-09 09:14,ORD5367,C118,Farhan,Croissant,Desserts,Baked,2,190
+2026-05-09 14:33,ORD5368,C142,Rajat,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-09 11:37,ORD5369,C135,Simran,Masala Chai,Beverages,Tea,1,60
+2026-05-09 11:37,ORD5369,C135,Simran,Maggi,Food,Snacks,1,80
+2026-05-09 11:37,ORD5369,C135,Simran,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-09 16:50,ORD5370,C124,Manav,Maggi,Food,Snacks,1,80
+2026-05-09 16:50,ORD5370,C124,Manav,Croissant,Desserts,Baked,1,95
+2026-05-09 17:34,ORD5371,C148,Sameer,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-09 18:09,ORD5372,C145,Zoya,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-09 18:09,ORD5372,C145,Zoya,Maggi,Food,Snacks,1,80
+2026-05-09 16:24,ORD5373,C108,Arjun,Green Tea,Beverages,Tea,1,80
+2026-05-10 17:59,ORD5374,C105,Sneha,Fries,Food,Snacks,1,110
+2026-05-10 10:53,ORD5375,C146,Pranav,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-10 12:38,ORD5376,C138,Kunal,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-10 10:37,ORD5377,C148,Sameer,Croissant,Desserts,Baked,1,95
+2026-05-10 10:37,ORD5377,C148,Sameer,Green Tea,Beverages,Tea,2,160
+2026-05-10 19:19,ORD5378,C121,Isha,Cappuccino,Beverages,Hot Coffee,2,280
+2026-05-10 19:19,ORD5378,C121,Isha,Green Tea,Beverages,Tea,1,80
+2026-05-10 19:19,ORD5378,C121,Isha,Cheesecake Slice,Desserts,Cakes,2,360
+2026-05-10 17:58,ORD5379,C130,Siddharth,Green Tea,Beverages,Tea,1,80
+2026-05-10 20:35,ORD5380,C115,Ritu,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-10 14:41,ORD5381,C134,Harsh,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-10 14:31,ORD5382,C156,Naveen,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-10 14:58,ORD5383,C120,Dev,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-10 18:55,ORD5384,C136,Yash,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-10 10:59,ORD5385,C135,Simran,Maggi,Food,Snacks,1,80
+2026-05-10 10:59,ORD5385,C135,Simran,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-10 11:36,ORD5386,C124,Manav,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-10 11:36,ORD5386,C124,Manav,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-10 19:41,ORD5387,C146,Pranav,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-10 19:41,ORD5387,C146,Pranav,Masala Chai,Beverages,Tea,1,60
+2026-05-10 18:46,ORD5388,C108,Arjun,Masala Chai,Beverages,Tea,1,60
+2026-05-10 18:46,ORD5388,C108,Arjun,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-10 12:52,ORD5389,C104,Kiran,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-10 12:52,ORD5389,C104,Kiran,Maggi,Food,Snacks,1,80
+2026-05-10 13:45,ORD5390,C104,Kiran,Green Tea,Beverages,Tea,1,80
+2026-05-10 13:03,ORD5391,C123,Shreya,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-10 13:03,ORD5391,C123,Shreya,Croissant,Desserts,Baked,1,95
+2026-05-10 18:00,ORD5392,C126,Varun,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-10 09:01,ORD5393,C118,Farhan,Maggi,Food,Snacks,1,80
+2026-05-10 09:01,ORD5393,C118,Farhan,Masala Chai,Beverages,Tea,1,60
+2026-05-10 19:15,ORD5394,C109,Meera,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-10 14:17,ORD5395,C122,Nikhil,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-05-10 14:17,ORD5395,C122,Nikhil,Fries,Food,Snacks,1,110
+2026-05-10 13:44,ORD5396,C115,Ritu,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-11 18:41,ORD5397,C154,Dhruv,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-11 18:41,ORD5397,C154,Dhruv,Samosa (2 pc),Food,Snacks,1,50
+2026-05-11 17:40,ORD5398,C103,Priya,Masala Chai,Beverages,Tea,1,60
+2026-05-11 17:27,ORD5399,C154,Dhruv,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-11 17:27,ORD5399,C154,Dhruv,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-05-11 17:13,ORD5400,C114,Sanjay,Blueberry Muffin,Desserts,Baked,2,220
+2026-05-11 17:13,ORD5400,C114,Sanjay,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-11 17:13,ORD5400,C114,Sanjay,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-11 16:36,ORD5401,C134,Harsh,Masala Chai,Beverages,Tea,1,60
+2026-05-11 16:36,ORD5401,C134,Harsh,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-11 13:48,ORD5402,C109,Meera,Samosa (2 pc),Food,Snacks,1,50
+2026-05-11 13:48,ORD5402,C109,Meera,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-11 14:53,ORD5403,C136,Yash,Croissant,Desserts,Baked,1,95
+2026-05-11 14:53,ORD5403,C136,Yash,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-11 17:44,ORD5404,C150,Vivek,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-11 17:44,ORD5404,C150,Vivek,Fries,Food,Snacks,1,110
+2026-05-11 13:04,ORD5405,C153,Rekha,Samosa (2 pc),Food,Snacks,2,100
+2026-05-11 13:01,ORD5406,C120,Dev,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-11 13:01,ORD5406,C120,Dev,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-11 14:27,ORD5407,C124,Manav,Samosa (2 pc),Food,Snacks,1,50
+2026-05-11 14:18,ORD5408,C139,Swati,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-11 14:18,ORD5408,C139,Swati,Croissant,Desserts,Baked,1,95
+2026-05-11 14:40,ORD5409,C150,Vivek,Samosa (2 pc),Food,Snacks,1,50
+2026-05-11 19:05,ORD5410,C106,Vikram,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-11 13:17,ORD5411,C148,Sameer,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-11 09:35,ORD5412,C128,Imran,Maggi,Food,Snacks,1,80
+2026-05-11 09:35,ORD5412,C128,Imran,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-11 09:38,ORD5413,C105,Sneha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-11 09:38,ORD5413,C105,Sneha,Samosa (2 pc),Food,Snacks,1,50
+2026-05-11 09:05,ORD5414,C149,Juhi,Croissant,Desserts,Baked,1,95
+2026-05-11 09:05,ORD5414,C149,Juhi,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-12 19:10,ORD5415,C124,Manav,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-12 21:04,ORD5416,C109,Meera,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-12 11:50,ORD5417,C130,Siddharth,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-12 19:40,ORD5418,C146,Pranav,Green Tea,Beverages,Tea,1,80
+2026-05-12 17:19,ORD5419,C108,Arjun,Samosa (2 pc),Food,Snacks,1,50
+2026-05-12 16:24,ORD5420,C139,Swati,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-12 16:24,ORD5420,C139,Swati,Chocolate Brownie,Desserts,Baked,2,260
+2026-05-12 18:41,ORD5421,C155,Payal,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-12 18:41,ORD5421,C155,Payal,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-12 18:41,ORD5421,C155,Payal,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-12 21:25,ORD5422,C111,Pooja,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-12 21:25,ORD5422,C111,Pooja,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-12 21:25,ORD5422,C111,Pooja,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-12 16:07,ORD5423,C123,Shreya,Green Tea,Beverages,Tea,2,160
+2026-05-12 16:07,ORD5423,C123,Shreya,Masala Chai,Beverages,Tea,1,60
+2026-05-12 16:07,ORD5423,C123,Shreya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-12 18:51,ORD5424,C128,Imran,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-05-12 12:50,ORD5425,C150,Vivek,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-12 18:15,ORD5426,C119,Tara,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-12 16:24,ORD5427,C150,Vivek,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-12 20:32,ORD5428,C134,Harsh,Maggi,Food,Snacks,1,80
+2026-05-12 20:32,ORD5428,C134,Harsh,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-12 20:32,ORD5428,C134,Harsh,Fries,Food,Snacks,1,110
+2026-05-12 16:05,ORD5429,C158,Kabir,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-12 14:10,ORD5430,C122,Nikhil,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-12 14:10,ORD5430,C122,Nikhil,Samosa (2 pc),Food,Snacks,1,50
+2026-05-13 20:27,ORD5431,C150,Vivek,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-13 18:47,ORD5432,C132,Gaurav,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-13 18:47,ORD5432,C132,Gaurav,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-13 13:37,ORD5433,C143,Tanvi,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-13 13:37,ORD5433,C143,Tanvi,Fries,Food,Snacks,1,110
+2026-05-13 09:26,ORD5434,C118,Farhan,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-13 09:26,ORD5434,C118,Farhan,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-13 09:26,ORD5434,C118,Farhan,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-13 17:30,ORD5435,C133,Anjali,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-13 17:28,ORD5436,C144,Mohit,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-13 13:07,ORD5437,C145,Zoya,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-13 19:51,ORD5438,C143,Tanvi,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-13 21:10,ORD5439,C135,Simran,Maggi,Food,Snacks,2,160
+2026-05-13 20:51,ORD5440,C114,Sanjay,Masala Chai,Beverages,Tea,1,60
+2026-05-13 21:27,ORD5441,C142,Rajat,Green Tea,Beverages,Tea,1,80
+2026-05-13 13:24,ORD5442,C127,Kavya,Green Tea,Beverages,Tea,1,80
+2026-05-14 19:45,ORD5443,C148,Sameer,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-14 19:45,ORD5443,C148,Sameer,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-14 18:20,ORD5444,C123,Shreya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-14 12:31,ORD5445,C155,Payal,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-14 12:31,ORD5445,C155,Payal,Samosa (2 pc),Food,Snacks,1,50
+2026-05-14 18:22,ORD5446,C122,Nikhil,Masala Chai,Beverages,Tea,2,120
+2026-05-14 18:22,ORD5446,C122,Nikhil,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-14 18:08,ORD5447,C143,Tanvi,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-14 18:23,ORD5448,C111,Pooja,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-14 18:23,ORD5448,C111,Pooja,Samosa (2 pc),Food,Snacks,1,50
+2026-05-14 13:27,ORD5449,C124,Manav,Croissant,Desserts,Baked,1,95
+2026-05-14 17:59,ORD5450,C141,Bhavna,Croissant,Desserts,Baked,1,95
+2026-05-14 17:59,ORD5450,C141,Bhavna,Masala Chai,Beverages,Tea,1,60
+2026-05-14 17:59,ORD5450,C141,Bhavna,Blueberry Muffin,Desserts,Baked,2,220
+2026-05-14 18:03,ORD5451,C139,Swati,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-14 18:03,ORD5451,C139,Swati,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-14 18:03,ORD5451,C139,Swati,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-14 18:31,ORD5452,C141,Bhavna,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-14 17:28,ORD5453,C153,Rekha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-14 16:48,ORD5454,C150,Vivek,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-14 16:18,ORD5455,C134,Harsh,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-14 13:49,ORD5456,C149,Juhi,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-14 14:17,ORD5457,C107,Divya,Fries,Food,Snacks,1,110
+2026-05-14 14:17,ORD5457,C107,Divya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-14 10:27,ORD5458,C113,Nisha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-14 17:28,ORD5459,C102,Rohan,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-14 16:49,ORD5460,C107,Divya,Green Tea,Beverages,Tea,2,160
+2026-05-14 16:49,ORD5460,C107,Divya,Fries,Food,Snacks,1,110
+2026-05-14 18:10,ORD5461,C127,Kavya,Green Tea,Beverages,Tea,2,160
+2026-05-14 18:10,ORD5461,C127,Kavya,Croissant,Desserts,Baked,1,95
+2026-05-14 18:17,ORD5462,C134,Harsh,Masala Chai,Beverages,Tea,2,120
+2026-05-14 18:17,ORD5462,C134,Harsh,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-15 16:17,ORD5463,C136,Yash,Cheesecake Slice,Desserts,Cakes,2,360
+2026-05-15 16:17,ORD5463,C136,Yash,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-15 16:17,ORD5463,C136,Yash,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-15 16:55,ORD5464,C117,Lakshmi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-15 16:55,ORD5464,C117,Lakshmi,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-15 11:48,ORD5465,C115,Ritu,Samosa (2 pc),Food,Snacks,1,50
+2026-05-15 11:48,ORD5465,C115,Ritu,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-15 17:26,ORD5466,C140,Aman,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-15 18:49,ORD5467,C156,Naveen,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-15 12:59,ORD5468,C144,Mohit,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-15 12:59,ORD5468,C144,Mohit,Blueberry Muffin,Desserts,Baked,2,220
+2026-05-15 12:59,ORD5468,C144,Mohit,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-15 17:46,ORD5469,C105,Sneha,Fries,Food,Snacks,1,110
+2026-05-15 17:46,ORD5469,C105,Sneha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-15 17:46,ORD5469,C105,Sneha,Samosa (2 pc),Food,Snacks,1,50
+2026-05-15 18:20,ORD5470,C117,Lakshmi,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-15 18:20,ORD5470,C117,Lakshmi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-15 18:57,ORD5471,C121,Isha,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-15 18:57,ORD5471,C121,Isha,Croissant,Desserts,Baked,1,95
+2026-05-15 13:01,ORD5472,C129,Neha,Masala Chai,Beverages,Tea,1,60
+2026-05-15 12:27,ORD5473,C100,Aarav,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-15 17:10,ORD5474,C119,Tara,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-15 17:10,ORD5474,C119,Tara,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-15 17:10,ORD5474,C119,Tara,Fries,Food,Snacks,2,220
+2026-05-15 11:03,ORD5475,C110,Rahul,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-15 16:14,ORD5476,C148,Sameer,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-15 17:13,ORD5477,C100,Aarav,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-15 17:43,ORD5478,C133,Anjali,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-15 16:07,ORD5479,C152,Ashwin,Maggi,Food,Snacks,1,80
+2026-05-15 16:07,ORD5479,C152,Ashwin,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-15 16:07,ORD5479,C152,Ashwin,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-15 17:06,ORD5480,C106,Vikram,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-15 12:52,ORD5481,C149,Juhi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-15 12:52,ORD5481,C149,Juhi,Croissant,Desserts,Baked,1,95
+2026-05-15 14:41,ORD5482,C139,Swati,Fries,Food,Snacks,1,110
+2026-05-15 16:47,ORD5483,C140,Aman,Maggi,Food,Snacks,1,80
+2026-05-16 21:55,ORD5484,C128,Imran,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-16 16:37,ORD5485,C107,Divya,Fries,Food,Snacks,1,110
+2026-05-16 16:37,ORD5485,C107,Divya,Maggi,Food,Snacks,1,80
+2026-05-16 14:41,ORD5486,C117,Lakshmi,Croissant,Desserts,Baked,1,95
+2026-05-16 19:38,ORD5487,C146,Pranav,Cappuccino,Beverages,Hot Coffee,2,280
+2026-05-16 12:56,ORD5488,C142,Rajat,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-16 18:47,ORD5489,C112,Karthik,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-16 09:15,ORD5490,C150,Vivek,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-16 12:38,ORD5491,C140,Aman,Cappuccino,Beverages,Hot Coffee,2,280
+2026-05-16 13:20,ORD5492,C159,Aditi,Maggi,Food,Snacks,1,80
+2026-05-16 16:11,ORD5493,C143,Tanvi,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-16 16:11,ORD5493,C143,Tanvi,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-16 11:02,ORD5494,C113,Nisha,Samosa (2 pc),Food,Snacks,1,50
+2026-05-16 11:02,ORD5494,C113,Nisha,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-16 11:02,ORD5494,C113,Nisha,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-16 20:25,ORD5495,C144,Mohit,Croissant,Desserts,Baked,1,95
+2026-05-16 11:17,ORD5496,C109,Meera,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-16 21:51,ORD5497,C113,Nisha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-16 11:48,ORD5498,C140,Aman,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-16 11:48,ORD5498,C140,Aman,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-16 20:15,ORD5499,C154,Dhruv,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-05-16 13:29,ORD5500,C107,Divya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-16 13:29,ORD5500,C107,Divya,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-16 16:07,ORD5501,C111,Pooja,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-16 13:31,ORD5502,C110,Rahul,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-16 13:31,ORD5502,C110,Rahul,Croissant,Desserts,Baked,1,95
+2026-05-16 13:31,ORD5502,C110,Rahul,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-16 14:46,ORD5503,C117,Lakshmi,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-16 14:46,ORD5503,C117,Lakshmi,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-16 14:46,ORD5503,C117,Lakshmi,Maggi,Food,Snacks,1,80
+2026-05-16 19:40,ORD5504,C136,Yash,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-16 13:31,ORD5505,C103,Priya,Masala Chai,Beverages,Tea,1,60
+2026-05-16 13:31,ORD5505,C103,Priya,Fries,Food,Snacks,1,110
+2026-05-16 13:31,ORD5505,C103,Priya,Croissant,Desserts,Baked,1,95
+2026-05-16 17:07,ORD5506,C146,Pranav,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-17 14:55,ORD5507,C154,Dhruv,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-17 21:58,ORD5508,C124,Manav,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-17 14:45,ORD5509,C158,Kabir,Maggi,Food,Snacks,1,80
+2026-05-17 14:45,ORD5509,C158,Kabir,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-17 21:20,ORD5510,C146,Pranav,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-17 11:32,ORD5511,C107,Divya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-17 11:32,ORD5511,C107,Divya,Masala Chai,Beverages,Tea,1,60
+2026-05-17 11:25,ORD5512,C102,Rohan,Chocolate Brownie,Desserts,Baked,2,260
+2026-05-17 20:54,ORD5513,C149,Juhi,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-17 18:23,ORD5514,C100,Aarav,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-17 18:29,ORD5515,C115,Ritu,Blueberry Muffin,Desserts,Baked,2,220
+2026-05-17 11:12,ORD5516,C149,Juhi,Croissant,Desserts,Baked,1,95
+2026-05-17 11:12,ORD5516,C149,Juhi,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-05-17 12:14,ORD5517,C101,Ananya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-17 12:14,ORD5517,C101,Ananya,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-17 17:47,ORD5518,C154,Dhruv,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-17 17:47,ORD5518,C154,Dhruv,Green Tea,Beverages,Tea,1,80
+2026-05-17 17:03,ORD5519,C131,Riya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-17 17:03,ORD5519,C131,Riya,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-17 17:03,ORD5519,C131,Riya,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-05-17 17:44,ORD5520,C126,Varun,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-17 17:44,ORD5520,C126,Varun,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-17 17:44,ORD5520,C126,Varun,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-17 16:36,ORD5521,C137,Deepa,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-17 14:54,ORD5522,C116,Aditya,Samosa (2 pc),Food,Snacks,1,50
+2026-05-17 17:20,ORD5523,C147,Ira,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-17 19:08,ORD5524,C112,Karthik,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-17 19:08,ORD5524,C112,Karthik,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-17 11:26,ORD5525,C120,Dev,Fries,Food,Snacks,2,220
+2026-05-17 17:28,ORD5526,C113,Nisha,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-17 17:10,ORD5527,C105,Sneha,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-17 17:10,ORD5527,C105,Sneha,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-17 16:05,ORD5528,C109,Meera,Fries,Food,Snacks,1,110
+2026-05-17 16:05,ORD5528,C109,Meera,Samosa (2 pc),Food,Snacks,1,50
+2026-05-17 17:52,ORD5529,C116,Aditya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-17 17:52,ORD5529,C116,Aditya,Samosa (2 pc),Food,Snacks,1,50
+2026-05-17 17:52,ORD5529,C116,Aditya,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-17 17:51,ORD5530,C106,Vikram,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-17 17:51,ORD5530,C106,Vikram,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-17 17:08,ORD5531,C114,Sanjay,Samosa (2 pc),Food,Snacks,1,50
+2026-05-17 16:41,ORD5532,C140,Aman,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-17 11:01,ORD5533,C104,Kiran,Green Tea,Beverages,Tea,1,80
+2026-05-17 11:01,ORD5533,C104,Kiran,Chocolate Brownie,Desserts,Baked,2,260
+2026-05-17 11:01,ORD5533,C104,Kiran,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-17 13:02,ORD5534,C107,Divya,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-17 13:02,ORD5534,C107,Divya,Masala Chai,Beverages,Tea,1,60
+2026-05-17 13:02,ORD5534,C107,Divya,Maggi,Food,Snacks,1,80
+2026-05-17 21:27,ORD5535,C143,Tanvi,Green Tea,Beverages,Tea,2,160
+2026-05-17 13:17,ORD5536,C117,Lakshmi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-17 18:39,ORD5537,C139,Swati,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-17 18:35,ORD5538,C156,Naveen,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-17 12:26,ORD5539,C108,Arjun,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-17 19:34,ORD5540,C151,Mansi,Samosa (2 pc),Food,Snacks,1,50
+2026-05-17 19:34,ORD5540,C151,Mansi,Fries,Food,Snacks,1,110
+2026-05-17 09:58,ORD5541,C122,Nikhil,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-17 09:58,ORD5541,C122,Nikhil,Samosa (2 pc),Food,Snacks,1,50
+2026-05-18 17:14,ORD5542,C138,Kunal,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-18 11:33,ORD5543,C130,Siddharth,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-05-18 16:15,ORD5544,C106,Vikram,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-18 16:15,ORD5544,C106,Vikram,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-18 17:54,ORD5545,C136,Yash,Samosa (2 pc),Food,Snacks,1,50
+2026-05-18 17:54,ORD5545,C136,Yash,Fries,Food,Snacks,1,110
+2026-05-18 17:54,ORD5545,C136,Yash,Masala Chai,Beverages,Tea,2,120
+2026-05-18 17:22,ORD5546,C144,Mohit,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-18 17:22,ORD5546,C144,Mohit,Fries,Food,Snacks,1,110
+2026-05-18 17:22,ORD5546,C144,Mohit,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-18 14:31,ORD5547,C156,Naveen,Masala Chai,Beverages,Tea,1,60
+2026-05-18 14:31,ORD5547,C156,Naveen,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-18 18:14,ORD5548,C138,Kunal,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-18 19:39,ORD5549,C158,Kabir,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-18 21:58,ORD5550,C111,Pooja,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-18 21:58,ORD5550,C111,Pooja,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-18 11:09,ORD5551,C158,Kabir,Cheesecake Slice,Desserts,Cakes,2,360
+2026-05-18 11:09,ORD5551,C158,Kabir,Fries,Food,Snacks,1,110
+2026-05-18 14:25,ORD5552,C142,Rajat,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-18 14:25,ORD5552,C142,Rajat,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-05-18 09:27,ORD5553,C146,Pranav,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-18 09:27,ORD5553,C146,Pranav,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-18 17:56,ORD5554,C144,Mohit,Fries,Food,Snacks,1,110
+2026-05-18 17:56,ORD5554,C144,Mohit,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-18 17:56,ORD5554,C144,Mohit,Masala Chai,Beverages,Tea,1,60
+2026-05-18 09:46,ORD5555,C111,Pooja,Samosa (2 pc),Food,Snacks,2,100
+2026-05-19 17:36,ORD5556,C149,Juhi,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-19 19:14,ORD5557,C139,Swati,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-19 19:14,ORD5557,C139,Swati,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-19 13:22,ORD5558,C115,Ritu,Masala Chai,Beverages,Tea,1,60
+2026-05-19 13:22,ORD5558,C115,Ritu,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-19 13:22,ORD5558,C115,Ritu,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-19 13:22,ORD5559,C104,Kiran,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-19 10:24,ORD5560,C103,Priya,Maggi,Food,Snacks,2,160
+2026-05-19 18:26,ORD5561,C156,Naveen,Samosa (2 pc),Food,Snacks,1,50
+2026-05-19 17:06,ORD5562,C124,Manav,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-19 17:06,ORD5562,C124,Manav,Masala Chai,Beverages,Tea,1,60
+2026-05-19 17:18,ORD5563,C102,Rohan,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-19 12:21,ORD5564,C104,Kiran,Samosa (2 pc),Food,Snacks,1,50
+2026-05-19 18:35,ORD5565,C104,Kiran,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-19 18:35,ORD5565,C104,Kiran,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-19 18:35,ORD5565,C104,Kiran,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-19 12:56,ORD5566,C138,Kunal,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-19 17:12,ORD5567,C113,Nisha,Croissant,Desserts,Baked,1,95
+2026-05-19 17:34,ORD5568,C146,Pranav,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-19 16:03,ORD5569,C106,Vikram,Croissant,Desserts,Baked,2,190
+2026-05-19 16:03,ORD5570,C109,Meera,Maggi,Food,Snacks,1,80
+2026-05-19 16:42,ORD5571,C152,Ashwin,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-19 16:42,ORD5571,C152,Ashwin,Green Tea,Beverages,Tea,1,80
+2026-05-19 16:18,ORD5572,C140,Aman,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-19 16:18,ORD5572,C140,Aman,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-19 16:18,ORD5572,C140,Aman,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-05-19 11:05,ORD5573,C116,Aditya,Samosa (2 pc),Food,Snacks,1,50
+2026-05-19 11:05,ORD5573,C116,Aditya,Masala Chai,Beverages,Tea,1,60
+2026-05-19 17:28,ORD5574,C111,Pooja,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-19 16:53,ORD5575,C114,Sanjay,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-19 17:42,ORD5576,C144,Mohit,Fries,Food,Snacks,2,220
+2026-05-19 10:48,ORD5577,C126,Varun,Croissant,Desserts,Baked,2,190
+2026-05-19 10:48,ORD5577,C126,Varun,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-19 17:34,ORD5578,C126,Varun,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-19 17:34,ORD5578,C126,Varun,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-20 16:54,ORD5579,C157,Sonali,Cheesecake Slice,Desserts,Cakes,2,360
+2026-05-20 16:54,ORD5579,C157,Sonali,Croissant,Desserts,Baked,1,95
+2026-05-20 17:09,ORD5580,C139,Swati,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-20 12:13,ORD5581,C110,Rahul,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-20 12:13,ORD5581,C110,Rahul,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-20 11:12,ORD5582,C127,Kavya,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-20 11:12,ORD5582,C127,Kavya,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-20 11:12,ORD5582,C127,Kavya,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-20 21:35,ORD5583,C124,Manav,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-20 18:29,ORD5584,C133,Anjali,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-20 18:29,ORD5584,C133,Anjali,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-20 18:29,ORD5584,C133,Anjali,Maggi,Food,Snacks,1,80
+2026-05-20 17:48,ORD5585,C137,Deepa,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-20 17:48,ORD5585,C137,Deepa,Croissant,Desserts,Baked,2,190
+2026-05-20 17:48,ORD5585,C137,Deepa,Cheesecake Slice,Desserts,Cakes,2,360
+2026-05-20 17:26,ORD5586,C156,Naveen,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-20 21:02,ORD5587,C130,Siddharth,Samosa (2 pc),Food,Snacks,1,50
+2026-05-20 17:43,ORD5588,C138,Kunal,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-20 17:43,ORD5588,C138,Kunal,Samosa (2 pc),Food,Snacks,1,50
+2026-05-20 17:03,ORD5589,C115,Ritu,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-20 17:03,ORD5589,C115,Ritu,Fries,Food,Snacks,2,220
+2026-05-20 14:19,ORD5590,C119,Tara,Blueberry Muffin,Desserts,Baked,2,220
+2026-05-20 17:06,ORD5591,C143,Tanvi,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-05-20 17:06,ORD5591,C143,Tanvi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-20 17:06,ORD5591,C143,Tanvi,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-05-20 09:46,ORD5592,C117,Lakshmi,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-20 13:58,ORD5593,C113,Nisha,Blueberry Muffin,Desserts,Baked,2,220
+2026-05-20 13:58,ORD5593,C113,Nisha,Cheesecake Slice,Desserts,Cakes,2,360
+2026-05-20 18:50,ORD5594,C132,Gaurav,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-20 13:08,ORD5595,C125,Ayesha,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-20 13:08,ORD5595,C125,Ayesha,Cappuccino,Beverages,Hot Coffee,2,280
+2026-05-20 18:53,ORD5596,C112,Karthik,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-21 18:23,ORD5597,C158,Kabir,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-21 18:23,ORD5597,C158,Kabir,Fries,Food,Snacks,1,110
+2026-05-21 12:59,ORD5598,C140,Aman,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-21 12:38,ORD5599,C131,Riya,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-21 16:22,ORD5600,C122,Nikhil,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-21 16:05,ORD5601,C144,Mohit,Samosa (2 pc),Food,Snacks,1,50
+2026-05-21 18:36,ORD5602,C154,Dhruv,Green Tea,Beverages,Tea,1,80
+2026-05-21 18:36,ORD5602,C154,Dhruv,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-21 17:41,ORD5603,C117,Lakshmi,Cappuccino,Beverages,Hot Coffee,2,280
+2026-05-21 18:43,ORD5604,C149,Juhi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-21 11:51,ORD5605,C138,Kunal,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-21 13:45,ORD5606,C119,Tara,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-21 13:45,ORD5606,C119,Tara,Maggi,Food,Snacks,1,80
+2026-05-21 13:45,ORD5606,C119,Tara,Samosa (2 pc),Food,Snacks,1,50
+2026-05-21 16:43,ORD5607,C119,Tara,Samosa (2 pc),Food,Snacks,1,50
+2026-05-21 16:43,ORD5607,C119,Tara,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-05-21 16:53,ORD5608,C153,Rekha,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-21 13:30,ORD5609,C106,Vikram,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-21 10:17,ORD5610,C155,Payal,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-21 18:48,ORD5611,C133,Anjali,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-21 10:51,ORD5612,C151,Mansi,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-21 10:51,ORD5612,C151,Mansi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-21 14:16,ORD5613,C118,Farhan,Samosa (2 pc),Food,Snacks,1,50
+2026-05-21 14:16,ORD5613,C118,Farhan,Croissant,Desserts,Baked,2,190
+2026-05-21 14:16,ORD5613,C118,Farhan,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-21 18:46,ORD5614,C121,Isha,Croissant,Desserts,Baked,2,190
+2026-05-21 18:46,ORD5614,C121,Isha,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-22 17:19,ORD5615,C132,Gaurav,Croissant,Desserts,Baked,1,95
+2026-05-22 17:19,ORD5615,C132,Gaurav,Masala Chai,Beverages,Tea,1,60
+2026-05-22 17:16,ORD5616,C147,Ira,Croissant,Desserts,Baked,2,190
+2026-05-22 17:16,ORD5616,C147,Ira,Masala Chai,Beverages,Tea,2,120
+2026-05-22 18:05,ORD5617,C141,Bhavna,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-22 18:26,ORD5618,C119,Tara,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-22 18:26,ORD5618,C119,Tara,Fries,Food,Snacks,1,110
+2026-05-22 18:07,ORD5619,C154,Dhruv,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-22 21:32,ORD5620,C112,Karthik,Samosa (2 pc),Food,Snacks,1,50
+2026-05-22 14:03,ORD5621,C126,Varun,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-22 14:03,ORD5621,C126,Varun,Croissant,Desserts,Baked,2,190
+2026-05-22 14:03,ORD5621,C126,Varun,Green Tea,Beverages,Tea,2,160
+2026-05-22 10:09,ORD5622,C129,Neha,Masala Chai,Beverages,Tea,1,60
+2026-05-22 10:21,ORD5623,C131,Riya,Masala Chai,Beverages,Tea,1,60
+2026-05-22 10:21,ORD5623,C131,Riya,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-22 16:13,ORD5624,C117,Lakshmi,Masala Chai,Beverages,Tea,1,60
+2026-05-22 16:13,ORD5624,C117,Lakshmi,Croissant,Desserts,Baked,1,95
+2026-05-22 11:08,ORD5625,C105,Sneha,Maggi,Food,Snacks,1,80
+2026-05-22 11:08,ORD5625,C105,Sneha,Samosa (2 pc),Food,Snacks,1,50
+2026-05-22 16:02,ORD5626,C100,Aarav,Fries,Food,Snacks,2,220
+2026-05-22 16:02,ORD5626,C100,Aarav,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-22 09:12,ORD5627,C133,Anjali,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-22 17:14,ORD5628,C115,Ritu,Fries,Food,Snacks,1,110
+2026-05-22 17:14,ORD5628,C115,Ritu,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-22 21:19,ORD5629,C137,Deepa,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-22 16:29,ORD5630,C118,Farhan,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-22 16:29,ORD5630,C118,Farhan,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-23 19:21,ORD5631,C108,Arjun,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-23 19:21,ORD5631,C108,Arjun,Fries,Food,Snacks,2,220
+2026-05-23 19:21,ORD5631,C108,Arjun,Green Tea,Beverages,Tea,2,160
+2026-05-23 16:14,ORD5632,C101,Ananya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-23 09:37,ORD5633,C101,Ananya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-23 09:37,ORD5633,C101,Ananya,Fries,Food,Snacks,1,110
+2026-05-23 14:56,ORD5634,C124,Manav,Croissant,Desserts,Baked,1,95
+2026-05-23 14:56,ORD5634,C124,Manav,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-23 12:41,ORD5635,C106,Vikram,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-23 12:41,ORD5635,C106,Vikram,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-23 18:16,ORD5636,C135,Simran,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-23 13:40,ORD5637,C143,Tanvi,Maggi,Food,Snacks,1,80
+2026-05-23 16:33,ORD5638,C142,Rajat,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-23 13:06,ORD5639,C157,Sonali,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-23 13:06,ORD5639,C157,Sonali,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-23 17:38,ORD5640,C112,Karthik,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-23 14:22,ORD5641,C112,Karthik,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-23 14:22,ORD5641,C112,Karthik,Masala Chai,Beverages,Tea,1,60
+2026-05-23 16:44,ORD5642,C113,Nisha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-23 16:44,ORD5642,C113,Nisha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-23 16:44,ORD5642,C113,Nisha,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-23 18:42,ORD5643,C136,Yash,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-23 16:46,ORD5644,C104,Kiran,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-23 16:46,ORD5644,C104,Kiran,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-05-23 19:29,ORD5645,C116,Aditya,Masala Chai,Beverages,Tea,2,120
+2026-05-23 09:18,ORD5646,C154,Dhruv,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-23 17:06,ORD5647,C107,Divya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-23 17:06,ORD5647,C107,Divya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-23 17:06,ORD5647,C107,Divya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-23 20:39,ORD5648,C128,Imran,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-23 21:11,ORD5649,C121,Isha,Samosa (2 pc),Food,Snacks,2,100
+2026-05-23 09:53,ORD5650,C117,Lakshmi,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-23 16:56,ORD5651,C141,Bhavna,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-23 16:56,ORD5651,C141,Bhavna,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-23 17:10,ORD5652,C154,Dhruv,Blueberry Muffin,Desserts,Baked,2,220
+2026-05-23 18:28,ORD5653,C143,Tanvi,Samosa (2 pc),Food,Snacks,1,50
+2026-05-23 14:01,ORD5654,C139,Swati,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-23 14:01,ORD5654,C139,Swati,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-23 14:01,ORD5654,C139,Swati,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-23 16:41,ORD5655,C116,Aditya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-23 16:46,ORD5656,C136,Yash,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-23 16:46,ORD5656,C136,Yash,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-24 14:27,ORD5657,C106,Vikram,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-24 14:27,ORD5657,C106,Vikram,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-24 19:09,ORD5658,C124,Manav,Croissant,Desserts,Baked,1,95
+2026-05-24 19:09,ORD5658,C124,Manav,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-24 13:54,ORD5659,C132,Gaurav,Blueberry Muffin,Desserts,Baked,2,220
+2026-05-24 13:48,ORD5660,C104,Kiran,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-24 20:03,ORD5661,C117,Lakshmi,Croissant,Desserts,Baked,1,95
+2026-05-24 20:03,ORD5661,C117,Lakshmi,Samosa (2 pc),Food,Snacks,1,50
+2026-05-24 11:28,ORD5662,C129,Neha,Chocolate Brownie,Desserts,Baked,2,260
+2026-05-24 11:28,ORD5662,C129,Neha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-24 18:31,ORD5663,C107,Divya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-24 18:31,ORD5663,C107,Divya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-24 20:00,ORD5664,C135,Simran,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-24 20:00,ORD5664,C135,Simran,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-24 18:21,ORD5665,C129,Neha,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-24 16:29,ORD5666,C154,Dhruv,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-24 19:45,ORD5667,C123,Shreya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-24 18:00,ORD5668,C114,Sanjay,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-24 17:44,ORD5669,C123,Shreya,Masala Chai,Beverages,Tea,1,60
+2026-05-24 18:45,ORD5670,C152,Ashwin,Maggi,Food,Snacks,1,80
+2026-05-24 18:45,ORD5670,C152,Ashwin,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-24 14:59,ORD5671,C107,Divya,Green Tea,Beverages,Tea,1,80
+2026-05-24 14:59,ORD5671,C107,Divya,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-24 14:59,ORD5671,C107,Divya,Croissant,Desserts,Baked,1,95
+2026-05-24 19:40,ORD5672,C159,Aditi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-24 19:40,ORD5672,C159,Aditi,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-24 17:08,ORD5673,C132,Gaurav,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-24 17:08,ORD5673,C132,Gaurav,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-24 17:08,ORD5673,C132,Gaurav,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-24 11:32,ORD5674,C159,Aditi,Masala Chai,Beverages,Tea,1,60
+2026-05-24 11:32,ORD5674,C159,Aditi,Croissant,Desserts,Baked,1,95
+2026-05-24 12:42,ORD5675,C124,Manav,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-24 12:42,ORD5675,C124,Manav,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-24 10:58,ORD5676,C138,Kunal,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-24 10:58,ORD5676,C138,Kunal,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-24 18:28,ORD5677,C118,Farhan,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-24 18:28,ORD5677,C118,Farhan,Maggi,Food,Snacks,2,160
+2026-05-24 19:19,ORD5678,C132,Gaurav,Croissant,Desserts,Baked,1,95
+2026-05-24 19:19,ORD5678,C132,Gaurav,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-25 18:13,ORD5679,C140,Aman,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-25 20:43,ORD5680,C158,Kabir,Masala Chai,Beverages,Tea,1,60
+2026-05-25 19:40,ORD5681,C144,Mohit,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-25 17:30,ORD5682,C135,Simran,Maggi,Food,Snacks,2,160
+2026-05-25 17:30,ORD5682,C135,Simran,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-25 16:33,ORD5683,C100,Aarav,Samosa (2 pc),Food,Snacks,1,50
+2026-05-25 18:03,ORD5684,C142,Rajat,Masala Chai,Beverages,Tea,2,120
+2026-05-25 09:16,ORD5685,C143,Tanvi,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-25 13:13,ORD5686,C118,Farhan,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-25 13:13,ORD5686,C118,Farhan,Fries,Food,Snacks,1,110
+2026-05-25 11:43,ORD5687,C155,Payal,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-25 11:43,ORD5687,C155,Payal,Samosa (2 pc),Food,Snacks,1,50
+2026-05-25 10:44,ORD5688,C151,Mansi,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-25 18:26,ORD5689,C124,Manav,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-25 18:26,ORD5689,C124,Manav,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-25 18:26,ORD5689,C124,Manav,Cappuccino,Beverages,Hot Coffee,2,280
+2026-05-25 13:55,ORD5690,C155,Payal,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-05-26 16:45,ORD5691,C145,Zoya,Croissant,Desserts,Baked,1,95
+2026-05-26 16:45,ORD5691,C145,Zoya,Green Tea,Beverages,Tea,2,160
+2026-05-26 09:28,ORD5692,C118,Farhan,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-26 18:47,ORD5693,C111,Pooja,Samosa (2 pc),Food,Snacks,1,50
+2026-05-26 18:47,ORD5693,C111,Pooja,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-26 16:10,ORD5694,C108,Arjun,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-26 16:10,ORD5694,C108,Arjun,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-26 13:09,ORD5695,C102,Rohan,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-26 13:09,ORD5695,C102,Rohan,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-26 13:09,ORD5695,C102,Rohan,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-26 18:20,ORD5696,C145,Zoya,Masala Chai,Beverages,Tea,1,60
+2026-05-26 18:20,ORD5696,C145,Zoya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-26 19:34,ORD5697,C126,Varun,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-26 19:34,ORD5697,C126,Varun,Fries,Food,Snacks,1,110
+2026-05-26 19:21,ORD5698,C121,Isha,Green Tea,Beverages,Tea,2,160
+2026-05-26 17:33,ORD5699,C139,Swati,Croissant,Desserts,Baked,2,190
+2026-05-26 17:00,ORD5700,C141,Bhavna,Fries,Food,Snacks,1,110
+2026-05-26 17:41,ORD5701,C157,Sonali,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-26 17:41,ORD5701,C157,Sonali,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-26 18:50,ORD5702,C158,Kabir,Samosa (2 pc),Food,Snacks,1,50
+2026-05-26 18:50,ORD5702,C158,Kabir,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-26 18:50,ORD5702,C158,Kabir,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-26 18:51,ORD5703,C132,Gaurav,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-26 18:51,ORD5703,C132,Gaurav,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-26 19:32,ORD5704,C120,Dev,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-26 18:34,ORD5705,C149,Juhi,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-26 18:34,ORD5705,C149,Juhi,Green Tea,Beverages,Tea,1,80
+2026-05-26 11:43,ORD5706,C155,Payal,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-26 18:44,ORD5707,C153,Rekha,Maggi,Food,Snacks,1,80
+2026-05-26 18:44,ORD5707,C153,Rekha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-26 18:44,ORD5707,C153,Rekha,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-27 18:11,ORD5708,C103,Priya,Croissant,Desserts,Baked,1,95
+2026-05-27 18:11,ORD5708,C103,Priya,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-27 11:26,ORD5709,C116,Aditya,Samosa (2 pc),Food,Snacks,1,50
+2026-05-27 20:24,ORD5710,C101,Ananya,Croissant,Desserts,Baked,1,95
+2026-05-27 20:24,ORD5710,C101,Ananya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-27 09:47,ORD5711,C148,Sameer,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-05-27 09:47,ORD5711,C148,Sameer,Fries,Food,Snacks,1,110
+2026-05-27 10:43,ORD5712,C150,Vivek,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-27 14:28,ORD5713,C159,Aditi,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-27 21:14,ORD5714,C134,Harsh,Samosa (2 pc),Food,Snacks,1,50
+2026-05-27 19:34,ORD5715,C154,Dhruv,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-27 18:58,ORD5716,C156,Naveen,Fries,Food,Snacks,1,110
+2026-05-27 18:58,ORD5716,C156,Naveen,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-27 18:58,ORD5716,C156,Naveen,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-27 10:35,ORD5717,C134,Harsh,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-27 10:35,ORD5717,C134,Harsh,Green Tea,Beverages,Tea,2,160
+2026-05-27 10:35,ORD5717,C134,Harsh,Fries,Food,Snacks,2,220
+2026-05-27 09:11,ORD5718,C110,Rahul,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-27 20:42,ORD5719,C111,Pooja,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-27 20:42,ORD5719,C111,Pooja,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-27 12:04,ORD5720,C142,Rajat,Green Tea,Beverages,Tea,1,80
+2026-05-27 18:21,ORD5721,C131,Riya,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-27 19:04,ORD5722,C139,Swati,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-27 19:04,ORD5722,C139,Swati,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-27 19:04,ORD5722,C139,Swati,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-27 12:36,ORD5723,C136,Yash,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-27 09:00,ORD5724,C110,Rahul,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-27 20:27,ORD5725,C141,Bhavna,Fries,Food,Snacks,1,110
+2026-05-27 13:21,ORD5726,C146,Pranav,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-27 13:21,ORD5726,C146,Pranav,Croissant,Desserts,Baked,1,95
+2026-05-27 13:21,ORD5726,C146,Pranav,Fries,Food,Snacks,1,110
+2026-05-27 20:38,ORD5727,C141,Bhavna,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-27 19:57,ORD5728,C108,Arjun,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-27 19:57,ORD5728,C108,Arjun,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-05-27 18:32,ORD5729,C154,Dhruv,Samosa (2 pc),Food,Snacks,2,100
+2026-05-27 18:32,ORD5729,C154,Dhruv,Green Tea,Beverages,Tea,1,80
+2026-05-28 17:57,ORD5730,C134,Harsh,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-28 17:57,ORD5730,C134,Harsh,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-28 17:57,ORD5730,C134,Harsh,Fries,Food,Snacks,1,110
+2026-05-28 16:18,ORD5731,C154,Dhruv,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-28 10:23,ORD5732,C125,Ayesha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-28 10:23,ORD5732,C125,Ayesha,Masala Chai,Beverages,Tea,1,60
+2026-05-28 10:11,ORD5733,C110,Rahul,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-28 10:11,ORD5733,C110,Rahul,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-28 20:31,ORD5734,C148,Sameer,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-28 21:42,ORD5735,C102,Rohan,Fries,Food,Snacks,1,110
+2026-05-28 18:29,ORD5736,C158,Kabir,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-28 18:29,ORD5736,C158,Kabir,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-28 18:29,ORD5736,C158,Kabir,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-05-28 17:47,ORD5737,C153,Rekha,Croissant,Desserts,Baked,1,95
+2026-05-28 09:24,ORD5738,C141,Bhavna,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-28 13:14,ORD5739,C158,Kabir,Fries,Food,Snacks,1,110
+2026-05-28 13:14,ORD5739,C158,Kabir,Croissant,Desserts,Baked,1,95
+2026-05-28 18:00,ORD5740,C138,Kunal,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-28 18:00,ORD5740,C138,Kunal,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-28 18:17,ORD5741,C141,Bhavna,Masala Chai,Beverages,Tea,1,60
+2026-05-28 12:45,ORD5742,C138,Kunal,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-05-28 12:45,ORD5742,C138,Kunal,Maggi,Food,Snacks,1,80
+2026-05-28 20:43,ORD5743,C130,Siddharth,Green Tea,Beverages,Tea,1,80
+2026-05-28 11:53,ORD5744,C141,Bhavna,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-28 11:37,ORD5745,C136,Yash,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-28 18:09,ORD5746,C136,Yash,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-28 14:25,ORD5747,C133,Anjali,Cappuccino,Beverages,Hot Coffee,2,280
+2026-05-28 14:25,ORD5747,C133,Anjali,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-28 18:30,ORD5748,C138,Kunal,Masala Chai,Beverages,Tea,1,60
+2026-05-28 18:30,ORD5748,C138,Kunal,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-28 18:30,ORD5748,C138,Kunal,Maggi,Food,Snacks,2,160
+2026-05-28 17:39,ORD5749,C111,Pooja,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-28 17:39,ORD5749,C111,Pooja,Masala Chai,Beverages,Tea,1,60
+2026-05-28 19:38,ORD5750,C129,Neha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-28 19:38,ORD5750,C129,Neha,Samosa (2 pc),Food,Snacks,1,50
+2026-05-28 12:33,ORD5751,C112,Karthik,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-28 12:33,ORD5751,C112,Karthik,Maggi,Food,Snacks,1,80
+2026-05-28 12:33,ORD5751,C112,Karthik,Iced Americano,Beverages,Cold Beverages,2,280
+2026-05-28 17:02,ORD5752,C138,Kunal,Croissant,Desserts,Baked,1,95
+2026-05-28 17:02,ORD5752,C138,Kunal,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-28 17:02,ORD5752,C138,Kunal,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-05-28 16:52,ORD5753,C134,Harsh,Maggi,Food,Snacks,1,80
+2026-05-29 14:55,ORD5754,C123,Shreya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-29 13:30,ORD5755,C151,Mansi,Samosa (2 pc),Food,Snacks,1,50
+2026-05-29 13:30,ORD5755,C151,Mansi,Fries,Food,Snacks,1,110
+2026-05-29 11:53,ORD5756,C148,Sameer,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-29 11:53,ORD5756,C148,Sameer,Maggi,Food,Snacks,1,80
+2026-05-29 18:58,ORD5757,C114,Sanjay,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-29 18:58,ORD5757,C114,Sanjay,Maggi,Food,Snacks,1,80
+2026-05-29 18:58,ORD5757,C114,Sanjay,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-29 17:33,ORD5758,C136,Yash,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-29 17:44,ORD5759,C113,Nisha,Maggi,Food,Snacks,1,80
+2026-05-29 17:44,ORD5759,C113,Nisha,Fries,Food,Snacks,1,110
+2026-05-29 11:16,ORD5760,C137,Deepa,Croissant,Desserts,Baked,1,95
+2026-05-29 18:39,ORD5761,C123,Shreya,Samosa (2 pc),Food,Snacks,1,50
+2026-05-29 11:35,ORD5762,C126,Varun,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-29 11:35,ORD5762,C126,Varun,Masala Chai,Beverages,Tea,1,60
+2026-05-29 19:19,ORD5763,C116,Aditya,Samosa (2 pc),Food,Snacks,2,100
+2026-05-29 19:19,ORD5763,C116,Aditya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-29 09:14,ORD5764,C147,Ira,Masala Chai,Beverages,Tea,1,60
+2026-05-29 11:25,ORD5765,C132,Gaurav,Croissant,Desserts,Baked,1,95
+2026-05-29 11:25,ORD5765,C132,Gaurav,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-29 21:51,ORD5766,C100,Aarav,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-29 18:27,ORD5767,C138,Kunal,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-29 17:38,ORD5768,C105,Sneha,Samosa (2 pc),Food,Snacks,2,100
+2026-05-29 11:39,ORD5769,C125,Ayesha,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-05-29 11:39,ORD5769,C125,Ayesha,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-30 17:31,ORD5770,C140,Aman,Green Tea,Beverages,Tea,2,160
+2026-05-30 16:51,ORD5771,C159,Aditi,Green Tea,Beverages,Tea,1,80
+2026-05-30 16:51,ORD5771,C159,Aditi,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-30 17:14,ORD5772,C144,Mohit,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-30 17:14,ORD5772,C144,Mohit,Fries,Food,Snacks,1,110
+2026-05-30 14:05,ORD5773,C110,Rahul,Samosa (2 pc),Food,Snacks,1,50
+2026-05-30 14:05,ORD5773,C110,Rahul,Fries,Food,Snacks,1,110
+2026-05-30 14:05,ORD5773,C110,Rahul,Croissant,Desserts,Baked,1,95
+2026-05-30 17:04,ORD5774,C145,Zoya,Croissant,Desserts,Baked,1,95
+2026-05-30 17:04,ORD5774,C145,Zoya,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-05-30 17:04,ORD5774,C145,Zoya,Fries,Food,Snacks,1,110
+2026-05-30 17:29,ORD5775,C112,Karthik,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-30 17:29,ORD5775,C112,Karthik,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-30 17:29,ORD5775,C112,Karthik,Masala Chai,Beverages,Tea,1,60
+2026-05-30 17:21,ORD5776,C118,Farhan,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-30 17:21,ORD5776,C118,Farhan,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-30 17:21,ORD5776,C118,Farhan,Croissant,Desserts,Baked,1,95
+2026-05-30 14:15,ORD5777,C149,Juhi,Chocolate Brownie,Desserts,Baked,2,260
+2026-05-30 14:15,ORD5777,C149,Juhi,Croissant,Desserts,Baked,2,190
+2026-05-30 21:07,ORD5778,C130,Siddharth,Samosa (2 pc),Food,Snacks,1,50
+2026-05-30 13:43,ORD5779,C114,Sanjay,Chicken Sandwich,Food,Sandwiches,2,360
+2026-05-30 13:43,ORD5779,C114,Sanjay,Maggi,Food,Snacks,1,80
+2026-05-30 18:44,ORD5780,C100,Aarav,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-30 18:44,ORD5780,C100,Aarav,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-30 18:21,ORD5781,C152,Ashwin,Masala Chai,Beverages,Tea,1,60
+2026-05-30 17:13,ORD5782,C122,Nikhil,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-30 17:13,ORD5782,C122,Nikhil,Masala Chai,Beverages,Tea,1,60
+2026-05-30 17:13,ORD5782,C122,Nikhil,Green Tea,Beverages,Tea,1,80
+2026-05-30 11:16,ORD5783,C155,Payal,Green Tea,Beverages,Tea,2,160
+2026-05-30 12:39,ORD5784,C153,Rekha,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-30 12:43,ORD5785,C105,Sneha,Blueberry Muffin,Desserts,Baked,2,220
+2026-05-30 12:43,ORD5785,C105,Sneha,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-30 12:43,ORD5785,C105,Sneha,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-30 17:56,ORD5786,C157,Sonali,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-30 17:56,ORD5786,C157,Sonali,Blueberry Muffin,Desserts,Baked,2,220
+2026-05-30 17:56,ORD5786,C157,Sonali,Masala Chai,Beverages,Tea,1,60
+2026-05-30 18:48,ORD5787,C114,Sanjay,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-30 18:48,ORD5787,C114,Sanjay,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-30 18:02,ORD5788,C134,Harsh,Samosa (2 pc),Food,Snacks,1,50
+2026-05-30 18:02,ORD5788,C134,Harsh,Masala Chai,Beverages,Tea,1,60
+2026-05-30 14:29,ORD5789,C133,Anjali,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-30 16:24,ORD5790,C113,Nisha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-30 16:24,ORD5790,C113,Nisha,Fries,Food,Snacks,1,110
+2026-05-30 13:16,ORD5791,C135,Simran,Blueberry Muffin,Desserts,Baked,2,220
+2026-05-30 19:23,ORD5792,C121,Isha,Maggi,Food,Snacks,1,80
+2026-05-30 14:48,ORD5793,C144,Mohit,Samosa (2 pc),Food,Snacks,1,50
+2026-05-30 21:36,ORD5794,C111,Pooja,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-05-30 18:17,ORD5795,C146,Pranav,Croissant,Desserts,Baked,2,190
+2026-05-30 18:17,ORD5795,C146,Pranav,Maggi,Food,Snacks,1,80
+2026-05-30 19:47,ORD5796,C151,Mansi,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-30 11:08,ORD5797,C131,Riya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-30 11:08,ORD5797,C131,Riya,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-30 11:08,ORD5797,C131,Riya,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-31 18:06,ORD5798,C125,Ayesha,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-05-31 18:06,ORD5798,C125,Ayesha,Green Tea,Beverages,Tea,1,80
+2026-05-31 20:06,ORD5799,C140,Aman,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-31 17:35,ORD5800,C123,Shreya,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-31 17:35,ORD5800,C123,Shreya,Fries,Food,Snacks,1,110
+2026-05-31 18:43,ORD5801,C155,Payal,Green Tea,Beverages,Tea,1,80
+2026-05-31 18:43,ORD5801,C155,Payal,Masala Chai,Beverages,Tea,1,60
+2026-05-31 18:43,ORD5801,C155,Payal,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-31 21:28,ORD5802,C147,Ira,Samosa (2 pc),Food,Snacks,1,50
+2026-05-31 21:28,ORD5802,C147,Ira,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-31 21:28,ORD5802,C147,Ira,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-31 19:59,ORD5803,C151,Mansi,Samosa (2 pc),Food,Snacks,2,100
+2026-05-31 17:10,ORD5804,C105,Sneha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-05-31 10:45,ORD5805,C118,Farhan,Samosa (2 pc),Food,Snacks,1,50
+2026-05-31 17:49,ORD5806,C128,Imran,Fries,Food,Snacks,1,110
+2026-05-31 17:49,ORD5806,C128,Imran,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-31 17:49,ORD5806,C128,Imran,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-31 19:15,ORD5807,C146,Pranav,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-31 19:15,ORD5807,C146,Pranav,Green Tea,Beverages,Tea,1,80
+2026-05-31 16:56,ORD5808,C159,Aditi,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-31 17:33,ORD5809,C125,Ayesha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-31 17:33,ORD5809,C125,Ayesha,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-05-31 17:59,ORD5810,C141,Bhavna,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-05-31 17:59,ORD5810,C141,Bhavna,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-31 17:59,ORD5810,C141,Bhavna,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-31 09:53,ORD5811,C133,Anjali,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-31 17:58,ORD5812,C155,Payal,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-31 19:34,ORD5813,C155,Payal,Croissant,Desserts,Baked,2,190
+2026-05-31 19:34,ORD5813,C155,Payal,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-31 19:34,ORD5813,C155,Payal,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-31 14:29,ORD5814,C138,Kunal,Maggi,Food,Snacks,1,80
+2026-05-31 14:29,ORD5814,C138,Kunal,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-31 14:22,ORD5815,C158,Kabir,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-05-31 18:19,ORD5816,C128,Imran,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-31 17:00,ORD5817,C100,Aarav,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-31 17:00,ORD5817,C100,Aarav,Fries,Food,Snacks,1,110
+2026-05-31 12:59,ORD5818,C144,Mohit,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-31 18:27,ORD5819,C149,Juhi,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-31 18:27,ORD5819,C149,Juhi,Cappuccino,Beverages,Hot Coffee,1,140
+2026-05-31 14:35,ORD5820,C156,Naveen,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-31 20:41,ORD5821,C147,Ira,Samosa (2 pc),Food,Snacks,1,50
+2026-05-31 09:27,ORD5822,C105,Sneha,Cheesecake Slice,Desserts,Cakes,1,180
+2026-05-31 09:27,ORD5822,C105,Sneha,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-31 17:17,ORD5823,C151,Mansi,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-05-31 16:07,ORD5824,C118,Farhan,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-31 16:07,ORD5824,C118,Farhan,Veg Sandwich,Food,Sandwiches,1,120
+2026-05-31 14:01,ORD5825,C120,Dev,Croissant,Desserts,Baked,1,95
+2026-05-31 11:18,ORD5826,C106,Vikram,Chocolate Brownie,Desserts,Baked,1,130
+2026-05-31 17:05,ORD5827,C114,Sanjay,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-31 18:19,ORD5828,C126,Varun,Blueberry Muffin,Desserts,Baked,1,110
+2026-05-31 18:19,ORD5828,C126,Varun,Fries,Food,Snacks,1,110
+2026-05-31 14:05,ORD5829,C121,Isha,Iced Americano,Beverages,Cold Beverages,1,140
+2026-05-31 14:05,ORD5829,C121,Isha,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-31 18:30,ORD5830,C134,Harsh,Veg Sandwich,Food,Sandwiches,2,240
+2026-05-31 09:00,ORD5831,C153,Rekha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-05-31 16:15,ORD5832,C128,Imran,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-05-31 16:15,ORD5832,C128,Imran,Green Tea,Beverages,Tea,1,80
+2026-06-01 17:42,ORD5833,C133,Anjali,Blueberry Muffin,Desserts,Baked,2,220
+2026-06-01 17:42,ORD5833,C133,Anjali,Samosa (2 pc),Food,Snacks,1,50
+2026-06-01 17:42,ORD5833,C133,Anjali,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-01 17:59,ORD5834,C147,Ira,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-01 17:59,ORD5834,C147,Ira,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-01 17:56,ORD5835,C123,Shreya,Green Tea,Beverages,Tea,2,160
+2026-06-01 21:40,ORD5836,C115,Ritu,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-01 21:37,ORD5837,C117,Lakshmi,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-01 14:37,ORD5838,C102,Rohan,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-01 14:37,ORD5838,C102,Rohan,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-01 17:31,ORD5839,C110,Rahul,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-01 14:40,ORD5840,C148,Sameer,Fries,Food,Snacks,1,110
+2026-06-01 18:34,ORD5841,C144,Mohit,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-01 18:34,ORD5841,C144,Mohit,Blueberry Muffin,Desserts,Baked,2,220
+2026-06-01 18:41,ORD5842,C150,Vivek,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-01 18:41,ORD5842,C150,Vivek,Green Tea,Beverages,Tea,1,80
+2026-06-01 14:08,ORD5843,C146,Pranav,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-01 16:35,ORD5844,C128,Imran,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-01 18:34,ORD5845,C111,Pooja,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-01 17:38,ORD5846,C153,Rekha,Croissant,Desserts,Baked,1,95
+2026-06-01 17:38,ORD5846,C153,Rekha,Masala Chai,Beverages,Tea,1,60
+2026-06-01 17:38,ORD5846,C153,Rekha,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-06-01 18:23,ORD5847,C134,Harsh,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-01 16:56,ORD5848,C111,Pooja,Fries,Food,Snacks,1,110
+2026-06-02 11:20,ORD5849,C115,Ritu,Croissant,Desserts,Baked,1,95
+2026-06-02 11:20,ORD5849,C115,Ritu,Samosa (2 pc),Food,Snacks,1,50
+2026-06-02 14:35,ORD5850,C149,Juhi,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-02 13:20,ORD5851,C141,Bhavna,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-02 09:53,ORD5852,C102,Rohan,Masala Chai,Beverages,Tea,1,60
+2026-06-02 09:53,ORD5852,C102,Rohan,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-02 09:53,ORD5852,C102,Rohan,Green Tea,Beverages,Tea,1,80
+2026-06-02 18:53,ORD5853,C141,Bhavna,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-02 13:37,ORD5854,C144,Mohit,Fries,Food,Snacks,1,110
+2026-06-02 16:04,ORD5855,C145,Zoya,Green Tea,Beverages,Tea,1,80
+2026-06-02 19:56,ORD5856,C159,Aditi,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-02 19:56,ORD5856,C159,Aditi,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-02 12:26,ORD5857,C156,Naveen,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-02 12:26,ORD5857,C156,Naveen,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-02 17:19,ORD5858,C153,Rekha,Green Tea,Beverages,Tea,2,160
+2026-06-02 18:06,ORD5859,C106,Vikram,Croissant,Desserts,Baked,1,95
+2026-06-02 18:06,ORD5859,C106,Vikram,Samosa (2 pc),Food,Snacks,1,50
+2026-06-02 17:36,ORD5860,C115,Ritu,Masala Chai,Beverages,Tea,1,60
+2026-06-02 17:36,ORD5860,C115,Ritu,Maggi,Food,Snacks,1,80
+2026-06-02 17:43,ORD5861,C122,Nikhil,Maggi,Food,Snacks,2,160
+2026-06-02 14:50,ORD5862,C110,Rahul,Samosa (2 pc),Food,Snacks,1,50
+2026-06-03 17:10,ORD5863,C142,Rajat,Chocolate Brownie,Desserts,Baked,2,260
+2026-06-03 17:10,ORD5863,C142,Rajat,Fries,Food,Snacks,1,110
+2026-06-03 16:54,ORD5864,C120,Dev,Maggi,Food,Snacks,2,160
+2026-06-03 19:38,ORD5865,C120,Dev,Croissant,Desserts,Baked,1,95
+2026-06-03 16:35,ORD5866,C149,Juhi,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-03 16:35,ORD5866,C149,Juhi,Fries,Food,Snacks,1,110
+2026-06-03 16:35,ORD5866,C149,Juhi,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-03 19:38,ORD5867,C118,Farhan,Iced Americano,Beverages,Cold Beverages,2,280
+2026-06-03 17:00,ORD5868,C119,Tara,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-03 14:01,ORD5869,C120,Dev,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-03 14:01,ORD5869,C120,Dev,Cheesecake Slice,Desserts,Cakes,2,360
+2026-06-03 11:02,ORD5870,C106,Vikram,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-03 20:56,ORD5871,C123,Shreya,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-06-03 20:56,ORD5871,C123,Shreya,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-03 17:36,ORD5872,C125,Ayesha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-03 17:36,ORD5872,C125,Ayesha,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-03 17:36,ORD5872,C125,Ayesha,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-04 13:58,ORD5873,C152,Ashwin,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-04 17:36,ORD5874,C151,Mansi,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-06-04 11:22,ORD5875,C121,Isha,Maggi,Food,Snacks,2,160
+2026-06-04 11:22,ORD5875,C121,Isha,Croissant,Desserts,Baked,1,95
+2026-06-04 11:22,ORD5875,C121,Isha,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-04 16:59,ORD5876,C138,Kunal,Samosa (2 pc),Food,Snacks,1,50
+2026-06-04 10:02,ORD5877,C133,Anjali,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-04 13:14,ORD5878,C144,Mohit,Samosa (2 pc),Food,Snacks,2,100
+2026-06-04 18:38,ORD5879,C148,Sameer,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-04 18:38,ORD5879,C148,Sameer,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-04 13:21,ORD5880,C108,Arjun,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-04 17:05,ORD5881,C116,Aditya,Maggi,Food,Snacks,1,80
+2026-06-04 16:48,ORD5882,C108,Arjun,Croissant,Desserts,Baked,1,95
+2026-06-04 09:41,ORD5883,C125,Ayesha,Croissant,Desserts,Baked,1,95
+2026-06-04 09:41,ORD5883,C125,Ayesha,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-04 12:27,ORD5884,C149,Juhi,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-04 11:27,ORD5885,C126,Varun,Green Tea,Beverages,Tea,1,80
+2026-06-04 11:41,ORD5886,C138,Kunal,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-04 10:39,ORD5887,C122,Nikhil,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-04 10:39,ORD5887,C122,Nikhil,Iced Americano,Beverages,Cold Beverages,2,280
+2026-06-05 20:12,ORD5888,C114,Sanjay,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-05 20:12,ORD5888,C114,Sanjay,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-05 17:59,ORD5889,C139,Swati,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-05 20:51,ORD5890,C144,Mohit,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-05 18:13,ORD5891,C121,Isha,Green Tea,Beverages,Tea,1,80
+2026-06-05 18:13,ORD5891,C121,Isha,Croissant,Desserts,Baked,1,95
+2026-06-05 14:30,ORD5892,C135,Simran,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-05 14:30,ORD5892,C135,Simran,Cappuccino,Beverages,Hot Coffee,2,280
+2026-06-05 19:02,ORD5893,C133,Anjali,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-05 17:44,ORD5894,C150,Vivek,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-05 17:44,ORD5894,C150,Vivek,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-05 21:17,ORD5895,C142,Rajat,Fries,Food,Snacks,1,110
+2026-06-05 21:17,ORD5895,C142,Rajat,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-06-05 20:24,ORD5896,C141,Bhavna,Samosa (2 pc),Food,Snacks,1,50
+2026-06-05 12:06,ORD5897,C145,Zoya,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-05 12:06,ORD5897,C145,Zoya,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-06-05 12:06,ORD5897,C145,Zoya,Masala Chai,Beverages,Tea,1,60
+2026-06-05 19:01,ORD5898,C145,Zoya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-06 18:25,ORD5899,C131,Riya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-06 18:25,ORD5899,C131,Riya,Fries,Food,Snacks,1,110
+2026-06-06 17:15,ORD5900,C119,Tara,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-06 17:15,ORD5900,C119,Tara,Veg Sandwich,Food,Sandwiches,2,240
+2026-06-06 17:15,ORD5900,C119,Tara,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-06-06 20:01,ORD5901,C152,Ashwin,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-06 20:01,ORD5901,C152,Ashwin,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-06 20:01,ORD5901,C152,Ashwin,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-06 20:24,ORD5902,C146,Pranav,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-06 20:24,ORD5902,C146,Pranav,Maggi,Food,Snacks,1,80
+2026-06-06 18:58,ORD5903,C119,Tara,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-06 18:58,ORD5903,C119,Tara,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-06 13:43,ORD5904,C134,Harsh,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-06 13:43,ORD5904,C134,Harsh,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-06-06 18:08,ORD5905,C158,Kabir,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-06 18:10,ORD5906,C158,Kabir,Croissant,Desserts,Baked,1,95
+2026-06-06 18:07,ORD5907,C146,Pranav,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-06 20:20,ORD5908,C148,Sameer,Maggi,Food,Snacks,1,80
+2026-06-06 20:20,ORD5908,C148,Sameer,Croissant,Desserts,Baked,2,190
+2026-06-06 20:20,ORD5908,C148,Sameer,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-06-06 18:47,ORD5909,C159,Aditi,Green Tea,Beverages,Tea,1,80
+2026-06-06 18:01,ORD5910,C111,Pooja,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-06 18:01,ORD5910,C111,Pooja,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-06 12:22,ORD5911,C101,Ananya,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-06 17:38,ORD5912,C154,Dhruv,Fries,Food,Snacks,1,110
+2026-06-06 14:30,ORD5913,C131,Riya,Green Tea,Beverages,Tea,1,80
+2026-06-06 17:48,ORD5914,C126,Varun,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-06 17:48,ORD5914,C126,Varun,Maggi,Food,Snacks,2,160
+2026-06-06 17:48,ORD5914,C126,Varun,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-06 18:59,ORD5915,C111,Pooja,Chocolate Brownie,Desserts,Baked,2,260
+2026-06-06 18:59,ORD5915,C111,Pooja,Blueberry Muffin,Desserts,Baked,2,220
+2026-06-06 18:59,ORD5915,C111,Pooja,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-06 16:38,ORD5916,C102,Rohan,Samosa (2 pc),Food,Snacks,1,50
+2026-06-06 16:38,ORD5916,C102,Rohan,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-06 13:34,ORD5917,C138,Kunal,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-06 13:34,ORD5917,C138,Kunal,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-06 17:02,ORD5918,C156,Naveen,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-06-06 17:02,ORD5918,C156,Naveen,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-06 17:02,ORD5918,C156,Naveen,Samosa (2 pc),Food,Snacks,1,50
+2026-06-06 09:40,ORD5919,C148,Sameer,Green Tea,Beverages,Tea,1,80
+2026-06-06 09:40,ORD5919,C148,Sameer,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-06 09:40,ORD5919,C148,Sameer,Chocolate Brownie,Desserts,Baked,2,260
+2026-06-06 12:10,ORD5920,C129,Neha,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-06 18:09,ORD5921,C157,Sonali,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-07 21:07,ORD5922,C132,Gaurav,Croissant,Desserts,Baked,1,95
+2026-06-07 16:20,ORD5923,C126,Varun,Masala Chai,Beverages,Tea,1,60
+2026-06-07 18:45,ORD5924,C157,Sonali,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-07 18:45,ORD5924,C157,Sonali,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-07 18:45,ORD5924,C157,Sonali,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-07 14:46,ORD5925,C145,Zoya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-07 16:23,ORD5926,C140,Aman,Samosa (2 pc),Food,Snacks,1,50
+2026-06-07 16:39,ORD5927,C132,Gaurav,Samosa (2 pc),Food,Snacks,1,50
+2026-06-07 16:39,ORD5927,C132,Gaurav,Croissant,Desserts,Baked,2,190
+2026-06-07 16:39,ORD5927,C132,Gaurav,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-07 13:55,ORD5928,C142,Rajat,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-07 19:03,ORD5929,C145,Zoya,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-07 17:18,ORD5930,C128,Imran,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-06-07 17:18,ORD5930,C128,Imran,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-07 09:16,ORD5931,C148,Sameer,Blueberry Muffin,Desserts,Baked,2,220
+2026-06-07 17:51,ORD5932,C134,Harsh,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-07 18:42,ORD5933,C137,Deepa,Maggi,Food,Snacks,1,80
+2026-06-07 21:38,ORD5934,C138,Kunal,Croissant,Desserts,Baked,1,95
+2026-06-07 20:35,ORD5935,C140,Aman,Green Tea,Beverages,Tea,1,80
+2026-06-07 20:35,ORD5935,C140,Aman,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-07 11:02,ORD5936,C122,Nikhil,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-07 14:38,ORD5937,C153,Rekha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-07 12:11,ORD5938,C126,Varun,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-07 14:44,ORD5939,C144,Mohit,Croissant,Desserts,Baked,2,190
+2026-06-07 14:44,ORD5939,C144,Mohit,Masala Chai,Beverages,Tea,1,60
+2026-06-07 17:59,ORD5940,C123,Shreya,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-07 18:24,ORD5941,C157,Sonali,Maggi,Food,Snacks,1,80
+2026-06-07 18:24,ORD5941,C157,Sonali,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-07 17:55,ORD5942,C144,Mohit,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-07 18:44,ORD5943,C113,Nisha,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-07 13:40,ORD5944,C146,Pranav,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-07 13:40,ORD5944,C146,Pranav,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-07 16:45,ORD5945,C150,Vivek,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-08 18:59,ORD5946,C122,Nikhil,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-08 16:31,ORD5947,C140,Aman,Masala Chai,Beverages,Tea,2,120
+2026-06-08 13:45,ORD5948,C114,Sanjay,Green Tea,Beverages,Tea,1,80
+2026-06-08 17:29,ORD5949,C101,Ananya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-08 17:29,ORD5949,C101,Ananya,Green Tea,Beverages,Tea,2,160
+2026-06-08 21:02,ORD5950,C126,Varun,Croissant,Desserts,Baked,2,190
+2026-06-08 16:00,ORD5951,C113,Nisha,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-08 16:00,ORD5951,C113,Nisha,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-08 19:35,ORD5952,C132,Gaurav,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-08 10:21,ORD5953,C121,Isha,Cappuccino,Beverages,Hot Coffee,2,280
+2026-06-08 11:21,ORD5954,C112,Karthik,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-08 11:21,ORD5954,C112,Karthik,Croissant,Desserts,Baked,1,95
+2026-06-08 18:09,ORD5955,C130,Siddharth,Croissant,Desserts,Baked,1,95
+2026-06-08 18:09,ORD5955,C130,Siddharth,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-08 17:47,ORD5956,C159,Aditi,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-08 13:43,ORD5957,C146,Pranav,Croissant,Desserts,Baked,1,95
+2026-06-08 18:21,ORD5958,C143,Tanvi,Fries,Food,Snacks,2,220
+2026-06-08 18:21,ORD5958,C143,Tanvi,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-08 16:21,ORD5959,C101,Ananya,Croissant,Desserts,Baked,1,95
+2026-06-08 16:21,ORD5959,C101,Ananya,Masala Chai,Beverages,Tea,1,60
+2026-06-08 16:21,ORD5959,C101,Ananya,Samosa (2 pc),Food,Snacks,1,50
+2026-06-08 21:45,ORD5960,C119,Tara,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-08 21:45,ORD5960,C119,Tara,Veg Sandwich,Food,Sandwiches,2,240
+2026-06-08 21:45,ORD5960,C119,Tara,Maggi,Food,Snacks,1,80
+2026-06-09 19:19,ORD5961,C153,Rekha,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-09 18:50,ORD5962,C123,Shreya,Green Tea,Beverages,Tea,2,160
+2026-06-09 17:32,ORD5963,C128,Imran,Blueberry Muffin,Desserts,Baked,2,220
+2026-06-09 18:21,ORD5964,C112,Karthik,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-09 18:21,ORD5964,C112,Karthik,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-06-09 18:21,ORD5964,C112,Karthik,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-09 17:43,ORD5965,C133,Anjali,Green Tea,Beverages,Tea,1,80
+2026-06-09 17:43,ORD5965,C133,Anjali,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-06-09 17:43,ORD5965,C133,Anjali,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-09 16:59,ORD5966,C119,Tara,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-09 11:02,ORD5967,C156,Naveen,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-09 18:19,ORD5968,C148,Sameer,Green Tea,Beverages,Tea,1,80
+2026-06-09 18:19,ORD5968,C148,Sameer,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-09 11:20,ORD5969,C134,Harsh,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-09 11:20,ORD5969,C134,Harsh,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-09 11:39,ORD5970,C100,Aarav,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-09 11:39,ORD5970,C100,Aarav,Green Tea,Beverages,Tea,1,80
+2026-06-09 18:09,ORD5971,C117,Lakshmi,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-09 18:09,ORD5971,C117,Lakshmi,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-09 18:09,ORD5971,C117,Lakshmi,Masala Chai,Beverages,Tea,1,60
+2026-06-09 11:03,ORD5972,C128,Imran,Blueberry Muffin,Desserts,Baked,2,220
+2026-06-09 14:24,ORD5973,C106,Vikram,Maggi,Food,Snacks,1,80
+2026-06-10 12:38,ORD5974,C145,Zoya,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-10 12:38,ORD5974,C145,Zoya,Fries,Food,Snacks,1,110
+2026-06-10 12:38,ORD5974,C145,Zoya,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-10 11:34,ORD5975,C151,Mansi,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-10 18:52,ORD5976,C105,Sneha,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-10 18:52,ORD5976,C105,Sneha,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-10 16:49,ORD5977,C145,Zoya,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-06-10 17:57,ORD5978,C155,Payal,Fries,Food,Snacks,1,110
+2026-06-10 17:57,ORD5978,C155,Payal,Samosa (2 pc),Food,Snacks,2,100
+2026-06-10 21:50,ORD5979,C121,Isha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-10 21:50,ORD5979,C121,Isha,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-10 21:50,ORD5979,C121,Isha,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-10 19:54,ORD5980,C129,Neha,Fries,Food,Snacks,1,110
+2026-06-10 18:32,ORD5981,C108,Arjun,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-10 20:04,ORD5982,C141,Bhavna,Croissant,Desserts,Baked,1,95
+2026-06-10 20:04,ORD5982,C141,Bhavna,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-10 10:35,ORD5983,C115,Ritu,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-10 18:13,ORD5984,C121,Isha,Maggi,Food,Snacks,1,80
+2026-06-10 18:13,ORD5984,C121,Isha,Croissant,Desserts,Baked,1,95
+2026-06-10 12:15,ORD5985,C144,Mohit,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-10 14:36,ORD5986,C145,Zoya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-10 14:36,ORD5986,C145,Zoya,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-10 14:11,ORD5987,C128,Imran,Samosa (2 pc),Food,Snacks,1,50
+2026-06-10 17:43,ORD5988,C106,Vikram,Samosa (2 pc),Food,Snacks,1,50
+2026-06-10 17:43,ORD5988,C106,Vikram,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-10 09:13,ORD5989,C105,Sneha,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-10 09:13,ORD5989,C105,Sneha,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-10 10:24,ORD5990,C118,Farhan,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-10 10:24,ORD5990,C118,Farhan,Green Tea,Beverages,Tea,2,160
+2026-06-11 18:36,ORD5991,C119,Tara,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-11 18:36,ORD5991,C119,Tara,Maggi,Food,Snacks,2,160
+2026-06-11 14:37,ORD5992,C105,Sneha,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-11 14:54,ORD5993,C108,Arjun,Fries,Food,Snacks,2,220
+2026-06-11 10:45,ORD5994,C100,Aarav,Fries,Food,Snacks,2,220
+2026-06-11 10:45,ORD5994,C100,Aarav,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-06-11 17:27,ORD5995,C115,Ritu,Samosa (2 pc),Food,Snacks,1,50
+2026-06-11 17:27,ORD5995,C115,Ritu,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-11 20:34,ORD5996,C127,Kavya,Masala Chai,Beverages,Tea,1,60
+2026-06-11 17:35,ORD5997,C112,Karthik,Fries,Food,Snacks,2,220
+2026-06-11 17:55,ORD5998,C118,Farhan,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-11 17:55,ORD5998,C118,Farhan,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-11 20:56,ORD5999,C146,Pranav,Maggi,Food,Snacks,2,160
+2026-06-11 17:05,ORD6000,C108,Arjun,Maggi,Food,Snacks,2,160
+2026-06-11 12:50,ORD6001,C157,Sonali,Maggi,Food,Snacks,1,80
+2026-06-11 12:50,ORD6001,C157,Sonali,Masala Chai,Beverages,Tea,1,60
+2026-06-11 17:28,ORD6002,C152,Ashwin,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-11 17:00,ORD6003,C138,Kunal,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-11 17:00,ORD6003,C138,Kunal,Cheesecake Slice,Desserts,Cakes,2,360
+2026-06-11 10:02,ORD6004,C123,Shreya,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-11 10:02,ORD6004,C123,Shreya,Fries,Food,Snacks,2,220
+2026-06-11 10:02,ORD6004,C123,Shreya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-12 20:46,ORD6005,C146,Pranav,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-12 20:46,ORD6005,C146,Pranav,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-12 11:15,ORD6006,C105,Sneha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-12 11:51,ORD6007,C134,Harsh,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-12 11:51,ORD6007,C134,Harsh,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-12 18:32,ORD6008,C129,Neha,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-12 18:32,ORD6008,C129,Neha,Maggi,Food,Snacks,1,80
+2026-06-12 18:32,ORD6008,C129,Neha,Fries,Food,Snacks,1,110
+2026-06-12 16:44,ORD6009,C102,Rohan,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-12 16:44,ORD6009,C102,Rohan,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-12 16:44,ORD6009,C102,Rohan,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-12 18:18,ORD6010,C142,Rajat,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-12 18:18,ORD6010,C142,Rajat,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-12 18:50,ORD6011,C154,Dhruv,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-12 19:54,ORD6012,C117,Lakshmi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-12 12:37,ORD6013,C158,Kabir,Chocolate Brownie,Desserts,Baked,2,260
+2026-06-12 12:37,ORD6013,C158,Kabir,Fries,Food,Snacks,1,110
+2026-06-12 17:15,ORD6014,C144,Mohit,Cheesecake Slice,Desserts,Cakes,2,360
+2026-06-12 18:05,ORD6015,C121,Isha,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-12 18:05,ORD6015,C121,Isha,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-12 18:05,ORD6015,C121,Isha,Maggi,Food,Snacks,1,80
+2026-06-12 11:10,ORD6016,C140,Aman,Fries,Food,Snacks,1,110
+2026-06-12 14:48,ORD6017,C116,Aditya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-12 14:48,ORD6017,C116,Aditya,Masala Chai,Beverages,Tea,1,60
+2026-06-12 14:47,ORD6018,C130,Siddharth,Croissant,Desserts,Baked,1,95
+2026-06-12 14:47,ORD6018,C130,Siddharth,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-12 14:47,ORD6018,C130,Siddharth,Samosa (2 pc),Food,Snacks,1,50
+2026-06-12 20:55,ORD6019,C133,Anjali,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-06-12 16:24,ORD6020,C128,Imran,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-12 16:24,ORD6020,C128,Imran,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-12 13:54,ORD6021,C122,Nikhil,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-13 12:51,ORD6022,C117,Lakshmi,Samosa (2 pc),Food,Snacks,1,50
+2026-06-13 17:47,ORD6023,C143,Tanvi,Green Tea,Beverages,Tea,1,80
+2026-06-13 17:44,ORD6024,C143,Tanvi,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-13 17:44,ORD6024,C143,Tanvi,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-13 17:44,ORD6024,C143,Tanvi,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-13 11:43,ORD6025,C106,Vikram,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-13 14:12,ORD6026,C116,Aditya,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-13 18:42,ORD6027,C138,Kunal,Green Tea,Beverages,Tea,1,80
+2026-06-13 18:42,ORD6027,C138,Kunal,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-13 18:42,ORD6027,C138,Kunal,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-13 18:57,ORD6028,C148,Sameer,Masala Chai,Beverages,Tea,1,60
+2026-06-13 18:57,ORD6028,C148,Sameer,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-13 19:42,ORD6029,C129,Neha,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-13 19:42,ORD6029,C129,Neha,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-13 19:42,ORD6029,C129,Neha,Maggi,Food,Snacks,1,80
+2026-06-13 11:10,ORD6030,C116,Aditya,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-13 11:10,ORD6030,C116,Aditya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-13 13:52,ORD6031,C116,Aditya,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-13 13:12,ORD6032,C159,Aditi,Masala Chai,Beverages,Tea,1,60
+2026-06-13 13:12,ORD6032,C159,Aditi,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-13 12:13,ORD6033,C127,Kavya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-13 12:13,ORD6033,C127,Kavya,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-13 14:16,ORD6034,C146,Pranav,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-13 14:16,ORD6034,C146,Pranav,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-13 21:02,ORD6035,C159,Aditi,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-13 21:02,ORD6035,C159,Aditi,Iced Americano,Beverages,Cold Beverages,2,280
+2026-06-13 21:32,ORD6036,C100,Aarav,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-13 21:32,ORD6036,C100,Aarav,Croissant,Desserts,Baked,2,190
+2026-06-13 12:50,ORD6037,C151,Mansi,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-13 13:52,ORD6038,C144,Mohit,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-13 13:52,ORD6038,C144,Mohit,Fries,Food,Snacks,1,110
+2026-06-13 17:41,ORD6039,C140,Aman,Croissant,Desserts,Baked,2,190
+2026-06-13 19:05,ORD6040,C121,Isha,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-13 19:05,ORD6040,C121,Isha,Green Tea,Beverages,Tea,1,80
+2026-06-13 11:12,ORD6041,C142,Rajat,Samosa (2 pc),Food,Snacks,2,100
+2026-06-13 21:44,ORD6042,C140,Aman,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-06-13 11:47,ORD6043,C128,Imran,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-13 11:37,ORD6044,C146,Pranav,Samosa (2 pc),Food,Snacks,1,50
+2026-06-13 09:41,ORD6045,C134,Harsh,Croissant,Desserts,Baked,2,190
+2026-06-13 13:28,ORD6046,C151,Mansi,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-13 13:28,ORD6046,C151,Mansi,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-13 13:28,ORD6046,C151,Mansi,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-13 17:13,ORD6047,C107,Divya,Cheesecake Slice,Desserts,Cakes,2,360
+2026-06-13 17:13,ORD6047,C107,Divya,Chocolate Brownie,Desserts,Baked,2,260
+2026-06-13 12:09,ORD6048,C134,Harsh,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-13 12:09,ORD6048,C134,Harsh,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-13 14:01,ORD6049,C141,Bhavna,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-14 19:08,ORD6050,C141,Bhavna,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-06-14 12:50,ORD6051,C152,Ashwin,Masala Chai,Beverages,Tea,2,120
+2026-06-14 17:52,ORD6052,C152,Ashwin,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-14 11:04,ORD6053,C114,Sanjay,Maggi,Food,Snacks,2,160
+2026-06-14 11:04,ORD6053,C114,Sanjay,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-14 17:25,ORD6054,C143,Tanvi,Croissant,Desserts,Baked,1,95
+2026-06-14 17:50,ORD6055,C153,Rekha,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-14 17:04,ORD6056,C121,Isha,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-14 10:23,ORD6057,C144,Mohit,Chocolate Brownie,Desserts,Baked,2,260
+2026-06-14 10:23,ORD6057,C144,Mohit,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-14 13:50,ORD6058,C106,Vikram,Samosa (2 pc),Food,Snacks,1,50
+2026-06-14 13:50,ORD6058,C106,Vikram,Masala Chai,Beverages,Tea,1,60
+2026-06-14 13:00,ORD6059,C100,Aarav,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-14 10:56,ORD6060,C137,Deepa,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-14 13:09,ORD6061,C113,Nisha,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-14 13:09,ORD6061,C113,Nisha,Chocolate Brownie,Desserts,Baked,2,260
+2026-06-14 12:02,ORD6062,C144,Mohit,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-14 12:02,ORD6062,C144,Mohit,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-14 10:26,ORD6063,C122,Nikhil,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-14 18:06,ORD6064,C133,Anjali,Croissant,Desserts,Baked,1,95
+2026-06-14 18:06,ORD6064,C133,Anjali,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-14 18:13,ORD6065,C142,Rajat,Green Tea,Beverages,Tea,1,80
+2026-06-14 13:54,ORD6066,C143,Tanvi,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-14 13:54,ORD6066,C143,Tanvi,Croissant,Desserts,Baked,2,190
+2026-06-14 13:54,ORD6066,C143,Tanvi,Masala Chai,Beverages,Tea,1,60
+2026-06-14 18:18,ORD6067,C123,Shreya,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-14 19:56,ORD6068,C151,Mansi,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-14 19:56,ORD6068,C151,Mansi,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-06-14 12:10,ORD6069,C111,Pooja,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-14 12:10,ORD6069,C111,Pooja,Cheesecake Slice,Desserts,Cakes,2,360
+2026-06-14 17:28,ORD6070,C146,Pranav,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-14 17:28,ORD6070,C146,Pranav,Maggi,Food,Snacks,1,80
+2026-06-14 11:49,ORD6071,C114,Sanjay,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-14 17:26,ORD6072,C147,Ira,Samosa (2 pc),Food,Snacks,1,50
+2026-06-14 17:26,ORD6072,C147,Ira,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-14 17:26,ORD6072,C147,Ira,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-06-14 18:59,ORD6073,C113,Nisha,Masala Chai,Beverages,Tea,1,60
+2026-06-14 18:59,ORD6073,C113,Nisha,Samosa (2 pc),Food,Snacks,1,50
+2026-06-14 13:40,ORD6074,C112,Karthik,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-14 10:02,ORD6075,C108,Arjun,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-14 10:02,ORD6075,C108,Arjun,Veg Sandwich,Food,Sandwiches,2,240
+2026-06-15 18:26,ORD6076,C129,Neha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-15 18:38,ORD6077,C118,Farhan,Masala Chai,Beverages,Tea,1,60
+2026-06-15 11:54,ORD6078,C135,Simran,Maggi,Food,Snacks,2,160
+2026-06-15 11:55,ORD6079,C131,Riya,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-15 11:55,ORD6079,C131,Riya,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-15 11:55,ORD6079,C131,Riya,Veg Sandwich,Food,Sandwiches,2,240
+2026-06-15 18:20,ORD6080,C115,Ritu,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-06-15 21:09,ORD6081,C137,Deepa,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-15 21:09,ORD6081,C137,Deepa,Maggi,Food,Snacks,1,80
+2026-06-15 21:09,ORD6081,C137,Deepa,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-15 10:27,ORD6082,C102,Rohan,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-15 10:27,ORD6082,C102,Rohan,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-15 16:48,ORD6083,C135,Simran,Maggi,Food,Snacks,2,160
+2026-06-15 13:22,ORD6084,C108,Arjun,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-15 17:19,ORD6085,C142,Rajat,Chocolate Brownie,Desserts,Baked,2,260
+2026-06-15 13:37,ORD6086,C147,Ira,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-15 17:55,ORD6087,C108,Arjun,Masala Chai,Beverages,Tea,1,60
+2026-06-15 17:55,ORD6087,C108,Arjun,Fries,Food,Snacks,1,110
+2026-06-16 17:55,ORD6088,C100,Aarav,Samosa (2 pc),Food,Snacks,1,50
+2026-06-16 17:55,ORD6088,C100,Aarav,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-16 14:17,ORD6089,C148,Sameer,Croissant,Desserts,Baked,1,95
+2026-06-16 14:17,ORD6089,C148,Sameer,Green Tea,Beverages,Tea,1,80
+2026-06-16 19:21,ORD6090,C156,Naveen,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-06-16 19:21,ORD6090,C156,Naveen,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-16 18:03,ORD6091,C156,Naveen,Fries,Food,Snacks,1,110
+2026-06-16 12:23,ORD6092,C102,Rohan,Croissant,Desserts,Baked,1,95
+2026-06-16 18:45,ORD6093,C135,Simran,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-16 18:45,ORD6093,C135,Simran,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-16 21:47,ORD6094,C130,Siddharth,Green Tea,Beverages,Tea,1,80
+2026-06-16 21:47,ORD6094,C130,Siddharth,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-16 21:47,ORD6094,C130,Siddharth,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-16 16:03,ORD6095,C117,Lakshmi,Fries,Food,Snacks,1,110
+2026-06-16 14:33,ORD6096,C132,Gaurav,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-16 14:33,ORD6096,C132,Gaurav,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-16 10:44,ORD6097,C143,Tanvi,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-06-16 10:44,ORD6097,C143,Tanvi,Green Tea,Beverages,Tea,1,80
+2026-06-16 19:25,ORD6098,C105,Sneha,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-16 19:25,ORD6098,C105,Sneha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-16 19:25,ORD6098,C105,Sneha,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-16 18:13,ORD6099,C155,Payal,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-16 18:13,ORD6099,C155,Payal,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-16 14:30,ORD6100,C108,Arjun,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-16 17:18,ORD6101,C101,Ananya,Cappuccino,Beverages,Hot Coffee,2,280
+2026-06-16 18:53,ORD6102,C114,Sanjay,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-16 18:53,ORD6102,C114,Sanjay,Maggi,Food,Snacks,1,80
+2026-06-16 18:53,ORD6102,C114,Sanjay,Croissant,Desserts,Baked,1,95
+2026-06-16 16:44,ORD6103,C142,Rajat,Croissant,Desserts,Baked,1,95
+2026-06-16 16:44,ORD6103,C142,Rajat,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-16 12:50,ORD6104,C157,Sonali,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-16 16:18,ORD6105,C123,Shreya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-16 16:18,ORD6105,C123,Shreya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-17 17:34,ORD6106,C145,Zoya,Masala Chai,Beverages,Tea,2,120
+2026-06-17 10:57,ORD6107,C144,Mohit,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-17 10:57,ORD6107,C144,Mohit,Masala Chai,Beverages,Tea,1,60
+2026-06-17 11:28,ORD6108,C108,Arjun,Masala Chai,Beverages,Tea,1,60
+2026-06-17 20:02,ORD6109,C145,Zoya,Fries,Food,Snacks,1,110
+2026-06-17 20:02,ORD6109,C145,Zoya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-18 21:19,ORD6110,C134,Harsh,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-18 17:49,ORD6111,C131,Riya,Chocolate Brownie,Desserts,Baked,2,260
+2026-06-18 18:47,ORD6112,C100,Aarav,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-18 18:47,ORD6112,C100,Aarav,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-18 11:18,ORD6113,C157,Sonali,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-18 11:18,ORD6113,C157,Sonali,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-18 11:18,ORD6113,C157,Sonali,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-18 17:43,ORD6114,C108,Arjun,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-18 17:43,ORD6114,C108,Arjun,Cappuccino,Beverages,Hot Coffee,2,280
+2026-06-18 18:22,ORD6115,C128,Imran,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-18 16:37,ORD6116,C112,Karthik,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-18 16:37,ORD6116,C112,Karthik,Green Tea,Beverages,Tea,1,80
+2026-06-18 10:43,ORD6117,C128,Imran,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-18 10:43,ORD6117,C128,Imran,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-18 19:38,ORD6118,C138,Kunal,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-18 19:38,ORD6118,C138,Kunal,Fries,Food,Snacks,1,110
+2026-06-18 17:23,ORD6119,C127,Kavya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-18 20:19,ORD6120,C122,Nikhil,Croissant,Desserts,Baked,1,95
+2026-06-18 20:19,ORD6120,C122,Nikhil,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-18 20:19,ORD6120,C122,Nikhil,Green Tea,Beverages,Tea,2,160
+2026-06-18 11:18,ORD6121,C128,Imran,Maggi,Food,Snacks,1,80
+2026-06-19 09:53,ORD6122,C108,Arjun,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-19 09:53,ORD6122,C108,Arjun,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-19 17:33,ORD6123,C155,Payal,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-19 17:33,ORD6123,C155,Payal,Samosa (2 pc),Food,Snacks,1,50
+2026-06-19 17:33,ORD6123,C155,Payal,Croissant,Desserts,Baked,1,95
+2026-06-19 19:35,ORD6124,C111,Pooja,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-19 19:24,ORD6125,C153,Rekha,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-19 17:19,ORD6126,C152,Ashwin,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-19 17:19,ORD6126,C152,Ashwin,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-19 17:50,ORD6127,C101,Ananya,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-19 21:53,ORD6128,C140,Aman,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-19 21:53,ORD6128,C140,Aman,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-19 19:41,ORD6129,C144,Mohit,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-19 12:04,ORD6130,C131,Riya,Fries,Food,Snacks,1,110
+2026-06-19 12:04,ORD6130,C131,Riya,Blueberry Muffin,Desserts,Baked,2,220
+2026-06-19 14:43,ORD6131,C140,Aman,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-19 16:36,ORD6132,C146,Pranav,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-20 16:56,ORD6133,C129,Neha,Fries,Food,Snacks,1,110
+2026-06-20 16:56,ORD6133,C129,Neha,Masala Chai,Beverages,Tea,1,60
+2026-06-20 12:58,ORD6134,C140,Aman,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-20 12:58,ORD6134,C140,Aman,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-06-20 12:58,ORD6134,C140,Aman,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-20 13:11,ORD6135,C140,Aman,Masala Chai,Beverages,Tea,2,120
+2026-06-20 13:11,ORD6135,C140,Aman,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-20 17:51,ORD6136,C143,Tanvi,Fries,Food,Snacks,1,110
+2026-06-20 19:22,ORD6137,C137,Deepa,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-20 19:22,ORD6137,C137,Deepa,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-20 21:26,ORD6138,C131,Riya,Masala Chai,Beverages,Tea,1,60
+2026-06-20 18:14,ORD6139,C132,Gaurav,Croissant,Desserts,Baked,2,190
+2026-06-20 18:14,ORD6139,C132,Gaurav,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-20 19:48,ORD6140,C144,Mohit,Maggi,Food,Snacks,2,160
+2026-06-20 19:48,ORD6140,C144,Mohit,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-20 21:59,ORD6141,C108,Arjun,Fries,Food,Snacks,1,110
+2026-06-20 18:08,ORD6142,C123,Shreya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-20 18:08,ORD6142,C123,Shreya,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-20 17:52,ORD6143,C147,Ira,Iced Americano,Beverages,Cold Beverages,2,280
+2026-06-20 18:14,ORD6144,C144,Mohit,Green Tea,Beverages,Tea,1,80
+2026-06-20 18:27,ORD6145,C105,Sneha,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-20 18:27,ORD6145,C105,Sneha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-20 10:02,ORD6146,C127,Kavya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-20 16:37,ORD6147,C132,Gaurav,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-06-20 14:04,ORD6148,C102,Rohan,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-20 10:07,ORD6149,C150,Vivek,Green Tea,Beverages,Tea,1,80
+2026-06-20 10:07,ORD6149,C150,Vivek,Croissant,Desserts,Baked,1,95
+2026-06-20 10:07,ORD6149,C150,Vivek,Masala Chai,Beverages,Tea,1,60
+2026-06-20 11:17,ORD6150,C147,Ira,Fries,Food,Snacks,2,220
+2026-06-20 11:17,ORD6150,C147,Ira,Croissant,Desserts,Baked,1,95
+2026-06-20 11:17,ORD6150,C147,Ira,Masala Chai,Beverages,Tea,1,60
+2026-06-20 17:36,ORD6151,C132,Gaurav,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-20 20:12,ORD6152,C145,Zoya,Masala Chai,Beverages,Tea,2,120
+2026-06-20 20:12,ORD6152,C145,Zoya,Cappuccino,Beverages,Hot Coffee,2,280
+2026-06-20 20:12,ORD6152,C145,Zoya,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-06-20 17:23,ORD6153,C130,Siddharth,Masala Chai,Beverages,Tea,1,60
+2026-06-20 17:23,ORD6153,C130,Siddharth,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-21 17:22,ORD6154,C153,Rekha,Maggi,Food,Snacks,1,80
+2026-06-21 17:22,ORD6154,C153,Rekha,Green Tea,Beverages,Tea,1,80
+2026-06-21 17:22,ORD6154,C153,Rekha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-21 16:07,ORD6155,C129,Neha,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-21 16:07,ORD6155,C129,Neha,Fries,Food,Snacks,1,110
+2026-06-21 11:05,ORD6156,C102,Rohan,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-21 17:38,ORD6157,C129,Neha,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-21 17:38,ORD6157,C129,Neha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-21 16:27,ORD6158,C154,Dhruv,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-06-21 17:43,ORD6159,C130,Siddharth,Cappuccino,Beverages,Hot Coffee,2,280
+2026-06-21 12:43,ORD6160,C131,Riya,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-21 09:05,ORD6161,C143,Tanvi,Samosa (2 pc),Food,Snacks,1,50
+2026-06-21 17:06,ORD6162,C137,Deepa,Masala Chai,Beverages,Tea,1,60
+2026-06-21 17:06,ORD6162,C137,Deepa,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-21 21:54,ORD6163,C138,Kunal,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-21 21:54,ORD6163,C138,Kunal,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-21 21:54,ORD6163,C138,Kunal,Maggi,Food,Snacks,1,80
+2026-06-21 12:37,ORD6164,C137,Deepa,Samosa (2 pc),Food,Snacks,1,50
+2026-06-21 18:38,ORD6165,C142,Rajat,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-21 18:38,ORD6165,C142,Rajat,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-21 18:38,ORD6165,C142,Rajat,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-21 13:31,ORD6166,C131,Riya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-21 17:03,ORD6167,C147,Ira,Blueberry Muffin,Desserts,Baked,2,220
+2026-06-21 17:03,ORD6167,C147,Ira,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-21 18:20,ORD6168,C143,Tanvi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-21 13:48,ORD6169,C142,Rajat,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-21 13:48,ORD6169,C142,Rajat,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-21 17:32,ORD6170,C131,Riya,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-21 10:34,ORD6171,C134,Harsh,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-06-21 19:58,ORD6172,C156,Naveen,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-21 18:29,ORD6173,C128,Imran,Masala Chai,Beverages,Tea,1,60
+2026-06-22 18:49,ORD6174,C155,Payal,Masala Chai,Beverages,Tea,1,60
+2026-06-22 11:19,ORD6175,C108,Arjun,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-22 11:19,ORD6175,C108,Arjun,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-22 16:43,ORD6176,C135,Simran,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-22 16:43,ORD6176,C135,Simran,Croissant,Desserts,Baked,1,95
+2026-06-22 21:31,ORD6177,C116,Aditya,Samosa (2 pc),Food,Snacks,1,50
+2026-06-22 21:31,ORD6177,C116,Aditya,Fries,Food,Snacks,1,110
+2026-06-22 14:37,ORD6178,C101,Ananya,Fries,Food,Snacks,1,110
+2026-06-22 18:37,ORD6179,C147,Ira,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-22 12:22,ORD6180,C127,Kavya,Maggi,Food,Snacks,1,80
+2026-06-22 12:22,ORD6180,C127,Kavya,Fries,Food,Snacks,1,110
+2026-06-22 12:22,ORD6180,C127,Kavya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-22 13:05,ORD6181,C137,Deepa,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-22 13:05,ORD6181,C137,Deepa,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-22 13:05,ORD6181,C137,Deepa,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-22 09:42,ORD6182,C129,Neha,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-22 09:42,ORD6182,C129,Neha,Maggi,Food,Snacks,1,80
+2026-06-22 09:42,ORD6182,C129,Neha,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-22 10:51,ORD6183,C106,Vikram,Green Tea,Beverages,Tea,1,80
+2026-06-22 12:51,ORD6184,C132,Gaurav,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-22 12:51,ORD6184,C132,Gaurav,Masala Chai,Beverages,Tea,1,60
+2026-06-23 17:12,ORD6185,C127,Kavya,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-06-23 16:13,ORD6186,C134,Harsh,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-23 10:39,ORD6187,C114,Sanjay,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-23 10:39,ORD6187,C114,Sanjay,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-23 14:30,ORD6188,C133,Anjali,Fries,Food,Snacks,1,110
+2026-06-23 17:52,ORD6189,C141,Bhavna,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-23 17:20,ORD6190,C134,Harsh,Samosa (2 pc),Food,Snacks,1,50
+2026-06-23 18:29,ORD6191,C132,Gaurav,Croissant,Desserts,Baked,2,190
+2026-06-23 18:29,ORD6191,C132,Gaurav,Masala Chai,Beverages,Tea,1,60
+2026-06-23 09:55,ORD6192,C133,Anjali,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-23 17:47,ORD6193,C152,Ashwin,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-23 17:47,ORD6193,C152,Ashwin,Maggi,Food,Snacks,1,80
+2026-06-23 17:47,ORD6193,C152,Ashwin,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-23 12:43,ORD6194,C147,Ira,Maggi,Food,Snacks,1,80
+2026-06-23 12:43,ORD6194,C147,Ira,Croissant,Desserts,Baked,2,190
+2026-06-23 14:13,ORD6195,C140,Aman,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-23 14:13,ORD6195,C140,Aman,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-23 20:15,ORD6196,C138,Kunal,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-23 19:15,ORD6197,C101,Ananya,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-23 19:15,ORD6197,C101,Ananya,Chocolate Brownie,Desserts,Baked,2,260
+2026-06-23 16:41,ORD6198,C127,Kavya,Green Tea,Beverages,Tea,1,80
+2026-06-23 16:41,ORD6198,C127,Kavya,Masala Chai,Beverages,Tea,1,60
+2026-06-23 16:41,ORD6198,C127,Kavya,Veg Sandwich,Food,Sandwiches,2,240
+2026-06-24 17:35,ORD6199,C142,Rajat,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-06-24 13:50,ORD6200,C131,Riya,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-24 16:55,ORD6201,C119,Tara,Maggi,Food,Snacks,2,160
+2026-06-24 17:42,ORD6202,C142,Rajat,Samosa (2 pc),Food,Snacks,1,50
+2026-06-24 17:42,ORD6202,C142,Rajat,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-24 17:42,ORD6202,C142,Rajat,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-06-24 20:42,ORD6203,C133,Anjali,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-24 20:42,ORD6203,C133,Anjali,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-24 12:07,ORD6204,C138,Kunal,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-24 12:07,ORD6204,C138,Kunal,Croissant,Desserts,Baked,1,95
+2026-06-24 18:47,ORD6205,C147,Ira,Maggi,Food,Snacks,1,80
+2026-06-24 11:11,ORD6206,C106,Vikram,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-24 17:55,ORD6207,C116,Aditya,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-24 17:55,ORD6207,C116,Aditya,Fries,Food,Snacks,1,110
+2026-06-24 17:27,ORD6208,C134,Harsh,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-06-24 17:50,ORD6209,C156,Naveen,Fries,Food,Snacks,2,220
+2026-06-24 17:50,ORD6209,C156,Naveen,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-24 17:50,ORD6209,C156,Naveen,Croissant,Desserts,Baked,2,190
+2026-06-25 20:02,ORD6210,C138,Kunal,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-25 20:02,ORD6210,C138,Kunal,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-25 09:44,ORD6211,C140,Aman,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-25 17:54,ORD6212,C115,Ritu,Cappuccino,Beverages,Hot Coffee,2,280
+2026-06-25 13:16,ORD6213,C158,Kabir,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-25 20:56,ORD6214,C155,Payal,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-25 21:51,ORD6215,C156,Naveen,Maggi,Food,Snacks,1,80
+2026-06-25 21:51,ORD6215,C156,Naveen,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-25 19:30,ORD6216,C131,Riya,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-25 19:30,ORD6216,C131,Riya,Maggi,Food,Snacks,2,160
+2026-06-25 18:10,ORD6217,C152,Ashwin,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-25 18:10,ORD6217,C152,Ashwin,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-25 17:35,ORD6218,C152,Ashwin,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-25 17:35,ORD6218,C152,Ashwin,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-25 19:40,ORD6219,C111,Pooja,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-26 18:19,ORD6220,C140,Aman,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-26 18:33,ORD6221,C115,Ritu,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-26 18:33,ORD6221,C115,Ritu,Maggi,Food,Snacks,1,80
+2026-06-26 21:55,ORD6222,C130,Siddharth,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-26 21:55,ORD6222,C130,Siddharth,Masala Chai,Beverages,Tea,2,120
+2026-06-26 18:12,ORD6223,C118,Farhan,Fries,Food,Snacks,1,110
+2026-06-26 10:24,ORD6224,C156,Naveen,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-06-26 10:24,ORD6224,C156,Naveen,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-26 10:24,ORD6224,C156,Naveen,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-26 18:05,ORD6225,C158,Kabir,Green Tea,Beverages,Tea,1,80
+2026-06-26 18:05,ORD6225,C158,Kabir,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-26 18:05,ORD6225,C158,Kabir,Masala Chai,Beverages,Tea,1,60
+2026-06-26 14:23,ORD6226,C105,Sneha,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-26 18:27,ORD6227,C133,Anjali,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-26 18:27,ORD6227,C133,Anjali,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-26 10:52,ORD6228,C155,Payal,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-26 10:52,ORD6228,C155,Payal,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-26 10:38,ORD6229,C113,Nisha,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-26 09:26,ORD6230,C111,Pooja,Cappuccino,Beverages,Hot Coffee,2,280
+2026-06-26 09:26,ORD6230,C111,Pooja,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-26 14:58,ORD6231,C128,Imran,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-26 19:08,ORD6232,C130,Siddharth,Samosa (2 pc),Food,Snacks,1,50
+2026-06-26 19:08,ORD6232,C130,Siddharth,Green Tea,Beverages,Tea,1,80
+2026-06-26 19:08,ORD6232,C130,Siddharth,Croissant,Desserts,Baked,1,95
+2026-06-26 14:35,ORD6233,C106,Vikram,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-26 16:58,ORD6234,C130,Siddharth,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-26 18:39,ORD6235,C132,Gaurav,Samosa (2 pc),Food,Snacks,1,50
+2026-06-26 12:35,ORD6236,C157,Sonali,Masala Chai,Beverages,Tea,1,60
+2026-06-26 10:31,ORD6237,C132,Gaurav,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-26 10:31,ORD6237,C132,Gaurav,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-26 10:31,ORD6237,C132,Gaurav,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-27 14:20,ORD6238,C107,Divya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-27 16:17,ORD6239,C153,Rekha,Maggi,Food,Snacks,2,160
+2026-06-27 16:17,ORD6239,C153,Rekha,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-27 09:48,ORD6240,C153,Rekha,Cheesecake Slice,Desserts,Cakes,2,360
+2026-06-27 09:48,ORD6240,C153,Rekha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-27 09:48,ORD6240,C153,Rekha,Maggi,Food,Snacks,2,160
+2026-06-27 10:09,ORD6241,C148,Sameer,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-27 10:09,ORD6241,C148,Sameer,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-27 17:02,ORD6242,C111,Pooja,Masala Chai,Beverages,Tea,1,60
+2026-06-27 16:07,ORD6243,C127,Kavya,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-27 16:07,ORD6243,C127,Kavya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-27 16:07,ORD6243,C127,Kavya,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-27 14:07,ORD6244,C131,Riya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-27 14:07,ORD6244,C131,Riya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-27 17:11,ORD6245,C118,Farhan,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-27 17:11,ORD6245,C118,Farhan,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-27 17:37,ORD6246,C113,Nisha,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-27 17:37,ORD6246,C113,Nisha,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-27 17:37,ORD6246,C113,Nisha,Masala Chai,Beverages,Tea,1,60
+2026-06-27 21:06,ORD6247,C143,Tanvi,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-27 21:06,ORD6247,C143,Tanvi,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-27 21:06,ORD6247,C143,Tanvi,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-06-27 11:20,ORD6248,C153,Rekha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-27 12:42,ORD6249,C145,Zoya,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-27 13:21,ORD6250,C100,Aarav,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-27 13:21,ORD6250,C100,Aarav,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-27 13:21,ORD6250,C100,Aarav,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-27 21:04,ORD6251,C147,Ira,Samosa (2 pc),Food,Snacks,1,50
+2026-06-27 21:04,ORD6251,C147,Ira,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-27 20:25,ORD6252,C155,Payal,Green Tea,Beverages,Tea,1,80
+2026-06-27 12:41,ORD6253,C118,Farhan,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-27 12:41,ORD6253,C118,Farhan,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-06-27 17:51,ORD6254,C147,Ira,Iced Americano,Beverages,Cold Beverages,2,280
+2026-06-27 17:51,ORD6254,C147,Ira,Fries,Food,Snacks,1,110
+2026-06-27 17:51,ORD6254,C147,Ira,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-27 13:24,ORD6255,C156,Naveen,Maggi,Food,Snacks,1,80
+2026-06-27 17:51,ORD6256,C127,Kavya,Masala Chai,Beverages,Tea,1,60
+2026-06-27 16:05,ORD6257,C127,Kavya,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-27 14:14,ORD6258,C143,Tanvi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-27 14:14,ORD6258,C143,Tanvi,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-27 17:18,ORD6259,C105,Sneha,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-06-28 18:19,ORD6260,C130,Siddharth,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-28 16:53,ORD6261,C119,Tara,Maggi,Food,Snacks,1,80
+2026-06-28 16:04,ORD6262,C135,Simran,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-28 16:04,ORD6262,C135,Simran,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-28 16:04,ORD6262,C135,Simran,Maggi,Food,Snacks,1,80
+2026-06-28 21:16,ORD6263,C152,Ashwin,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-28 12:07,ORD6264,C101,Ananya,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-28 12:07,ORD6264,C101,Ananya,Masala Chai,Beverages,Tea,2,120
+2026-06-28 17:05,ORD6265,C102,Rohan,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-28 16:29,ORD6266,C146,Pranav,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-28 16:29,ORD6266,C146,Pranav,Veg Sandwich,Food,Sandwiches,2,240
+2026-06-28 17:13,ORD6267,C111,Pooja,Veg Sandwich,Food,Sandwiches,2,240
+2026-06-28 19:27,ORD6268,C106,Vikram,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-28 19:27,ORD6268,C106,Vikram,Samosa (2 pc),Food,Snacks,1,50
+2026-06-28 19:29,ORD6269,C130,Siddharth,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-28 19:29,ORD6269,C130,Siddharth,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-06-28 20:44,ORD6270,C123,Shreya,Samosa (2 pc),Food,Snacks,1,50
+2026-06-28 20:44,ORD6270,C123,Shreya,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-28 19:52,ORD6271,C107,Divya,Green Tea,Beverages,Tea,2,160
+2026-06-28 13:30,ORD6272,C113,Nisha,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-06-28 13:30,ORD6272,C113,Nisha,Maggi,Food,Snacks,2,160
+2026-06-28 11:12,ORD6273,C134,Harsh,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-28 18:01,ORD6274,C127,Kavya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-28 17:31,ORD6275,C128,Imran,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-28 11:36,ORD6276,C118,Farhan,Samosa (2 pc),Food,Snacks,1,50
+2026-06-28 11:36,ORD6276,C118,Farhan,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-28 19:45,ORD6277,C154,Dhruv,Maggi,Food,Snacks,2,160
+2026-06-28 13:37,ORD6278,C147,Ira,Croissant,Desserts,Baked,1,95
+2026-06-28 13:37,ORD6278,C147,Ira,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-28 17:37,ORD6279,C132,Gaurav,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-28 17:37,ORD6279,C132,Gaurav,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-28 17:36,ORD6280,C127,Kavya,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-28 09:26,ORD6281,C141,Bhavna,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-28 09:26,ORD6281,C141,Bhavna,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-28 09:26,ORD6281,C141,Bhavna,Fries,Food,Snacks,1,110
+2026-06-28 09:12,ORD6282,C146,Pranav,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-28 20:37,ORD6283,C114,Sanjay,Chicken Sandwich,Food,Sandwiches,2,360
+2026-06-28 20:37,ORD6283,C114,Sanjay,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-28 20:37,ORD6283,C114,Sanjay,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-28 13:43,ORD6284,C153,Rekha,Fries,Food,Snacks,1,110
+2026-06-28 13:43,ORD6284,C153,Rekha,Blueberry Muffin,Desserts,Baked,2,220
+2026-06-29 19:18,ORD6285,C113,Nisha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-06-29 19:18,ORD6285,C113,Nisha,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-29 09:31,ORD6286,C138,Kunal,Maggi,Food,Snacks,2,160
+2026-06-29 21:19,ORD6287,C131,Riya,Croissant,Desserts,Baked,1,95
+2026-06-29 12:22,ORD6288,C101,Ananya,Fries,Food,Snacks,2,220
+2026-06-29 12:22,ORD6288,C101,Ananya,Masala Chai,Beverages,Tea,2,120
+2026-06-29 12:22,ORD6288,C101,Ananya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-29 14:27,ORD6289,C121,Isha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-06-29 17:31,ORD6290,C114,Sanjay,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-29 17:49,ORD6291,C102,Rohan,Veg Sandwich,Food,Sandwiches,1,120
+2026-06-29 17:49,ORD6291,C102,Rohan,Iced Americano,Beverages,Cold Beverages,2,280
+2026-06-29 17:49,ORD6291,C102,Rohan,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-29 17:53,ORD6292,C129,Neha,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-06-29 17:53,ORD6292,C129,Neha,Croissant,Desserts,Baked,1,95
+2026-06-29 21:10,ORD6293,C106,Vikram,Green Tea,Beverages,Tea,1,80
+2026-06-29 21:10,ORD6293,C106,Vikram,Fries,Food,Snacks,1,110
+2026-06-30 17:48,ORD6294,C128,Imran,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-06-30 17:48,ORD6294,C128,Imran,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-30 13:54,ORD6295,C107,Divya,Maggi,Food,Snacks,1,80
+2026-06-30 13:15,ORD6296,C100,Aarav,Blueberry Muffin,Desserts,Baked,1,110
+2026-06-30 13:15,ORD6296,C100,Aarav,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-30 14:23,ORD6297,C117,Lakshmi,Maggi,Food,Snacks,1,80
+2026-06-30 14:23,ORD6297,C117,Lakshmi,Fries,Food,Snacks,1,110
+2026-06-30 17:48,ORD6298,C148,Sameer,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-06-30 17:48,ORD6298,C148,Sameer,Iced Americano,Beverages,Cold Beverages,1,140
+2026-06-30 12:29,ORD6299,C157,Sonali,Cheesecake Slice,Desserts,Cakes,1,180
+2026-06-30 12:29,ORD6299,C157,Sonali,Fries,Food,Snacks,1,110
+2026-06-30 12:29,ORD6299,C157,Sonali,Cappuccino,Beverages,Hot Coffee,1,140
+2026-06-30 14:04,ORD6300,C133,Anjali,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-30 17:03,ORD6301,C127,Kavya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-30 14:09,ORD6302,C141,Bhavna,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-06-30 14:09,ORD6302,C141,Bhavna,Cheesecake Slice,Desserts,Cakes,2,360
+2026-06-30 14:09,ORD6302,C141,Bhavna,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-06-30 18:19,ORD6303,C155,Payal,Chicken Sandwich,Food,Sandwiches,1,180
+2026-06-30 18:19,ORD6303,C155,Payal,Fries,Food,Snacks,1,110
+2026-06-30 18:39,ORD6304,C133,Anjali,Samosa (2 pc),Food,Snacks,2,100
+2026-06-30 18:39,ORD6304,C133,Anjali,Chocolate Brownie,Desserts,Baked,1,130
+2026-06-30 18:39,ORD6304,C133,Anjali,Green Tea,Beverages,Tea,1,80
+2026-06-30 19:44,ORD6305,C128,Imran,Samosa (2 pc),Food,Snacks,1,50
+2026-06-30 13:19,ORD6306,C156,Naveen,Croissant,Desserts,Baked,1,95
+2026-07-01 12:46,ORD6307,C146,Pranav,Iced Americano,Beverages,Cold Beverages,2,280
+2026-07-01 12:46,ORD6307,C146,Pranav,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-01 20:32,ORD6308,C105,Sneha,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-01 20:32,ORD6308,C105,Sneha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-01 11:56,ORD6309,C101,Ananya,Veg Sandwich,Food,Sandwiches,2,240
+2026-07-01 11:56,ORD6309,C101,Ananya,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-01 17:32,ORD6310,C127,Kavya,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-07-01 16:40,ORD6311,C116,Aditya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-01 16:40,ORD6311,C116,Aditya,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-07-01 19:19,ORD6312,C128,Imran,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-01 19:19,ORD6312,C128,Imran,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-01 09:37,ORD6313,C147,Ira,Croissant,Desserts,Baked,1,95
+2026-07-01 09:37,ORD6313,C147,Ira,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-01 21:52,ORD6314,C150,Vivek,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-01 21:52,ORD6314,C150,Vivek,Samosa (2 pc),Food,Snacks,1,50
+2026-07-01 19:37,ORD6315,C133,Anjali,Fries,Food,Snacks,1,110
+2026-07-01 21:27,ORD6316,C145,Zoya,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-01 21:27,ORD6316,C145,Zoya,Croissant,Desserts,Baked,2,190
+2026-07-01 18:13,ORD6317,C130,Siddharth,Fries,Food,Snacks,1,110
+2026-07-01 21:35,ORD6318,C137,Deepa,Samosa (2 pc),Food,Snacks,1,50
+2026-07-01 21:35,ORD6318,C137,Deepa,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-01 19:44,ORD6319,C128,Imran,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-01 19:44,ORD6319,C128,Imran,Maggi,Food,Snacks,1,80
+2026-07-01 19:44,ORD6319,C128,Imran,Masala Chai,Beverages,Tea,1,60
+2026-07-01 14:32,ORD6320,C145,Zoya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-01 14:32,ORD6320,C145,Zoya,Green Tea,Beverages,Tea,1,80
+2026-07-01 14:32,ORD6320,C145,Zoya,Chocolate Brownie,Desserts,Baked,2,260
+2026-07-01 16:58,ORD6321,C123,Shreya,Maggi,Food,Snacks,1,80
+2026-07-01 16:58,ORD6321,C123,Shreya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-01 16:58,ORD6321,C123,Shreya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-02 14:23,ORD6322,C107,Divya,Fries,Food,Snacks,1,110
+2026-07-02 19:01,ORD6323,C131,Riya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-02 19:01,ORD6323,C131,Riya,Maggi,Food,Snacks,2,160
+2026-07-02 17:18,ORD6324,C156,Naveen,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-02 11:22,ORD6325,C135,Simran,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-02 18:36,ORD6326,C119,Tara,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-02 17:53,ORD6327,C130,Siddharth,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-02 17:53,ORD6327,C130,Siddharth,Croissant,Desserts,Baked,1,95
+2026-07-02 17:42,ORD6328,C128,Imran,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-02 13:39,ORD6329,C142,Rajat,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-07-02 19:34,ORD6330,C121,Isha,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-02 20:05,ORD6331,C141,Bhavna,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-02 20:05,ORD6331,C141,Bhavna,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-02 20:05,ORD6331,C141,Bhavna,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-07-02 09:36,ORD6332,C134,Harsh,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-02 09:36,ORD6332,C134,Harsh,Green Tea,Beverages,Tea,1,80
+2026-07-02 18:07,ORD6333,C101,Ananya,Croissant,Desserts,Baked,2,190
+2026-07-02 18:07,ORD6333,C101,Ananya,Masala Chai,Beverages,Tea,1,60
+2026-07-02 14:15,ORD6334,C113,Nisha,Chocolate Brownie,Desserts,Baked,2,260
+2026-07-02 14:15,ORD6334,C113,Nisha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-02 09:02,ORD6335,C137,Deepa,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-02 12:26,ORD6336,C111,Pooja,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-02 14:05,ORD6337,C116,Aditya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-02 10:09,ORD6338,C118,Farhan,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-02 18:10,ORD6339,C143,Tanvi,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-02 18:03,ORD6340,C145,Zoya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-03 09:20,ORD6341,C157,Sonali,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-03 17:48,ORD6342,C115,Ritu,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-03 17:48,ORD6342,C115,Ritu,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-03 21:17,ORD6343,C107,Divya,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-03 13:01,ORD6344,C130,Siddharth,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-07-03 18:17,ORD6345,C101,Ananya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-03 18:17,ORD6345,C101,Ananya,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-03 18:36,ORD6346,C119,Tara,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-07-03 20:13,ORD6347,C132,Gaurav,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-03 20:13,ORD6347,C132,Gaurav,Fries,Food,Snacks,1,110
+2026-07-03 09:34,ORD6348,C115,Ritu,Croissant,Desserts,Baked,1,95
+2026-07-03 09:34,ORD6348,C115,Ritu,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-03 09:34,ORD6348,C115,Ritu,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-07-03 12:41,ORD6349,C118,Farhan,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-03 12:41,ORD6349,C118,Farhan,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-03 12:41,ORD6349,C118,Farhan,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-03 14:40,ORD6350,C153,Rekha,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-04 14:34,ORD6351,C147,Ira,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-04 14:34,ORD6351,C147,Ira,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-04 18:35,ORD6352,C146,Pranav,Maggi,Food,Snacks,2,160
+2026-07-04 18:35,ORD6352,C146,Pranav,Green Tea,Beverages,Tea,2,160
+2026-07-04 18:35,ORD6352,C146,Pranav,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-04 16:45,ORD6353,C148,Sameer,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-04 17:13,ORD6354,C121,Isha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-04 20:08,ORD6355,C144,Mohit,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-04 20:08,ORD6355,C144,Mohit,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-04 11:26,ORD6356,C111,Pooja,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-04 11:26,ORD6356,C111,Pooja,Samosa (2 pc),Food,Snacks,1,50
+2026-07-04 13:41,ORD6357,C141,Bhavna,Cappuccino,Beverages,Hot Coffee,2,280
+2026-07-04 18:42,ORD6358,C152,Ashwin,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-04 19:24,ORD6359,C152,Ashwin,Fries,Food,Snacks,1,110
+2026-07-04 19:24,ORD6359,C152,Ashwin,Samosa (2 pc),Food,Snacks,1,50
+2026-07-04 21:00,ORD6360,C144,Mohit,Fries,Food,Snacks,2,220
+2026-07-04 17:00,ORD6361,C128,Imran,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-04 17:58,ORD6362,C143,Tanvi,Green Tea,Beverages,Tea,2,160
+2026-07-04 17:58,ORD6362,C143,Tanvi,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-04 13:14,ORD6363,C145,Zoya,Blueberry Muffin,Desserts,Baked,2,220
+2026-07-04 17:17,ORD6364,C102,Rohan,Green Tea,Beverages,Tea,1,80
+2026-07-04 17:40,ORD6365,C152,Ashwin,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-04 09:10,ORD6366,C131,Riya,Masala Chai,Beverages,Tea,1,60
+2026-07-04 09:10,ORD6366,C131,Riya,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-04 14:59,ORD6367,C116,Aditya,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-04 14:59,ORD6367,C116,Aditya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-04 17:43,ORD6368,C154,Dhruv,Croissant,Desserts,Baked,1,95
+2026-07-04 13:35,ORD6369,C143,Tanvi,Cappuccino,Beverages,Hot Coffee,2,280
+2026-07-04 13:35,ORD6369,C143,Tanvi,Maggi,Food,Snacks,1,80
+2026-07-04 13:35,ORD6369,C143,Tanvi,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-07-04 09:07,ORD6370,C117,Lakshmi,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-04 09:07,ORD6370,C117,Lakshmi,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-04 14:46,ORD6371,C156,Naveen,Veg Sandwich,Food,Sandwiches,2,240
+2026-07-04 16:28,ORD6372,C134,Harsh,Samosa (2 pc),Food,Snacks,1,50
+2026-07-04 21:56,ORD6373,C105,Sneha,Cappuccino,Beverages,Hot Coffee,2,280
+2026-07-04 21:56,ORD6373,C105,Sneha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-04 18:15,ORD6374,C158,Kabir,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-04 16:40,ORD6375,C140,Aman,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-04 20:37,ORD6376,C101,Ananya,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-04 20:37,ORD6376,C101,Ananya,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-05 19:53,ORD6377,C121,Isha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-05 16:04,ORD6378,C115,Ritu,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-05 16:04,ORD6378,C115,Ritu,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-05 21:03,ORD6379,C105,Sneha,Samosa (2 pc),Food,Snacks,1,50
+2026-07-05 21:03,ORD6379,C105,Sneha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-05 21:03,ORD6379,C105,Sneha,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-07-05 16:39,ORD6380,C119,Tara,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-05 16:39,ORD6380,C119,Tara,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-05 10:54,ORD6381,C118,Farhan,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-05 14:55,ORD6382,C114,Sanjay,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-05 14:55,ORD6382,C114,Sanjay,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-05 11:39,ORD6383,C156,Naveen,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-05 11:39,ORD6383,C156,Naveen,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-05 16:06,ORD6384,C106,Vikram,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-05 17:12,ORD6385,C153,Rekha,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-05 17:12,ORD6385,C153,Rekha,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-05 17:12,ORD6385,C153,Rekha,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-05 10:15,ORD6386,C111,Pooja,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-05 16:37,ORD6387,C119,Tara,Fries,Food,Snacks,1,110
+2026-07-05 18:34,ORD6388,C156,Naveen,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-05 18:34,ORD6388,C156,Naveen,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-05 14:00,ORD6389,C123,Shreya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-05 14:00,ORD6389,C123,Shreya,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-07-05 16:54,ORD6390,C135,Simran,Fries,Food,Snacks,1,110
+2026-07-06 17:58,ORD6391,C140,Aman,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-06 21:30,ORD6392,C142,Rajat,Chocolate Brownie,Desserts,Baked,2,260
+2026-07-06 21:30,ORD6392,C142,Rajat,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-06 16:39,ORD6393,C121,Isha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-06 17:56,ORD6394,C129,Neha,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-06 17:56,ORD6394,C129,Neha,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-06 17:44,ORD6395,C114,Sanjay,Green Tea,Beverages,Tea,1,80
+2026-07-06 14:49,ORD6396,C147,Ira,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-06 14:49,ORD6396,C147,Ira,Samosa (2 pc),Food,Snacks,2,100
+2026-07-06 14:49,ORD6396,C147,Ira,Green Tea,Beverages,Tea,1,80
+2026-07-06 17:04,ORD6397,C100,Aarav,Croissant,Desserts,Baked,1,95
+2026-07-06 14:28,ORD6398,C118,Farhan,Fries,Food,Snacks,1,110
+2026-07-06 17:12,ORD6399,C101,Ananya,Masala Chai,Beverages,Tea,1,60
+2026-07-06 21:46,ORD6400,C116,Aditya,Croissant,Desserts,Baked,1,95
+2026-07-06 18:11,ORD6401,C101,Ananya,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-07-06 18:11,ORD6401,C101,Ananya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-06 19:50,ORD6402,C141,Bhavna,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-06 19:50,ORD6402,C141,Bhavna,Green Tea,Beverages,Tea,1,80
+2026-07-06 19:50,ORD6402,C141,Bhavna,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-06 14:51,ORD6403,C133,Anjali,Maggi,Food,Snacks,1,80
+2026-07-06 14:51,ORD6403,C133,Anjali,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-07-06 14:51,ORD6403,C133,Anjali,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-06 17:24,ORD6404,C134,Harsh,Chicken Sandwich,Food,Sandwiches,2,360
+2026-07-06 17:24,ORD6404,C134,Harsh,Maggi,Food,Snacks,1,80
+2026-07-07 20:48,ORD6405,C102,Rohan,Green Tea,Beverages,Tea,1,80
+2026-07-07 20:48,ORD6405,C102,Rohan,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-07 16:50,ORD6406,C140,Aman,Iced Americano,Beverages,Cold Beverages,2,280
+2026-07-07 11:56,ORD6407,C137,Deepa,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-07 17:42,ORD6408,C150,Vivek,Masala Chai,Beverages,Tea,1,60
+2026-07-07 17:42,ORD6408,C150,Vivek,Cheesecake Slice,Desserts,Cakes,2,360
+2026-07-07 11:32,ORD6409,C148,Sameer,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-07 16:23,ORD6410,C145,Zoya,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-07 16:23,ORD6410,C145,Zoya,Croissant,Desserts,Baked,1,95
+2026-07-07 10:58,ORD6411,C140,Aman,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-07 10:58,ORD6411,C140,Aman,Green Tea,Beverages,Tea,1,80
+2026-07-07 19:15,ORD6412,C155,Payal,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-08 18:23,ORD6413,C153,Rekha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-08 12:18,ORD6414,C105,Sneha,Fries,Food,Snacks,1,110
+2026-07-08 14:29,ORD6415,C102,Rohan,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-08 14:29,ORD6415,C102,Rohan,Maggi,Food,Snacks,1,80
+2026-07-08 14:51,ORD6416,C123,Shreya,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-08 09:28,ORD6417,C111,Pooja,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-08 18:18,ORD6418,C105,Sneha,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-08 18:18,ORD6418,C105,Sneha,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-07-08 13:07,ORD6419,C106,Vikram,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-08 16:12,ORD6420,C121,Isha,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-08 16:12,ORD6420,C121,Isha,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-08 16:17,ORD6421,C154,Dhruv,Iced Americano,Beverages,Cold Beverages,2,280
+2026-07-09 13:45,ORD6422,C148,Sameer,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-09 13:45,ORD6422,C148,Sameer,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-09 17:25,ORD6423,C150,Vivek,Cappuccino,Beverages,Hot Coffee,2,280
+2026-07-09 17:25,ORD6423,C150,Vivek,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-09 17:25,ORD6423,C150,Vivek,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-09 17:30,ORD6424,C113,Nisha,Croissant,Desserts,Baked,1,95
+2026-07-09 18:52,ORD6425,C146,Pranav,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-09 14:49,ORD6426,C127,Kavya,Maggi,Food,Snacks,1,80
+2026-07-09 14:49,ORD6426,C127,Kavya,Green Tea,Beverages,Tea,1,80
+2026-07-09 14:49,ORD6426,C127,Kavya,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-09 21:08,ORD6427,C155,Payal,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-09 17:53,ORD6428,C142,Rajat,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-09 17:48,ORD6429,C143,Tanvi,Croissant,Desserts,Baked,1,95
+2026-07-09 17:01,ORD6430,C137,Deepa,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-09 17:01,ORD6430,C137,Deepa,Iced Americano,Beverages,Cold Beverages,2,280
+2026-07-09 09:36,ORD6431,C121,Isha,Samosa (2 pc),Food,Snacks,1,50
+2026-07-09 09:36,ORD6431,C121,Isha,Croissant,Desserts,Baked,1,95
+2026-07-09 19:24,ORD6432,C134,Harsh,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-09 12:40,ORD6433,C128,Imran,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-09 12:40,ORD6433,C128,Imran,Masala Chai,Beverages,Tea,1,60
+2026-07-09 12:40,ORD6433,C128,Imran,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-07-09 19:31,ORD6434,C138,Kunal,Green Tea,Beverages,Tea,1,80
+2026-07-09 13:13,ORD6435,C118,Farhan,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-09 17:33,ORD6436,C123,Shreya,Chicken Sandwich,Food,Sandwiches,2,360
+2026-07-09 17:08,ORD6437,C107,Divya,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-09 17:08,ORD6437,C107,Divya,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-07-09 16:08,ORD6438,C113,Nisha,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-09 16:08,ORD6438,C113,Nisha,Maggi,Food,Snacks,1,80
+2026-07-09 16:08,ORD6438,C113,Nisha,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-10 13:45,ORD6439,C132,Gaurav,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-10 13:45,ORD6439,C132,Gaurav,Green Tea,Beverages,Tea,1,80
+2026-07-10 17:25,ORD6440,C152,Ashwin,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-10 17:25,ORD6440,C152,Ashwin,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-10 18:29,ORD6441,C131,Riya,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-10 11:41,ORD6442,C118,Farhan,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-10 11:41,ORD6442,C118,Farhan,Fries,Food,Snacks,2,220
+2026-07-10 11:41,ORD6442,C118,Farhan,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-07-10 19:11,ORD6443,C115,Ritu,Maggi,Food,Snacks,2,160
+2026-07-10 19:11,ORD6443,C115,Ritu,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-10 19:11,ORD6443,C115,Ritu,Samosa (2 pc),Food,Snacks,1,50
+2026-07-10 17:02,ORD6444,C144,Mohit,Masala Chai,Beverages,Tea,1,60
+2026-07-10 21:34,ORD6445,C140,Aman,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-10 19:57,ORD6446,C146,Pranav,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-10 11:35,ORD6447,C148,Sameer,Fries,Food,Snacks,1,110
+2026-07-10 18:32,ORD6448,C106,Vikram,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-10 18:32,ORD6448,C106,Vikram,Maggi,Food,Snacks,1,80
+2026-07-10 13:02,ORD6449,C132,Gaurav,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-10 09:47,ORD6450,C143,Tanvi,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-10 09:12,ORD6451,C154,Dhruv,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-10 18:58,ORD6452,C145,Zoya,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-11 18:35,ORD6453,C105,Sneha,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-11 18:35,ORD6453,C105,Sneha,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-11 13:01,ORD6454,C153,Rekha,Masala Chai,Beverages,Tea,1,60
+2026-07-11 13:01,ORD6454,C153,Rekha,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-11 16:48,ORD6455,C142,Rajat,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-11 09:13,ORD6456,C111,Pooja,Croissant,Desserts,Baked,1,95
+2026-07-11 09:13,ORD6456,C111,Pooja,Green Tea,Beverages,Tea,1,80
+2026-07-11 14:51,ORD6457,C140,Aman,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-11 14:51,ORD6457,C140,Aman,Samosa (2 pc),Food,Snacks,1,50
+2026-07-11 17:00,ORD6458,C138,Kunal,Samosa (2 pc),Food,Snacks,1,50
+2026-07-11 18:23,ORD6459,C115,Ritu,Green Tea,Beverages,Tea,1,80
+2026-07-11 18:23,ORD6459,C115,Ritu,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-07-11 18:23,ORD6459,C115,Ritu,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-11 17:42,ORD6460,C143,Tanvi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-11 20:42,ORD6461,C153,Rekha,Masala Chai,Beverages,Tea,1,60
+2026-07-11 09:06,ORD6462,C132,Gaurav,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-11 09:06,ORD6462,C132,Gaurav,Green Tea,Beverages,Tea,2,160
+2026-07-11 17:07,ORD6463,C127,Kavya,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-11 14:00,ORD6464,C111,Pooja,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-11 17:29,ORD6465,C113,Nisha,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-11 17:02,ORD6466,C123,Shreya,Green Tea,Beverages,Tea,1,80
+2026-07-11 11:31,ORD6467,C138,Kunal,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-07-11 11:31,ORD6467,C138,Kunal,Masala Chai,Beverages,Tea,1,60
+2026-07-11 11:31,ORD6467,C138,Kunal,Veg Sandwich,Food,Sandwiches,2,240
+2026-07-12 17:24,ORD6468,C144,Mohit,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-12 17:24,ORD6468,C144,Mohit,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-12 11:20,ORD6469,C144,Mohit,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-12 11:20,ORD6469,C144,Mohit,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-07-12 11:20,ORD6469,C144,Mohit,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-12 17:40,ORD6470,C132,Gaurav,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-12 17:40,ORD6470,C132,Gaurav,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-12 17:07,ORD6471,C157,Sonali,Maggi,Food,Snacks,1,80
+2026-07-12 13:03,ORD6472,C105,Sneha,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-12 16:41,ORD6473,C113,Nisha,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-12 12:08,ORD6474,C121,Isha,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-12 18:52,ORD6475,C141,Bhavna,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-12 19:21,ORD6476,C146,Pranav,Green Tea,Beverages,Tea,1,80
+2026-07-12 20:58,ORD6477,C158,Kabir,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-12 20:58,ORD6477,C158,Kabir,Croissant,Desserts,Baked,1,95
+2026-07-12 11:28,ORD6478,C111,Pooja,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-12 11:28,ORD6478,C111,Pooja,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-12 11:09,ORD6479,C140,Aman,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-12 11:09,ORD6479,C140,Aman,Cafe Latte,Beverages,Hot Coffee,2,300
+2026-07-12 11:09,ORD6479,C140,Aman,Masala Chai,Beverages,Tea,2,120
+2026-07-12 14:32,ORD6480,C115,Ritu,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-12 16:12,ORD6481,C146,Pranav,Masala Chai,Beverages,Tea,1,60
+2026-07-12 12:18,ORD6482,C119,Tara,Green Tea,Beverages,Tea,2,160
+2026-07-12 12:18,ORD6482,C119,Tara,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-12 10:25,ORD6483,C123,Shreya,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-12 20:39,ORD6484,C132,Gaurav,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-12 20:39,ORD6484,C132,Gaurav,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-12 12:05,ORD6485,C154,Dhruv,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-12 12:05,ORD6485,C154,Dhruv,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-12 13:19,ORD6486,C129,Neha,Samosa (2 pc),Food,Snacks,1,50
+2026-07-12 17:04,ORD6487,C130,Siddharth,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-12 12:12,ORD6488,C158,Kabir,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-12 12:31,ORD6489,C123,Shreya,Maggi,Food,Snacks,2,160
+2026-07-13 17:23,ORD6490,C147,Ira,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-13 18:04,ORD6491,C137,Deepa,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-07-13 09:24,ORD6492,C107,Divya,Masala Chai,Beverages,Tea,2,120
+2026-07-13 09:24,ORD6492,C107,Divya,Green Tea,Beverages,Tea,1,80
+2026-07-13 09:24,ORD6492,C107,Divya,Maggi,Food,Snacks,1,80
+2026-07-13 21:45,ORD6493,C132,Gaurav,Fries,Food,Snacks,1,110
+2026-07-13 10:24,ORD6494,C141,Bhavna,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-13 10:24,ORD6494,C141,Bhavna,Croissant,Desserts,Baked,2,190
+2026-07-13 10:24,ORD6494,C141,Bhavna,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-13 14:01,ORD6495,C143,Tanvi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-13 14:01,ORD6495,C143,Tanvi,Veg Sandwich,Food,Sandwiches,2,240
+2026-07-13 20:15,ORD6496,C116,Aditya,Masala Chai,Beverages,Tea,1,60
+2026-07-13 20:15,ORD6496,C116,Aditya,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-13 17:58,ORD6497,C145,Zoya,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-13 11:27,ORD6498,C156,Naveen,Maggi,Food,Snacks,1,80
+2026-07-13 18:32,ORD6499,C119,Tara,Samosa (2 pc),Food,Snacks,1,50
+2026-07-13 18:32,ORD6499,C119,Tara,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-07-13 18:32,ORD6499,C119,Tara,Maggi,Food,Snacks,2,160
+2026-07-13 14:40,ORD6500,C106,Vikram,Fries,Food,Snacks,1,110
+2026-07-13 14:40,ORD6500,C106,Vikram,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-13 13:25,ORD6501,C147,Ira,Cappuccino,Beverages,Hot Coffee,2,280
+2026-07-13 13:25,ORD6501,C147,Ira,Masala Chai,Beverages,Tea,1,60
+2026-07-14 17:26,ORD6502,C144,Mohit,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-14 17:26,ORD6502,C144,Mohit,Maggi,Food,Snacks,1,80
+2026-07-14 20:08,ORD6503,C145,Zoya,Masala Chai,Beverages,Tea,1,60
+2026-07-14 16:28,ORD6504,C107,Divya,Green Tea,Beverages,Tea,1,80
+2026-07-14 16:28,ORD6504,C107,Divya,Masala Chai,Beverages,Tea,1,60
+2026-07-14 17:12,ORD6505,C148,Sameer,Maggi,Food,Snacks,1,80
+2026-07-14 20:39,ORD6506,C158,Kabir,Masala Chai,Beverages,Tea,1,60
+2026-07-14 17:24,ORD6507,C105,Sneha,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-14 11:15,ORD6508,C137,Deepa,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-14 21:48,ORD6509,C117,Lakshmi,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-14 21:48,ORD6509,C117,Lakshmi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-14 21:48,ORD6509,C117,Lakshmi,Green Tea,Beverages,Tea,1,80
+2026-07-14 14:17,ORD6510,C148,Sameer,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-14 14:17,ORD6510,C148,Sameer,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-14 14:17,ORD6510,C148,Sameer,Maggi,Food,Snacks,1,80
+2026-07-15 11:15,ORD6511,C152,Ashwin,Samosa (2 pc),Food,Snacks,2,100
+2026-07-15 11:15,ORD6511,C152,Ashwin,Croissant,Desserts,Baked,2,190
+2026-07-15 11:15,ORD6511,C152,Ashwin,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-07-15 11:29,ORD6512,C100,Aarav,Samosa (2 pc),Food,Snacks,1,50
+2026-07-15 11:29,ORD6512,C100,Aarav,Iced Americano,Beverages,Cold Beverages,2,280
+2026-07-15 11:29,ORD6512,C100,Aarav,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-15 17:48,ORD6513,C144,Mohit,Fries,Food,Snacks,1,110
+2026-07-15 17:48,ORD6513,C144,Mohit,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-15 20:32,ORD6514,C130,Siddharth,Green Tea,Beverages,Tea,1,80
+2026-07-15 20:52,ORD6515,C140,Aman,Fries,Food,Snacks,2,220
+2026-07-15 17:20,ORD6516,C147,Ira,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-15 17:20,ORD6516,C147,Ira,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-15 17:22,ORD6517,C105,Sneha,Blueberry Muffin,Desserts,Baked,2,220
+2026-07-15 10:44,ORD6518,C154,Dhruv,Samosa (2 pc),Food,Snacks,1,50
+2026-07-15 10:44,ORD6518,C154,Dhruv,Paneer Tikka Sandwich,Food,Sandwiches,2,320
+2026-07-15 10:44,ORD6518,C154,Dhruv,Green Tea,Beverages,Tea,2,160
+2026-07-15 19:54,ORD6519,C150,Vivek,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-15 19:54,ORD6519,C150,Vivek,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-15 10:43,ORD6520,C153,Rekha,Chocolate Brownie,Desserts,Baked,2,260
+2026-07-15 10:43,ORD6520,C153,Rekha,Masala Chai,Beverages,Tea,1,60
+2026-07-15 10:43,ORD6520,C153,Rekha,Croissant,Desserts,Baked,1,95
+2026-07-15 14:13,ORD6521,C115,Ritu,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-15 10:01,ORD6522,C145,Zoya,Chicken Sandwich,Food,Sandwiches,2,360
+2026-07-15 11:14,ORD6523,C117,Lakshmi,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-15 11:14,ORD6523,C117,Lakshmi,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-07-15 17:46,ORD6524,C140,Aman,Chicken Sandwich,Food,Sandwiches,2,360
+2026-07-16 17:04,ORD6525,C138,Kunal,Samosa (2 pc),Food,Snacks,1,50
+2026-07-16 17:04,ORD6525,C138,Kunal,Croissant,Desserts,Baked,1,95
+2026-07-16 16:27,ORD6526,C154,Dhruv,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-16 16:27,ORD6526,C154,Dhruv,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-16 12:21,ORD6527,C105,Sneha,Green Tea,Beverages,Tea,1,80
+2026-07-16 12:21,ORD6527,C105,Sneha,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-16 16:00,ORD6528,C147,Ira,Croissant,Desserts,Baked,1,95
+2026-07-16 16:20,ORD6529,C127,Kavya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-16 16:20,ORD6529,C127,Kavya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-16 13:25,ORD6530,C106,Vikram,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-16 19:18,ORD6531,C152,Ashwin,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-16 19:18,ORD6531,C152,Ashwin,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-16 17:42,ORD6532,C147,Ira,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-16 17:42,ORD6532,C147,Ira,Chicken Sandwich,Food,Sandwiches,2,360
+2026-07-16 18:17,ORD6533,C107,Divya,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-16 18:17,ORD6533,C107,Divya,Green Tea,Beverages,Tea,2,160
+2026-07-16 18:17,ORD6533,C107,Divya,Croissant,Desserts,Baked,1,95
+2026-07-17 16:09,ORD6534,C121,Isha,Green Tea,Beverages,Tea,1,80
+2026-07-17 16:09,ORD6534,C121,Isha,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-17 12:49,ORD6535,C155,Payal,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-17 09:52,ORD6536,C119,Tara,Masala Chai,Beverages,Tea,1,60
+2026-07-17 09:52,ORD6536,C119,Tara,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-17 19:30,ORD6537,C143,Tanvi,Samosa (2 pc),Food,Snacks,1,50
+2026-07-17 19:30,ORD6537,C143,Tanvi,Croissant,Desserts,Baked,1,95
+2026-07-17 19:30,ORD6537,C143,Tanvi,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-17 13:54,ORD6538,C144,Mohit,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-17 13:54,ORD6538,C144,Mohit,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-17 18:51,ORD6539,C155,Payal,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-17 09:44,ORD6540,C128,Imran,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-17 17:12,ORD6541,C147,Ira,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-17 17:12,ORD6541,C147,Ira,Fries,Food,Snacks,1,110
+2026-07-17 18:50,ORD6542,C143,Tanvi,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-17 18:50,ORD6542,C143,Tanvi,Samosa (2 pc),Food,Snacks,1,50
+2026-07-17 18:50,ORD6542,C143,Tanvi,Maggi,Food,Snacks,1,80
+2026-07-17 16:11,ORD6543,C130,Siddharth,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-17 16:11,ORD6543,C130,Siddharth,Cheesecake Slice,Desserts,Cakes,2,360
+2026-07-17 16:11,ORD6543,C130,Siddharth,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-17 09:02,ORD6544,C115,Ritu,Samosa (2 pc),Food,Snacks,1,50
+2026-07-18 14:38,ORD6545,C144,Mohit,Samosa (2 pc),Food,Snacks,2,100
+2026-07-18 14:38,ORD6545,C144,Mohit,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-18 14:38,ORD6545,C144,Mohit,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-18 18:28,ORD6546,C141,Bhavna,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-18 14:31,ORD6547,C107,Divya,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-18 14:31,ORD6547,C107,Divya,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-18 17:17,ORD6548,C130,Siddharth,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-18 17:17,ORD6548,C130,Siddharth,Masala Chai,Beverages,Tea,2,120
+2026-07-18 09:27,ORD6549,C144,Mohit,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-18 12:58,ORD6550,C145,Zoya,Croissant,Desserts,Baked,2,190
+2026-07-18 12:58,ORD6550,C145,Zoya,Masala Chai,Beverages,Tea,1,60
+2026-07-18 12:58,ORD6550,C145,Zoya,Samosa (2 pc),Food,Snacks,1,50
+2026-07-18 18:50,ORD6551,C134,Harsh,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-18 18:50,ORD6551,C134,Harsh,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-18 09:52,ORD6552,C145,Zoya,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-07-18 09:52,ORD6552,C145,Zoya,Green Tea,Beverages,Tea,2,160
+2026-07-18 17:55,ORD6553,C111,Pooja,Masala Chai,Beverages,Tea,1,60
+2026-07-18 17:55,ORD6553,C111,Pooja,Cappuccino,Beverages,Hot Coffee,2,280
+2026-07-18 17:02,ORD6554,C107,Divya,Green Tea,Beverages,Tea,1,80
+2026-07-18 12:35,ORD6555,C105,Sneha,Filter Coffee,Beverages,Hot Coffee,1,90
+2026-07-18 21:32,ORD6556,C107,Divya,Croissant,Desserts,Baked,1,95
+2026-07-18 17:00,ORD6557,C142,Rajat,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-07-18 18:57,ORD6558,C133,Anjali,Croissant,Desserts,Baked,1,95
+2026-07-18 18:57,ORD6558,C133,Anjali,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-18 18:58,ORD6559,C133,Anjali,Fries,Food,Snacks,1,110
+2026-07-18 18:58,ORD6559,C133,Anjali,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-18 18:58,ORD6559,C133,Anjali,Green Tea,Beverages,Tea,1,80
+2026-07-18 14:12,ORD6560,C102,Rohan,Green Tea,Beverages,Tea,2,160
+2026-07-18 10:35,ORD6561,C138,Kunal,Fries,Food,Snacks,1,110
+2026-07-18 17:39,ORD6562,C146,Pranav,Croissant,Desserts,Baked,1,95
+2026-07-18 09:57,ORD6563,C141,Bhavna,Chocolate Brownie,Desserts,Baked,1,130
+2026-07-18 17:43,ORD6564,C116,Aditya,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-18 18:46,ORD6565,C140,Aman,Green Tea,Beverages,Tea,1,80
+2026-07-18 17:41,ORD6566,C142,Rajat,Masala Chai,Beverages,Tea,2,120
+2026-07-18 17:41,ORD6566,C142,Rajat,Maggi,Food,Snacks,1,80
+2026-07-18 20:27,ORD6567,C150,Vivek,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-19 12:34,ORD6568,C107,Divya,Croissant,Desserts,Baked,1,95
+2026-07-19 19:40,ORD6569,C121,Isha,Chicken Sandwich,Food,Sandwiches,1,180
+2026-07-19 17:51,ORD6570,C155,Payal,Cappuccino,Beverages,Hot Coffee,1,140
+2026-07-19 09:24,ORD6571,C114,Sanjay,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-19 09:24,ORD6571,C114,Sanjay,Masala Chai,Beverages,Tea,2,120
+2026-07-19 09:24,ORD6571,C114,Sanjay,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-19 17:36,ORD6572,C144,Mohit,Croissant,Desserts,Baked,2,190
+2026-07-19 17:36,ORD6572,C144,Mohit,Veg Sandwich,Food,Sandwiches,1,120
+2026-07-19 17:36,ORD6572,C144,Mohit,Cold Coffee,Beverages,Cold Beverages,2,320
+2026-07-19 13:22,ORD6573,C111,Pooja,Croissant,Desserts,Baked,1,95
+2026-07-19 13:22,ORD6573,C111,Pooja,Samosa (2 pc),Food,Snacks,1,50
+2026-07-19 16:43,ORD6574,C100,Aarav,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-19 16:43,ORD6574,C100,Aarav,Croissant,Desserts,Baked,1,95
+2026-07-19 21:03,ORD6575,C117,Lakshmi,Fries,Food,Snacks,1,110
+2026-07-19 21:03,ORD6575,C117,Lakshmi,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-19 21:03,ORD6575,C117,Lakshmi,Maggi,Food,Snacks,2,160
+2026-07-19 14:32,ORD6576,C129,Neha,Maggi,Food,Snacks,1,80
+2026-07-19 13:56,ORD6577,C145,Zoya,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-07-19 13:56,ORD6577,C145,Zoya,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-19 13:56,ORD6577,C145,Zoya,Cafe Latte,Beverages,Hot Coffee,1,150
+2026-07-19 18:40,ORD6578,C105,Sneha,Fresh Lime Soda,Beverages,Cold Beverages,2,180
+2026-07-19 17:47,ORD6579,C105,Sneha,Blueberry Muffin,Desserts,Baked,2,220
+2026-07-19 09:27,ORD6580,C100,Aarav,Iced Americano,Beverages,Cold Beverages,1,140
+2026-07-19 09:27,ORD6580,C100,Aarav,Blueberry Muffin,Desserts,Baked,1,110
+2026-07-19 13:56,ORD6581,C143,Tanvi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-19 13:56,ORD6581,C143,Tanvi,Samosa (2 pc),Food,Snacks,1,50
+2026-07-19 17:47,ORD6582,C153,Rekha,Maggi,Food,Snacks,1,80
+2026-07-19 18:22,ORD6583,C147,Ira,Cheesecake Slice,Desserts,Cakes,1,180
+2026-07-19 19:38,ORD6584,C102,Rohan,Masala Chai,Beverages,Tea,1,60
+2026-07-19 17:48,ORD6585,C156,Naveen,Fresh Lime Soda,Beverages,Cold Beverages,1,90
+2026-07-19 17:48,ORD6585,C156,Naveen,Masala Chai,Beverages,Tea,2,120
+2026-07-19 17:22,ORD6586,C132,Gaurav,Maggi,Food,Snacks,1,80
+2026-07-19 17:22,ORD6586,C132,Gaurav,Blueberry Muffin,Desserts,Baked,2,220
+2026-07-19 17:22,ORD6586,C132,Gaurav,Samosa (2 pc),Food,Snacks,1,50
+2026-07-19 18:15,ORD6587,C143,Tanvi,Cold Coffee,Beverages,Cold Beverages,1,160
+2026-07-19 18:15,ORD6587,C143,Tanvi,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-19 17:00,ORD6588,C113,Nisha,Samosa (2 pc),Food,Snacks,2,100
+2026-07-19 17:00,ORD6588,C113,Nisha,Green Tea,Beverages,Tea,2,160
+2026-07-19 19:32,ORD6589,C141,Bhavna,Filter Coffee,Beverages,Hot Coffee,2,180
+2026-07-19 19:32,ORD6589,C141,Bhavna,Chocolate Brownie,Desserts,Baked,2,260
+2026-07-19 14:39,ORD6590,C100,Aarav,Paneer Tikka Sandwich,Food,Sandwiches,1,160
+2026-07-19 16:22,ORD6591,C100,Aarav,Masala Chai,Beverages,Tea,1,60
+2026-07-19 16:22,ORD6591,C100,Aarav,Samosa (2 pc),Food,Snacks,1,50
+2026-07-19 16:22,ORD6591,C100,Aarav,Fries,Food,Snacks,1,110
