@@ -97,6 +97,17 @@ def insert(table_name: str, row: dict):
     return c.table(table_name).insert(row).execute()
 
 
+def update(table_name: str, match: dict, patch: dict):
+    """UPDATE ... SET patch WHERE match. Returns the PostgREST response."""
+    c = client()
+    if not c:
+        return None
+    q = c.table(table_name).update(patch)
+    for k, v in match.items():
+        q = q.eq(k, v)
+    return q.execute()
+
+
 def delete(table_name: str, match: dict):
     c = client()
     if not c:

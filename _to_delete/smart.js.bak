@@ -187,7 +187,7 @@ function redrawCharts() {
 const MODULES = [
   { id: "sales",      name: "Sales Analytics",        sub: "KPIs, revenue trends and a 30-day forecast from your order data.",             ico: "📊", cls: "tile-sales",     needs: "sales",  tag: "SALES" },
   { id: "subcategory",name: "Sub-Category Analysis",  sub: "Which categories & sub-categories drive revenue — trends and drill-downs.",   ico: "🗂️", cls: "tile-sub",       needs: "sales",  tag: "SALES" },
-  { id: "supply",     name: "Supply Management",      sub: "Track inventory & suppliers, link products to materials, log waste, and get per-item EOQ/MOQ restock suggestions with PDF purchase orders.", ico: "📦", cls: "tile-supply",   needs: null,     tag: "SUPPLY" },
+  { id: "supply",     name: "Supply Management",      sub: "Track inventory, get reorder points from your sales × lead times, and auto-generate purchase orders.", ico: "📦", cls: "tile-supply",   needs: null,     tag: "SUPPLY" },
   { id: "review",     name: "Review Analytics",       sub: "Your brand positioning from your own reviews — what customers come to you for.", ico: "⭐", cls: "tile-review",    needs: "review", tag: "BRAND" },
   { id: "complaints", name: "Complaint Analysis",     sub: "The fix-first plan for the complaint themes hurting your brand right now.",    ico: "😤", cls: "tile-complaint", needs: "review", tag: "BRAND" },
   { id: "strategy",   name: "Position Strategy + AI", sub: "A levelled checklist to strengthen or reposition your brand, plus the AI Analyst.", ico: "🧭", cls: "tile-strategy", needs: "review", tag: "STRATEGY" },
@@ -634,7 +634,6 @@ async function openModule(id) {
 
 // ---------- MODULE: Supply Management ----------
 let _supplyData = null;
-const _rupee = (v) => (v == null || v === "" ? "—" : "₹" + fmt(v));
 
 async function openSupply() {
   moduleShell("Supply Management", `<div class="ap-empty">Loading inventory…</div>`);
@@ -650,72 +649,34 @@ function _supBadge(it) {
     : `<span class="sup-badge ok">● OK</span>`;
 }
 
-function _sugCard(it) {
-  const chips = [
-    ["Stock", fmt(it.current_stock) + " " + esc(it.unit_label || "")],
-    ["Avg/day", it.avg_daily_sales ?? 0],
-    ["Reorder pt", fmt(it.reorder_point)],
-    ["EOQ", it.eoq == null ? "—" : fmt(it.eoq)],
-    ["MOQ", fmt(it.moq)],
-    ["Suggested", `<b>${fmt(it.suggested_qty)}</b>`],
-    ["Est. cost", it.est_line_cost == null ? "—" : _rupee(it.est_line_cost)],
-  ].map(([k, v]) => `<span class="sug-chip"><i>${k}</i>${v}</span>`).join("");
-  const sup = it.supplier_name
-    ? `${esc(it.supplier_name)}${it.supplier_phone ? " · " + esc(it.supplier_phone) : ""}${it.supplier_email ? " · " + esc(it.supplier_email) : ""}`
-    : `No supplier linked`;
-  return `
-    <div class="sug-card">
-      <div class="sug-head">
-        <div><b>${esc(it.name)}</b>${it.moq_applied ? ` <span class="sup-badge moq">MOQ applied</span>` : ""}
-          <div class="muted tiny">${sup}</div></div>
-        <button class="btn approve sm" data-openpo="${it.id}">📄 Open → PO (PDF)</button>
-      </div>
-      <div class="sug-reason">${esc(it.reason || "")}</div>
-      <div class="sug-metrics">${chips}</div>
-    </div>`;
-}
-
 function renderSupply(d) {
   _supplyData = d;
   const items = d.inventory || [];
   const pos = d.purchase_orders || [];
   const meta = d.meta || {};
   const belowN = d.n_below || 0;
-  const suggestions = d.suggestions || [];
-  const waste = d.waste || [];
 
   const salesNote = meta.has_sales
-    ? `Average daily usage is computed from your Sales data over ${meta.days_span} day${meta.days_span === 1 ? "" : "s"}, routed through your product links. Reorder point = daily usage × lead time + safety stock. Suggested order = Economic Order Quantity, raised to the supplier MOQ.`
-    : `No Sales data yet — upload Sales (from the home screen) to compute usage automatically. You can still track stock, suppliers, EOQ inputs and MOQ manually.`;
-
-  const sugSection = suggestions.length ? `
-    <div class="section-title" style="margin-top:8px;">🔔 Restock suggestions <span class="muted tiny">(${suggestions.length}, one per item)</span></div>
-    <div class="sug-grid">${suggestions.map(_sugCard).join("")}</div>
-    <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px;">
-      <button class="btn approve sm" id="supGenPo">📦 Generate PO for all ${belowN} item${belowN === 1 ? "" : "s"}</button>
-    </div>` : `
-    <div class="action-card ok" style="margin:10px 0;"><div class="do">✓ Everything is above its reorder point</div><div class="why">No restock needed right now. Add items or links, and suggestions will appear here per item.</div></div>`;
+    ? `Average daily sales are computed from your Sales data over ${meta.days_span} day${meta.days_span === 1 ? "" : "s"}. Reorder point = avg daily sales × lead time + safety stock.`
+    : `No Sales data yet — upload Sales (from the home screen) to compute average daily usage automatically. You can still track stock and set lead time / safety stock manually.`;
 
   const rows = items.length ? items.map((it) => `
       <tr class="${it.below_reorder ? "sup-below" : ""}">
-        <td>${esc(it.name)}${it.category ? `<div class="muted tiny">${esc(it.category)}</div>` : ""}</td>
-        <td>${it.supplier_name ? esc(it.supplier_name) : "<span class='muted tiny'>—</span>"}
-            ${it.supplier_phone || it.supplier_email ? `<div class="muted tiny">${esc(it.supplier_phone || "")}${it.supplier_phone && it.supplier_email ? " · " : ""}${esc(it.supplier_email || "")}</div>` : ""}</td>
-        <td class="num">${fmt(it.current_stock)} <span class="muted tiny">${esc(it.unit_label || "")}</span></td>
+        <td>${esc(it.sku)}${it.supplier ? `<div class="muted tiny">${esc(it.supplier)}</div>` : ""}</td>
+        <td class="num">${fmt(it.current_stock)}</td>
         <td class="num">${it.avg_daily_sales ?? 0}</td>
         <td class="num">${fmt(it.lead_time_days)}</td>
         <td class="num">${fmt(it.safety_stock)}</td>
-        <td class="num">${fmt(it.moq)}</td>
-        <td class="num">${it.unit_cost == null ? "—" : _rupee(it.unit_cost)}</td>
         <td class="num">${fmt(it.reorder_point)}</td>
+        <td class="num">${it.days_of_cover == null ? "—" : it.days_of_cover}</td>
         <td>${_supBadge(it)}</td>
+        <td class="num">${it.below_reorder ? fmt(it.suggested_qty) : "—"}</td>
         <td class="sup-actions">
           <button class="btn ghost tiny" data-edit="${it.id}" title="Edit">✎</button>
-          <button class="btn ghost tiny" data-waste="${it.id}" title="Record waste">🗑️</button>
-          <button class="btn ghost tiny" data-del="${it.id}" title="Remove item">✕</button>
+          <button class="btn ghost tiny" data-del="${it.id}" title="Remove">🗑</button>
         </td>
       </tr>`).join("")
-    : `<tr><td colspan="11" class="ap-empty">No inventory yet. Add an item, or pull products from your sales.</td></tr>`;
+    : `<tr><td colspan="10" class="ap-empty">No inventory yet. Add an item, or pull products from your sales.</td></tr>`;
 
   const poRows = pos.length ? pos.slice().reverse().map((p) => `
       <tr>
@@ -723,43 +684,29 @@ function renderSupply(d) {
         <td>${esc(String(p.created_at || "").slice(0, 16).replace("T", " "))}</td>
         <td class="num">${fmt(p.n_items)}</td>
         <td class="num">${fmt(p.total_qty)}</td>
-        <td class="num">${p.total_amount == null ? "—" : _rupee(p.total_amount)}</td>
-        <td class="sup-actions">
-          <button class="btn approve tiny" data-popdf="${esc(p.po_number)}">📄 Open PDF</button>
-          <button class="btn ghost tiny" data-poxls="${esc(p.po_number)}">⬇ Excel</button>
-        </td>
+        <td class="num">${p.total_value == null ? "—" : "₹" + fmt(p.total_value)}</td>
+        <td><button class="btn ghost tiny" data-podl="${esc(p.po_number)}">⬇ Excel</button></td>
       </tr>`).join("")
-    : `<tr><td colspan="6" class="ap-empty">No purchase orders yet. Open a suggestion to generate one.</td></tr>`;
-
-  const wasteRows = waste.length ? waste.slice(0, 10).map((w) => `
-      <tr>
-        <td>${esc(String(w.ts || "").slice(0, 16).replace("T", " "))}</td>
-        <td>${esc(w.item_name || "")}</td>
-        <td class="num">${fmt(w.qty)}</td>
-        <td>${esc(w.reason || "")}</td>
-      </tr>`).join("") : "";
+    : `<tr><td colspan="6" class="ap-empty">No purchase orders yet. Generate one when items fall below their reorder point.</td></tr>`;
 
   const body = `
     <p class="muted">${esc(salesNote)}</p>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;">
       <button class="btn primary sm" id="supAdd">＋ Add item</button>
       <button class="btn ghost sm" id="supImport">⤵ Pull products from sales</button>
-      <button class="btn ghost sm" id="supLinks">🔗 Product links</button>
-      <button class="btn ghost sm" id="supWaste">🗑️ Record waste</button>
+      ${belowN ? `<button class="btn approve sm" id="supGenPo">📦 Generate purchase order (${belowN})</button>` : ""}
     </div>
+    ${belowN ? `<div class="action-card warning" style="margin-bottom:12px;"><div class="do">⚠ ${belowN} item${belowN === 1 ? "" : "s"} at or below reorder point</div><div class="why">Approve the “Reorder” card in the panel, or use “Generate purchase order” to create &amp; download a PO now.</div></div>` : ""}
 
     <div id="supForm" hidden></div>
-    <div id="supPanel" hidden></div>
 
-    ${sugSection}
-
-    <div class="section-title" style="margin-top:18px;">Inventory</div>
+    <div class="section-title" style="margin-top:8px;">Inventory</div>
     <div class="table-scroll">
       <table class="sup-table">
         <thead><tr>
-          <th>Item</th><th>Supplier</th><th class="num">Stock</th><th class="num">Avg/day</th>
-          <th class="num">Lead (d)</th><th class="num">Safety</th><th class="num">MOQ</th>
-          <th class="num">Unit cost</th><th class="num">Reorder pt</th><th>Status</th><th></th>
+          <th>Item</th><th class="num">Stock</th><th class="num">Avg/day</th>
+          <th class="num">Lead (d)</th><th class="num">Safety</th><th class="num">Reorder pt</th>
+          <th class="num">Cover (d)</th><th>Status</th><th class="num">Suggested qty</th><th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -768,32 +715,18 @@ function renderSupply(d) {
     <div class="section-title" style="margin-top:20px;">Purchase orders</div>
     <div class="table-scroll">
       <table class="sup-table">
-        <thead><tr><th>PO #</th><th>Created</th><th class="num">Items</th><th class="num">Qty</th><th class="num">Amount</th><th></th></tr></thead>
+        <thead><tr><th>PO #</th><th>Created</th><th class="num">Items</th><th class="num">Qty</th><th class="num">Value</th><th></th></tr></thead>
         <tbody>${poRows}</tbody>
       </table>
-    </div>
-
-    ${wasteRows ? `
-    <div class="section-title" style="margin-top:20px;">Recent waste</div>
-    <div class="table-scroll">
-      <table class="sup-table">
-        <thead><tr><th>When</th><th>Item</th><th class="num">Qty</th><th>Reason</th></tr></thead>
-        <tbody>${wasteRows}</tbody>
-      </table>
-    </div>` : ""}`;
+    </div>`;
 
   moduleShell("Supply Management", body);
   $("supAdd").onclick = () => openSupplyForm(null);
   $("supImport").onclick = supplyImport;
-  $("supLinks").onclick = openLinksPanel;
-  $("supWaste").onclick = () => openWastePanel(null);
   if ($("supGenPo")) $("supGenPo").onclick = supplyGeneratePo;
   document.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => openSupplyForm(b.dataset.edit));
   document.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => supplyDelete(b.dataset.del));
-  document.querySelectorAll("[data-waste]").forEach((b) => b.onclick = () => openWastePanel(b.dataset.waste));
-  document.querySelectorAll("[data-openpo]").forEach((b) => b.onclick = () => supplyOpenPo([b.dataset.openpo]));
-  document.querySelectorAll("[data-popdf]").forEach((b) => b.onclick = () => download(`/api/supply/po/${encodeURIComponent(b.dataset.popdf)}/pdf`, `${b.dataset.popdf}.pdf`));
-  document.querySelectorAll("[data-poxls]").forEach((b) => b.onclick = () => download(`/api/supply/po/${encodeURIComponent(b.dataset.poxls)}/download`, `${b.dataset.poxls}.xlsx`));
+  document.querySelectorAll("[data-podl]").forEach((b) => b.onclick = () => download(`/api/supply/po/${encodeURIComponent(b.dataset.podl)}/download`, `${b.dataset.podl}.xlsx`));
 }
 
 function _supAfter(d) {
@@ -802,38 +735,21 @@ function _supAfter(d) {
   if (d.insights) renderApprovals(d.insights);
 }
 
-function _closePanels() {
-  ["supForm", "supPanel"].forEach((id) => { const e = $(id); if (e) { e.hidden = true; e.innerHTML = ""; } });
-}
-
-// ---- Add / edit item ----
 function openSupplyForm(id) {
-  _closePanels();
   const it = id ? (_supplyData.inventory || []).find((x) => x.id === id) : null;
   const f = $("supForm");
   f.hidden = false;
-  const v = (x, dflt = "") => (it && it[x] != null ? it[x] : dflt);
   f.innerHTML = `
     <div class="card sup-form">
       <h4 style="margin:0 0 8px;">${id ? "Edit item" : "Add item"}</h4>
       <div class="sup-form-grid">
-        <label>Item name<input id="sfName" value="${esc(v("name"))}" placeholder="e.g. Paper cup 250ml" /></label>
-        <label>Category <span class="muted tiny">(optional)</span><input id="sfCat" value="${esc(v("category"))}" placeholder="Packaging" /></label>
-        <label>Unit label<input id="sfUnit" value="${esc(v("unit_label", "unit"))}" placeholder="pcs / kg / box" /></label>
-        <label>Current stock<input id="sfStock" type="number" min="0" step="any" value="${v("current_stock", 0)}" /></label>
-        <label>Lead time (days)<input id="sfLead" type="number" min="0" step="any" value="${v("lead_time_days", 7)}" /></label>
-        <label>Safety stock<input id="sfSafe" type="number" min="0" step="any" value="${v("safety_stock", 0)}" /></label>
-        <label>MOQ <span class="muted tiny">(min order qty)</span><input id="sfMoq" type="number" min="0" step="any" value="${v("moq", 0)}" /></label>
-        <label>Ordering cost ₹ <span class="muted tiny">(per order · EOQ)</span><input id="sfOrder" type="number" min="0" step="any" value="${it && it.ordering_cost != null ? it.ordering_cost : ""}" /></label>
-        <label>Holding cost ₹ <span class="muted tiny">(/unit/year · EOQ)</span><input id="sfHold" type="number" min="0" step="any" value="${it && it.holding_cost != null ? it.holding_cost : ""}" /></label>
-        <label>Unit cost ₹<input id="sfCost" type="number" min="0" step="any" value="${it && it.unit_cost != null ? it.unit_cost : ""}" /></label>
-        <label>Reorder qty <span class="muted tiny">(blank = EOQ auto)</span><input id="sfQty" type="number" min="0" step="any" value="${it && it.reorder_qty != null ? it.reorder_qty : ""}" /></label>
-      </div>
-      <div class="sup-sub">Supplier</div>
-      <div class="sup-form-grid">
-        <label>Supplier name<input id="sfSupN" value="${esc(v("supplier_name"))}" /></label>
-        <label>Contact number<input id="sfSupP" value="${esc(v("supplier_phone"))}" placeholder="+91 …" /></label>
-        <label>Email<input id="sfSupE" type="email" value="${esc(v("supplier_email"))}" placeholder="sales@supplier.com" /></label>
+        <label>Item name<input id="sfSku" value="${it ? esc(it.sku) : ""}" placeholder="e.g. Silver hoop earrings" /></label>
+        <label>Supplier <span class="muted tiny">(optional)</span><input id="sfSup" value="${it ? esc(it.supplier || "") : ""}" /></label>
+        <label>Current stock<input id="sfStock" type="number" min="0" step="any" value="${it ? it.current_stock : 0}" /></label>
+        <label>Lead time (days)<input id="sfLead" type="number" min="0" step="any" value="${it ? it.lead_time_days : 7}" /></label>
+        <label>Safety stock<input id="sfSafe" type="number" min="0" step="any" value="${it ? it.safety_stock : 0}" /></label>
+        <label>Reorder qty <span class="muted tiny">(blank = auto)</span><input id="sfQty" type="number" min="0" step="any" value="${it && it.reorder_qty != null ? it.reorder_qty : ""}" /></label>
+        <label>Unit cost ₹ <span class="muted tiny">(optional)</span><input id="sfCost" type="number" min="0" step="any" value="${it && it.unit_cost != null ? it.unit_cost : ""}" /></label>
       </div>
       <div class="modal-actions">
         <button class="btn ghost" id="sfCancel">Cancel</button>
@@ -843,34 +759,28 @@ function openSupplyForm(id) {
     </div>`;
   f.scrollIntoView({ behavior: "smooth", block: "nearest" });
   $("sfCancel").onclick = () => { f.hidden = true; f.innerHTML = ""; };
-  const numOrNull = (id) => ($(id).value === "" ? null : parseFloat($(id).value));
   $("sfSave").onclick = async () => {
+    const val = (id) => $(id).value.trim();
     const payload = {
       id: id || null,
-      name: $("sfName").value.trim(),
-      category: $("sfCat").value.trim(),
-      unit_label: $("sfUnit").value.trim() || "unit",
+      sku: val("sfSku"),
+      supplier: val("sfSup"),
       current_stock: parseFloat($("sfStock").value) || 0,
       lead_time_days: parseFloat($("sfLead").value) || 0,
       safety_stock: parseFloat($("sfSafe").value) || 0,
-      moq: parseFloat($("sfMoq").value) || 0,
-      ordering_cost: numOrNull("sfOrder"),
-      holding_cost: numOrNull("sfHold"),
-      unit_cost: numOrNull("sfCost"),
-      reorder_qty: numOrNull("sfQty"),
-      supplier_name: $("sfSupN").value.trim(),
-      supplier_phone: $("sfSupP").value.trim(),
-      supplier_email: $("sfSupE").value.trim(),
+      reorder_qty: $("sfQty").value === "" ? null : parseFloat($("sfQty").value),
+      unit_cost: $("sfCost").value === "" ? null : parseFloat($("sfCost").value),
     };
-    if (!payload.name) { const e = $("sfErr"); e.textContent = "Item name is required."; e.hidden = false; return; }
-    try { _supAfter(await api("/api/supply/item", { method: "POST", json: payload })); toast("Saved"); }
-    catch (e) { const el = $("sfErr"); el.textContent = e.message; el.hidden = false; }
+    if (!payload.sku) { const e = $("sfErr"); e.textContent = "Item name is required."; e.hidden = false; return; }
+    try {
+      const d = await api("/api/supply/item", { method: "POST", json: payload });
+      _supAfter(d);
+      toast("Saved");
+    } catch (e) { const el = $("sfErr"); el.textContent = e.message; el.hidden = false; }
   };
 }
 
 async function supplyDelete(id) {
-  const it = (_supplyData.inventory || []).find((x) => x.id === id);
-  if (it && !confirm(`Remove "${it.name}" from inventory?`)) return;
   try { _supAfter(await api("/api/supply/item/delete", { method: "POST", json: { id } })); toast("Removed"); }
   catch (e) { toast(e.message); }
 }
@@ -880,122 +790,12 @@ async function supplyImport() {
   catch (e) { toast(e.message); }
 }
 
-// ---- Waste ----
-function openWastePanel(preId) {
-  _closePanels();
-  const items = _supplyData.inventory || [];
-  if (!items.length) { toast("Add an inventory item first."); return; }
-  const p = $("supPanel");
-  p.hidden = false;
-  const opts = items.map((it) => `<option value="${it.id}" ${it.id === preId ? "selected" : ""}>${esc(it.name)} (${fmt(it.current_stock)} ${esc(it.unit_label || "")})</option>`).join("");
-  p.innerHTML = `
-    <div class="card sup-form">
-      <h4 style="margin:0 0 4px;">🗑️ Record waste</h4>
-      <p class="muted tiny">Logs the loss and reduces stock — e.g. a packing material spoiled by mistake.</p>
-      <div class="sup-form-grid">
-        <label>Item<select id="wsItem">${opts}</select></label>
-        <label>Quantity wasted<input id="wsQty" type="number" min="0" step="any" value="1" /></label>
-        <label>Reason <span class="muted tiny">(optional)</span><input id="wsReason" placeholder="Dropped / spoiled / damaged" /></label>
-      </div>
-      <div class="modal-actions">
-        <button class="btn ghost" id="wsCancel">Cancel</button>
-        <button class="btn primary" id="wsSave">Record waste</button>
-      </div>
-      <div class="err" id="wsErr" hidden></div>
-    </div>`;
-  p.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  $("wsCancel").onclick = _closePanels;
-  $("wsSave").onclick = async () => {
-    const payload = { inventory_id: $("wsItem").value, qty: parseFloat($("wsQty").value) || 0, reason: $("wsReason").value.trim() };
-    try { _supAfter(await api("/api/supply/waste", { method: "POST", json: payload })); toast("Waste recorded — stock reduced"); }
-    catch (e) { const el = $("wsErr"); el.textContent = e.message; el.hidden = false; }
-  };
-}
-
-// ---- Product links (recipe map) ----
-function openLinksPanel() {
-  _closePanels();
-  const p = $("supPanel");
-  p.hidden = false;
-  _renderLinks();
-  p.scrollIntoView({ behavior: "smooth", block: "nearest" });
-}
-
-function _renderLinks() {
-  const p = $("supPanel");
-  const products = _supplyData.products || [];
-  const items = _supplyData.inventory || [];
-  const maps = _supplyData.maps || [];
-  const byName = {};
-  items.forEach((it) => (byName[it.id] = it));
-  const itemOpts = items.map((it) => `<option value="${it.id}">${esc(it.name)}</option>`).join("");
-
-  const prodBlocks = products.length ? products.map((prod) => {
-    const links = maps.filter((m) => (m.product || "").toLowerCase() === prod.toLowerCase());
-    const chips = links.map((m) => {
-      const it = byName[m.inventory_id];
-      return `<span class="link-chip">${esc(it ? it.name : "?")} × ${fmt(m.qty_per_unit)} ${esc(it ? it.unit_label : "")}
-        <button class="lc-x" data-unmap="${m.id}" title="Remove">✕</button></span>`;
-    }).join("") || `<span class="muted tiny">No items linked yet</span>`;
-    return `
-      <div class="link-row">
-        <div class="link-prod"><b>${esc(prod)}</b></div>
-        <div class="link-chips">${chips}</div>
-        <div class="link-add">
-          <select data-lp-item="${esc(prod)}">${itemOpts}</select>
-          <input type="number" min="0" step="any" value="1" data-lp-qty="${esc(prod)}" title="Qty per unit sold" />
-          <button class="btn ghost tiny" data-lp-add="${esc(prod)}">＋ Link</button>
-        </div>
-      </div>`;
-  }).join("") : `<p class="muted tiny">No products found. Upload Sales data (home screen) or pull products first.</p>`;
-
-  p.innerHTML = `
-    <div class="card sup-form">
-      <h4 style="margin:0 0 4px;">🔗 Product links <span class="muted tiny">— how much inventory each product needs</span></h4>
-      <p class="muted tiny">For every unit of a product sold, set how many units of each inventory item it consumes. Usage &amp; reorder points then follow your real sales.</p>
-      ${!items.length ? `<p class="muted tiny">Add inventory items first, then link them here.</p>` : `<div class="link-list">${prodBlocks}</div>`}
-      <div class="modal-actions"><button class="btn ghost" id="lkClose">Close</button></div>
-    </div>`;
-  $("lkClose").onclick = _closePanels;
-  p.querySelectorAll("[data-lp-add]").forEach((b) => b.onclick = () => {
-    const prod = b.dataset.lpAdd;
-    const sel = p.querySelector(`[data-lp-item="${CSS.escape(prod)}"]`);
-    const qin = p.querySelector(`[data-lp-qty="${CSS.escape(prod)}"]`);
-    _linkAdd(prod, sel.value, parseFloat(qin.value) || 1);
-  });
-  p.querySelectorAll("[data-unmap]").forEach((b) => b.onclick = () => _linkRemove(b.dataset.unmap));
-}
-
-async function _linkAdd(product, inventory_id, qty_per_unit) {
-  try {
-    const d = await api("/api/supply/map", { method: "POST", json: { product, inventory_id, qty_per_unit } });
-    _supplyData = d; _renderLinks(); if (d.insights) renderApprovals(d.insights); toast("Linked");
-  } catch (e) { toast(e.message); }
-}
-
-async function _linkRemove(id) {
-  try {
-    const d = await api("/api/supply/map/delete", { method: "POST", json: { id } });
-    _supplyData = d; _renderLinks(); if (d.insights) renderApprovals(d.insights); toast("Removed");
-  } catch (e) { toast(e.message); }
-}
-
-// ---- Purchase orders ----
-async function supplyOpenPo(itemIds) {
-  try {
-    const d = await api("/api/supply/po/create", { method: "POST", json: { item_ids: itemIds } });
-    if (d.download_url) await download(d.download_url, `${d.po_number}.pdf`);
-    _supAfter(d);
-    toast(`✅ ${d.po_number} — PDF saved to your device.`);
-  } catch (e) { toast(e.message); }
-}
-
 async function supplyGeneratePo() {
   try {
     const d = await api("/api/supply/reorder/generate", { method: "POST" });
-    if (d.download_url) await download(d.download_url, `${d.po_number}.pdf`);
+    if (d.download_url) await download(d.download_url, `${d.po_number}.xlsx`);
     _supAfter(d);
-    toast(`✅ ${d.po_number} generated — PDF saved to your device.`);
+    toast(`✅ ${d.po_number} generated — Excel downloaded & saved.`);
   } catch (e) { toast(e.message); }
 }
 

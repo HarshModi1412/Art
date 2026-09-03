@@ -2102,48 +2102,21 @@ def smart_tasks(body: SmartTaskBody, authorization: str | None = Header(default=
 
 
 # ---------------------------------------------------------
-# Supply Management  (inventory -> EOQ/MOQ reorder -> purchase order PDF)
+# Supply Management  (inventory -> reorder point -> purchase order)
 # ---------------------------------------------------------
 class SupplyItemBody(BaseModel):
     id: str | None = None
-    name: str
-    category: str | None = ""
-    unit_label: str | None = "unit"
+    sku: str
     current_stock: float | None = 0
     lead_time_days: float | None = 0
     safety_stock: float | None = 0
-    moq: float | None = 0
-    ordering_cost: float | None = None
-    holding_cost: float | None = None
-    unit_cost: float | None = None
     reorder_qty: float | None = None
-    supplier_name: str | None = ""
-    supplier_phone: str | None = ""
-    supplier_email: str | None = ""
+    unit_cost: float | None = None
+    supplier: str | None = ""
 
 
 class SupplyIdBody(BaseModel):
     id: str
-
-
-class SupplyWasteBody(BaseModel):
-    inventory_id: str
-    qty: float
-    reason: str | None = ""
-
-
-class SupplyMapBody(BaseModel):
-    product: str
-    inventory_id: str
-    qty_per_unit: float | None = 1
-
-
-class SupplyMapIdBody(BaseModel):
-    id: str
-
-
-class SupplyPOBody(BaseModel):
-    item_ids: list[str] | None = None
 
 
 def _supply_payload(email: str) -> dict:
@@ -2151,10 +2124,6 @@ def _supply_payload(email: str) -> dict:
     return {
         "inventory": comp["items"], "below": comp["below"], "meta": comp["meta"],
         "n_below": comp["n_below"],
-        "suggestions": comp["below"],
-        "products": supply.get_products(email),
-        "maps": supply.get_maps(email),
-        "waste": supply.get_waste(email),
         "purchase_orders": supply.get_purchase_orders(email),
         "insights": smart.build_insights(email),
     }
@@ -2190,33 +2159,6 @@ def supply_import_products(authorization: str | None = Header(default=None)):
     return _supply_payload(email)
 
 
-@app.post("/api/supply/waste")
-def supply_waste(body: SupplyWasteBody, authorization: str | None = Header(default=None)):
-    email = require_user(authorization)
-    try:
-        supply.record_waste(email, body.inventory_id, body.qty, body.reason or "")
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    return _supply_payload(email)
-
-
-@app.post("/api/supply/map")
-def supply_map(body: SupplyMapBody, authorization: str | None = Header(default=None)):
-    email = require_user(authorization)
-    try:
-        supply.upsert_map(email, body.product, body.inventory_id, body.qty_per_unit)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    return _supply_payload(email)
-
-
-@app.post("/api/supply/map/delete")
-def supply_map_delete(body: SupplyMapIdBody, authorization: str | None = Header(default=None)):
-    email = require_user(authorization)
-    supply.delete_map(email, body.id)
-    return _supply_payload(email)
-
-
 @app.post("/api/supply/reorder/generate")
 def supply_generate_po(authorization: str | None = Header(default=None)):
     email = require_user(authorization)
@@ -2227,36 +2169,8 @@ def supply_generate_po(authorization: str | None = Header(default=None)):
     smart.add_task(email, f"Execute: Purchase order {po['po_number']}")
     payload = _supply_payload(email)
     payload["po_number"] = po["po_number"]
-    payload["download_url"] = f"/api/supply/po/{po['po_number']}/pdf"
-    payload["excel_url"] = f"/api/supply/po/{po['po_number']}/download"
+    payload["download_url"] = f"/api/supply/po/{po['po_number']}/download"
     return payload
-
-
-@app.post("/api/supply/po/create")
-def supply_po_create(body: SupplyPOBody, authorization: str | None = Header(default=None)):
-    email = require_user(authorization)
-    po = supply.create_po(email, item_ids=body.item_ids or None)
-    if not po:
-        raise HTTPException(400, "Nothing to order for the selected item(s).")
-    smart.add_task(email, f"Execute: Purchase order {po['po_number']}")
-    payload = _supply_payload(email)
-    payload["po_number"] = po["po_number"]
-    payload["download_url"] = f"/api/supply/po/{po['po_number']}/pdf"
-    payload["excel_url"] = f"/api/supply/po/{po['po_number']}/download"
-    return payload
-
-
-@app.get("/api/supply/po/{po_number}/pdf")
-def supply_po_pdf(po_number: str, authorization: str | None = Header(default=None)):
-    email = require_user(authorization)
-    po = supply.get_po(email, po_number)
-    if not po:
-        raise HTTPException(404, "Purchase order not found.")
-    fname, buf = supply.po_pdf_bytes(email, po)
-    from fastapi.responses import StreamingResponse
-    return StreamingResponse(
-        buf, media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={fname}"})
 
 
 @app.get("/api/supply/po/{po_number}/download")

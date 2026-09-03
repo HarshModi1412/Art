@@ -515,30 +515,3 @@ td { color: var(--text-2); }
 .sup-form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-2); }
 .sup-form-grid input { padding: 8px 10px; font-size: 13px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); }
 .sup-form-grid input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
-
-/* ---- Supply: EOQ suggestions, waste, product links (v15) ---- */
-.sup-form-grid select { padding: 8px 10px; font-size: 13px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); }
-.sup-form-grid select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
-.sup-sub { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 4px 0 10px; }
-.sup-badge.moq { color: var(--amber); background: var(--amber-soft); padding: 1px 7px; border-radius: 99px; font-size: 10px; }
-.action-card.ok { border-left-color: var(--green); }
-
-.sug-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-bottom: 6px; }
-.sug-card { border: 1px solid var(--border); border-left: 4px solid var(--amber); border-radius: var(--radius); background: var(--surface); padding: 12px 14px; }
-.sug-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.sug-head b { font-size: 14px; color: var(--text); }
-.sug-reason { font-size: 12px; color: var(--muted); margin: 8px 0 10px; line-height: 1.45; }
-.sug-metrics { display: flex; flex-wrap: wrap; gap: 6px; }
-.sug-chip { display: inline-flex; flex-direction: column; gap: 1px; background: var(--surface-2); border-radius: 8px; padding: 4px 9px; font-size: 12.5px; font-weight: 650; color: var(--text); font-variant-numeric: tabular-nums; }
-.sug-chip i { font-style: normal; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-
-.link-list { display: flex; flex-direction: column; gap: 10px; margin: 6px 0 12px; }
-.link-row { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; background: var(--surface); }
-.link-prod { font-size: 13.5px; margin-bottom: 6px; }
-.link-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-.link-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--primary-soft); color: var(--text); border-radius: 99px; padding: 3px 6px 3px 10px; font-size: 12px; font-weight: 600; }
-.lc-x { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 12px; line-height: 1; padding: 0 2px; }
-.lc-x:hover { color: var(--red); }
-.link-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.link-add select { flex: 1 1 160px; min-width: 140px; padding: 6px 8px; font-size: 12.5px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); }
-.link-add input { width: 80px; padding: 6px 8px; font-size: 12.5px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); }
