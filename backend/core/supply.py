@@ -353,33 +353,56 @@ def get_waste(email: str, limit: int = 60) -> list[dict]:
 
 
 # ---------------------------------------------------------
-# correlate with sales -> per-product average daily units
+# correlate with sales -> per-product daily demand (mean + variability)
 # ---------------------------------------------------------
-def _product_daily(email: str) -> tuple[dict, dict]:
-    """({normalised product -> avg units/day}, meta) from the account's saved
-    Sales data: total units sold per product over the dataset's day span."""
+# Auto-fill defaults, used when the owner leaves a field blank/zero and there is
+# enough sales history to suggest a value. All are editable once applied.
+HOLDING_PCT = 0.20          # annual holding cost as a fraction of unit cost
+DEFAULT_ORDERING = 200.0    # ₹ per order, when none entered
+DEFAULT_LEAD_DAYS = 7       # supplier lead time fallback (not sales-derivable)
+SERVICE_Z = 1.65            # ~95% service level for safety stock
+MIN_DAYS_FOR_AUTO = 5       # need at least this many days of sales to suggest
+
+
+def _demand_stats(email: str):
+    """(product_daily_mean, daily_matrix, meta).
+
+    product_daily_mean: {norm product -> mean units/day over the span}
+    daily_matrix: DataFrame (index = every day in the span, columns = norm
+                  product, values = units that day, 0-filled) or None if the
+                  sales data has no usable dates. Used for demand variability.
+    """
     txns = smart.load_sales(email)
     if txns is None or not len(txns) or "product" not in getattr(txns, "columns", []):
-        return {}, {"has_sales": False, "days_span": 0}
+        return {}, None, {"has_sales": False, "days_span": 0}
     try:
         from backend.core import products as _products
         txns = _products.canonicalize_df(email, txns)
     except Exception:
         pass
     df = txns.copy()
-    days = 1
-    if "date" in df.columns:
-        dts = pd.to_datetime(df["date"], errors="coerce").dropna()
-        if len(dts):
-            days = max(1, int((dts.max().normalize() - dts.min().normalize()).days) + 1)
+    df["_prod"] = df["product"].map(_norm)
+    df = df[df["_prod"] != ""]
     qty_col = "quantity" if "quantity" in df.columns else None
-    usage: dict[str, float] = {}
-    for prod, g in df.groupby(df["product"].map(_norm)):
-        if not prod:
-            continue
-        units = float(pd.to_numeric(g[qty_col], errors="coerce").fillna(0).sum()) if qty_col else float(len(g))
-        usage[prod] = units / days
-    return usage, {"has_sales": True, "days_span": int(days)}
+    df["_q"] = (pd.to_numeric(df[qty_col], errors="coerce").fillna(0.0)
+                if qty_col else 1.0)
+
+    if "date" in df.columns:
+        df["_d"] = pd.to_datetime(df["date"], errors="coerce").dt.normalize()
+        dd = df.dropna(subset=["_d"])
+        if len(dd):
+            dmin, dmax = dd["_d"].min(), dd["_d"].max()
+            days = max(1, int((dmax - dmin).days) + 1)
+            full = pd.date_range(dmin, dmax, freq="D")
+            piv = dd.pivot_table(index="_d", columns="_prod", values="_q",
+                                 aggfunc="sum", fill_value=0.0).reindex(full, fill_value=0.0)
+            product_daily = {c: float(piv[c].mean()) for c in piv.columns}
+            return product_daily, piv, {"has_sales": True, "days_span": int(days)}
+
+    # No usable dates: fall back to totals / 1-day span.
+    totals = df.groupby("_prod")["_q"].sum()
+    return ({k: float(v) for k, v in totals.items()}, None,
+            {"has_sales": True, "days_span": 1})
 
 
 def _maps_by_item(email: str) -> dict:
@@ -397,8 +420,32 @@ def _item_daily_usage(item: dict, product_daily: dict, maps_by_item: dict) -> tu
         for prod_norm, qty in links:
             total += product_daily.get(prod_norm, 0.0) * qty
         return total, True
-    # Fallback: item name matches a product name directly.
     return product_daily.get(_norm(item.get("name")), 0.0), False
+
+
+def _item_daily_std(item: dict, piv, maps_by_item: dict) -> float | None:
+    """Std-dev of the item's daily consumption, for safety stock. None when the
+    sales data has no dates (variability unknown)."""
+    if piv is None or not len(piv):
+        return None
+    links = maps_by_item.get(item["id"])
+    if links:
+        series = None
+        for prod_norm, qty in links:
+            if prod_norm in piv.columns:
+                col = piv[prod_norm] * qty
+                series = col if series is None else series + col
+        if series is None:
+            return 0.0
+    else:
+        name = _norm(item.get("name"))
+        if name not in piv.columns:
+            return None
+        series = piv[name]
+    try:
+        return float(series.std(ddof=0))
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------
@@ -412,18 +459,45 @@ def _eoq(annual_demand: float, ordering_cost, holding_cost) -> float | None:
     return None
 
 
-def _enrich(item: dict, product_daily: dict, maps_by_item: dict) -> dict:
+def _enrich(item: dict, product_daily: dict, piv, maps_by_item: dict, meta: dict) -> dict:
     avg_daily, via_recipe = _item_daily_usage(item, product_daily, maps_by_item)
-    lead = _num(item.get("lead_time_days"))
-    safety = _num(item.get("safety_stock"))
+    std_daily = _item_daily_std(item, piv, maps_by_item)
     current = _num(item.get("current_stock"))
     moq = _int(item.get("moq"))
     annual_demand = avg_daily * 365.0
+    enough = bool(meta.get("has_sales") and meta.get("days_span", 0) >= MIN_DAYS_FOR_AUTO
+                  and avg_daily > 0)
 
-    reorder_point = int(math.ceil(avg_daily * lead + safety))
+    # --- lead time: not sales-derivable; fall back to a default when unset ---
+    lead_raw = _num(item.get("lead_time_days"))
+    lead_is_auto = lead_raw <= 0
+    eff_lead = lead_raw if lead_raw > 0 else DEFAULT_LEAD_DAYS
+
+    # --- safety stock: auto = Z * daily-demand std * sqrt(lead) ---
+    auto_safety = None
+    if enough and std_daily is not None and std_daily > 0:
+        auto_safety = int(math.ceil(SERVICE_Z * std_daily * math.sqrt(eff_lead)))
+    safety_raw = _num(item.get("safety_stock"))
+    safety_is_auto = safety_raw <= 0 and auto_safety is not None
+    eff_safety = safety_raw if safety_raw > 0 else (auto_safety or 0)
+
+    # --- holding cost: auto = unit cost * holding % ---
+    uc = _opt_num(item.get("unit_cost"))
+    auto_holding = round(uc * HOLDING_PCT, 2) if uc and uc > 0 else None
+    holding_raw = _opt_num(item.get("holding_cost"))
+    holding_is_auto = (not holding_raw or holding_raw <= 0) and auto_holding is not None
+    eff_holding = holding_raw if (holding_raw and holding_raw > 0) else auto_holding
+
+    # --- ordering cost: business cost; suggest a default once selling ---
+    auto_ordering = DEFAULT_ORDERING if enough else None
+    ordering_raw = _opt_num(item.get("ordering_cost"))
+    ordering_is_auto = (not ordering_raw or ordering_raw <= 0) and auto_ordering is not None
+    eff_ordering = ordering_raw if (ordering_raw and ordering_raw > 0) else auto_ordering
+
+    reorder_point = int(math.ceil(avg_daily * eff_lead + eff_safety))
     below = reorder_point > 0 and current <= reorder_point
 
-    eoq_raw = _eoq(annual_demand, item.get("ordering_cost"), item.get("holding_cost"))
+    eoq_raw = _eoq(annual_demand, eff_ordering, eff_holding)
 
     if not _blank(item.get("reorder_qty")):
         base = max(1, _int(item.get("reorder_qty")))
@@ -432,8 +506,7 @@ def _enrich(item: dict, product_daily: dict, maps_by_item: dict) -> dict:
         base = max(1, int(math.ceil(eoq_raw)))
         basis = "eoq"
     else:
-        # Bring stock back above the reorder point plus one lead-time cycle.
-        base = int(max(1, math.ceil(reorder_point - current + avg_daily * lead)))
+        base = int(max(1, math.ceil(reorder_point - current + avg_daily * eff_lead)))
         basis = "cover"
 
     order_qty = base
@@ -442,13 +515,15 @@ def _enrich(item: dict, product_daily: dict, maps_by_item: dict) -> dict:
         order_qty = moq
         moq_applied = True
 
-    unit_cost = item.get("unit_cost")
-    est_line_cost = round(order_qty * float(unit_cost), 2) if not _blank(unit_cost) else None
+    est_line_cost = round(order_qty * float(uc), 2) if uc else None
     days_of_cover = round(current / avg_daily, 1) if avg_daily > 0 else None
+    suggestions_available = bool(enough and (safety_is_auto or holding_is_auto
+                                             or ordering_is_auto or lead_is_auto))
 
     out = dict(item)
     out.update({
         "avg_daily_sales": round(avg_daily, 3),
+        "std_daily": (round(std_daily, 3) if std_daily is not None else None),
         "usage_via_recipe": via_recipe,
         "annual_demand": round(annual_demand, 1),
         "eoq": (int(round(eoq_raw)) if eoq_raw else None),
@@ -460,23 +535,54 @@ def _enrich(item: dict, product_daily: dict, maps_by_item: dict) -> dict:
         "suggested_qty": int(order_qty) if below else 0,
         "est_line_cost": est_line_cost,
         "days_of_cover": days_of_cover,
+        # effective (used for the maths) + which came from auto-fill
+        "effective_lead_time_days": round(eff_lead, 2),
+        "effective_safety_stock": int(eff_safety),
+        "effective_ordering_cost": (round(eff_ordering, 2) if eff_ordering else None),
+        "effective_holding_cost": (round(eff_holding, 2) if eff_holding else None),
+        "auto_safety_stock": auto_safety,
+        "auto_ordering_cost": auto_ordering,
+        "auto_holding_cost": auto_holding,
+        "lead_is_auto": lead_is_auto,
+        "safety_is_auto": safety_is_auto,
+        "holding_is_auto": holding_is_auto,
+        "ordering_is_auto": ordering_is_auto,
+        "has_enough_sales": enough,
+        "suggestions_available": suggestions_available,
         "reason": _reason_text(item, avg_daily, reorder_point, current, eoq_raw,
-                               basis, order_qty, moq, moq_applied, below),
+                               basis, order_qty, moq, moq_applied, below,
+                               eff_lead, eff_safety, safety_is_auto, lead_is_auto,
+                               holding_is_auto, ordering_is_auto, enough),
     })
     return out
 
 
-def _reason_text(item, avg_daily, rop, current, eoq_raw, basis, order_qty, moq, moq_applied, below) -> str:
+def _reason_text(item, avg_daily, rop, current, eoq_raw, basis, order_qty, moq,
+                 moq_applied, below, eff_lead, eff_safety, safety_is_auto,
+                 lead_is_auto, holding_is_auto, ordering_is_auto, enough) -> str:
     unit = item.get("unit_label") or "unit"
     if avg_daily <= 0:
-        base = ("No sales usage detected yet, so demand is unknown. "
-                "Link this item to the products that use it, or upload Sales data.")
-    else:
-        base = (f"Uses about {round(avg_daily, 2)} {unit}/day. Reorder point "
-                f"{rop} = daily usage x {int(_num(item.get('lead_time_days')))}d lead "
-                f"+ {int(_num(item.get('safety_stock')))} safety.")
+        return ("No sales usage detected yet, so demand is unknown. Link this item to "
+                "the products that use it, or load past sales — reorder point, safety "
+                "stock and EOQ fill in automatically once there's enough history.")
+    lead_txt = f"{int(eff_lead)}d lead{' (auto)' if lead_is_auto else ''}"
+    safe_txt = f"{int(eff_safety)} safety{' (auto)' if safety_is_auto else ''}"
+    base = (f"Uses about {round(avg_daily, 2)} {unit}/day. Reorder point {rop} = "
+            f"daily usage x {lead_txt} + {safe_txt}.")
+    autos = []
+    if safety_is_auto:
+        autos.append("safety stock")
+    if holding_is_auto:
+        autos.append("holding cost")
+    if ordering_is_auto:
+        autos.append("ordering cost")
+    if lead_is_auto:
+        autos.append("lead time")
     if not below:
-        return base + f" Current stock {int(current)} is above the reorder point."
+        tail = f" Current stock {int(current)} is above the reorder point."
+        if autos:
+            tail += f" Suggested {', '.join(autos)} from your sales — apply to edit."
+        return base + tail
     if basis == "eoq":
         base += f" Economic order quantity is {int(round(eoq_raw))} {unit}."
     elif basis == "manual":
@@ -485,7 +591,10 @@ def _reason_text(item, avg_daily, rop, current, eoq_raw, basis, order_qty, moq, 
         base += " EOQ needs ordering & holding cost; using a lead-time cover estimate."
     if moq_applied:
         base += f" Raised to the supplier MOQ of {moq}."
-    return base + f" Suggested order: {order_qty} {unit}."
+    base += f" Suggested order: {order_qty} {unit}."
+    if autos:
+        base += f" ({', '.join(autos)} auto-suggested from sales — apply to make them editable.)"
+    return base
 
 
 # ---------------------------------------------------------
@@ -493,9 +602,9 @@ def _reason_text(item, avg_daily, rop, current, eoq_raw, basis, order_qty, moq, 
 # ---------------------------------------------------------
 def compute_inventory(email: str) -> dict:
     email = _email(email)
-    product_daily, meta = _product_daily(email)
+    product_daily, piv, meta = _demand_stats(email)
     mbi = _maps_by_item(email)
-    rows = [_enrich(it, product_daily, mbi) for it in get_inventory(email)]
+    rows = [_enrich(it, product_daily, piv, mbi, meta) for it in get_inventory(email)]
     rows.sort(key=lambda r: (not r["below_reorder"], _norm(r.get("name"))))
     below = [r for r in rows if r["below_reorder"]]
     return {"items": rows, "below": below, "meta": meta, "n_below": len(below)}

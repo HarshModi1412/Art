@@ -198,6 +198,7 @@ const MODULES = [
 ];
 
 async function goHome() {
+  _afterUpload = null;
   setCrumb(""); showRail(true);
   setView(`<div class="ap-empty">Loading your workspace…</div>`);
   try {
@@ -533,7 +534,7 @@ function openMapModal(d) {
   $("mapErr").hidden = true;
   $("mapModal").hidden = false;
 }
-function closeMap() { $("mapModal").hidden = true; _mapCtx = null; _pendingMode = null; const mm = $("mapMode"); if (mm) mm.hidden = true; }
+function closeMap() { $("mapModal").hidden = true; _mapCtx = null; _pendingMode = null; _afterUpload = null; const mm = $("mapMode"); if (mm) mm.hidden = true; }
 $("mapClose").onclick = closeMap; $("mapCancel").onclick = closeMap;
 $("mapConfirm").onclick = async () => {
   if (!_mapCtx) return;
@@ -552,7 +553,7 @@ $("mapConfirm").onclick = async () => {
     closeMap();
     if (res && res.mode === "append") toast(`✅ Added ${fmt(res.added)} rows — ${fmt(res.rows)} total saved`);
     else toast("✅ Data saved to your account");
-    goHome();
+    if (_afterUpload) { const f = _afterUpload; _afterUpload = null; f(); } else goHome();
   } catch (e) { const el = $("mapErr"); el.textContent = e.message; el.hidden = false; }
 };
 async function clearData(kind) {
@@ -790,7 +791,9 @@ async function aliasDelete(id) {
 
 // ---------- MODULE: Supply Management ----------
 let _supplyData = null;
+let _afterUpload = null;   // set to a fn to run after the next Sales upload+map, instead of goHome
 const _rupee = (v) => (v == null || v === "" ? "—" : "₹" + fmt(v));
+const _eff = (v, auto) => (auto ? fmt(v) + "<span class=\"auto-tag\">auto</span>" : fmt(v));
 
 async function openSupply() {
   moduleShell("Supply Management", `<div class="ap-empty">Loading inventory…</div>`);
@@ -859,13 +862,14 @@ function renderSupply(d) {
             ${it.supplier_phone || it.supplier_email ? `<div class="muted tiny">${esc(it.supplier_phone || "")}${it.supplier_phone && it.supplier_email ? " · " : ""}${esc(it.supplier_email || "")}</div>` : ""}</td>
         <td class="num">${fmt(it.current_stock)} <span class="muted tiny">${esc(it.unit_label || "")}</span></td>
         <td class="num">${it.avg_daily_sales ?? 0}</td>
-        <td class="num">${fmt(it.lead_time_days)}</td>
-        <td class="num">${fmt(it.safety_stock)}</td>
+        <td class="num">${_eff(it.effective_lead_time_days, it.lead_is_auto)}</td>
+        <td class="num">${_eff(it.effective_safety_stock, it.safety_is_auto)}</td>
         <td class="num">${fmt(it.moq)}</td>
         <td class="num">${it.unit_cost == null ? "—" : _rupee(it.unit_cost)}</td>
         <td class="num">${fmt(it.reorder_point)}</td>
         <td>${_supBadge(it)}</td>
         <td class="sup-actions">
+          ${it.suggestions_available ? `<button class="btn ghost tiny" data-apply="${it.id}" title="Apply the values suggested from your sales">✨</button>` : ""}
           <button class="btn ghost tiny" data-edit="${it.id}" title="Edit">✎</button>
           <button class="btn ghost tiny" data-waste="${it.id}" title="Record waste">🗑️</button>
           <button class="btn ghost tiny" data-del="${it.id}" title="Remove item">✕</button>
@@ -899,6 +903,7 @@ function renderSupply(d) {
     <p class="muted">${esc(salesNote)}</p>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;">
       <button class="btn primary sm" id="supAdd">＋ Add item</button>
+      <button class="btn ghost sm" id="supLoadSales">⤵ Load past sales data</button>
       <button class="btn ghost sm" id="supImport">⤵ Pull products from sales</button>
       <button class="btn ghost sm" id="supLinks">🔗 Product links</button>
       <button class="btn ghost sm" id="supWaste">🗑️ Record waste</button>
@@ -941,12 +946,14 @@ function renderSupply(d) {
   moduleShell("Supply Management", body);
   $("supAdd").onclick = () => openSupplyForm(null);
   $("supImport").onclick = supplyImport;
+  $("supLoadSales").onclick = () => { _afterUpload = () => openSupply(); startUpload("sales", "append"); };
   $("supLinks").onclick = openLinksPanel;
   $("supWaste").onclick = () => openWastePanel(null);
   if ($("supGenPo")) $("supGenPo").onclick = supplyGeneratePo;
   document.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => openSupplyForm(b.dataset.edit));
   document.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => supplyDelete(b.dataset.del));
   document.querySelectorAll("[data-waste]").forEach((b) => b.onclick = () => openWastePanel(b.dataset.waste));
+  document.querySelectorAll("[data-apply]").forEach((b) => b.onclick = () => supplyApplySuggested(b.dataset.apply));
   document.querySelectorAll("[data-openpo]").forEach((b) => b.onclick = () => supplyOpenPo([b.dataset.openpo]));
   document.querySelectorAll("[data-popdf]").forEach((b) => b.onclick = () => download(`/api/supply/po/${encodeURIComponent(b.dataset.popdf)}/pdf`, `${b.dataset.popdf}.pdf`));
   document.querySelectorAll("[data-poxls]").forEach((b) => b.onclick = () => download(`/api/supply/po/${encodeURIComponent(b.dataset.poxls)}/download`, `${b.dataset.poxls}.xlsx`));
@@ -971,17 +978,18 @@ function openSupplyForm(id) {
   const v = (x, dflt = "") => (it && it[x] != null ? it[x] : dflt);
   f.innerHTML = `
     <div class="card sup-form">
-      <h4 style="margin:0 0 8px;">${id ? "Edit item" : "Add item"}</h4>
+      <h4 style="margin:0 0 4px;">${id ? "Edit item" : "Add item"}</h4>
+      <p class="muted tiny" style="margin:0 0 10px;">Leave lead time, safety stock and the EOQ costs blank &mdash; we suggest them from your sales once there is enough history, then you can apply and edit them.</p>
       <div class="sup-form-grid">
         <label>Item name<input id="sfName" value="${esc(v("name"))}" placeholder="e.g. Paper cup 250ml" /></label>
         <label>Category <span class="muted tiny">(optional)</span><input id="sfCat" value="${esc(v("category"))}" placeholder="Packaging" /></label>
         <label>Unit label<input id="sfUnit" value="${esc(v("unit_label", "unit"))}" placeholder="pcs / kg / box" /></label>
         <label>Current stock<input id="sfStock" type="number" min="0" step="any" value="${v("current_stock", 0)}" /></label>
-        <label>Lead time (days)<input id="sfLead" type="number" min="0" step="any" value="${v("lead_time_days", 7)}" /></label>
-        <label>Safety stock<input id="sfSafe" type="number" min="0" step="any" value="${v("safety_stock", 0)}" /></label>
+        <label>Lead time (days) <span class="muted tiny">(blank = auto)</span><input id="sfLead" type="number" min="0" step="any" placeholder="auto (7)" value="${it && it.lead_time_days > 0 ? it.lead_time_days : ''}" /></label>
+        <label>Safety stock <span class="muted tiny">(blank = auto from sales)</span><input id="sfSafe" type="number" min="0" step="any" placeholder="auto" value="${it && it.safety_stock > 0 ? it.safety_stock : ''}" /></label>
         <label>MOQ <span class="muted tiny">(min order qty)</span><input id="sfMoq" type="number" min="0" step="any" value="${v("moq", 0)}" /></label>
-        <label>Ordering cost ₹ <span class="muted tiny">(per order · EOQ)</span><input id="sfOrder" type="number" min="0" step="any" value="${it && it.ordering_cost != null ? it.ordering_cost : ""}" /></label>
-        <label>Holding cost ₹ <span class="muted tiny">(/unit/year · EOQ)</span><input id="sfHold" type="number" min="0" step="any" value="${it && it.holding_cost != null ? it.holding_cost : ""}" /></label>
+        <label>Ordering cost ₹ <span class="muted tiny">(per order · blank = auto)</span><input id="sfOrder" type="number" min="0" step="any" value="${it && it.ordering_cost != null ? it.ordering_cost : ""}" /></label>
+        <label>Holding cost ₹ <span class="muted tiny">(/unit/yr · blank = auto)</span><input id="sfHold" type="number" min="0" step="any" value="${it && it.holding_cost != null ? it.holding_cost : ""}" /></label>
         <label>Unit cost ₹<input id="sfCost" type="number" min="0" step="any" value="${it && it.unit_cost != null ? it.unit_cost : ""}" /></label>
         <label>Reorder qty <span class="muted tiny">(blank = EOQ auto)</span><input id="sfQty" type="number" min="0" step="any" value="${it && it.reorder_qty != null ? it.reorder_qty : ""}" /></label>
       </div>
@@ -1007,8 +1015,8 @@ function openSupplyForm(id) {
       category: $("sfCat").value.trim(),
       unit_label: $("sfUnit").value.trim() || "unit",
       current_stock: parseFloat($("sfStock").value) || 0,
-      lead_time_days: parseFloat($("sfLead").value) || 0,
-      safety_stock: parseFloat($("sfSafe").value) || 0,
+      lead_time_days: numOrNull("sfLead"),
+      safety_stock: numOrNull("sfSafe"),
       moq: parseFloat($("sfMoq").value) || 0,
       ordering_cost: numOrNull("sfOrder"),
       holding_cost: numOrNull("sfHold"),
@@ -1028,6 +1036,23 @@ async function supplyDelete(id) {
   const it = (_supplyData.inventory || []).find((x) => x.id === id);
   if (it && !confirm(`Remove "${it.name}" from inventory?`)) return;
   try { _supAfter(await api("/api/supply/item/delete", { method: "POST", json: { id } })); toast("Removed"); }
+  catch (e) { toast(e.message); }
+}
+
+async function supplyApplySuggested(id) {
+  const it = (_supplyData.inventory || []).find((x) => x.id === id);
+  if (!it) return;
+  const payload = {
+    id: it.id, name: it.name, category: it.category, unit_label: it.unit_label,
+    current_stock: it.current_stock, moq: it.moq, unit_cost: it.unit_cost,
+    reorder_qty: it.reorder_qty,
+    supplier_name: it.supplier_name, supplier_phone: it.supplier_phone, supplier_email: it.supplier_email,
+    lead_time_days: it.lead_is_auto ? it.effective_lead_time_days : it.lead_time_days,
+    safety_stock: it.safety_is_auto ? it.effective_safety_stock : it.safety_stock,
+    ordering_cost: it.ordering_is_auto ? it.effective_ordering_cost : it.ordering_cost,
+    holding_cost: it.holding_is_auto ? it.effective_holding_cost : it.holding_cost,
+  };
+  try { _supAfter(await api("/api/supply/item", { method: "POST", json: payload })); toast("Suggested values applied — edit them anytime."); }
   catch (e) { toast(e.message); }
 }
 

@@ -551,3 +551,6 @@ td { color: var(--text-2); }
 .prod-head b { font-size: 14.5px; color: var(--text); }
 .prod-sub { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 10px 0 6px; }
 .al-plat { font-style: normal; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--primary); opacity: .8; margin-left: 2px; }
+
+/* ---- Supply: auto-suggested value marker (v17) ---- */
+.auto-tag { display:inline-block; margin-left:4px; font-size:9px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--amber); background:var(--amber-soft); padding:0 4px; border-radius:6px; vertical-align:middle; }
