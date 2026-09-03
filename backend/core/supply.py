@@ -288,7 +288,7 @@ def get_products(email: str) -> list[str]:
                 canon.append(m["product"]); have.add(n)
         return sorted(canon, key=_norm)
     names: dict[str, str] = {}
-    txns = smart.load_sales(email)
+    txns = smart.load_supply_sales(email)
     if txns is not None and "product" in getattr(txns, "columns", []):
         try:
             if _products:
@@ -372,7 +372,7 @@ def _demand_stats(email: str):
                   product, values = units that day, 0-filled) or None if the
                   sales data has no usable dates. Used for demand variability.
     """
-    txns = smart.load_sales(email)
+    txns = smart.load_supply_sales(email)
     if txns is None or not len(txns) or "product" not in getattr(txns, "columns", []):
         return {}, None, {"has_sales": False, "days_span": 0}
     try:
@@ -614,7 +614,7 @@ def import_products_from_sales(email: str) -> list[dict]:
     """Seed inventory rows for any product in the sales data not already tracked
     (blank stock, a default 7-day lead time, for the owner to adjust)."""
     email = _email(email)
-    txns = smart.load_sales(email)
+    txns = smart.load_supply_sales(email)
     if txns is None or "product" not in getattr(txns, "columns", []):
         return get_inventory(email)
     have = {_norm(it.get("name")) for it in get_inventory(email)}

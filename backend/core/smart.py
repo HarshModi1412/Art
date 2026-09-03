@@ -34,6 +34,7 @@ from backend.core import (analytics, complaints, content_gen, positioning, produ
 
 SALES_KEY = "smart_sales_txns"
 REVIEW_KEY = "smart_review_df"
+SUPPLY_SALES_KEY = "smart_supply_sales_txns"   # separate "previous sales" set, used ONLY by Supply
 
 
 # ---------------------------------------------------------
@@ -97,12 +98,32 @@ def load_review(email: str):
     return user_store.load_df(email, REVIEW_KEY)
 
 
+def save_supply_sales(email: str, txns: pd.DataFrame, meta: dict, mode: str = "replace") -> None:
+    """Persist the Supply module's own historical/"previous" sales set. Kept
+    separate from the main Sales data — it feeds the supply-chain math only."""
+    if mode == "append":
+        existing = load_supply_sales(email)
+        if existing is not None and len(existing):
+            txns = pd.concat([existing, txns], ignore_index=True)
+    user_store.save_df(email, SUPPLY_SALES_KEY, txns)
+    st = user_store.get_key(email, "smart_data", {}) or {}
+    st["supply_sales"] = {**meta, "rows": int(len(txns)),
+                          "updated_at": pd.Timestamp.now().isoformat(timespec="seconds")}
+    user_store.set_key(email, "smart_data", st)
+
+
+def load_supply_sales(email: str):
+    return user_store.load_df(email, SUPPLY_SALES_KEY)
+
+
 def clear(email: str, kind: str) -> None:
     st = user_store.get_key(email, "smart_data", {}) or {}
     if kind == "sales":
         user_store.delete_df(email, SALES_KEY); st.pop("sales", None)
     elif kind == "review":
         user_store.delete_df(email, REVIEW_KEY); st.pop("review", None)
+    elif kind == "supply_sales":
+        user_store.delete_df(email, SUPPLY_SALES_KEY); st.pop("supply_sales", None)
     user_store.set_key(email, "smart_data", st)
 
 
@@ -111,6 +132,7 @@ def data_status(email: str) -> dict:
     return {
         "sales": {"ready": user_store.has_df(email, SALES_KEY), **(st.get("sales") or {})},
         "review": {"ready": user_store.has_df(email, REVIEW_KEY), **(st.get("review") or {})},
+        "supply_sales": {"ready": user_store.has_df(email, SUPPLY_SALES_KEY), **(st.get("supply_sales") or {})},
     }
 
 

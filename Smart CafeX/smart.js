@@ -505,10 +505,11 @@ async function remap(kind) {
 
 function openMapModal(d) {
   _mapCtx = d;
-  $("mapTitle").textContent = d.kind === "sales" ? "Map your Sales columns" : "Map your Review columns";
-  $("mapHint").textContent = d.kind === "sales"
-    ? "Tell us which column is which. Date and Amount are required."
-    : "Which column holds the review text? (required). Rating and Date are optional but sharpen the analysis.";
+  $("mapTitle").textContent = d.kind === "review" ? "Map your Review columns"
+    : (d.kind === "supply_sales" ? "Map your previous-sales columns (for Supply)" : "Map your Sales columns");
+  $("mapHint").textContent = d.kind === "review"
+    ? "Which column holds the review text? (required). Rating and Date are optional but sharpen the analysis."
+    : "Tell us which column is which. Date and Amount are required.";
   const labelFor = { date: "Date", amount: "Amount", customer_id: "Customer ID", customer_name: "Customer Name",
     order_id: "Order ID", product: "Product", category: "Category", subcategory: "Sub-category", quantity: "Quantity",
     review: "Review text", rating: "Rating" };
@@ -844,8 +845,8 @@ function renderSupply(d) {
   const waste = d.waste || [];
 
   const salesNote = meta.has_sales
-    ? `Average daily usage is computed from your Sales data over ${meta.days_span} day${meta.days_span === 1 ? "" : "s"}, routed through your product links. Reorder point = daily usage × lead time + safety stock. Suggested order = Economic Order Quantity, raised to the supplier MOQ.`
-    : `No Sales data yet — upload Sales (from the home screen) to compute usage automatically. You can still track stock, suppliers, EOQ inputs and MOQ manually.`;
+    ? `These calculations run only on the previous-sales history you upload here for Supply (${meta.days_span} day${meta.days_span === 1 ? "" : "s"} loaded) — a separate set from your main Sales Data. Daily usage → product links → reorder point (daily usage × lead time + safety stock); suggested order = EOQ, raised to the supplier MOQ.`
+    : `No previous-sales history uploaded for Supply yet. Use “Upload previous sales” to add and map your past sales — the supply-chain math (usage, reorder point, EOQ, safety stock) runs only on that, separate from your main Sales Data. You can still track stock, suppliers, EOQ inputs and MOQ manually meanwhile.`;
 
   const sugSection = suggestions.length ? `
     <div class="section-title" style="margin-top:8px;">🔔 Restock suggestions <span class="muted tiny">(${suggestions.length}, one per item)</span></div>
@@ -903,7 +904,7 @@ function renderSupply(d) {
     <p class="muted">${esc(salesNote)}</p>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;">
       <button class="btn primary sm" id="supAdd">＋ Add item</button>
-      <button class="btn ghost sm" id="supLoadSales">⤵ Load past sales data</button>
+      <button class="btn ghost sm" id="supLoadSales" title="Upload &amp; map the past sales history used ONLY for these supply-chain calculations (separate from your main Sales Data)">🧾 Upload previous sales</button>
       <button class="btn ghost sm" id="supImport">⤵ Pull products from sales</button>
       <button class="btn ghost sm" id="supLinks">🔗 Product links</button>
       <button class="btn ghost sm" id="supWaste">🗑️ Record waste</button>
@@ -946,7 +947,7 @@ function renderSupply(d) {
   moduleShell("Supply Management", body);
   $("supAdd").onclick = () => openSupplyForm(null);
   $("supImport").onclick = supplyImport;
-  $("supLoadSales").onclick = () => { _afterUpload = () => openSupply(); startUpload("sales", "append"); };
+  $("supLoadSales").onclick = () => { _afterUpload = () => openSupply(); startUpload("supply_sales", "append"); };
   $("supLinks").onclick = openLinksPanel;
   $("supWaste").onclick = () => openWastePanel(null);
   if ($("supGenPo")) $("supGenPo").onclick = supplyGeneratePo;

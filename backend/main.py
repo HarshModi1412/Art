@@ -1564,8 +1564,8 @@ async def smart_upload(kind: str, files: list[UploadFile] = File(...),
     """Stage one or more Sales (or Review) files for mapping. Multiple files are
     combined: Sales via the auto-joiner, Reviews by stacking rows."""
     email = require_user(authorization)
-    if kind not in ("sales", "review"):
-        raise HTTPException(400, "kind must be 'sales' or 'review'")
+    if kind not in ("sales", "review", "supply_sales"):
+        raise HTTPException(400, "kind must be 'sales', 'supply_sales' or 'review'")
     if len(files) > 100:
         raise HTTPException(400, "Please upload at most 100 files at a time.")
     sess = get_session(x_session_id)
@@ -1588,7 +1588,7 @@ async def smart_upload(kind: str, files: list[UploadFile] = File(...),
     if not dfs:
         raise HTTPException(400, "No readable data found in the uploaded file(s).")
 
-    if kind == "sales":
+    if kind in ("sales", "supply_sales"):
         if len(dfs) == 1:
             combined = dfs[0]
         else:
@@ -1596,17 +1596,18 @@ async def smart_upload(kind: str, files: list[UploadFile] = File(...),
             nm = {f"f{i}": names[i] for i in range(len(dfs))}
             joined = joiner.auto_join(raw, nm)
             combined = joined[0] if joined else pd.concat(dfs, ignore_index=True)
-        sess.raw_dfs["smart_pending_sales"] = combined
+        pending_key = "smart_pending_supply_sales" if kind == "supply_sales" else "smart_pending_sales"
+        sess.raw_dfs[pending_key] = combined
         pos = pos_formats.detect_format(combined)
         suggested = mapper.suggest_mapping(combined)
         if pos and pos["mapping"].get("date") and pos["mapping"].get("amount"):
             suggested = {**suggested, **pos["mapping"]}
         try:
-            _st = smart.data_status(email).get("sales", {})
+            _st = smart.data_status(email).get(kind, {})
             existing_rows = int(_st.get("rows", 0)) if _st.get("ready") else 0
         except Exception:
             existing_rows = 0
-        return {"kind": "sales", "files": names, "rows": int(len(combined)),
+        return {"kind": kind, "files": names, "rows": int(len(combined)),
                 "columns": [str(c) for c in combined.columns],
                 "roles": list(mapper.ROLE_KEYWORDS), "required": ["date", "amount"],
                 "suggested_mapping": suggested, "existing_rows": existing_rows,
@@ -1646,25 +1647,34 @@ def smart_map(body: SmartMapBody, x_session_id: str | None = Header(default=None
     """Confirm the mapping, build the dataset and persist it to the account."""
     email = require_user(authorization)
     sess = get_session(x_session_id)
-    if body.kind == "sales":
-        pending = sess.raw_dfs.get("smart_pending_sales")
+    if body.kind in ("sales", "supply_sales"):
+        is_supply = body.kind == "supply_sales"
+        pending_key = "smart_pending_supply_sales" if is_supply else "smart_pending_sales"
+        pending = sess.raw_dfs.get(pending_key)
         if pending is None:
-            raise HTTPException(400, "Upload a Sales file first.")
+            raise HTTPException(400, "Upload a sales file first.")
         try:
             txns, diag = mapper.build_transactions(pending, body.mapping)
         except ValueError as e:
             raise HTTPException(400, str(e))
         if diag["rows_after"] == 0:
             raise HTTPException(400, "None of the rows had a readable date and amount — check your mapping.")
-        smart.save_sales(email, txns,
-                         {"files": sess.file_names.get("smart_pending_sales", "Sales upload")},
-                         mode=body.mode)
-        combined = smart.load_sales(email)
-        sess.txns_df = combined if combined is not None else txns
-        sess.mapped_file_id = "smart_sales"
-        sess.raw_dfs.pop("smart_pending_sales", None)
-        total = int(len(sess.txns_df)) if sess.txns_df is not None else diag["rows_after"]
-        return {"ok": True, "kind": "sales", "rows": total,
+        if is_supply:
+            smart.save_supply_sales(email, txns,
+                                    {"files": sess.file_names.get(pending_key, "Supply sales upload")},
+                                    mode=body.mode)
+            combined = smart.load_supply_sales(email)
+            total = int(len(combined)) if combined is not None else diag["rows_after"]
+        else:
+            smart.save_sales(email, txns,
+                             {"files": sess.file_names.get(pending_key, "Sales upload")},
+                             mode=body.mode)
+            combined = smart.load_sales(email)
+            sess.txns_df = combined if combined is not None else txns
+            sess.mapped_file_id = "smart_sales"
+            total = int(len(sess.txns_df)) if sess.txns_df is not None else diag["rows_after"]
+        sess.raw_dfs.pop(pending_key, None)
+        return {"ok": True, "kind": body.kind, "rows": total,
                 "added": diag["rows_after"], "mode": body.mode,
                 "data": smart.data_status(email), "insights": smart.build_insights(email)}
     elif body.kind == "review":
@@ -1702,16 +1712,16 @@ def smart_remap(kind: str, x_session_id: str | None = Header(default=None),
     user can adjust which column is which later without re-uploading a file."""
     email = require_user(authorization)
     sess = get_session(x_session_id)
-    if kind == "sales":
-        df = smart.load_sales(email)
+    if kind in ("sales", "supply_sales"):
+        df = smart.load_supply_sales(email) if kind == "supply_sales" else smart.load_sales(email)
         if df is None or getattr(df, "empty", True):
-            raise HTTPException(400, "Upload a Sales file first.")
-        sess.raw_dfs["smart_pending_sales"] = df
+            raise HTTPException(400, "Upload a sales file first.")
+        sess.raw_dfs["smart_pending_supply_sales" if kind == "supply_sales" else "smart_pending_sales"] = df
         suggested = mapper.suggest_mapping(df)
         pos = pos_formats.detect_format(df)
         if pos and pos["mapping"].get("date") and pos["mapping"].get("amount"):
             suggested = {**suggested, **pos["mapping"]}
-        return {"kind": "sales", "files": [], "rows": int(len(df)),
+        return {"kind": kind, "files": [], "rows": int(len(df)),
                 "columns": [str(c) for c in df.columns],
                 "roles": list(mapper.ROLE_KEYWORDS), "required": ["date", "amount"],
                 "suggested_mapping": suggested,
@@ -1754,6 +1764,8 @@ def smart_clear(kind: str, x_session_id: str | None = Header(default=None),
                     sess.raw_dfs.pop(k, None)
         elif kind == "review":
             sess.raw_dfs.pop("smart_pending_review", None)
+        elif kind == "supply_sales":
+            sess.raw_dfs.pop("smart_pending_supply_sales", None)
     except HTTPException:
         pass
     return {"ok": True, "data": smart.data_status(email)}
