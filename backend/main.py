@@ -26,7 +26,7 @@ from backend.core import (ad_analytics, ai, analytics, auth, billing, complaints
                           content_gen, email_intake, i18n, instagram, joiner, mapper,
                           pos_formats, position_strategy, positioning, pricing, product_config,
                           report_pdf, smart, templates, user_store)
-from backend.core import commerce, secrets_store, db, supply
+from backend.core import commerce, secrets_store, db, supply, products
 
 # ---------------------------------------------------------
 # numpy/pandas JSON safety net
@@ -2270,6 +2270,81 @@ def supply_po_download(po_number: str, authorization: str | None = Header(defaul
     return StreamingResponse(
         buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={fname}"})
+
+
+# ---------------------------------------------------------
+# Product Management  (canonical products + platform aliases)
+# ---------------------------------------------------------
+class ProductBody(BaseModel):
+    id: str | None = None
+    name: str
+    category: str | None = ""
+    sku: str | None = ""
+    price: float | None = None
+    unit_cost: float | None = None
+    status: str | None = "active"
+
+
+class ProductIdBody(BaseModel):
+    id: str
+
+
+class AliasBody(BaseModel):
+    product_id: str
+    alias: str
+    platform: str | None = ""
+
+
+class AliasIdBody(BaseModel):
+    id: str
+
+
+def _products_payload(email: str) -> dict:
+    return {
+        "products": products.get_products(email),
+        "unmatched": products.unmatched_sales_names(email),
+        "sales_products": products.sales_product_names(email),
+    }
+
+
+@app.get("/api/products/state")
+def products_state(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return _products_payload(email)
+
+
+@app.post("/api/products/item")
+def products_item(body: ProductBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    try:
+        products.upsert_product(email, body.dict())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _products_payload(email)
+
+
+@app.post("/api/products/item/delete")
+def products_item_delete(body: ProductIdBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    products.delete_product(email, body.id)
+    return _products_payload(email)
+
+
+@app.post("/api/products/alias")
+def products_alias(body: AliasBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    try:
+        products.add_alias(email, body.product_id, body.alias, body.platform or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _products_payload(email)
+
+
+@app.post("/api/products/alias/delete")
+def products_alias_delete(body: AliasIdBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    products.delete_alias(email, body.id)
+    return _products_payload(email)
 
 
 # ---------------------------------------------------------

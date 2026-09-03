@@ -58,6 +58,25 @@ def _email(email: str) -> str:
     return (email or "").strip().lower()
 
 
+def _safe_fetch(table: str, match: dict) -> list[dict]:
+    """Read rows for a supply table, tolerating a not-yet-created table.
+
+    The inventory tables must be created once (supabase/inventory.sql). Until
+    then — or on any transient PostgREST error — reads degrade to an empty list
+    so a missing table can never take down the rest of the app (home, insights,
+    other modules). Writes still surface real errors so setup problems are
+    visible where the user is actually adding data.
+    """
+    try:
+        return db.fetch_all(table, match)
+    except Exception as e:  # noqa: BLE001 - defensive by design
+        import logging
+        logging.getLogger("supply").warning(
+            "inventory read on %r failed (%s); is supabase/inventory.sql run?",
+            table, e)
+        return []
+
+
 # ---------------------------------------------------------
 # small helpers
 # ---------------------------------------------------------
@@ -137,7 +156,7 @@ def _clean_item(item: dict, existing_id: str | None) -> dict:
 def get_inventory(email: str) -> list[dict]:
     email = _email(email)
     if _tables():
-        rows = db.fetch_all(T_INV, {"email": email})
+        rows = _safe_fetch(T_INV, {"email": email})
     else:
         rows = user_store.get_key(email, INVENTORY_KEY, []) or []
         rows = rows if isinstance(rows, list) else []
@@ -194,7 +213,7 @@ def _get_item(email: str, iid: str) -> dict | None:
 def get_maps(email: str) -> list[dict]:
     email = _email(email)
     if _tables():
-        rows = db.fetch_all(T_MAP, {"email": email})
+        rows = _safe_fetch(T_MAP, {"email": email})
     else:
         rows = user_store.get_key(email, MAP_KEY, []) or []
         rows = rows if isinstance(rows, list) else []
@@ -253,11 +272,29 @@ def delete_map(email: str, map_id: str) -> list[dict]:
 
 
 def get_products(email: str) -> list[str]:
-    """Distinct product names known to the account: from Sales data, plus any
+    """Products available to link inventory to. Prefers canonical products from
+    Product Management; falls back to (canonicalised) raw sales names + any name
     already used in the recipe map."""
+    try:
+        from backend.core import products as _products
+        canon = _products.product_names(email)
+    except Exception:
+        _products, canon = None, []
+    if canon:
+        have = {_norm(x) for x in canon}
+        for m in get_maps(email):
+            n = _norm(m["product"])
+            if n and n not in have:
+                canon.append(m["product"]); have.add(n)
+        return sorted(canon, key=_norm)
     names: dict[str, str] = {}
     txns = smart.load_sales(email)
     if txns is not None and "product" in getattr(txns, "columns", []):
+        try:
+            if _products:
+                txns = _products.canonicalize_df(email, txns)
+        except Exception:
+            pass
         for p in txns["product"].dropna():
             n = _norm(p)
             if n and n not in names:
@@ -307,7 +344,7 @@ def record_waste(email: str, inventory_id: str, qty, reason: str = "") -> list[d
 def get_waste(email: str, limit: int = 60) -> list[dict]:
     email = _email(email)
     if _tables():
-        rows = db.fetch_all(T_WASTE, {"email": email})
+        rows = _safe_fetch(T_WASTE, {"email": email})
     else:
         rows = user_store.get_key(email, WASTE_KEY, []) or []
         rows = rows if isinstance(rows, list) else []
@@ -324,6 +361,11 @@ def _product_daily(email: str) -> tuple[dict, dict]:
     txns = smart.load_sales(email)
     if txns is None or not len(txns) or "product" not in getattr(txns, "columns", []):
         return {}, {"has_sales": False, "days_span": 0}
+    try:
+        from backend.core import products as _products
+        txns = _products.canonicalize_df(email, txns)
+    except Exception:
+        pass
     df = txns.copy()
     days = 1
     if "date" in df.columns:
@@ -532,7 +574,7 @@ def build_reorder_insight(email: str) -> dict | None:
 def get_purchase_orders(email: str) -> list[dict]:
     email = _email(email)
     if _tables():
-        rows = db.fetch_all(T_PO, {"email": email})
+        rows = _safe_fetch(T_PO, {"email": email})
         rows = sorted(rows, key=lambda r: str(r.get("created_at", "")))
     else:
         rows = user_store.get_key(email, PO_KEY, []) or []

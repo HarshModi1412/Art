@@ -119,6 +119,11 @@ def hydrate_session(email: str, sess) -> dict:
     existing /api/analytics, /api/subcategory, /api/rfm endpoints work on it."""
     txns = load_sales(email)
     if txns is not None and len(txns):
+        try:
+            from backend.core import products as _products
+            txns = _products.canonicalize_df(email, txns)
+        except Exception:
+            pass
         sess.txns_df = txns
         sess.mapped_file_id = "smart_sales"
     return data_status(email)

@@ -176,3 +176,43 @@ alter table public.inventory_waste       enable row level security;
 alter table public.purchase_orders       enable row level security;
 -- No anon/authenticated policies => those roles get no access. The backend
 -- uses the service_role key, which is exempt from RLS.
+
+
+-- ============================================================================
+-- Product Management (see supabase/products.sql for the same DDL)
+-- ============================================================================
+-- product. When Supabase is unset the backend falls back to per-account JSON.
+-- ============================================================================
+
+-- ---------- canonical products ----------
+create table if not exists public.products (
+    id          text primary key,
+    email       text not null,
+    name        text not null,               -- canonical product name (e.g. ABC)
+    category    text default '',
+    sku         text default '',             -- seller's own SKU
+    price       numeric,                      -- selling price (₹)
+    unit_cost   numeric,                      -- cost / COGS per unit (₹)
+    status      text not null default 'active',   -- active | archived
+    created_at  timestamptz not null default now(),
+    updated_at  timestamptz not null default now()
+);
+create index if not exists products_email_idx on public.products(email);
+
+-- ---------- platform aliases (name as it appears in sales data) ----------
+create table if not exists public.product_aliases (
+    id          text primary key,
+    email       text not null,
+    product_id  text not null references public.products(id) on delete cascade,
+    alias       text not null,               -- e.g. DRF
+    platform    text default '',             -- Amazon, Shopify, Flipkart, ...
+    created_at  timestamptz not null default now()
+);
+create index if not exists product_aliases_email_idx on public.product_aliases(email);
+-- one alias name maps to exactly one canonical product per seller
+create unique index if not exists product_aliases_unique_idx
+    on public.product_aliases(email, lower(alias));
+
+-- ---------- RLS: on, restrictive (service_role bypasses) ----------
+alter table public.products        enable row level security;
+alter table public.product_aliases enable row level security;

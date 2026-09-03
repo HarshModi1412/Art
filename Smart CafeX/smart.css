@@ -542,3 +542,12 @@ td { color: var(--text-2); }
 .link-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .link-add select { flex: 1 1 160px; min-width: 140px; padding: 6px 8px; font-size: 12.5px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); }
 .link-add input { width: 80px; padding: 6px 8px; font-size: 12.5px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+
+/* ---- Product Management (v16) ---- */
+.prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.prod-card { border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: var(--radius); background: var(--surface); padding: 12px 14px; }
+.prod-card.archived { opacity: .6; border-left-color: var(--muted); }
+.prod-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.prod-head b { font-size: 14.5px; color: var(--text); }
+.prod-sub { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 10px 0 6px; }
+.al-plat { font-style: normal; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--primary); opacity: .8; margin-left: 2px; }

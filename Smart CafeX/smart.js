@@ -188,6 +188,7 @@ const MODULES = [
   { id: "sales",      name: "Sales Analytics",        sub: "KPIs, revenue trends and a 30-day forecast from your order data.",             ico: "📊", cls: "tile-sales",     needs: "sales",  tag: "SALES" },
   { id: "subcategory",name: "Sub-Category Analysis",  sub: "Which categories & sub-categories drive revenue — trends and drill-downs.",   ico: "🗂️", cls: "tile-sub",       needs: "sales",  tag: "SALES" },
   { id: "supply",     name: "Supply Management",      sub: "Track inventory & suppliers, link products to materials, log waste, and get per-item EOQ/MOQ restock suggestions with PDF purchase orders.", ico: "📦", cls: "tile-supply",   needs: null,     tag: "SUPPLY" },
+  { id: "products",   name: "Product Management",     sub: "Your catalogue of products, each linked to the names it carries on Amazon, Shopify and other platforms — sales roll up to the product everywhere.", ico: "🏷️", cls: "tile-supply",   needs: null,     tag: "CATALOG" },
   { id: "review",     name: "Review Analytics",       sub: "Your brand positioning from your own reviews — what customers come to you for.", ico: "⭐", cls: "tile-review",    needs: "review", tag: "BRAND" },
   { id: "complaints", name: "Complaint Analysis",     sub: "The fix-first plan for the complaint themes hurting your brand right now.",    ico: "😤", cls: "tile-complaint", needs: "review", tag: "BRAND" },
   { id: "strategy",   name: "Position Strategy + AI", sub: "A levelled checklist to strengthen or reposition your brand, plus the AI Analyst.", ico: "🧭", cls: "tile-strategy", needs: "review", tag: "STRATEGY" },
@@ -623,6 +624,7 @@ function moduleShell(name, bodyHtml) {
 async function openModule(id) {
   if (id === "sales") return openSales();
   if (id === "subcategory") return openSubcategory();
+  if (id === "products") return openProducts();
   if (id === "supply") return openSupply();
   if (id === "review") return openReview();
   if (id === "complaints") return openComplaints();
@@ -630,6 +632,160 @@ async function openModule(id) {
   if (id === "content") return openContentModule();
   if (id === "instagram") return openInstagramModule();
   if (id === "ads") return openAdsModule();
+}
+
+// ---------- MODULE: Product Management ----------
+let _productsData = null;
+
+async function openProducts() {
+  moduleShell("Product Management", `<div class="ap-empty">Loading products…</div>`);
+  try {
+    const d = await api("/api/products/state");
+    renderProducts(d);
+  } catch (e) { moduleShell("Product Management", `<div class="card">${esc(e.message)}</div>`); }
+}
+
+function _prodCard(p) {
+  const aliasChips = (p.aliases || []).length
+    ? p.aliases.map((a) => `<span class="link-chip">${esc(a.alias)}${a.platform ? ` <i class="al-plat">${esc(a.platform)}</i>` : ""}
+        <button class="lc-x" data-delalias="${a.id}" title="Unlink">✕</button></span>`).join("")
+    : `<span class="muted tiny">No platform names linked yet</span>`;
+  const meta = [
+    p.category ? esc(p.category) : null,
+    p.sku ? "SKU " + esc(p.sku) : null,
+    p.price != null ? "₹" + fmt(p.price) : null,
+    p.unit_cost != null ? "cost ₹" + fmt(p.unit_cost) : null,
+  ].filter(Boolean).join(" · ");
+  return `
+    <div class="prod-card ${p.status === "archived" ? "archived" : ""}">
+      <div class="prod-head">
+        <div><b>${esc(p.name)}</b> ${p.status === "archived" ? `<span class="sup-badge moq">archived</span>` : ""}
+          <div class="muted tiny">${meta || "—"}</div></div>
+        <div class="sup-actions">
+          <button class="btn ghost tiny" data-editprod="${p.id}" title="Edit">✎</button>
+          <button class="btn ghost tiny" data-delprod="${p.id}" title="Delete">✕</button>
+        </div>
+      </div>
+      <div class="prod-sub">Platform names (aliases)</div>
+      <div class="link-chips">${aliasChips}</div>
+      <div class="link-add">
+        <input placeholder="Platform name e.g. DRF" data-al-name="${p.id}" />
+        <input placeholder="Platform (Amazon…)" data-al-plat="${p.id}" style="width:130px" />
+        <button class="btn ghost tiny" data-al-add="${p.id}">＋ Link name</button>
+      </div>
+    </div>`;
+}
+
+function renderProducts(d) {
+  _productsData = d;
+  const prods = d.products || [];
+  const unmatched = d.unmatched || [];
+
+  const prodOpts = prods.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+
+  const unmatchedBlock = unmatched.length ? `
+    <div class="action-card warning" style="margin:10px 0;">
+      <div class="do">🔌 ${unmatched.length} platform name${unmatched.length === 1 ? "" : "s"} in your sales not linked to a product</div>
+      <div class="why">These names came from your sales platforms but aren't tied to any product yet, so their sales don't roll up. Link each to a product, or create it as a new one.</div>
+    </div>
+    <div class="link-list">
+      ${unmatched.map((name) => `
+        <div class="link-row">
+          <div class="link-prod"><b>${esc(name)}</b> <span class="muted tiny">(from your sales)</span></div>
+          <div class="link-add">
+            ${prods.length ? `<select data-um-sel="${esc(name)}">${prodOpts}</select>
+              <button class="btn ghost tiny" data-um-link="${esc(name)}">🔗 Link to product</button>` : ""}
+            <button class="btn ghost tiny" data-um-new="${esc(name)}">＋ New product</button>
+          </div>
+        </div>`).join("")}
+    </div>` : "";
+
+  const body = `
+    <p class="muted">Manage the products you sell and link each to the names it carries on your sales platforms (Amazon, Shopify…). Sales for every linked name roll up to the product across the app — analytics, forecasts and the Supply module all follow it.</p>
+    <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;">
+      <button class="btn primary sm" id="prodAdd">＋ Add product</button>
+    </div>
+
+    <div id="prodForm" hidden></div>
+
+    ${unmatchedBlock}
+
+    <div class="section-title" style="margin-top:14px;">Products <span class="muted tiny">(${prods.length})</span></div>
+    ${prods.length ? `<div class="prod-grid">${prods.map(_prodCard).join("")}</div>`
+      : `<div class="ap-empty">No products yet. Add one, then link your platform names to it.</div>`}`;
+
+  moduleShell("Product Management", body);
+  $("prodAdd").onclick = () => openProductForm(null);
+  document.querySelectorAll("[data-editprod]").forEach((b) => b.onclick = () => openProductForm(b.dataset.editprod));
+  document.querySelectorAll("[data-delprod]").forEach((b) => b.onclick = () => productDelete(b.dataset.delprod));
+  document.querySelectorAll("[data-delalias]").forEach((b) => b.onclick = () => aliasDelete(b.dataset.delalias));
+  document.querySelectorAll("[data-al-add]").forEach((b) => b.onclick = () => {
+    const pid = b.dataset.alAdd;
+    const nm = document.querySelector(`[data-al-name="${CSS.escape(pid)}"]`).value.trim();
+    const pl = document.querySelector(`[data-al-plat="${CSS.escape(pid)}"]`).value.trim();
+    aliasAdd(pid, nm, pl);
+  });
+  document.querySelectorAll("[data-um-link]").forEach((b) => b.onclick = () => {
+    const name = b.dataset.umLink;
+    const pid = document.querySelector(`[data-um-sel="${CSS.escape(name)}"]`).value;
+    aliasAdd(pid, name, "");
+  });
+  document.querySelectorAll("[data-um-new]").forEach((b) => b.onclick = () => openProductForm(null, b.dataset.umNew));
+}
+
+function openProductForm(id, prefillName) {
+  const p = $("prodForm");
+  const it = id ? (_productsData.products || []).find((x) => x.id === id) : null;
+  p.hidden = false;
+  const v = (x, dflt = "") => (it && it[x] != null ? it[x] : dflt);
+  p.innerHTML = `
+    <div class="card sup-form">
+      <h4 style="margin:0 0 8px;">${id ? "Edit product" : "Add product"}</h4>
+      <div class="sup-form-grid">
+        <label>Product name<input id="pfName" value="${it ? esc(it.name) : esc(prefillName || "")}" placeholder="e.g. ABC" /></label>
+        <label>Category <span class="muted tiny">(optional)</span><input id="pfCat" value="${esc(v("category"))}" /></label>
+        <label>Your SKU <span class="muted tiny">(optional)</span><input id="pfSku" value="${esc(v("sku"))}" /></label>
+        <label>Selling price ₹<input id="pfPrice" type="number" min="0" step="any" value="${it && it.price != null ? it.price : ""}" /></label>
+        <label>Unit cost ₹ <span class="muted tiny">(COGS)</span><input id="pfCost" type="number" min="0" step="any" value="${it && it.unit_cost != null ? it.unit_cost : ""}" /></label>
+        <label>Status<select id="pfStatus"><option value="active" ${v("status","active")==="active"?"selected":""}>Active</option><option value="archived" ${v("status")==="archived"?"selected":""}>Archived</option></select></label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="pfCancel">Cancel</button>
+        <button class="btn primary" id="pfSave">${id ? "Save changes" : "Add product"}</button>
+      </div>
+      <div class="err" id="pfErr" hidden></div>
+    </div>`;
+  p.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  $("pfCancel").onclick = () => { p.hidden = true; p.innerHTML = ""; };
+  const numOrNull = (x) => ($(x).value === "" ? null : parseFloat($(x).value));
+  $("pfSave").onclick = async () => {
+    const payload = {
+      id: id || null, name: $("pfName").value.trim(), category: $("pfCat").value.trim(),
+      sku: $("pfSku").value.trim(), price: numOrNull("pfPrice"), unit_cost: numOrNull("pfCost"),
+      status: $("pfStatus").value,
+    };
+    if (!payload.name) { const e = $("pfErr"); e.textContent = "Product name is required."; e.hidden = false; return; }
+    try { renderProducts(await api("/api/products/item", { method: "POST", json: payload })); toast("Saved"); }
+    catch (e) { const el = $("pfErr"); el.textContent = e.message; el.hidden = false; }
+  };
+}
+
+async function productDelete(id) {
+  const it = (_productsData.products || []).find((x) => x.id === id);
+  if (it && !confirm(`Delete product "${it.name}" and its platform links?`)) return;
+  try { renderProducts(await api("/api/products/item/delete", { method: "POST", json: { id } })); toast("Deleted"); }
+  catch (e) { toast(e.message); }
+}
+
+async function aliasAdd(product_id, alias, platform) {
+  if (!alias) { toast("Enter the platform name to link."); return; }
+  try { renderProducts(await api("/api/products/alias", { method: "POST", json: { product_id, alias, platform } })); toast("Linked"); }
+  catch (e) { toast(e.message); }
+}
+
+async function aliasDelete(id) {
+  try { renderProducts(await api("/api/products/alias/delete", { method: "POST", json: { id } })); toast("Unlinked"); }
+  catch (e) { toast(e.message); }
 }
 
 // ---------- MODULE: Supply Management ----------
