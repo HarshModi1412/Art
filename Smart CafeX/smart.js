@@ -189,6 +189,8 @@ const MODULES = [
   { id: "subcategory",name: "Sub-Category Analysis",  sub: "Which categories & sub-categories drive revenue — trends and drill-downs.",   ico: "🗂️", cls: "tile-sub",       needs: "sales",  tag: "SALES" },
   { id: "supply",     name: "Supply Management",      sub: "Track inventory & suppliers, link products to materials, log waste, and get per-item EOQ/MOQ restock suggestions with PDF purchase orders.", ico: "📦", cls: "tile-supply",   needs: null,     tag: "SUPPLY" },
   { id: "products",   name: "Product Management",     sub: "Your catalogue of products, each linked to the names it carries on Amazon, Shopify and other platforms — sales roll up to the product everywhere.", ico: "🏷️", cls: "tile-supply",   needs: null,     tag: "CATALOG" },
+  { id: "site",       name: "Website Builder",        sub: "Build your own selling website — pick a theme for your genre, set fonts, colours and images, then publish. Your listed products become its shop.", ico: "🌐", cls: "tile-site",     needs: null,     tag: "SITE" },
+  { id: "orders",     name: "Orders",                 sub: "Every order placed on your website — status, customer, address and export. Delivered orders feed straight into your sales analytics.", ico: "🧺", cls: "tile-orders",   needs: null,     tag: "ORDERS" },
   { id: "review",     name: "Review Analytics",       sub: "Your brand positioning from your own reviews — what customers come to you for.", ico: "⭐", cls: "tile-review",    needs: "review", tag: "BRAND" },
   { id: "complaints", name: "Complaint Analysis",     sub: "The fix-first plan for the complaint themes hurting your brand right now.",    ico: "😤", cls: "tile-complaint", needs: "review", tag: "BRAND" },
   { id: "strategy",   name: "Position Strategy + AI", sub: "A levelled checklist to strengthen or reposition your brand, plus the AI Analyst.", ico: "🧭", cls: "tile-strategy", needs: "review", tag: "STRATEGY" },
@@ -270,8 +272,10 @@ function renderHome(s) {
       ${dataCard("review", "Review", "⭐", "upload your reviews (Google / marketplace / Instagram)")}
     </div>
 
-    <div class="section-title">Connect a store <span class="muted tiny" style="font-weight:500;">— pull your orders automatically</span></div>
-    <div class="data-grid" id="commerceGrid"><div class="ap-empty">Loading connectors…</div></div>
+    <div class="section-title">Listed platforms
+      <span class="muted tiny" style="font-weight:500;">— every place you sell. The toggle decides whether that channel's sales count in your insights.</span>
+    </div>
+    <div class="chan-strip" id="chanStrip"><div class="ap-empty">Loading platforms…</div></div>
 
     <div class="section-title">Apps</div>
     <div class="apps-grid">${tiles}</div>
@@ -292,7 +296,7 @@ function renderHome(s) {
     if (m.needs && !(state.data[m.needs] && state.data[m.needs].ready)) { toast(`Upload ${m.needs} data first`); return; }
     openModule(m.id);
   });
-  renderCommerce();
+  renderChannels();
   document.querySelectorAll("[data-up]").forEach((el) => el.onclick = () => startUpload(el.dataset.up));
   document.querySelectorAll("[data-add]").forEach((el) => el.onclick = () => openAddRecords(el.dataset.add));
   document.querySelectorAll("[data-clear]").forEach((el) => el.onclick = () => clearData(el.dataset.clear));
@@ -627,6 +631,8 @@ async function openModule(id) {
   if (id === "sales") return openSales();
   if (id === "subcategory") return openSubcategory();
   if (id === "products") return openProducts();
+  if (id === "site") return openSite();
+  if (id === "orders") return openOrders();
   if (id === "supply") return openSupply();
   if (id === "review") return openReview();
   if (id === "complaints") return openComplaints();
@@ -658,16 +664,30 @@ function _prodCard(p) {
     p.price != null ? "₹" + fmt(p.price) : null,
     p.unit_cost != null ? "cost ₹" + fmt(p.unit_cost) : null,
   ].filter(Boolean).join(" · ");
+  const img = p.image_url || (p.images || [])[0] || "";
+  const stock = p.track_stock === false ? "not tracked"
+    : (p.stock > 0 ? `${fmt(p.stock)} in stock` : "out of stock");
   return `
     <div class="prod-card ${p.status === "archived" ? "archived" : ""}">
       <div class="prod-head">
-        <div><b>${esc(p.name)}</b> ${p.status === "archived" ? `<span class="sup-badge moq">archived</span>` : ""}
-          <div class="muted tiny">${meta || "—"}</div></div>
+        <div class="prod-id">
+          <div class="prod-thumb" style="${img ? `background-image:url('${esc(img)}')` : ""}">${img ? "" : "🛍️"}</div>
+          <div>
+            <b>${esc(p.name)}</b> ${p.status === "archived" ? `<span class="sup-badge moq">archived</span>` : ""}
+            <div class="muted tiny">${meta || "—"}</div>
+            <div class="muted tiny ${p.track_stock !== false && !(p.stock > 0) ? "stock-out" : ""}">${stock}</div>
+          </div>
+        </div>
         <div class="sup-actions">
           <button class="btn ghost tiny" data-editprod="${p.id}" title="Edit">✎</button>
           <button class="btn ghost tiny" data-delprod="${p.id}" title="Delete">✕</button>
         </div>
       </div>
+      <label class="site-toggle" title="Show this product on your own website">
+        <input type="checkbox" data-listprod="${p.id}" ${p.listed && p.status !== "archived" ? "checked" : ""} ${p.status === "archived" ? "disabled" : ""} />
+        <span class="tsw"></span>
+        <span class="tlbl">Listed on my website</span>
+      </label>
       <div class="prod-sub">Platform names (aliases)</div>
       <div class="link-chips">${aliasChips}</div>
       <div class="link-add">
@@ -721,6 +741,12 @@ function renderProducts(d) {
   document.querySelectorAll("[data-editprod]").forEach((b) => b.onclick = () => openProductForm(b.dataset.editprod));
   document.querySelectorAll("[data-delprod]").forEach((b) => b.onclick = () => productDelete(b.dataset.delprod));
   document.querySelectorAll("[data-delalias]").forEach((b) => b.onclick = () => aliasDelete(b.dataset.delalias));
+  document.querySelectorAll("[data-listprod]").forEach((cb) => cb.onchange = async () => {
+    try {
+      renderProducts(await api("/api/products/listed", { method: "POST", json: { id: cb.dataset.listprod, listed: cb.checked } }));
+      toast(cb.checked ? "Listed on your website" : "Hidden from your website");
+    } catch (e) { toast(e.message); cb.checked = !cb.checked; }
+  });
   document.querySelectorAll("[data-al-add]").forEach((b) => b.onclick = () => {
     const pid = b.dataset.alAdd;
     const nm = document.querySelector(`[data-al-name="${CSS.escape(pid)}"]`).value.trim();
@@ -735,41 +761,173 @@ function renderProducts(d) {
   document.querySelectorAll("[data-um-new]").forEach((b) => b.onclick = () => openProductForm(null, b.dataset.umNew));
 }
 
+// ---- shared image picker: uploads to /api/site/image and returns the URL ----
+function pickImage(onUrl, multiple) {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*"; inp.multiple = !!multiple;
+  inp.onchange = async () => {
+    const files = Array.from(inp.files || []);
+    if (!files.length) return;
+    toast(`Uploading ${files.length} image${files.length === 1 ? "" : "s"}…`);
+    for (const f of files) {
+      const fd = new FormData(); fd.append("files", f);
+      try {
+        const r = await api("/api/site/image", { method: "POST", body: fd });
+        onUrl(r.image_url);
+      } catch (e) { toast(e.message); }
+    }
+    toast("Image ready");
+  };
+  inp.click();
+}
+
+// A single-image field: thumbnail + upload + paste-a-URL, used for the product
+// photo, the logo, the hero and the story image.
+function imageField(id, url, label, hint) {
+  return `
+    <div class="img-field" data-imgfield="${id}">
+      <div class="if-preview" id="${id}Prev" style="${url ? `background-image:url('${esc(url)}')` : ""}">${url ? "" : "🖼️"}</div>
+      <div class="if-body">
+        <label class="if-label">${label}${hint ? ` <span class="muted tiny">${hint}</span>` : ""}</label>
+        <input id="${id}" value="${esc(url || "")}" placeholder="Paste an image URL, or upload →" />
+        <div class="if-actions">
+          <button type="button" class="btn ghost tiny" data-imgup="${id}">⬆ Upload</button>
+          <button type="button" class="btn ghost tiny" data-imgclear="${id}">Clear</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function wireImageFields(scope) {
+  (scope || document).querySelectorAll("[data-imgup]").forEach((b) => b.onclick = () => {
+    const id = b.dataset.imgup;
+    pickImage((url) => {
+      $(id).value = url;
+      const pv = $(id + "Prev");
+      if (pv) { pv.style.backgroundImage = `url('${url}')`; pv.textContent = ""; }
+      $(id).dispatchEvent(new Event("change"));
+    });
+  });
+  (scope || document).querySelectorAll("[data-imgclear]").forEach((b) => b.onclick = () => {
+    const id = b.dataset.imgclear;
+    $(id).value = "";
+    const pv = $(id + "Prev");
+    if (pv) { pv.style.backgroundImage = ""; pv.textContent = "🖼️"; }
+    $(id).dispatchEvent(new Event("change"));
+  });
+  (scope || document).querySelectorAll("[data-imgfield] input").forEach((inp) => inp.onblur = () => {
+    const pv = $(inp.id + "Prev");
+    if (!pv) return;
+    if (inp.value.trim()) { pv.style.backgroundImage = `url('${inp.value.trim()}')`; pv.textContent = ""; }
+    else { pv.style.backgroundImage = ""; pv.textContent = "🖼️"; }
+  });
+}
+
+// ---- product form: one field per row, storefront fields included ----------
+let _pfGallery = [];
+
 function openProductForm(id, prefillName) {
   const p = $("prodForm");
   const it = id ? (_productsData.products || []).find((x) => x.id === id) : null;
   p.hidden = false;
   const v = (x, dflt = "") => (it && it[x] != null ? it[x] : dflt);
+  const num = (x) => (it && it[x] != null && it[x] !== "" ? it[x] : "");
+  _pfGallery = (it && it.images ? it.images.slice() : []);
+  const listed = it ? it.listed !== false : true;
+
   p.innerHTML = `
-    <div class="card sup-form">
-      <h4 style="margin:0 0 8px;">${id ? "Edit product" : "Add product"}</h4>
+    <div class="card sup-form form-v">
+      <h4 style="margin:0 0 4px;">${id ? "Edit product" : "Add product"}</h4>
+      <p class="muted tiny" style="margin:0 0 14px;">Everything below the divider is what shoppers see on your own website.</p>
+
       <div class="sup-form-grid">
-        <label>Product name<input id="pfName" value="${it ? esc(it.name) : esc(prefillName || "")}" placeholder="e.g. ABC" /></label>
-        <label>Category <span class="muted tiny">(optional)</span><input id="pfCat" value="${esc(v("category"))}" /></label>
-        <label>Your SKU <span class="muted tiny">(optional)</span><input id="pfSku" value="${esc(v("sku"))}" /></label>
-        <label>Selling price ₹<input id="pfPrice" type="number" min="0" step="any" value="${it && it.price != null ? it.price : ""}" /></label>
-        <label>Unit cost ₹ <span class="muted tiny">(COGS)</span><input id="pfCost" type="number" min="0" step="any" value="${it && it.unit_cost != null ? it.unit_cost : ""}" /></label>
-        <label>Status<select id="pfStatus"><option value="active" ${v("status","active")==="active"?"selected":""}>Active</option><option value="archived" ${v("status")==="archived"?"selected":""}>Archived</option></select></label>
+        <label>Product name<input id="pfName" value="${it ? esc(it.name) : esc(prefillName || "")}" placeholder="e.g. Midnight Oud 50ml" /></label>
+        <label>Category <span class="muted tiny">(groups it on your site)</span><input id="pfCat" value="${esc(v("category"))}" placeholder="Fragrance" /></label>
+        <label>Your SKU <span class="muted tiny">(internal, never shown)</span><input id="pfSku" value="${esc(v("sku"))}" /></label>
+        <label>Selling price ₹<input id="pfPrice" type="number" min="0" step="any" value="${num("price")}" placeholder="1499" /></label>
+        <label>MRP / strike-through price ₹ <span class="muted tiny">(optional — shows a discount badge)</span><input id="pfMrp" type="number" min="0" step="any" value="${num("mrp")}" placeholder="1999" /></label>
+        <label>Unit cost ₹ <span class="muted tiny">(COGS, never shown)</span><input id="pfCost" type="number" min="0" step="any" value="${num("unit_cost")}" /></label>
+        <label>Status<select id="pfStatus">
+          <option value="active" ${v("status", "active") === "active" ? "selected" : ""}>Active</option>
+          <option value="archived" ${v("status") === "archived" ? "selected" : ""}>Archived</option>
+        </select></label>
       </div>
+
+      <div class="sup-sub">On my website</div>
+
+      <label class="site-toggle big" title="Show this product on your website">
+        <input type="checkbox" id="pfListed" ${listed ? "checked" : ""} />
+        <span class="tsw"></span>
+        <span class="tlbl">List this product on my website<span class="muted tiny"> — on by default</span></span>
+      </label>
+
+      <div class="sup-form-grid">
+        ${imageField("pfImg", v("image_url"), "Main photo", "square images look best")}
+        <label>Description<textarea id="pfDesc" rows="4" placeholder="What it is, what it's made of, why someone should buy it.">${esc(v("description"))}</textarea></label>
+        <label>Key points <span class="muted tiny">(one per line — shown as ticks on the product page)</span>
+          <textarea id="pfHl" rows="3" placeholder="100% cotton&#10;Ships in 24 hours&#10;Free returns">${esc((v("highlights", []) || []).join("\n"))}</textarea></label>
+        <label>Sold by <span class="muted tiny">(piece / kg / box — optional)</span><input id="pfUnit" value="${esc(v("unit_label"))}" placeholder="piece" /></label>
+      </div>
+
+      <div class="sup-sub">Stock</div>
+      <div class="sup-form-grid">
+        <label class="inline-check"><input type="checkbox" id="pfTrack" ${v("track_stock", true) === false ? "" : "checked"} /> Track stock for this product <span class="muted tiny">— sells out at zero, and site orders deduct from it</span></label>
+        <label>Units available<input id="pfStock" type="number" min="0" step="1" value="${it && it.stock != null ? it.stock : 0}" /></label>
+      </div>
+
+      <div class="sup-sub">Extra photos</div>
+      <div class="gal-wrap" id="pfGal"></div>
+
       <div class="modal-actions">
         <button class="btn ghost" id="pfCancel">Cancel</button>
         <button class="btn primary" id="pfSave">${id ? "Save changes" : "Add product"}</button>
       </div>
       <div class="err" id="pfErr" hidden></div>
     </div>`;
+
   p.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  wireImageFields(p);
+  renderGallery();
+
   $("pfCancel").onclick = () => { p.hidden = true; p.innerHTML = ""; };
   const numOrNull = (x) => ($(x).value === "" ? null : parseFloat($(x).value));
   $("pfSave").onclick = async () => {
     const payload = {
-      id: id || null, name: $("pfName").value.trim(), category: $("pfCat").value.trim(),
-      sku: $("pfSku").value.trim(), price: numOrNull("pfPrice"), unit_cost: numOrNull("pfCost"),
+      id: id || null,
+      name: $("pfName").value.trim(),
+      category: $("pfCat").value.trim(),
+      sku: $("pfSku").value.trim(),
+      price: numOrNull("pfPrice"),
+      mrp: numOrNull("pfMrp"),
+      unit_cost: numOrNull("pfCost"),
       status: $("pfStatus").value,
+      listed: $("pfListed").checked,
+      image_url: $("pfImg").value.trim(),
+      images: _pfGallery,
+      description: $("pfDesc").value.trim(),
+      highlights: $("pfHl").value.split("\n").map((x) => x.trim()).filter(Boolean),
+      unit_label: $("pfUnit").value.trim(),
+      track_stock: $("pfTrack").checked,
+      stock: parseInt($("pfStock").value || "0", 10) || 0,
     };
     if (!payload.name) { const e = $("pfErr"); e.textContent = "Product name is required."; e.hidden = false; return; }
     try { renderProducts(await api("/api/products/item", { method: "POST", json: payload })); toast("Saved"); }
     catch (e) { const el = $("pfErr"); el.textContent = e.message; el.hidden = false; }
   };
+}
+
+function renderGallery() {
+  const g = $("pfGal");
+  if (!g) return;
+  g.innerHTML = _pfGallery.map((u, i) => `
+      <div class="gal-item" style="background-image:url('${esc(u)}')">
+        <button class="gal-x" data-galrm="${i}" title="Remove">✕</button>
+      </div>`).join("") +
+    `<button class="gal-add" id="galAdd">＋<span>Add photos</span></button>`;
+  g.querySelectorAll("[data-galrm]").forEach((b) => b.onclick = () => {
+    _pfGallery.splice(parseInt(b.dataset.galrm, 10), 1); renderGallery();
+  });
+  $("galAdd").onclick = () => pickImage((url) => { _pfGallery.push(url); renderGallery(); }, true);
 }
 
 async function productDelete(id) {
@@ -1763,7 +1921,7 @@ if ($("coConfirm")) $("coConfirm").onclick = async () => {
   const btn = $("coConfirm"); const label = btn.textContent; btn.disabled = true; btn.textContent = "Connecting…";
   try {
     await api("/api/commerce/connect", { method: "POST", json: { connector: _coCtx.id, credentials: creds } });
-    closeCommerce(); toast("✅ Connected — click “Pull orders” to import your sales."); renderCommerce();
+    closeCommerce(); toast("✅ Connected — click “Pull orders” to import your sales."); renderChannels();
   } catch (e) { el.textContent = e.message; el.hidden = false; }
   finally { btn.disabled = false; btn.textContent = label; }
 };
@@ -1791,31 +1949,64 @@ async function saveContentToDevice(insightId) {
 
 // ---------- store connectors (Shopify / Amazon) ----------
 let _coCtx = null;
-async function renderCommerce() {
-  const grid = $("commerceGrid");
-  if (!grid) return;
+
+// ---------- Listed platforms strip (home) ----------
+// One row for every place the seller's products can sell: their own website
+// first, then the live marketplace connectors, then the ones we haven't built
+// yet. The switch on each live channel decides whether that channel's sales are
+// counted in analytics, forecasts and the approval panel.
+async function renderChannels() {
+  const strip = $("chanStrip");
+  if (!strip) return;
   try {
-    const d = await api("/api/commerce/status");
-    grid.innerHTML = d.connectors.map((c) => {
-      const on = c.connected;
-      return `<div class="data-card">
-        <h4>${c.icon} ${esc(c.label)}</h4>
-        <div class="status">
-          <span class="dot ${on ? "ready" : "empty"}"></span>
-          ${on ? `Connected${c.account ? " · " + esc(String(c.account)) : ""}` : "Not connected — link once to pull orders"}
-        </div>
-        <div class="row">
-          <button class="btn ${on ? "ghost" : "primary"} sm" data-co-connect="${c.id}">${on ? "Reconnect" : "🔗 Connect"}</button>
-          ${on ? `<button class="btn primary sm" data-co-pull="${c.id}">⬇ Pull orders</button>` : ""}
-          ${on ? `<button class="btn ghost sm" data-co-disc="${c.id}">Disconnect</button>` : ""}
-        </div>
-      </div>`;
+    const d = await api("/api/channels");
+    strip.innerHTML = d.channels.map((c) => {
+      const soon = c.status === "soon";
+      const live = c.status === "live";
+      const connected = c.status === "connected";
+      const pill = soon ? `<span class="chan-pill soon">Yet to come</span>`
+        : live ? `<span class="chan-pill live">● Live</span>`
+        : connected ? `<span class="chan-pill on">● Connected</span>`
+        : c.status === "draft" ? `<span class="chan-pill draft">Draft</span>`
+        : `<span class="chan-pill">Not connected</span>`;
+      const actions = c.id === "site"
+        ? `<button class="btn ${live ? "ghost" : "primary"} sm" data-chan-open="site">${c.detail && live ? "Open builder" : "Build my site"}</button>
+           ${live ? `<a class="btn ghost sm" href="${esc(c.detail)}" target="_blank" rel="noopener">Visit ↗</a>` : ""}`
+        : soon ? `<button class="btn ghost sm" disabled>Coming soon</button>`
+        : connected
+          ? `<button class="btn primary sm" data-co-pull="${c.id}">⬇ Pull orders</button>
+             <button class="btn ghost sm" data-co-connect="${c.id}">Reconnect</button>
+             <button class="btn ghost sm" data-co-disc="${c.id}">Disconnect</button>`
+          : `<button class="btn primary sm" data-co-connect="${c.id}">🔗 Connect</button>`;
+      return `
+        <div class="chan-card ${soon ? "soon" : ""} ${c.id === "site" ? "own" : ""}">
+          <div class="chan-top">
+            <span class="chan-ico">${c.icon}</span>
+            <div class="chan-name"><b>${esc(c.label)}</b>${pill}</div>
+            <label class="site-toggle sm" title="${c.toggleable ? "Count this channel's sales in your insights" : "Available once this channel is live"}">
+              <input type="checkbox" data-chan="${c.id}" ${c.enabled ? "checked" : ""} ${c.toggleable ? "" : "disabled"} />
+              <span class="tsw"></span>
+            </label>
+          </div>
+          <div class="chan-detail">${esc(c.detail || "")}${c.orders != null && c.orders > 0 ? ` · ${fmt(c.orders)} order${c.orders === 1 ? "" : "s"}` : ""}</div>
+          <div class="chan-actions">${actions}</div>
+        </div>`;
     }).join("");
-    grid.querySelectorAll("[data-co-connect]").forEach((b) => b.onclick = () => openCommerceModal(b.dataset.coConnect, d.connectors));
-    grid.querySelectorAll("[data-co-pull]").forEach((b) => b.onclick = () => commercePull(b.dataset.coPull));
-    grid.querySelectorAll("[data-co-disc]").forEach((b) => b.onclick = () => commerceDisconnect(b.dataset.coDisc));
+
+    strip.querySelectorAll("[data-chan]").forEach((cb) => cb.onchange = async () => {
+      try {
+        await api("/api/channels/toggle", { method: "POST", json: { channel: cb.dataset.chan, enabled: cb.checked } });
+        toast(cb.checked ? "Counted in your insights" : "Excluded from your insights");
+        if (cb.dataset.chan === "site") goHome();
+      } catch (e) { toast(e.message); cb.checked = !cb.checked; }
+    });
+    strip.querySelectorAll("[data-chan-open]").forEach((b) => b.onclick = () => openSite());
+    const cat = await api("/api/commerce/status").catch(() => ({ connectors: [] }));
+    strip.querySelectorAll("[data-co-connect]").forEach((b) => b.onclick = () => openCommerceModal(b.dataset.coConnect, cat.connectors));
+    strip.querySelectorAll("[data-co-pull]").forEach((b) => b.onclick = () => commercePull(b.dataset.coPull));
+    strip.querySelectorAll("[data-co-disc]").forEach((b) => b.onclick = () => commerceDisconnect(b.dataset.coDisc));
   } catch (e) {
-    grid.innerHTML = `<div class="card">${esc(e.message)}</div>`;
+    strip.innerHTML = `<div class="card">${esc(e.message)}</div>`;
   }
 }
 
@@ -1843,7 +2034,7 @@ async function commercePull(id) {
   } catch (e) { toast(e.message, 7000); }
 }
 async function commerceDisconnect(id) {
-  try { await api("/api/commerce/disconnect", { method: "POST", json: { connector: id, credentials: {} } }); toast("Disconnected"); renderCommerce(); }
+  try { await api("/api/commerce/disconnect", { method: "POST", json: { connector: id, credentials: {} } }); toast("Disconnected"); renderChannels(); }
   catch (e) { toast(e.message); }
 }
 
@@ -1911,6 +2102,575 @@ async function viewAdsMetrics(id) {
     { x: d.dates, y: d.spend, type: "scatter", mode: "lines", name: "Spend", line: { color: cssVar("--primary", "#6d28d9") } },
     { x: d.dates, y: d.revenue, type: "scatter", mode: "lines", name: "Revenue", line: { color: cssVar("--green", "#0a7a4d") } },
   ], { yaxis: { tickprefix: "₹" } }, "Daily spend vs revenue");
+}
+
+// =========================================================================
+// MODULE: Website Builder (Site Management)
+// =========================================================================
+let _site = null;        // the working copy the seller is editing
+let _siteMeta = null;    // themes, fonts, counts, stats from the server
+let _siteTab = "setup";
+let _siteDirty = false;
+
+async function openSite() {
+  moduleShell("Website Builder", `<div class="ap-empty">Loading your site…</div>`);
+  try {
+    const d = await api("/api/site/state");
+    _siteMeta = d;
+    _site = JSON.parse(JSON.stringify(d.site));
+    if (!_site.handle) _site.handle = d.suggested_handle;
+    _siteDirty = false;
+    renderSite();
+  } catch (e) { moduleShell("Website Builder", `<div class="card">${esc(e.message)}</div>`); }
+}
+
+const SITE_TABS = [
+  { id: "setup",    label: "Setup",    ico: "🪪" },
+  { id: "theme",    label: "Theme",    ico: "🎨" },
+  { id: "design",   label: "Design",   ico: "🖌️" },
+  { id: "content",  label: "Content",  ico: "✍️" },
+  { id: "commerce", label: "Checkout", ico: "🧾" },
+  { id: "preview",  label: "Preview",  ico: "👁️" },
+];
+
+function siteMark() { _siteDirty = true; const b = $("siteSave"); if (b) { b.disabled = false; b.textContent = "Save changes"; } const d = $("siteDirty"); if (d) d.hidden = false; }
+
+function renderSite() {
+  const live = _site.published && _site.handle;
+  const url = _site.handle ? `/s/${_site.handle}` : "";
+  const c = _siteMeta.counts;
+
+  const banner = `
+    <div class="site-bar">
+      <div class="site-bar-l">
+        <span class="chan-ico">${live ? "🟢" : "⚪"}</span>
+        <div>
+          <b>${esc(_site.brand || "Your website")}</b>
+          <div class="muted tiny">${live ? `Live at <a href="${esc(url)}" target="_blank" rel="noopener">${esc(location.origin + url)}</a>` : "Not published yet — only you can see it"}</div>
+        </div>
+      </div>
+      <div class="site-bar-r">
+        <span class="muted tiny" id="siteDirty" hidden>Unsaved changes</span>
+        <button class="btn ghost sm" id="siteSave" ${_siteDirty ? "" : "disabled"}>${_siteDirty ? "Save changes" : "Saved"}</button>
+        <button class="btn ${live ? "ghost" : "primary"} sm" id="sitePub">${live ? "Unpublish" : "🚀 Publish site"}</button>
+      </div>
+    </div>`;
+
+  const health = `
+    <div class="site-health">
+      <div class="sh"><b>${fmt(c.listed)}</b><span>listed on site</span></div>
+      <div class="sh ${c.no_image ? "warn" : ""}"><b>${fmt(c.no_image)}</b><span>without a photo</span></div>
+      <div class="sh ${c.no_price ? "warn" : ""}"><b>${fmt(c.no_price)}</b><span>without a price</span></div>
+      <div class="sh"><b>${fmt(_siteMeta.stats.orders)}</b><span>orders received</span></div>
+      <div class="sh"><b>₹${fmt(_siteMeta.stats.revenue)}</b><span>site revenue</span></div>
+    </div>`;
+
+  const tabs = `<div class="site-tabs">${SITE_TABS.map((t) =>
+    `<button class="${_siteTab === t.id ? "on" : ""}" data-stab="${t.id}">${t.ico} ${t.label}</button>`).join("")}</div>`;
+
+  moduleShell("Website Builder", banner + health + tabs + `<div id="siteBody"></div>`);
+  $("siteSave").onclick = saveSite;
+  $("sitePub").onclick = togglePublish;
+  document.querySelectorAll("[data-stab]").forEach((b) => b.onclick = () => { _siteTab = b.dataset.stab; renderSite(); });
+  renderSiteTab();
+}
+
+function renderSiteTab() {
+  const b = $("siteBody");
+  if (_siteTab === "setup") b.innerHTML = tabSetup();
+  else if (_siteTab === "theme") b.innerHTML = tabTheme();
+  else if (_siteTab === "design") b.innerHTML = tabDesign();
+  else if (_siteTab === "content") b.innerHTML = tabContent();
+  else if (_siteTab === "commerce") b.innerHTML = tabCommerce();
+  else b.innerHTML = tabPreview();
+  wireSiteTab();
+}
+
+// ---- bind any [data-bind="a.b"] control straight onto the site document ----
+function bindPath(path, value) {
+  const parts = path.split(".");
+  let o = _site;
+  for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]];
+  o[parts[parts.length - 1]] = value;
+  siteMark();
+}
+function readPath(path) {
+  return path.split(".").reduce((o, k) => (o == null ? o : o[k]), _site);
+}
+function wireBinds(scope) {
+  (scope || document).querySelectorAll("[data-bind]").forEach((n) => {
+    const path = n.dataset.bind;
+    const ev = n.type === "checkbox" || n.tagName === "SELECT" || n.type === "color" ? "change" : "input";
+    n.addEventListener(ev, () => {
+      let v = n.type === "checkbox" ? n.checked : n.value;
+      if (n.dataset.num) v = v === "" ? 0 : parseFloat(v);
+      bindPath(path, v);
+      if (n.type === "range") { const out = $(n.id + "Out"); if (out) out.textContent = n.value; }
+    });
+  });
+}
+
+function field(label, path, opts = {}) {
+  const v = readPath(path);
+  const hint = opts.hint ? ` <span class="muted tiny">${opts.hint}</span>` : "";
+  if (opts.type === "textarea")
+    return `<label>${label}${hint}<textarea rows="${opts.rows || 3}" data-bind="${path}" placeholder="${esc(opts.ph || "")}">${esc(v || "")}</textarea></label>`;
+  if (opts.type === "check")
+    return `<label class="inline-check"><input type="checkbox" data-bind="${path}" ${v ? "checked" : ""} /> ${label}${hint}</label>`;
+  if (opts.type === "select")
+    return `<label>${label}${hint}<select data-bind="${path}">${opts.options.map((o) =>
+      `<option value="${esc(o[0])}" ${String(v) === String(o[0]) ? "selected" : ""}>${esc(o[1])}</option>`).join("")}</select></label>`;
+  if (opts.type === "range") {
+    const id = "rng_" + path.replace(/\./g, "_");
+    return `<label>${label}
+      <span class="rng-val"><b id="${id}Out">${v == null ? opts.def : v}</b>${opts.hint ? ` <span class="muted tiny">${opts.hint}</span>` : ""}</span>
+      <input type="range" id="${id}" data-bind="${path}" data-num="1" min="${opts.min}" max="${opts.max}" step="${opts.step || 1}" value="${v == null ? opts.def : v}" /></label>`;
+  }
+  return `<label>${label}${hint}<input type="${opts.type || "text"}" data-bind="${path}" ${opts.num ? 'data-num="1" min="0" step="any"' : ""} value="${esc(v == null ? "" : v)}" placeholder="${esc(opts.ph || "")}" /></label>`;
+}
+
+// ---------------------------------------------------------------- SETUP ---
+function tabSetup() {
+  return `
+  <div class="card sup-form form-v">
+    <div class="sup-sub">Your brand</div>
+    <div class="sup-form-grid">
+      ${field("Brand name", "brand", { ph: "Aureva" })}
+      ${field("Tagline", "tagline", { hint: "(one line, shown under the logo)", ph: "Handmade fragrance, made in Bengaluru" })}
+      ${imageField("siteLogo", _site.logo_url, "Logo", "square or wide, transparent PNG works best")}
+      ${field("Announcement bar", "announcement", { hint: "(optional strip across the top)", ph: "Free shipping over ₹999 · Ships in 24h" })}
+    </div>
+
+    <div class="sup-sub">Web address</div>
+    <p class="muted tiny" style="margin:0 0 10px;">Your site lives at this address today. A custom domain of your own can be attached later — the address below keeps working either way.</p>
+    <div class="handle-row">
+      <span class="handle-pre">${esc(location.origin)}/s/</span>
+      <input id="siteHandle" value="${esc(_site.handle || "")}" placeholder="your-brand" />
+      <span class="handle-state" id="handleState"></span>
+    </div>
+
+    <div class="sup-sub">Contact shown on your site</div>
+    <div class="sup-form-grid">
+      ${field("Email", "contact.email", { type: "email" })}
+      ${field("Phone", "contact.phone", { ph: "+91 …" })}
+      ${field("WhatsApp number", "contact.whatsapp", { hint: "(digits only)", ph: "919876543210" })}
+      ${field("Instagram handle", "contact.instagram", { ph: "@yourbrand" })}
+      ${field("Address", "contact.address", { type: "textarea", rows: 2 })}
+    </div>
+  </div>`;
+}
+
+// ---------------------------------------------------------------- THEME ---
+function tabTheme() {
+  const cards = _siteMeta.themes.map((t) => {
+    const sel = _site.theme === t.id;
+    const p = t.light;
+    return `
+      <div class="theme-card ${sel ? "sel" : ""}" data-theme-pick="${t.id}">
+        <div class="tc-mock" style="background:${p.bg};border-color:${p.border}">
+          <div class="tc-bar" style="background:${p.accent}"></div>
+          <div class="tc-title" style="color:${p.ink};font-family:${esc(fontStack(t.fonts.heading))}">${esc(t.label)}</div>
+          <div class="tc-lines"><i style="background:${p.border}"></i><i style="background:${p.border};width:60%"></i></div>
+          <div class="tc-grid">
+            <span style="background:${p.surface};border-color:${p.border}"></span>
+            <span style="background:${p.surface};border-color:${p.border}"></span>
+            <span style="background:${p.surface};border-color:${p.border}"></span>
+          </div>
+        </div>
+        <div class="tc-body">
+          <div class="tc-head"><b>${t.icon} ${esc(t.label)}</b>${sel ? `<span class="chan-pill live">Selected</span>` : ""}</div>
+          <div class="muted tiny" style="margin:2px 0 6px;">${esc(t.genre)}</div>
+          <p class="muted tiny">${esc(t.blurb)}</p>
+          <div class="motion-chips">${t.motion.map((m) => `<span>${esc(MOTION_LABEL[m] || m)}</span>`).join("")}</div>
+        </div>
+      </div>`;
+  }).join("");
+  return `<p class="muted" style="margin:6px 0 14px;">Each theme is a different website — its own layout, type scale and motion, not just a colour swap. Pick the one closest to what you sell, then fine-tune everything in <b>Design</b>.</p>
+    <div class="theme-grid">${cards}</div>`;
+}
+
+const MOTION_LABEL = {
+  reveal: "Fade-up on scroll", parallax: "Vertical parallax", hscroll: "Horizontal rails",
+  pin: "Pinned sections", marquee: "Scrolling band", zoom: "Image zoom",
+};
+function fontStack(id) {
+  const f = (_siteMeta.fonts || []).find((x) => x.id === id);
+  return f ? f.stack : "system-ui, sans-serif";
+}
+
+// --------------------------------------------------------------- DESIGN ---
+function tabDesign() {
+  const t = _siteMeta.themes.find((x) => x.id === _site.theme) || _siteMeta.themes[0];
+  const fontOpts = (sel) => _siteMeta.fonts.map((f) =>
+    `<option value="${f.id}" ${sel === f.id ? "selected" : ""}>${esc(f.label)} · ${f.kind}</option>`).join("");
+  return `
+  <div class="card sup-form form-v">
+    <div class="sup-sub">Typography</div>
+    <p class="muted tiny" style="margin:0 0 10px;">Leave a font on “Theme default” to follow ${esc(t.label)}, or choose your own — the change applies everywhere on your site.</p>
+    <div class="sup-form-grid">
+      <label>Headings font
+        <select data-bind="style.heading_font"><option value="">Theme default (${esc(fontLabel(t.fonts.heading))})</option>${fontOpts(_site.style.heading_font)}</select></label>
+      <label>Body font
+        <select data-bind="style.body_font"><option value="">Theme default (${esc(fontLabel(t.fonts.body))})</option>${fontOpts(_site.style.body_font)}</select></label>
+    </div>
+
+    <div class="sup-sub">Colour</div>
+    <div class="sup-form-grid">
+      <label>Accent — light mode
+        <span class="colour-row"><input type="color" data-bind="style.accent" value="${esc(_site.style.accent || t.light.accent)}" />
+        <button type="button" class="btn ghost tiny" data-reset="style.accent">Use theme colour</button></span></label>
+      <label>Accent — dark mode
+        <span class="colour-row"><input type="color" data-bind="style.accent_dark" value="${esc(_site.style.accent_dark || t.dark.accent)}" />
+        <button type="button" class="btn ghost tiny" data-reset="style.accent_dark">Use theme colour</button></span></label>
+      ${field("Colour mode", "style.mode", { type: "select", options: [["auto", "Follow the visitor's device"], ["light", "Always light"], ["dark", "Always dark"]] })}
+    </div>
+
+    <div class="sup-sub">Shape &amp; motion</div>
+    <div class="sup-form-grid">
+      ${field("Corner radius", "style.radius", { type: "range", min: 0, max: 28, def: t.layout.radius, hint: "px" })}
+      ${field("Animation", "style.motion", { type: "select", options: [["full", "Full — everything this theme does"], ["subtle", "Subtle — fades and rails only"], ["none", "None — completely static"]] })}
+      ${field("Product layout", "style.card_style", { type: "select", options: [["", `Theme default (${t.layout.grid})`], ["cards", "Cards — bordered tiles"], ["editorial", "Editorial — big imagery, no borders"], ["list", "List — a menu-style row per product"]] })}
+      ${field("Page width", "style.width", { type: "select", options: [["wide", "Wide"], ["compact", "Compact"]] })}
+    </div>
+    <p class="muted tiny">This theme animates with: ${t.motion.map((m) => MOTION_LABEL[m] || m).join(" · ")}.</p>
+  </div>`;
+}
+function fontLabel(id) {
+  const f = (_siteMeta.fonts || []).find((x) => x.id === id);
+  return f ? f.label : id;
+}
+
+// -------------------------------------------------------------- CONTENT ---
+function tabContent() {
+  const sec = _site.sections;
+  return `
+  <div class="card sup-form form-v">
+    <div class="sup-sub">Hero — the first thing visitors see</div>
+    <div class="sup-form-grid">
+      ${imageField("siteHero", _site.hero.image_url, "Hero image", "wide, at least 1600px")}
+      ${field("Headline", "hero.heading", { ph: "Scent that stays with you" })}
+      ${field("Sub-headline", "hero.sub", { type: "textarea", rows: 2, ph: "Small-batch perfume, bottled in Bengaluru." })}
+      ${field("Button text", "hero.cta_text", { ph: "Shop now" })}
+      ${field("Text alignment", "hero.align", { type: "select", options: [["left", "Left"], ["center", "Centred"]] })}
+      ${field("Image darkening", "hero.overlay", { type: "range", min: 0, max: 90, def: 45, hint: "% — keeps text readable over the photo" })}
+    </div>
+
+    <div class="sup-sub">Sections on your home page</div>
+    <div class="sup-form-grid">
+      ${field("Featured products rail", "sections.featured", { type: "check" })}
+      ${field("Shop by category", "sections.categories", { type: "check" })}
+      ${field("Promise strip (delivery, returns…)", "sections.highlights", { type: "check" })}
+      ${field("Our story", "sections.story", { type: "check" })}
+      ${field("Customer reviews", "sections.testimonials", { type: "check" })}
+      ${field("Newsletter signup", "sections.newsletter", { type: "check" })}
+    </div>
+
+    <div class="sup-sub">Our story</div>
+    <div class="sup-form-grid">
+      ${field("Title", "story.title", { ph: "Our story" })}
+      ${field("Story", "story.body", { type: "textarea", rows: 5, ph: "Why you started, what you make, who makes it." })}
+      ${imageField("siteStory", _site.story.image_url, "Story image", "")}
+    </div>
+
+    <div class="sup-sub">Promise strip</div>
+    <div id="hlEditor" class="rep-list"></div>
+
+    <div class="sup-sub">Customer reviews</div>
+    <div id="tsEditor" class="rep-list"></div>
+
+    <div class="sup-sub">Policies <span class="muted tiny">(shown as footer links when filled in)</span></div>
+    <div class="sup-form-grid">
+      ${field("Shipping policy", "policies.shipping", { type: "textarea", rows: 3 })}
+      ${field("Returns &amp; refunds", "policies.returns", { type: "textarea", rows: 3 })}
+      ${field("Privacy", "policies.privacy", { type: "textarea", rows: 3 })}
+    </div>
+  </div>`;
+}
+
+function renderRepeaters() {
+  const hl = $("hlEditor");
+  if (hl) {
+    hl.innerHTML = _site.highlights.map((h, i) => `
+      <div class="rep-row">
+        <input class="rep-ico" value="${esc(h.icon)}" data-hl="${i}" data-k="icon" />
+        <input value="${esc(h.title)}" data-hl="${i}" data-k="title" placeholder="Fast dispatch" />
+        <input value="${esc(h.text)}" data-hl="${i}" data-k="text" placeholder="Orders leave within 24 hours." />
+        <button class="btn ghost tiny" data-hlrm="${i}">✕</button>
+      </div>`).join("") +
+      `<button class="btn ghost sm" id="hlAdd">＋ Add a promise</button>`;
+    hl.querySelectorAll("[data-hl]").forEach((n) => n.oninput = () => { _site.highlights[+n.dataset.hl][n.dataset.k] = n.value; siteMark(); });
+    hl.querySelectorAll("[data-hlrm]").forEach((b) => b.onclick = () => { _site.highlights.splice(+b.dataset.hlrm, 1); siteMark(); renderRepeaters(); });
+    $("hlAdd").onclick = () => { if (_site.highlights.length >= 6) { toast("Six is the maximum."); return; } _site.highlights.push({ icon: "✅", title: "", text: "" }); siteMark(); renderRepeaters(); };
+  }
+  const ts = $("tsEditor");
+  if (ts) {
+    ts.innerHTML = (_site.testimonials.length ? _site.testimonials.map((t, i) => `
+      <div class="rep-row">
+        <select data-ts="${i}" data-k="rating" class="rep-ico">${[5, 4, 3, 2, 1].map((r) => `<option value="${r}" ${t.rating === r ? "selected" : ""}>${"★".repeat(r)}</option>`).join("")}</select>
+        <input value="${esc(t.name)}" data-ts="${i}" data-k="name" placeholder="Customer name" />
+        <input value="${esc(t.text)}" data-ts="${i}" data-k="text" placeholder="What they said" />
+        <button class="btn ghost tiny" data-tsrm="${i}">✕</button>
+      </div>`).join("") : `<p class="muted tiny">No reviews added yet.</p>`) +
+      `<button class="btn ghost sm" id="tsAdd">＋ Add a review</button>`;
+    ts.querySelectorAll("[data-ts]").forEach((n) => n.oninput = n.onchange = () => {
+      const t = _site.testimonials[+n.dataset.ts];
+      t[n.dataset.k] = n.dataset.k === "rating" ? parseInt(n.value, 10) : n.value; siteMark();
+    });
+    ts.querySelectorAll("[data-tsrm]").forEach((b) => b.onclick = () => { _site.testimonials.splice(+b.dataset.tsrm, 1); siteMark(); renderRepeaters(); });
+    $("tsAdd").onclick = () => { _site.testimonials.push({ name: "", text: "", rating: 5 }); siteMark(); renderRepeaters(); };
+  }
+}
+
+// ------------------------------------------------------------- COMMERCE ---
+function tabCommerce() {
+  return `
+  <div class="card sup-form form-v">
+    <p class="muted tiny" style="margin:0 0 12px;">These are the numbers your checkout calculates with. Shoppers create an account on your store before ordering, and every order lands in the Orders module.</p>
+    <div class="sup-sub">Delivery</div>
+    <div class="sup-form-grid">
+      ${field("Shipping fee ₹", "commerce.shipping_fee", { type: "number", num: true, ph: "49" })}
+      ${field("Free shipping above ₹", "commerce.free_shipping_above", { type: "number", num: true, hint: "(0 = never free)", ph: "999" })}
+      ${field("Minimum order value ₹", "commerce.min_order", { type: "number", num: true, hint: "(0 = no minimum)" })}
+    </div>
+    <div class="sup-sub">Tax</div>
+    <div class="sup-form-grid">
+      ${field("GST %", "commerce.gst_percent", { type: "number", num: true, hint: "(0 = don't show tax)", ph: "18" })}
+      ${field("My prices already include GST", "commerce.gst_inclusive", { type: "check", hint: "— when off, GST is added on top at checkout" })}
+    </div>
+    <div class="sup-sub">Payment</div>
+    <div class="sup-form-grid">
+      ${field("Offer cash on delivery", "commerce.cod_enabled", { type: "check" })}
+      ${field("Note shown at checkout", "commerce.order_note", { type: "textarea", rows: 2, ph: "We'll call to confirm your order before dispatch." })}
+    </div>
+  </div>`;
+}
+
+// -------------------------------------------------------------- PREVIEW ---
+function tabPreview() {
+  if (!_site.handle) return `<div class="ap-empty">Give your site an address in <b>Setup</b> first.</div>`;
+  const src = `/s/${encodeURIComponent(_site.handle)}?preview=${encodeURIComponent(state.token || "")}`;
+  return `
+    <div class="prev-bar">
+      <div class="prev-devices">
+        <button class="on" data-dev="desktop">🖥 Desktop</button>
+        <button data-dev="tablet">▭ Tablet</button>
+        <button data-dev="phone">▯ Phone</button>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn ghost sm" id="prevReload">↻ Reload</button>
+        <a class="btn ghost sm" href="${esc(src)}" target="_blank" rel="noopener">Open in a tab ↗</a>
+      </div>
+    </div>
+    <p class="muted tiny" style="margin:0 0 10px;">${_site.published ? "This is your live site." : "This is a private preview — publish when you're happy with it."} Save your changes to see them here.</p>
+    <div class="prev-stage" id="prevStage"><iframe id="prevFrame" src="${esc(src)}" title="Site preview"></iframe></div>`;
+}
+
+function wireSiteTab() {
+  wireBinds($("siteBody"));
+  wireImageFields($("siteBody"));
+
+  // image fields write back into the site document
+  const map = { siteLogo: "logo_url", siteHero: "hero.image_url", siteStory: "story.image_url" };
+  Object.entries(map).forEach(([id, path]) => {
+    const n = $(id);
+    if (!n) return;
+    const push = () => bindPath(path, n.value.trim());
+    n.addEventListener("change", push);
+    n.addEventListener("blur", push);
+  });
+
+  const h = $("siteHandle");
+  if (h) {
+    h.addEventListener("input", () => {
+      const clean = h.value.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-");
+      if (clean !== h.value) h.value = clean;
+      _site.handle = clean; siteMark();
+      clearTimeout(h._t);
+      h._t = setTimeout(async () => {
+        const st = $("handleState");
+        if (!clean || clean.length < 3) { st.textContent = "at least 3 letters"; st.className = "handle-state bad"; return; }
+        try {
+          const r = await api(`/api/site/handle-check?handle=${encodeURIComponent(clean)}`);
+          st.textContent = r.available ? "✓ available" : "✕ taken";
+          st.className = "handle-state " + (r.available ? "good" : "bad");
+        } catch (e) { st.textContent = ""; }
+      }, 400);
+    });
+  }
+
+  document.querySelectorAll("[data-theme-pick]").forEach((c) => c.onclick = () => {
+    _site.theme = c.dataset.themePick;
+    // a new theme resets the per-theme overrides so the seller actually sees it
+    _site.style.accent = ""; _site.style.accent_dark = "";
+    _site.style.heading_font = ""; _site.style.body_font = "";
+    _site.style.radius = null; _site.style.card_style = "";
+    siteMark(); renderSite();
+    toast(`Theme set to ${c.querySelector("b").textContent.trim()} — save to apply`);
+  });
+
+  document.querySelectorAll("[data-reset]").forEach((b) => b.onclick = () => {
+    bindPath(b.dataset.reset, ""); renderSiteTab(); toast("Back to the theme colour");
+  });
+
+  if (_siteTab === "content") renderRepeaters();
+
+  const pr = $("prevReload");
+  if (pr) pr.onclick = () => { const f = $("prevFrame"); f.src = f.src; };
+  document.querySelectorAll("[data-dev]").forEach((b) => b.onclick = () => {
+    document.querySelectorAll("[data-dev]").forEach((x) => x.classList.remove("on"));
+    b.classList.add("on");
+    $("prevStage").className = "prev-stage dev-" + b.dataset.dev;
+  });
+}
+
+async function saveSite() {
+  const btn = $("siteSave"); btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    const d = await api("/api/site/save", { method: "POST", json: { site: _site } });
+    _siteMeta = d; _site = JSON.parse(JSON.stringify(d.site)); _siteDirty = false;
+    renderSite(); toast("✅ Saved");
+  } catch (e) {
+    toast(e.message, 5000); btn.disabled = false; btn.textContent = "Save changes";
+  }
+}
+
+async function togglePublish() {
+  const want = !_site.published;
+  if (want && _siteDirty) { await saveSite(); }
+  try {
+    const d = await api("/api/site/publish", { method: "POST", json: { published: want } });
+    _siteMeta = d; _site = JSON.parse(JSON.stringify(d.site)); _siteDirty = false;
+    renderSite();
+    toast(want ? `🚀 Live at ${location.origin}/s/${_site.handle}` : "Site unpublished");
+  } catch (e) { toast(e.message, 5000); }
+}
+
+
+// =========================================================================
+// MODULE: Orders
+// =========================================================================
+let _ordersData = null;
+let _ordersFilter = "";
+let _ordersTab = "orders";
+
+async function openOrders() {
+  moduleShell("Orders", `<div class="ap-empty">Loading orders…</div>`);
+  try {
+    _ordersData = await api("/api/store/orders");
+    renderOrders();
+  } catch (e) { moduleShell("Orders", `<div class="card">${esc(e.message)}</div>`); }
+}
+
+function renderOrders() {
+  const d = _ordersData, st = d.stats;
+  const rows = _ordersFilter ? d.orders.filter((o) => o.status === _ordersFilter) : d.orders;
+
+  const kpis = `
+    <div class="site-health">
+      <div class="sh"><b>${fmt(st.orders)}</b><span>orders</span></div>
+      <div class="sh"><b>₹${fmt(st.revenue)}</b><span>revenue</span></div>
+      <div class="sh"><b>₹${fmt(st.aov)}</b><span>average order</span></div>
+      <div class="sh"><b>${fmt(st.units)}</b><span>units sold</span></div>
+      <div class="sh"><b>${fmt(st.customers)}</b><span>customers</span></div>
+    </div>`;
+
+  const tabs = `<div class="site-tabs">
+      <button class="${_ordersTab === "orders" ? "on" : ""}" data-otab="orders">🧺 Orders</button>
+      <button class="${_ordersTab === "customers" ? "on" : ""}" data-otab="customers">👥 Customers</button>
+    </div>`;
+
+  let body;
+  if (_ordersTab === "customers") {
+    body = `<div id="custBody"><div class="ap-empty">Loading customers…</div></div>`;
+  } else if (!d.orders.length) {
+    body = `<div class="ap-empty">No orders yet.${d.site.published ? "" : " Publish your website from the Website Builder to start taking them."}</div>`;
+  } else {
+    const chips = [["", "All", d.orders.length]].concat(d.statuses.map((s) =>
+      [s.id, s.label, st.by_status[s.id] || 0])).map(([id, label, n]) =>
+      `<button class="chip ${_ordersFilter === id ? "on" : ""}" data-ofil="${id}">${esc(label)} <b>${n}</b></button>`).join("");
+    body = `
+      <div class="ord-toolbar">
+        <div class="ord-chips">${chips}</div>
+        <button class="btn ghost sm" id="ordExport">⬇ Export CSV</button>
+      </div>
+      <div class="ord-list">${rows.map(orderCard).join("") || `<div class="ap-empty">Nothing with that status.</div>`}</div>`;
+  }
+
+  moduleShell("Orders", kpis + tabs + body);
+  document.querySelectorAll("[data-otab]").forEach((b) => b.onclick = () => { _ordersTab = b.dataset.otab; renderOrders(); if (_ordersTab === "customers") loadCustomers(); });
+  document.querySelectorAll("[data-ofil]").forEach((b) => b.onclick = () => { _ordersFilter = b.dataset.ofil; renderOrders(); });
+  const ex = $("ordExport");
+  if (ex) ex.onclick = () => download("/api/store/orders/export", "site_orders.csv");
+  document.querySelectorAll("[data-ostat]").forEach((sel) => sel.onchange = async () => {
+    try {
+      _ordersData = await api("/api/store/orders/status", { method: "POST", json: { order_id: sel.dataset.ostat, status: sel.value } });
+      toast("Order updated — sales figures refreshed");
+      renderOrders();
+    } catch (e) { toast(e.message); }
+  });
+  if (_ordersTab === "customers") loadCustomers();
+}
+
+function orderCard(o) {
+  const a = o.address || {};
+  const items = (o.items || []).map((i) =>
+    `<div class="oi"><span>${esc(i.name)} <span class="muted tiny">× ${i.qty}</span></span><b>₹${fmt(i.line_total)}</b></div>`).join("");
+  const opts = _ordersData.statuses.map((s) =>
+    `<option value="${s.id}" ${o.status === s.id ? "selected" : ""}>${esc(s.label)}</option>`).join("");
+  return `
+    <div class="ord-card ${esc(o.status)}">
+      <div class="ord-card-h">
+        <div>
+          <b>${esc(o.order_no)}</b>
+          <span class="chan-pill ${esc(o.status)}">${esc(o.status)}</span>
+          <div class="muted tiny">${esc(String(o.created_at).replace("T", " ").slice(0, 16))} · ${esc(o.payment === "cod" ? "Cash on delivery" : "Pay online")}</div>
+        </div>
+        <div class="ord-total">₹${fmt(o.total)}</div>
+      </div>
+      <div class="ord-grid">
+        <div>
+          <div class="ord-lbl">Customer</div>
+          <div><b>${esc(o.customer_name || "—")}</b></div>
+          <div class="muted tiny">${esc(o.customer_email || "")}</div>
+          <div class="muted tiny">${esc(o.phone || "")}</div>
+        </div>
+        <div>
+          <div class="ord-lbl">Deliver to</div>
+          <div class="muted tiny">${esc([a.line1, a.line2, a.landmark].filter(Boolean).join(", "))}</div>
+          <div class="muted tiny">${esc([a.city, a.state, a.pincode].filter(Boolean).join(" · "))}</div>
+        </div>
+        <div>
+          <div class="ord-lbl">Items</div>
+          ${items}
+          <div class="oi muted tiny"><span>Shipping</span><span>${o.shipping ? "₹" + fmt(o.shipping) : "Free"}</span></div>
+          ${o.gst_percent ? `<div class="oi muted tiny"><span>GST ${o.gst_percent}%${o.gst_inclusive ? " incl." : ""}</span><span>₹${fmt(o.tax)}</span></div>` : ""}
+        </div>
+      </div>
+      ${o.note ? `<div class="ord-note">📝 ${esc(o.note)}</div>` : ""}
+      <div class="ord-card-f">
+        <label class="muted tiny">Status <select data-ostat="${esc(o.id)}">${opts}</select></label>
+        ${o.phone ? `<a class="btn ghost tiny" href="https://wa.me/${esc(String(o.phone).replace(/\D/g, ""))}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ""}
+      </div>
+    </div>`;
+}
+
+async function loadCustomers() {
+  const box = $("custBody");
+  if (!box) return;
+  try {
+    const d = await api("/api/store/customers");
+    box.innerHTML = d.customers.length ? `
+      <div class="table-scroll"><table>
+        <thead><tr><th>Customer</th><th>Email</th><th>Phone</th><th>Orders</th><th>Spend</th><th>Last order</th></tr></thead>
+        <tbody>${d.customers.map((c) => `<tr>
+          <td><b>${esc(c.name || "—")}</b></td><td>${esc(c.email)}</td><td>${esc(c.phone || "—")}</td>
+          <td>${fmt(c.orders)}</td><td>₹${fmt(c.spend)}</td>
+          <td class="muted tiny">${esc(String(c.last || "").replace("T", " ").slice(0, 16) || "—")}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+      <p class="muted tiny" style="margin-top:10px;">These shoppers are yours alone — they also appear in RFM and Win-Back once their orders are counted in your sales.</p>`
+      : `<div class="ap-empty">No one has signed up on your site yet.</div>`;
+  } catch (e) { box.innerHTML = `<div class="card">${esc(e.message)}</div>`; }
 }
 
 // ---------- boot ----------

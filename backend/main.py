@@ -27,6 +27,7 @@ from backend.core import (ad_analytics, ai, analytics, auth, billing, complaints
                           pos_formats, position_strategy, positioning, pricing, product_config,
                           report_pdf, smart, templates, user_store)
 from backend.core import commerce, secrets_store, db, supply, products
+from backend.core import sitebuilder, storefront
 
 # ---------------------------------------------------------
 # numpy/pandas JSON safety net
@@ -61,6 +62,7 @@ async def _no_cache_frontend(request, call_next):
     resp = await call_next(request)
     path = request.url.path
     if (path.startswith("/smart") or path.startswith("/static") or path == "/app"
+            or path.startswith("/s/") or path.startswith("/store-static")
             or path.endswith((".js", ".css", ".html"))):
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         resp.headers["Pragma"] = "no-cache"
@@ -2295,6 +2297,16 @@ class ProductBody(BaseModel):
     price: float | None = None
     unit_cost: float | None = None
     status: str | None = "active"
+    # ---- storefront (Website Builder) ----
+    description: str | None = ""
+    image_url: str | None = ""
+    images: list[str] = []
+    highlights: list[str] = []
+    mrp: float | None = None
+    stock: int | None = 0
+    track_stock: bool | None = True
+    listed: bool | None = True
+    unit_label: str | None = ""
 
 
 class ProductIdBody(BaseModel):
@@ -2359,11 +2371,356 @@ def products_alias_delete(body: AliasIdBody, authorization: str | None = Header(
     return _products_payload(email)
 
 
+# =========================================================================
+# WEBSITE BUILDER — seller side (Site Management module)
+# =========================================================================
+class SiteSaveBody(BaseModel):
+    site: dict
+
+
+class PublishBody(BaseModel):
+    published: bool
+
+
+class ChannelBody(BaseModel):
+    channel: str
+    enabled: bool
+
+
+class OrderStatusBody(BaseModel):
+    order_id: str
+    status: str
+
+
+class ListedBody(BaseModel):
+    id: str
+    listed: bool
+
+
+def _site_state(email: str) -> dict:
+    site = sitebuilder.get_site(email)
+    listed = products.listed_products(email)
+    all_prods = products.get_products(email)
+    return {
+        "site": site,
+        "themes": sitebuilder.theme_catalog(),
+        "fonts": sitebuilder.FONTS,
+        "resolved": sitebuilder.resolved_style(site),
+        "suggested_handle": site.get("handle") or sitebuilder.suggest_handle(
+            site.get("brand") or "", email),
+        "counts": {
+            "listed": len(listed),
+            "products": len(all_prods),
+            "no_image": len([p for p in listed if not p.get("image_url")]),
+            "no_price": len([p for p in listed if p.get("price") in (None, "")]),
+        },
+        "stats": storefront.order_stats(email),
+        "public_path": f"/s/{site.get('handle')}" if site.get("handle") else "",
+    }
+
+
+@app.get("/api/site/state")
+def site_state(authorization: str | None = Header(default=None)):
+    return _site_state(require_user(authorization))
+
+
+@app.post("/api/site/save")
+def site_save(body: SiteSaveBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    try:
+        sitebuilder.save_site(email, body.site or {})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _site_state(email)
+
+
+@app.post("/api/site/publish")
+def site_publish(body: PublishBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    try:
+        sitebuilder.set_published(email, body.published)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _site_state(email)
+
+
+@app.get("/api/site/handle-check")
+def site_handle_check(handle: str, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    h = sitebuilder.normalise_handle(handle)
+    return {"handle": h, "available": sitebuilder.handle_available(h, email)}
+
+
+@app.get("/api/site/preview")
+def site_preview(authorization: str | None = Header(default=None)):
+    return sitebuilder.preview_site(require_user(authorization))
+
+
+@app.post("/api/site/image")
+async def site_image(files: list[UploadFile] = File(...),
+                     authorization: str | None = Header(default=None)):
+    """One image endpoint for logos, hero art, story art and product photos —
+    saved to the same public folder the content module already serves from."""
+    require_user(authorization)
+    if not files:
+        raise HTTPException(400, "No file uploaded.")
+    f = files[0]
+    ext = os.path.splitext(f.filename or "")[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"):
+        raise HTTPException(400, "Use a PNG, JPG, WEBP, GIF or SVG image.")
+    content = await f.read()
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(400, "Image is over 8MB - please compress it first.")
+    import uuid as _uuid
+    fname = f"{_uuid.uuid4().hex}{ext}"
+    with open(os.path.join(_IMG_DIR, fname), "wb") as out:
+        out.write(content)
+    return {"ok": True, "image_url": f"/generated_images/{fname}", "filename": f.filename}
+
+
+@app.post("/api/products/listed")
+def products_listed(body: ListedBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    try:
+        products.set_listed(email, body.id, body.listed)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _products_payload(email)
+
+
+# ---------------------------------------------------------
+# Listed Platforms strip
+# ---------------------------------------------------------
+@app.get("/api/channels")
+def channels_state(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    site = sitebuilder.get_site(email)
+    connected = {}
+    try:
+        for c in commerce.catalog():
+            connected[c["id"]] = bool(secrets_store.get_credentials(email, c["id"]))
+    except Exception:  # noqa: BLE001
+        connected = {}
+    rows = [{
+        "id": "site", "label": site.get("brand") or "My website", "icon": "🏬",
+        "kind": "own", "status": "live" if site.get("published") else "draft",
+        "detail": (f"/s/{site['handle']}" if site.get("handle") else "Not set up yet"),
+        "enabled": storefront.channel_enabled(email, "site"),
+        "toggleable": bool(site.get("handle")),
+        "orders": storefront.order_stats(email)["orders"],
+    }]
+    for cid, label, icon in (("shopify", "Shopify", "🛍️"), ("amazon", "Amazon", "📦")):
+        rows.append({
+            "id": cid, "label": label, "icon": icon, "kind": "marketplace",
+            "status": "connected" if connected.get(cid) else "available",
+            "detail": "Connected - pulling orders" if connected.get(cid) else "Connect to pull orders",
+            "enabled": storefront.channel_enabled(email, cid),
+            "toggleable": bool(connected.get(cid)), "orders": None,
+        })
+    for cid, label, icon in (("flipkart", "Flipkart", "🛒"), ("myntra", "Myntra", "👜")):
+        rows.append({
+            "id": cid, "label": label, "icon": icon, "kind": "marketplace",
+            "status": "soon", "detail": "Yet to come", "enabled": False,
+            "toggleable": False, "orders": None,
+        })
+    return {"channels": rows}
+
+
+@app.post("/api/channels/toggle")
+def channels_toggle(body: ChannelBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    if body.channel in ("flipkart", "myntra"):
+        raise HTTPException(400, "That marketplace is not live yet.")
+    storefront.set_channel(email, body.channel, body.enabled)
+    return channels_state(authorization)
+
+
+# ---------------------------------------------------------
+# Orders module (seller side)
+# ---------------------------------------------------------
+@app.get("/api/store/orders")
+def store_orders(status: str = "", authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return {
+        "orders": storefront.get_orders(email, status=status),
+        "stats": storefront.order_stats(email),
+        "statuses": [{"id": s, "label": storefront.STATUS_LABELS[s]} for s in storefront.STATUSES],
+        "site": {"handle": sitebuilder.get_site(email).get("handle"),
+                 "published": sitebuilder.get_site(email).get("published")},
+    }
+
+
+@app.post("/api/store/orders/status")
+def store_order_status(body: OrderStatusBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    try:
+        storefront.set_status(email, body.order_id, body.status)
+    except storefront.StoreError as e:
+        raise HTTPException(400, str(e))
+    return store_orders("", authorization)
+
+
+@app.get("/api/store/orders/export")
+def store_orders_export(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    csv = storefront.orders_csv(email)
+    return Response(content=csv, media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=site_orders.csv"})
+
+
+@app.get("/api/store/customers")
+def store_customers(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    rows = [storefront._public_customer(c) for c in storefront._customers(email)]
+    orders = storefront.get_orders(email)
+    spend: dict = {}
+    for o in orders:
+        if o.get("status") == "cancelled":
+            continue
+        cid = o.get("customer_id")
+        agg = spend.setdefault(cid, {"orders": 0, "spend": 0.0, "last": ""})
+        agg["orders"] += 1
+        agg["spend"] += float(o.get("total") or 0)
+        agg["last"] = max(agg["last"], o.get("created_at") or "")
+    for r in rows:
+        r.update(spend.get(r["id"], {"orders": 0, "spend": 0.0, "last": ""}))
+    rows.sort(key=lambda r: r.get("spend") or 0, reverse=True)
+    return {"customers": rows}
+
+
+# =========================================================================
+# STOREFRONT — public, shopper side
+# =========================================================================
+class ShopAuthBody(BaseModel):
+    email: str
+    password: str
+    name: str | None = ""
+    phone: str | None = ""
+
+
+class ShopCartBody(BaseModel):
+    lines: list[dict] = []
+
+
+class ShopOrderBody(BaseModel):
+    lines: list[dict] = []
+    address: dict = {}
+    payment: str = "cod"
+    note: str | None = ""
+
+
+def _seller_for(handle: str) -> str:
+    owner = sitebuilder.resolve_handle(handle)
+    if not owner:
+        raise HTTPException(404, "No store at this address.")
+    site = sitebuilder.get_site(owner)
+    if not site.get("published"):
+        raise HTTPException(404, "This store is not open yet.")
+    return owner
+
+
+def _shopper(handle: str, x_store_token: str | None):
+    seller = _seller_for(handle)
+    cust = storefront.customer_from_token(seller, (x_store_token or "").strip())
+    if not cust:
+        raise HTTPException(401, "Log in to continue.")
+    return seller, cust
+
+
+@app.get("/api/shop/{handle}/site")
+def shop_site(handle: str, x_preview_token: str | None = Header(default=None)):
+    """The storefront's own data. Normally only a published site answers; the
+    owner's live preview passes their session token so they can see the site
+    exactly as shoppers will before switching it on."""
+    owner = sitebuilder.resolve_handle(handle)
+    if not owner:
+        raise HTTPException(404, "No store at this address.")
+    if x_preview_token and auth.user_from_token(x_preview_token.strip()) == owner:
+        payload = sitebuilder.preview_site(owner)
+    else:
+        payload = sitebuilder.public_site(handle)
+    if not payload:
+        raise HTTPException(404, "This store is not open yet.")
+    payload.pop("seller", None)
+    return payload
+
+
+@app.post("/api/shop/{handle}/register")
+def shop_register(handle: str, body: ShopAuthBody):
+    seller = _seller_for(handle)
+    try:
+        cust = storefront.register(seller, body.email, body.password,
+                                   body.name or "", body.phone or "")
+    except storefront.StoreError as e:
+        raise HTTPException(400, str(e))
+    return {"token": storefront.issue_token(seller, cust["id"]),
+            "customer": storefront._public_customer(cust)}
+
+
+@app.post("/api/shop/{handle}/login")
+def shop_login(handle: str, body: ShopAuthBody):
+    seller = _seller_for(handle)
+    try:
+        cust = storefront.login(seller, body.email, body.password)
+    except storefront.StoreError as e:
+        raise HTTPException(401, str(e))
+    return {"token": storefront.issue_token(seller, cust["id"]),
+            "customer": storefront._public_customer(cust)}
+
+
+@app.post("/api/shop/{handle}/logout")
+def shop_logout(handle: str, x_store_token: str | None = Header(default=None)):
+    seller = _seller_for(handle)
+    storefront.revoke_token(seller, x_store_token or "")
+    return {"ok": True}
+
+
+@app.get("/api/shop/{handle}/me")
+def shop_me(handle: str, x_store_token: str | None = Header(default=None)):
+    seller, cust = _shopper(handle, x_store_token)
+    return {"customer": storefront._public_customer(cust),
+            "orders": storefront.get_orders(seller, customer_id=cust["id"])}
+
+
+@app.post("/api/shop/{handle}/cart")
+def shop_cart(handle: str, body: ShopCartBody):
+    seller = _seller_for(handle)
+    return storefront.price_cart(seller, body.lines or [])
+
+
+@app.post("/api/shop/{handle}/order")
+def shop_order(handle: str, body: ShopOrderBody,
+               x_store_token: str | None = Header(default=None)):
+    seller, cust = _shopper(handle, x_store_token)
+    try:
+        order = storefront.place_order(seller, cust, body.lines or [], body.address or {},
+                                       body.payment or "cod", body.note or "")
+    except storefront.StoreError as e:
+        raise HTTPException(400, str(e))
+    return {"order": order}
+
+
 # ---------------------------------------------------------
 # Frontend
 # ---------------------------------------------------------
 if os.path.isdir(SMART_DIR):
     app.mount("/smart-static", StaticFiles(directory=SMART_DIR), name="smart-static")
+
+
+STORE_DIR = os.path.join(SMART_DIR, "storefront")
+if os.path.isdir(STORE_DIR):
+    app.mount("/store-static", StaticFiles(directory=STORE_DIR), name="store-static")
+
+
+@app.get("/s/{handle}")
+def storefront_page(handle: str):
+    """A seller's own website. One page app; it fetches /api/shop/<handle>/site."""
+    index = os.path.join(STORE_DIR, "store.html")
+    if not os.path.exists(index):
+        raise HTTPException(404, "Storefront UI not found.")
+    if not sitebuilder.resolve_handle(handle):
+        raise HTTPException(404, "No store at this address.")
+    return FileResponse(index, headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
 
 
 @app.get("/smart")

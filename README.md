@@ -38,9 +38,59 @@ same GPT models (`gpt-4.1-mini`), same prompts, same JSON-extraction and chart-s
 logic from BA.py, same first-message "3 profit tips" behavior and "X vs Y"
 auto-chart detection from chatbot2.py.
 
+## Website Builder (each seller gets one storefront)
+
+A seller builds their own selling website from the **Website Builder** app in
+Smart mode, and every order it takes flows back into the same analytics that
+uploads and marketplace connectors feed.
+
+```
+backend/core/
+  sitebuilder.py   8 themes, 20 fonts, the site document, handle index
+  storefront.py    shopper accounts, cart pricing, orders, the sales mirror
+Smart CafeX/storefront/
+  store.html/.css/.js   the public shop — one page app, theme-driven
+supabase/site.sql       migration (additive; safe to re-run)
+```
+
+**Themes.** Basic, Luxury, Fitness, Fashion & Apparel, Jewellery, Food &
+Beverage, Beauty & Skincare, Tech & Gadgets. Each is a different site — its own
+layout, type scale and motion (fade-up reveals, vertical parallax, horizontal
+collection rails, pinned sections, a scrolling band, image zoom), not a recolour.
+The seller then overrides fonts, accent colours per mode, corner radius, product
+layout, animation strength and page width in the **Design** tab; a preview tab
+renders the real site at desktop / tablet / phone width, published or not.
+
+**Products.** The storefront sells the Product Management catalogue — the same
+records, extended with a photo, gallery, description, key points, MRP and stock.
+Every product carries a **List on my website** switch, on by default.
+
+**Shoppers.** Accounts are per store: a shopper who signs up on one seller's site
+is that seller's customer and nobody else's, and they appear in that seller's RFM
+and Win-Back modules. A shopper must be signed in to place an order.
+
+**Money.** The cart is priced server-side at checkout — flat shipping with a
+free-shipping threshold, GST inclusive or added, optional minimum order, cash on
+delivery. Orders deduct product stock and, where a product is linked to inventory
+in Supply Management, the materials behind it.
+
+**Orders.** The separate **Orders** app lists every order with its customer,
+address and items, moves it through New → Confirmed → Packed → Shipped →
+Delivered (or Cancelled, which returns the stock), and exports CSV.
+
+**Listed Platforms.** The home screen opens with one strip for every place the
+seller sells: their own site, Shopify and Amazon (live connectors), and Flipkart
+and Myntra marked *Yet to come*. The switch on each live channel decides whether
+its sales count in analytics — turning the site off removes its rows and turning
+it back on restores them, with no double-counting either way.
+
+Run `python scripts/test_website_builder.py` to exercise the whole loop against a
+throwaway data directory.
+
 ## Site structure
 
 - `/` — marketing landing page (MSME positioning, multilingual sample-story wall, pricing)
+- `/s/<handle>` — a seller's own storefront (Website Builder)
 - `/app` — the analytics application
 
 ## Pricing model (GTM: à-la-carte, not subscription)

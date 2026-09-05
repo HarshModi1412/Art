@@ -474,6 +474,29 @@ def subcategory_detail(txns: pd.DataFrame, value: str) -> dict:
 # =========================================================
 # RFM  (port of modules/rfm.calculate_rfm)
 # =========================================================
+def _quintile(series: pd.Series, invert: bool = False) -> pd.Series:
+    """Score a column 1-5 without assuming there are five distinct values.
+
+    Plain pd.qcut(x, 5) raises "Bin edges must be unique" as soon as a shop has
+    fewer than five customers — which is exactly the state a seller is in on the
+    day their new website takes its first order. Here we cut into as many bins as
+    the data actually supports and then stretch the result back onto the 1-5
+    scale, so the segment thresholds below keep their meaning.
+    """
+    ranks = series.rank(method="first")
+    uniq = int(ranks.nunique())
+    if uniq < 2:
+        return pd.Series(3, index=series.index, dtype=int)
+    bins = min(5, uniq)
+    labels = list(range(1, bins + 1))
+    if invert:
+        labels = labels[::-1]
+    scores = pd.qcut(ranks, bins, labels=labels).astype(int)
+    if bins < 5:
+        scores = (((scores - 1) * (4.0 / (bins - 1))) + 1).round().astype(int)
+    return scores
+
+
 def calculate_rfm(txns: pd.DataFrame) -> dict:
     df = txns.copy()
     if "customer_id" not in df.columns:
@@ -489,9 +512,9 @@ def calculate_rfm(txns: pd.DataFrame) -> dict:
     ).reset_index()
 
     # quintile scores (5 = best). Recency inverted: fewer days = higher score.
-    rfm["R"] = pd.qcut(rfm["recency"].rank(method="first"), 5, labels=[5, 4, 3, 2, 1]).astype(int)
-    rfm["F"] = pd.qcut(rfm["frequency"].rank(method="first"), 5, labels=[1, 2, 3, 4, 5]).astype(int)
-    rfm["M"] = pd.qcut(rfm["monetary"].rank(method="first"), 5, labels=[1, 2, 3, 4, 5]).astype(int)
+    rfm["R"] = _quintile(rfm["recency"], invert=True)
+    rfm["F"] = _quintile(rfm["frequency"])
+    rfm["M"] = _quintile(rfm["monetary"])
     rfm["RFM_score"] = rfm["R"].astype(str) + rfm["F"].astype(str) + rfm["M"].astype(str)
 
     def segment(row):
