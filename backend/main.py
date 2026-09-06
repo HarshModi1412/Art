@@ -2414,6 +2414,8 @@ def _site_state(email: str) -> dict:
             "no_image": len([p for p in listed if not p.get("image_url")]),
             "no_price": len([p for p in listed if p.get("price") in (None, "")]),
         },
+        "icons": sitebuilder.ICONS,
+        "promise_icons": sitebuilder.PROMISE_ICONS,
         "stats": storefront.order_stats(email),
         "public_path": f"/s/{site.get('handle')}" if site.get("handle") else "",
     }
@@ -2442,6 +2444,20 @@ def site_publish(body: PublishBody, authorization: str | None = Header(default=N
     except ValueError as e:
         raise HTTPException(400, str(e))
     return _site_state(email)
+
+
+@app.post("/api/site/resolve")
+def site_resolve(body: SiteSaveBody, authorization: str | None = Header(default=None)):
+    """Resolve a draft site to its final palette, fonts and motion WITHOUT
+    saving it. The builder calls this as the seller types so the live canvas
+    repaints from the same resolver the published site uses — no guessing in
+    the browser, and no half-finished edit ever reaching the database."""
+    email = require_user(authorization)
+    draft = body.site or {}
+    return {
+        "style": sitebuilder.resolved_style(draft),
+        "categories": sitebuilder._payload(email, draft)["categories"],
+    }
 
 
 @app.get("/api/site/handle-check")

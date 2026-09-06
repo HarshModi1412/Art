@@ -53,13 +53,23 @@ Smart CafeX/storefront/
 supabase/site.sql       migration (additive; safe to re-run)
 ```
 
-**Themes.** Basic, Luxury, Fitness, Fashion & Apparel, Jewellery, Food &
-Beverage, Beauty & Skincare, Tech & Gadgets. Each is a different site — its own
-layout, type scale and motion (fade-up reveals, vertical parallax, horizontal
-collection rails, pinned sections, a scrolling band, image zoom), not a recolour.
-The seller then overrides fonts, accent colours per mode, corner radius, product
-layout, animation strength and page width in the **Design** tab; a preview tab
-renders the real site at desktop / tablet / phone width, published or not.
+**Themes.** Eight, each a different website rather than a recolour — Studio,
+Maison, Charge, Atelier, Lustre, Counter, Bloom and Obsidian — with their own
+layout, type scale, palette and motion: fade-up reveals, headline word-rise,
+mask reveals, vertical parallax, horizontal collection rails, pinned sections,
+a scrolling claims band, image zoom, a shine sweep and drifting gradients.
+Icons are a shared stroke set (`sitebuilder.ICONS`) rendered identically in the
+storefront and the builder — no emoji anywhere.
+
+**The editor.** Step three of the builder is the live site on the left and an
+inspector on the right. Click a photo, a headline, the promise strip or the
+footer on the site and the matching controls open beside it; change a control
+and the canvas repaints in place — no reload, nothing saved until you say so.
+The bridge is `postMessage` in both directions, and the canvas repaints from
+`POST /api/site/resolve`, the same resolver the published site uses, so the
+preview can never drift from the real thing. Fonts, accent colours per mode,
+corner radius, motion strength, product layout and page width are all here,
+alongside every piece of copy.
 
 **Products.** The storefront sells the Product Management catalogue — the same
 records, extended with a photo, gallery, description, key points, MRP and stock.

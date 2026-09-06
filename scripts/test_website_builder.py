@@ -209,5 +209,32 @@ s2.update({"handle": HANDLE, "brand": "Copycat"})
 r = c.post("/api/site/save", headers=H2, json={"site": s2})
 must(r.status_code == 400, "a taken handle is refused")
 
-print("\nALL CHECKS PASSED ✓")
+print("\n== 12. builder: icons, live resolve, theme catalogue ==")
+r = c.get("/api/site/state", headers=H)
+st2 = r.json()
+must(len(st2["icons"]) >= 30, f"{len(st2['icons'])} icons shipped to the builder")
+must(len(st2["promise_icons"]) >= 15, "promise-strip icon choices")
+must(all(t["label"] for t in st2["themes"]), "every theme is named")
+must(all("feel" in t for t in st2["themes"]), "every theme resolves its motion feel")
+draft = dict(st2["site"])
+draft["theme"] = "fitness"
+draft["style"] = {**draft["style"], "accent": "#2f6f57", "heading_font": "bebas", "motion": "subtle"}
+r = c.post("/api/site/resolve", headers=H, json={"site": draft})
+must(r.status_code == 200, f"live resolve ({r.status_code})", r.text[:200])
+rs = r.json()["style"]
+must(rs["light"]["accent"] == "#2f6f57", "custom accent resolves live")
+must(rs["light"]["accent_ink"] in ("#ffffff", "#12100e"), "readable ink picked for the custom accent")
+must(rs["heading_font"]["id"] == "bebas", "font override resolves live")
+must("marquee" not in rs["motion"], "subtle motion drops the heavy effects")
+must(c.get("/api/site/state", headers=H).json()["site"]["theme"] != "fitness",
+     "resolving a draft never saves it")
+
+print("\n== 13. emoji icons heal ==")
+site3 = c.get("/api/site/state", headers=H).json()["site"]
+site3["highlights"] = [{"icon": "\U0001F69A", "title": "Fast", "text": "24h"}]
+c.post("/api/site/save", headers=H, json={"site": site3})
+healed = c.get("/api/site/state", headers=H).json()["site"]["highlights"][0]["icon"]
+must(healed == "truck", f"a stored emoji becomes a real icon (got {healed!r})")
+
+print("\nALL CHECKS PASSED \u2713")
 shutil.rmtree(TMP, ignore_errors=True)

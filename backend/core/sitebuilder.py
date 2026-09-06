@@ -43,29 +43,55 @@ RESERVED_HANDLES = {
 
 
 # =========================================================================
-# Fonts offered in the customiser (all Google Fonts, loaded on demand)
+# Fonts offered in the customiser (Google Fonts, loaded on demand)
+#
+# Curated rather than exhaustive: these are the faces that actually carry the
+# look each genre is going for. `kind` groups them in the picker.
 # =========================================================================
 FONTS = [
-    {"id": "inter",      "label": "Inter",              "stack": "'Inter', system-ui, sans-serif",                 "g": "Inter:wght@400;500;600;700;800",           "kind": "sans"},
-    {"id": "manrope",    "label": "Manrope",            "stack": "'Manrope', system-ui, sans-serif",               "g": "Manrope:wght@400;500;600;700;800",         "kind": "sans"},
-    {"id": "dmsans",     "label": "DM Sans",            "stack": "'DM Sans', system-ui, sans-serif",               "g": "DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700", "kind": "sans"},
-    {"id": "poppins",    "label": "Poppins",            "stack": "'Poppins', system-ui, sans-serif",               "g": "Poppins:wght@300;400;500;600;700",         "kind": "sans"},
-    {"id": "montserrat", "label": "Montserrat",         "stack": "'Montserrat', system-ui, sans-serif",            "g": "Montserrat:wght@400;500;600;700;800",      "kind": "sans"},
-    {"id": "outfit",     "label": "Outfit",             "stack": "'Outfit', system-ui, sans-serif",                "g": "Outfit:wght@300;400;500;600;700;800",      "kind": "sans"},
-    {"id": "spacegro",   "label": "Space Grotesk",      "stack": "'Space Grotesk', system-ui, sans-serif",         "g": "Space+Grotesk:wght@400;500;600;700",       "kind": "sans"},
-    {"id": "sora",       "label": "Sora",               "stack": "'Sora', system-ui, sans-serif",                  "g": "Sora:wght@300;400;500;600;700;800",        "kind": "sans"},
-    {"id": "worksans",   "label": "Work Sans",          "stack": "'Work Sans', system-ui, sans-serif",             "g": "Work+Sans:wght@400;500;600;700",           "kind": "sans"},
-    {"id": "syne",       "label": "Syne",               "stack": "'Syne', system-ui, sans-serif",                  "g": "Syne:wght@400;600;700;800",                "kind": "display"},
-    {"id": "oswald",     "label": "Oswald",             "stack": "'Oswald', system-ui, sans-serif",                "g": "Oswald:wght@400;500;600;700",              "kind": "display"},
-    {"id": "bebas",      "label": "Bebas Neue",         "stack": "'Bebas Neue', system-ui, sans-serif",            "g": "Bebas+Neue",                               "kind": "display"},
-    {"id": "archivo",    "label": "Archivo Black",      "stack": "'Archivo Black', system-ui, sans-serif",         "g": "Archivo+Black",                            "kind": "display"},
-    {"id": "playfair",   "label": "Playfair Display",   "stack": "'Playfair Display', Georgia, serif",             "g": "Playfair+Display:wght@400;500;600;700;800","kind": "serif"},
-    {"id": "cormorant",  "label": "Cormorant Garamond", "stack": "'Cormorant Garamond', Georgia, serif",           "g": "Cormorant+Garamond:wght@300;400;500;600;700","kind": "serif"},
-    {"id": "dmserif",    "label": "DM Serif Display",   "stack": "'DM Serif Display', Georgia, serif",             "g": "DM+Serif+Display",                         "kind": "serif"},
-    {"id": "marcellus",  "label": "Marcellus",          "stack": "'Marcellus', Georgia, serif",                    "g": "Marcellus",                                "kind": "serif"},
-    {"id": "fraunces",   "label": "Fraunces",           "stack": "'Fraunces', Georgia, serif",                     "g": "Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700", "kind": "serif"},
-    {"id": "lora",       "label": "Lora",               "stack": "'Lora', Georgia, serif",                         "g": "Lora:wght@400;500;600;700",                "kind": "serif"},
-    {"id": "libre",      "label": "Libre Baskerville",  "stack": "'Libre Baskerville', Georgia, serif",            "g": "Libre+Baskerville:wght@400;700",           "kind": "serif"},
+    # --- grotesk / neutral UI ---
+    {"id": "inter",       "label": "Inter",              "stack": "'Inter', system-ui, sans-serif",              "g": "Inter:wght@300;400;500;600;700;800",             "kind": "grotesk"},
+    {"id": "intertight",  "label": "Inter Tight",        "stack": "'Inter Tight', system-ui, sans-serif",        "g": "Inter+Tight:wght@300;400;500;600;700;800",        "kind": "grotesk"},
+    {"id": "schibsted",   "label": "Schibsted Grotesk",  "stack": "'Schibsted Grotesk', system-ui, sans-serif",  "g": "Schibsted+Grotesk:wght@400;500;600;700;800",      "kind": "grotesk"},
+    {"id": "hostgrotesk", "label": "Host Grotesk",       "stack": "'Host Grotesk', system-ui, sans-serif",       "g": "Host+Grotesk:wght@300;400;500;600;700",           "kind": "grotesk"},
+    {"id": "geist",       "label": "Geist",              "stack": "'Geist', system-ui, sans-serif",              "g": "Geist:wght@300;400;500;600;700;800",              "kind": "grotesk"},
+    {"id": "manrope",     "label": "Manrope",            "stack": "'Manrope', system-ui, sans-serif",            "g": "Manrope:wght@300;400;500;600;700;800",            "kind": "grotesk"},
+    {"id": "dmsans",      "label": "DM Sans",            "stack": "'DM Sans', system-ui, sans-serif",            "g": "DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,700", "kind": "grotesk"},
+    {"id": "figtree",     "label": "Figtree",            "stack": "'Figtree', system-ui, sans-serif",            "g": "Figtree:wght@300;400;500;600;700;800",            "kind": "grotesk"},
+    {"id": "onest",       "label": "Onest",              "stack": "'Onest', system-ui, sans-serif",              "g": "Onest:wght@300;400;500;600;700;800",              "kind": "grotesk"},
+    {"id": "jost",        "label": "Jost",               "stack": "'Jost', system-ui, sans-serif",               "g": "Jost:wght@300;400;500;600;700",                   "kind": "grotesk"},
+    {"id": "worksans",    "label": "Work Sans",          "stack": "'Work Sans', system-ui, sans-serif",          "g": "Work+Sans:wght@300;400;500;600;700",              "kind": "grotesk"},
+    {"id": "tenorsans",   "label": "Tenor Sans",         "stack": "'Tenor Sans', system-ui, sans-serif",         "g": "Tenor+Sans",                                      "kind": "grotesk"},
+    {"id": "instrsans",   "label": "Instrument Sans",    "stack": "'Instrument Sans', system-ui, sans-serif",    "g": "Instrument+Sans:wght@400;500;600;700",            "kind": "grotesk"},
+
+    # --- display / statement ---
+    {"id": "archivo",     "label": "Archivo Expanded",   "stack": "'Archivo', system-ui, sans-serif",            "g": "Archivo:wdth,wght@112,600;112,700;125,800;125,900", "kind": "display"},
+    {"id": "anton",       "label": "Anton",              "stack": "'Anton', system-ui, sans-serif",              "g": "Anton",                                           "kind": "display"},
+    {"id": "bebas",       "label": "Bebas Neue",         "stack": "'Bebas Neue', system-ui, sans-serif",         "g": "Bebas+Neue",                                      "kind": "display"},
+    {"id": "syne",        "label": "Syne",               "stack": "'Syne', system-ui, sans-serif",               "g": "Syne:wght@400;600;700;800",                       "kind": "display"},
+    {"id": "spacegro",    "label": "Space Grotesk",      "stack": "'Space Grotesk', system-ui, sans-serif",      "g": "Space+Grotesk:wght@400;500;600;700",              "kind": "display"},
+    {"id": "bricolage",   "label": "Bricolage Grotesque","stack": "'Bricolage Grotesque', system-ui, sans-serif","g": "Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800", "kind": "display"},
+    {"id": "oswald",      "label": "Oswald",             "stack": "'Oswald', system-ui, sans-serif",             "g": "Oswald:wght@400;500;600;700",                     "kind": "display"},
+    {"id": "italiana",    "label": "Italiana",           "stack": "'Italiana', Georgia, serif",                  "g": "Italiana",                                        "kind": "display"},
+
+    # --- serif / editorial ---
+    {"id": "bodoni",      "label": "Bodoni Moda",        "stack": "'Bodoni Moda', Georgia, serif",               "g": "Bodoni+Moda:opsz,wght@6..96,400;6..96,500;6..96,700", "kind": "serif"},
+    {"id": "gloock",      "label": "Gloock",             "stack": "'Gloock', Georgia, serif",                    "g": "Gloock",                                          "kind": "serif"},
+    {"id": "instrserif",  "label": "Instrument Serif",   "stack": "'Instrument Serif', Georgia, serif",          "g": "Instrument+Serif:ital@0;1",                       "kind": "serif"},
+    {"id": "cormorant",   "label": "Cormorant Garamond", "stack": "'Cormorant Garamond', Georgia, serif",        "g": "Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400", "kind": "serif"},
+    {"id": "prata",       "label": "Prata",              "stack": "'Prata', Georgia, serif",                     "g": "Prata",                                           "kind": "serif"},
+    {"id": "playfair",    "label": "Playfair Display",   "stack": "'Playfair Display', Georgia, serif",          "g": "Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400", "kind": "serif"},
+    {"id": "fraunces",    "label": "Fraunces",           "stack": "'Fraunces', Georgia, serif",                  "g": "Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700", "kind": "serif"},
+    {"id": "youngserif",  "label": "Young Serif",        "stack": "'Young Serif', Georgia, serif",               "g": "Young+Serif",                                     "kind": "serif"},
+    {"id": "newsreader",  "label": "Newsreader",         "stack": "'Newsreader', Georgia, serif",                "g": "Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300", "kind": "serif"},
+    {"id": "librecaslon", "label": "Libre Caslon Display","stack": "'Libre Caslon Display', Georgia, serif",     "g": "Libre+Caslon+Display",                            "kind": "serif"},
+    {"id": "marcellus",   "label": "Marcellus",          "stack": "'Marcellus', Georgia, serif",                 "g": "Marcellus",                                       "kind": "serif"},
+    {"id": "dmserif",     "label": "DM Serif Display",   "stack": "'DM Serif Display', Georgia, serif",          "g": "DM+Serif+Display",                                "kind": "serif"},
+    {"id": "lora",        "label": "Lora",               "stack": "'Lora', Georgia, serif",                      "g": "Lora:ital,wght@0,400;0,500;0,600;1,400",           "kind": "serif"},
+
+    # --- mono ---
+    {"id": "jetbrains",   "label": "JetBrains Mono",     "stack": "'JetBrains Mono', ui-monospace, monospace",   "g": "JetBrains+Mono:wght@400;500;700",                 "kind": "mono"},
+    {"id": "spacemono",   "label": "Space Mono",         "stack": "'Space Mono', ui-monospace, monospace",       "g": "Space+Mono:wght@400;700",                         "kind": "mono"},
 ]
 FONT_IDS = {f["id"] for f in FONTS}
 
@@ -75,114 +101,210 @@ def font(font_id: str) -> dict:
 
 
 # =========================================================================
-# Themes — each is a different storefront, not a recoloured one
+# Icon set — one source of truth, shipped to both the storefront and the
+# builder so a seller picks an icon by name and gets the same drawing in the
+# editor as their shoppers get on the site. Paths are drawn on a 24x24 grid
+# with a 1.6 stroke and no fill; the renderer supplies the <svg> wrapper.
 # =========================================================================
-# motion values understood by the storefront runtime:
-#   reveal      fade + rise as sections enter the viewport
-#   hscroll     horizontal collection rails (drag / wheel / arrows)
-#   parallax    background moves slower than content on vertical scroll
-#   pin         section sticks while its content advances
-#   marquee     continuous horizontal ticker band
-#   zoom        slow image scale on enter
+ICONS = {
+    # chrome
+    "bag": '<path d="M6 7h12l1 13H5L6 7Z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/>',
+    "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>',
+    "user": '<circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6"/>',
+    "close": '<path d="M6 6 18 18M18 6 6 18"/>',
+    "plus": '<path d="M12 5v14M5 12h14"/>',
+    "minus": '<path d="M5 12h14"/>',
+    "check": '<path d="m4.5 12.5 5 5 10-11"/>',
+    "arrow-right": '<path d="M4 12h16"/><path d="m14 6 6 6-6 6"/>',
+    "arrow-left": '<path d="M20 12H4"/><path d="m10 6-6 6 6 6"/>',
+    "arrow-up-right": '<path d="M7 17 17 7"/><path d="M8 7h9v9"/>',
+    "chevron-down": '<path d="m6 9 6 6 6-6"/>',
+    "menu": '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    # promise strip / product
+    "truck": '<path d="M2 7h11v10H2z"/><path d="M13 10h4.5l3.5 3.5V17H13z"/><circle cx="6.5" cy="18.5" r="1.8"/><circle cx="17" cy="18.5" r="1.8"/>',
+    "shield": '<path d="M12 3.5 5 6v6c0 4 3 7.2 7 8.5 4-1.3 7-4.5 7-8.5V6l-7-2.5Z"/>',
+    "refresh": '<path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4.5h-4.5"/>',
+    "star": '<path d="m12 3.8 2.5 5.3 5.6.8-4 4.1 1 5.8-5.1-2.8-5.1 2.8 1-5.8-4-4.1 5.6-.8L12 3.8Z"/>',
+    "leaf": '<path d="M5 19c0-8 5-13 14-13 0 9-5 14-14 13Z"/><path d="M9 15c2-3 4.5-5 8-6.5"/>',
+    "spark": '<path d="M12 3v5M12 16v5M3 12h5M16 12h5M6.3 6.3l3.2 3.2M14.5 14.5l3.2 3.2M17.7 6.3l-3.2 3.2M9.5 14.5l-3.2 3.2"/>',
+    "lock": '<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7"/>',
+    "gift": '<rect x="3.5" y="9" width="17" height="11" rx="1.5"/><path d="M3.5 13.5h17M12 9v11"/><path d="M12 9C9 9 7.5 8 7.5 6.5S9.5 4.5 12 9Zm0 0c3 0 4.5-1 4.5-2.5S14.5 4.5 12 9Z"/>',
+    "clock": '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
+    "credit-card": '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10.5h18"/>',
+    "package": '<path d="m12 3 8 4.2v9.6L12 21l-8-4.2V7.2L12 3Z"/><path d="M4 7.2 12 11.5l8-4.3M12 11.5V21"/>',
+    "heart": '<path d="M12 20s-7-4.4-7-9.3A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.7C19 15.6 12 20 12 20Z"/>',
+    "image": '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4.5 17 4.6-4.4L13 16l2.8-2.5 3.7 3.4"/>',
+    "map-pin": '<path d="M12 21c4-4.4 6-7.6 6-10a6 6 0 1 0-12 0c0 2.4 2 5.6 6 10Z"/><circle cx="12" cy="11" r="2.2"/>',
+    "mail": '<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="m3.6 7 8.4 6 8.4-6"/>',
+    "phone": '<path d="M6 3.8h3.2l1.6 4-2 1.4a11.6 11.6 0 0 0 5 5l1.4-2 4 1.6V17c0 1.7-1.4 3.1-3.1 2.9C9.6 19.2 4.8 14.4 3.9 6.9 3.7 5.2 4.3 3.8 6 3.8Z"/>',
+    "instagram": '<rect x="4" y="4" width="16" height="16" rx="4.6"/><circle cx="12" cy="12" r="3.6"/><circle cx="16.8" cy="7.2" r="1"/>',
+    "whatsapp": '<path d="M4 20l1.3-4A8 8 0 1 1 8 18.7L4 20Z"/><path d="M9 9.4c.4 2.4 2.2 4.2 4.6 4.6l1-1.3 1.8.8v1.2c0 .6-.5 1.1-1.1 1a7.6 7.6 0 0 1-6.9-6.9c-.1-.6.4-1.1 1-1.1h1.2l.8 1.8-1.4 1"/>',
+    "scissors": '<circle cx="6.5" cy="7" r="2.2"/><circle cx="6.5" cy="17" r="2.2"/><path d="M8.4 8.4 19 17M19 7 8.4 15.6"/>',
+    "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/>',
+    "droplet": '<path d="M12 3.5c3.4 4 5.5 6.7 5.5 9.3a5.5 5.5 0 1 1-11 0c0-2.6 2.1-5.3 5.5-9.3Z"/>',
+    "flame": '<path d="M12 21a5.5 5.5 0 0 0 5.5-5.5c0-4-3.5-5.5-3-9.5-2.5 1-4 3.5-4 5.5-1 0-2-1-2-2.5-1.3 1.4-2 3.4-2 6.5A5.5 5.5 0 0 0 12 21Z"/>',
+    "globe": '<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/><path d="M12 4c2.2 2.2 3.3 5 3.3 8s-1.1 5.8-3.3 8c-2.2-2.2-3.3-5-3.3-8s1.1-5.8 3.3-8Z"/>',
+}
+PROMISE_ICONS = ["truck", "shield", "refresh", "leaf", "spark", "lock", "gift",
+                 "clock", "credit-card", "package", "heart", "star", "scissors",
+                 "sun", "droplet", "flame", "globe", "map-pin", "check"]
+
+# Sites built before the icon set existed stored emoji here. Map the ones we
+# shipped onto real icons so an old site heals the moment it is read, and fall
+# back to a tick for anything we don't recognise.
+_ICON_ALIASES = {
+    "🚚": "truck", "🔒": "shield", "↩️": "refresh", "↩": "refresh", "✅": "check",
+    "🌿": "leaf", "✨": "spark", "🎁": "gift", "⏱": "clock", "⏰": "clock",
+    "💳": "credit-card", "📦": "package", "❤️": "heart", "⭐": "star",
+    "🔐": "lock", "🌍": "globe", "📍": "map-pin", "💧": "droplet", "🔥": "flame",
+    "☀️": "sun", "✂️": "scissors",
+}
+
+
+def icon_name(raw) -> str:
+    """Whatever is stored -> a name the icon set actually draws."""
+    v = str(raw or "").strip()
+    if v in ICONS:
+        return v
+    return _ICON_ALIASES.get(v, "check")
+
+
+
+
+# =========================================================================
+# Themes.
+#
+# Each theme is a different storefront, not a recoloured one. Three dials do
+# most of that work, in this order of impact:
+#
+#   layout.radius   0px reads couture, 999px reads friendly
+#   feel.dur/ease   slow expo curves read luxury, fast quart curves read sport
+#   layout.track    +0.16em on an eyebrow reads couture, +0.06em reads sportswear
+#
+# Colour and typeface come after those. Palettes below use near-black rather
+# than #000 and warm off-white rather than #fff, which is most of the
+# difference between "designed" and "default".
+#
+# motion values the storefront runtime understands:
+#   reveal    line-mask rise as a section enters
+#   parallax  media moves against the scroll
+#   hscroll   horizontal collection rails
+#   pin       a section holds while its content advances
+#   marquee   continuous ticker band
+#   zoom      counter-scaled image inside a clip-path reveal
+#   blur      soft blur-in for headings (beauty / jewellery register)
+#   magnetic  buttons lean toward the pointer
+# =========================================================================
 THEMES = [
     {
-        "id": "basic", "label": "Basic", "icon": "◻️", "genre": "Universal",
-        "blurb": "Clean, fast and quiet. Big product grid, no theatrics — the safe default that suits any category.",
+        "id": "basic", "label": "Studio", "icon": "◻", "genre": "Universal",
+        "blurb": "A quiet, confident grid. Generous white space, one strong typeface, nothing competing with the product photograph.",
         "fonts": {"heading": "inter", "body": "inter"},
-        "light": {"bg": "#ffffff", "surface": "#f7f7f8", "ink": "#17181c", "muted": "#6b7078",
-                  "border": "#e5e6ea", "accent": "#3f4757", "accent_ink": "#ffffff"},
-        "dark":  {"bg": "#101216", "surface": "#181a1f", "ink": "#e8eaee", "muted": "#8d929c",
-                  "border": "#282b33", "accent": "#c3cadb", "accent_ink": "#14161a"},
-        "layout": {"hero": "split", "grid": "cards", "cta": "solid", "radius": 12,
-                   "case": "none", "track": 0, "density": "normal"},
+        "light": {"bg": "#fbfbfa", "surface": "#f2f2f0", "ink": "#111112", "muted": "#6e6e73",
+                  "border": "#e4e4e1", "accent": "#1b1b1f", "accent_ink": "#ffffff"},
+        "dark":  {"bg": "#0c0c0d", "surface": "#141416", "ink": "#ececed", "muted": "#8b8b90",
+                  "border": "#232326", "accent": "#ededef", "accent_ink": "#101012"},
+        "layout": {"hero": "split", "grid": "cards", "cta": "solid", "radius": 10,
+                   "case": "none", "track": -1, "density": "normal", "grain": 0},
         "motion": ["reveal"],
     },
     {
-        "id": "luxury", "label": "Luxury", "icon": "🕯️", "genre": "Premium / heritage",
-        "blurb": "Ink-dark, wide margins, serif display type. Slow horizontal collection rails and a parallax hero — built to make one product feel expensive.",
+        "id": "luxury", "label": "Maison", "icon": "◈", "genre": "Luxury / heritage",
+        "blurb": "Espresso and champagne, wide margins, a serif that takes its time. Collections move sideways; the hero drifts behind the type.",
         "fonts": {"heading": "cormorant", "body": "worksans"},
-        "light": {"bg": "#f6f3ee", "surface": "#efe9e0", "ink": "#1c1a17", "muted": "#7a736a",
-                  "border": "#ddd5c9", "accent": "#8a6f43", "accent_ink": "#ffffff"},
-        "dark":  {"bg": "#0e0d0c", "surface": "#161412", "ink": "#ece7de", "muted": "#9a9186",
-                  "border": "#2a2622", "accent": "#c8a86a", "accent_ink": "#14120f"},
+        "light": {"bg": "#f7f4ee", "surface": "#efe9de", "ink": "#1a1713", "muted": "#7b7266",
+                  "border": "#e2d9ca", "accent": "#8c6f45", "accent_ink": "#ffffff"},
+        "dark":  {"bg": "#0b0a09", "surface": "#131110", "ink": "#ede7dc", "muted": "#948b7e",
+                  "border": "#241f1a", "accent": "#c9a86b", "accent_ink": "#100e0b"},
         "layout": {"hero": "full", "grid": "editorial", "cta": "outline", "radius": 0,
-                   "case": "upper", "track": 3, "density": "airy"},
-        "motion": ["reveal", "parallax", "hscroll", "zoom"],
+                   "case": "upper", "track": 12, "density": "airy", "grain": 0.05},
+        "motion": ["reveal", "parallax", "hscroll", "zoom", "split"],
     },
     {
-        "id": "fitness", "label": "Fitness", "icon": "🏋️", "genre": "Sports / supplements",
-        "blurb": "Loud condensed headlines, high-contrast blocks, a scrolling claims band and fast vertical parallax. Made to convert on energy.",
+        "id": "fitness", "label": "Charge", "icon": "◤", "genre": "Sport / supplements",
+        "blurb": "Carbon black and a green that shouts. Headlines set solid, a claims band that never stops moving, sections that lock as you scroll.",
         "fonts": {"heading": "bebas", "body": "manrope"},
-        "light": {"bg": "#f4f5f7", "surface": "#ffffff", "ink": "#101317", "muted": "#666d78",
-                  "border": "#dfe2e7", "accent": "#1f6f4a", "accent_ink": "#ffffff"},
-        "dark":  {"bg": "#0b0d10", "surface": "#14181d", "ink": "#eef1f5", "muted": "#8a929d",
-                  "border": "#242a31", "accent": "#4fd18b", "accent_ink": "#08110c"},
-        "layout": {"hero": "full", "grid": "cards", "cta": "solid", "radius": 6,
-                   "case": "upper", "track": 1, "density": "tight"},
-        "motion": ["reveal", "parallax", "marquee", "pin"],
+        "light": {"bg": "#f4f4f5", "surface": "#ffffff", "ink": "#0d0e11", "muted": "#62656e",
+                  "border": "#e3e4e8", "accent": "#12704a", "accent_ink": "#ffffff"},
+        "dark":  {"bg": "#08090b", "surface": "#101216", "ink": "#f0f2f5", "muted": "#8a8f99",
+                  "border": "#1e2127", "accent": "#46e08a", "accent_ink": "#06110a"},
+        "layout": {"hero": "full", "grid": "cards", "cta": "solid", "radius": 4,
+                   "case": "upper", "track": 2, "density": "tight", "grain": 0},
+        "motion": ["reveal", "parallax", "marquee", "pin", "split"],
     },
     {
-        "id": "fashion", "label": "Fashion & Apparel", "icon": "👗", "genre": "Clothing / lookbook",
-        "blurb": "Editorial lookbook. Full-bleed imagery, horizontal collection scroll and mask reveals — the grid gets out of the photo's way.",
+        "id": "fashion", "label": "Atelier", "icon": "▤", "genre": "Apparel / lookbook",
+        "blurb": "Bone and ink. Full-bleed photography, a lookbook that scrolls sideways, images that uncover themselves as they arrive.",
         "fonts": {"heading": "syne", "body": "dmsans"},
-        "light": {"bg": "#faf9f7", "surface": "#ffffff", "ink": "#15161a", "muted": "#71737b",
-                  "border": "#e6e4e0", "accent": "#1b1c20", "accent_ink": "#ffffff"},
-        "dark":  {"bg": "#0f0f11", "surface": "#17171a", "ink": "#eeedeb", "muted": "#90919a",
-                  "border": "#26262b", "accent": "#e8e6e1", "accent_ink": "#131315"},
-        "layout": {"hero": "full", "grid": "editorial", "cta": "outline", "radius": 2,
-                   "case": "upper", "track": 2, "density": "airy"},
-        "motion": ["reveal", "hscroll", "zoom"],
+        "light": {"bg": "#f8f7f5", "surface": "#ffffff", "ink": "#101012", "muted": "#6d6d72",
+                  "border": "#e8e6e2", "accent": "#101012", "accent_ink": "#ffffff"},
+        "dark":  {"bg": "#0b0b0c", "surface": "#131314", "ink": "#f0efed", "muted": "#8c8c92",
+                  "border": "#232325", "accent": "#f0efed", "accent_ink": "#0f0f10"},
+        "layout": {"hero": "full", "grid": "editorial", "cta": "outline", "radius": 0,
+                   "case": "upper", "track": 6, "density": "airy", "grain": 0.04},
+        "motion": ["reveal", "hscroll", "zoom", "split", "mask"],
     },
     {
-        "id": "jewellery", "label": "Jewellery", "icon": "💍", "genre": "Fine jewellery",
-        "blurb": "Small pieces, huge close-ups. Soft champagne palette, a slow carousel and a gentle shine pass over each card.",
+        "id": "jewellery", "label": "Lustre", "icon": "◇", "genre": "Fine jewellery",
+        "blurb": "Pearl grounds and antique gold. Small things photographed enormous, a slow carousel, and a shine that crosses each piece as you pass it.",
         "fonts": {"heading": "marcellus", "body": "worksans"},
-        "light": {"bg": "#fbf8f4", "surface": "#ffffff", "ink": "#1d1a16", "muted": "#7d746a",
-                  "border": "#e9e0d4", "accent": "#9c7c46", "accent_ink": "#ffffff"},
-        "dark":  {"bg": "#100e0c", "surface": "#191614", "ink": "#efe9e0", "muted": "#9a9086",
-                  "border": "#2b2620", "accent": "#d8b877", "accent_ink": "#161310"},
-        "layout": {"hero": "split", "grid": "editorial", "cta": "outline", "radius": 3,
-                   "case": "upper", "track": 4, "density": "airy"},
-        "motion": ["reveal", "hscroll", "zoom", "parallax"],
+        "light": {"bg": "#fbf9f5", "surface": "#ffffff", "ink": "#191713", "muted": "#7d746a",
+                  "border": "#ece4d7", "accent": "#9a7b45", "accent_ink": "#ffffff"},
+        "dark":  {"bg": "#0d0c0a", "surface": "#16140f", "ink": "#f0eae0", "muted": "#9b9286",
+                  "border": "#262119", "accent": "#d9bb7c", "accent_ink": "#14110c"},
+        "layout": {"hero": "split", "grid": "editorial", "cta": "outline", "radius": 2,
+                   "case": "upper", "track": 14, "density": "airy", "grain": 0.03},
+        "motion": ["reveal", "hscroll", "zoom", "parallax", "shine", "split"],
     },
     {
-        "id": "cafe", "label": "Food & Beverage", "icon": "☕", "genre": "Cafe / kitchen",
-        "blurb": "A menu, not a catalogue. Warm paper tones, horizontal category rails and prices that read like a board behind the counter.",
+        "id": "cafe", "label": "Counter", "icon": "◐", "genre": "Food & drink",
+        "blurb": "Cream paper and burnt orange. Prices set like a board behind the counter, categories on rails, warmth over polish.",
         "fonts": {"heading": "fraunces", "body": "worksans"},
-        "light": {"bg": "#fbf7f0", "surface": "#ffffff", "ink": "#211a12", "muted": "#7d7266",
-                  "border": "#e8ded0", "accent": "#a2542a", "accent_ink": "#ffffff"},
-        "dark":  {"bg": "#12100d", "surface": "#1b1814", "ink": "#f0e9df", "muted": "#9c9287",
-                  "border": "#2c2721", "accent": "#e08a52", "accent_ink": "#170f09"},
-        "layout": {"hero": "split", "grid": "list", "cta": "solid", "radius": 14,
-                   "case": "none", "track": 0, "density": "normal"},
+        "light": {"bg": "#fcf8f1", "surface": "#ffffff", "ink": "#1e1810", "muted": "#7b7164",
+                  "border": "#eee3d1", "accent": "#a9541f", "accent_ink": "#ffffff"},
+        "dark":  {"bg": "#100e0b", "surface": "#1a1712", "ink": "#f2ebe0", "muted": "#9c9287",
+                  "border": "#2a241c", "accent": "#e8874a", "accent_ink": "#150d07"},
+        "layout": {"hero": "split", "grid": "list", "cta": "solid", "radius": 16,
+                   "case": "none", "track": -1, "density": "normal", "grain": 0.04},
         "motion": ["reveal", "hscroll"],
     },
     {
-        "id": "beauty", "label": "Beauty & Skincare", "icon": "🧴", "genre": "Skincare / wellness",
-        "blurb": "Soft pastel ground, ingredient callouts under every product, gentle drifting gradients. Calm and clinical at once.",
+        "id": "beauty", "label": "Bloom", "icon": "○", "genre": "Beauty / skincare",
+        "blurb": "Blush grounds with plum accents and soft gradients that drift behind the hero. Ingredients called out under every product.",
         "fonts": {"heading": "playfair", "body": "manrope"},
-        "light": {"bg": "#fbf6f5", "surface": "#ffffff", "ink": "#1e191b", "muted": "#7c7175",
-                  "border": "#eddfdd", "accent": "#a8657a", "accent_ink": "#ffffff"},
-        "dark":  {"bg": "#120f11", "surface": "#1a1618", "ink": "#f0e8ea", "muted": "#9a8f93",
-                  "border": "#2b2427", "accent": "#e0a3b6", "accent_ink": "#181114"},
-        "layout": {"hero": "split", "grid": "cards", "cta": "solid", "radius": 20,
-                   "case": "none", "track": 0, "density": "airy"},
-        "motion": ["reveal", "parallax", "zoom"],
+        "light": {"bg": "#fcf7f6", "surface": "#ffffff", "ink": "#1c1719", "muted": "#7c7173",
+                  "border": "#f2e5e3", "accent": "#9d5f74", "accent_ink": "#ffffff"},
+        "dark":  {"bg": "#100d0f", "surface": "#191517", "ink": "#f2eaec", "muted": "#9a8f92",
+                  "border": "#2a2226", "accent": "#e3a5b7", "accent_ink": "#171013"},
+        "layout": {"hero": "split", "grid": "cards", "cta": "solid", "radius": 22,
+                   "case": "none", "track": -1, "density": "airy", "grain": 0},
+        "motion": ["reveal", "parallax", "zoom", "drift"],
     },
     {
-        "id": "tech", "label": "Tech & Gadgets", "icon": "🎧", "genre": "Electronics",
-        "blurb": "Dark spec-sheet layout. Feature sections pin while their detail scrolls, and every product carries a hard numbers strip.",
+        "id": "tech", "label": "Obsidian", "icon": "◼", "genre": "Electronics",
+        "blurb": "A spec sheet with taste. Ice blue on near-black, feature sections that pin while their detail scrolls, hard numbers under every product.",
         "fonts": {"heading": "spacegro", "body": "inter"},
-        "light": {"bg": "#f5f6f8", "surface": "#ffffff", "ink": "#111318", "muted": "#666c77",
-                  "border": "#e1e4e9", "accent": "#2f5d8c", "accent_ink": "#ffffff"},
-        "dark":  {"bg": "#0a0c10", "surface": "#12151b", "ink": "#e9ecf1", "muted": "#8a919d",
-                  "border": "#20242c", "accent": "#6fa8dc", "accent_ink": "#0a0f14"},
-        "layout": {"hero": "full", "grid": "cards", "cta": "solid", "radius": 10,
-                   "case": "none", "track": 0, "density": "tight"},
+        "light": {"bg": "#f4f5f7", "surface": "#ffffff", "ink": "#0e1015", "muted": "#626775",
+                  "border": "#e4e6ec", "accent": "#2b5fa8", "accent_ink": "#ffffff"},
+        "dark":  {"bg": "#07080b", "surface": "#0f1116", "ink": "#e9ebf0", "muted": "#868c99",
+                  "border": "#1c1f26", "accent": "#6ea8f5", "accent_ink": "#060a12"},
+        "layout": {"hero": "full", "grid": "cards", "cta": "solid", "radius": 8,
+                   "case": "none", "track": -2, "density": "tight", "grain": 0},
         "motion": ["reveal", "pin", "parallax", "marquee"],
     },
 ]
 THEME_IDS = {t["id"] for t in THEMES}
+
+# How a theme *moves*. Each theme may override any of these; the resolver falls
+# back here so adding a theme never means remembering every knob.
+DEFAULT_FEEL = {"grain": 0.0, "dur": 1.0, "ease": "expo"}
+
+# easing curves the storefront can be handed
+EASES = {
+    "expo":  "cubic-bezier(0.16, 1, 0.30, 1)",
+    "quart": "cubic-bezier(0.25, 1, 0.50, 1)",
+    "back":  "cubic-bezier(0.34, 1.56, 0.64, 1)",
+}
 
 
 def theme(theme_id: str) -> dict:
@@ -190,11 +312,13 @@ def theme(theme_id: str) -> dict:
 
 
 def theme_catalog() -> list[dict]:
-    """What the theme picker shows — no need to ship the whole palette twice."""
+    """What the theme picker shows."""
     return [{
         "id": t["id"], "label": t["label"], "icon": t["icon"], "genre": t["genre"],
         "blurb": t["blurb"], "motion": t["motion"],
+        "feel": {**DEFAULT_FEEL, **(t.get("feel") or {})},
         "fonts": t["fonts"], "light": t["light"], "dark": t["dark"], "layout": t["layout"],
+        "prefers_dark": bool(t.get("prefers_dark")),
     } for t in THEMES]
 
 
@@ -312,6 +436,8 @@ def default_site(email: str) -> dict:
             "radius": None,                          # None = theme default
             "motion": "full",                        # full | subtle | none
             "card_style": "",                        # blank = theme default
+            "cols": None,                            # products per row, None = theme default
+            "grain": None,                           # film grain strength, None = theme default
             "width": "wide",                         # wide | compact
         },
         "hero": {
@@ -324,9 +450,9 @@ def default_site(email: str) -> dict:
         },
         "story": {"title": "Our story", "body": "", "image_url": ""},
         "highlights": [
-            {"icon": "🚚", "title": "Fast dispatch", "text": "Orders leave within 24 hours."},
-            {"icon": "🔒", "title": "Secure checkout", "text": "Your details stay with us, never resold."},
-            {"icon": "↩️", "title": "Easy returns", "text": "7-day no-questions returns."},
+            {"icon": "truck", "title": "Fast dispatch", "text": "Orders leave within 24 hours."},
+            {"icon": "shield", "title": "Secure checkout", "text": "Your details stay with us, never resold."},
+            {"icon": "refresh", "title": "Easy returns", "text": "7-day no-questions returns."},
         ],
         "testimonials": [],
         "announcement": "",
@@ -377,6 +503,9 @@ def get_site(email: str) -> dict:
     site = _merge(default_site(email), raw or {})
     if site["theme"] not in THEME_IDS:
         site["theme"] = "basic"
+    for h in site.get("highlights") or []:
+        if isinstance(h, dict):
+            h["icon"] = icon_name(h.get("icon"))
     return site
 
 
@@ -420,6 +549,16 @@ def save_site(email: str, patch: dict) -> dict:
             st["radius"] = None
     if st.get("card_style") not in ("", "cards", "editorial", "list"):
         st["card_style"] = ""
+    if st.get("cols") not in (None, ""):
+        try:
+            st["cols"] = max(2, min(5, int(float(st["cols"]))))
+        except (TypeError, ValueError):
+            st["cols"] = None
+    if st.get("grain") not in (None, ""):
+        try:
+            st["grain"] = max(0.0, min(0.12, round(float(st["grain"]), 3)))
+        except (TypeError, ValueError):
+            st["grain"] = None
 
     # ---- hero ----
     site["hero"]["heading"] = str(site["hero"].get("heading") or "").strip()[:120]
@@ -434,7 +573,7 @@ def save_site(email: str, patch: dict) -> dict:
     # ---- sections / blocks ----
     site["sections"] = {k: _b(v, True) for k, v in site["sections"].items()}
     site["highlights"] = [
-        {"icon": str(h.get("icon") or "✅")[:4],
+        {"icon": icon_name(h.get("icon")),
          "title": str(h.get("title") or "").strip()[:60],
          "text": str(h.get("text") or "").strip()[:160]}
         for h in (site.get("highlights") or [])[:6] if isinstance(h, dict)
@@ -496,37 +635,101 @@ def set_published(email: str, published: bool) -> dict:
 # public payload — what the storefront renders from
 # =========================================================================
 def resolved_style(site: dict) -> dict:
-    """Theme defaults with the seller's overrides applied. The storefront turns
-    this straight into CSS custom properties, so every value is final here."""
+    """Theme defaults with the seller's overrides applied.
+
+    Everything the storefront needs is final by the time it leaves here — the
+    page turns this straight into CSS custom properties and never has to know
+    which parts came from the theme and which from the seller.
+    """
     t = theme(site.get("theme"))
     st = site.get("style") or {}
     light = dict(t["light"])
     dark = dict(t["dark"])
     if st.get("accent"):
         light["accent"] = st["accent"]
+        light["accent_soft"] = _tint(st["accent"], light["bg"], 0.12)
+        light["accent_ink"] = _readable_on(st["accent"])
     if st.get("accent_dark"):
         dark["accent"] = st["accent_dark"]
+        dark["accent_soft"] = _tint(st["accent_dark"], dark["bg"], 0.16)
+        dark["accent_ink"] = _readable_on(st["accent_dark"])
     elif st.get("accent"):
         dark["accent"] = st["accent"]
+        dark["accent_soft"] = _tint(st["accent"], dark["bg"], 0.16)
+        dark["accent_ink"] = _readable_on(st["accent"])
+
     layout = dict(t["layout"])
     if st.get("radius") not in (None, ""):
-        layout["radius"] = st["radius"]
+        r = int(st["radius"])
+        layout["radius"] = r
+        layout["radius_btn"] = r
+        layout["radius_badge"] = 999 if r >= 24 else r
     if st.get("card_style"):
         layout["grid"] = st["card_style"]
+    if st.get("cols") not in (None, ""):
+        layout["cols"] = max(2, min(5, int(st["cols"])))
+
     heading = font(st.get("heading_font") or t["fonts"]["heading"])
     body = font(st.get("body_font") or t["fonts"]["body"])
-    motion = t["motion"]
+    accent_face = font((t.get("fonts") or {}).get("accent") or t["fonts"]["body"])
+
+    feel = {**DEFAULT_FEEL, **(t.get("feel") or {})}
+    # a theme may carry its grain on the layout block instead
+    if t.get("layout", {}).get("grain") is not None:
+        feel["grain"] = t["layout"]["grain"]
+    motion = list(t["motion"])
     if st.get("motion") == "none":
         motion = []
+        feel["grain"] = 0.0
     elif st.get("motion") == "subtle":
-        motion = [m for m in motion if m in ("reveal", "hscroll")]
+        motion = [m for m in motion if m in ("reveal", "hscroll", "shine")]
+        feel["dur"] = min(feel["dur"], 1.0)
+    if st.get("grain") not in (None, ""):
+        try:
+            feel["grain"] = max(0.0, min(0.12, float(st["grain"])))
+        except (TypeError, ValueError):
+            pass
+
+    mode = st.get("mode") or "auto"
     return {
-        "theme": t["id"], "light": light, "dark": dark, "layout": layout,
-        "motion": motion, "mode": st.get("mode") or "auto",
+        "theme": t["id"],
+        "light": light, "dark": dark, "layout": layout,
+        "motion": motion, "feel": feel,
+        "ease": EASES.get(feel.get("ease", "expo"), EASES["expo"]),
+        "mode": mode,
+        "prefers_dark": bool(t.get("prefers_dark")) and mode == "auto",
         "width": st.get("width") or "wide",
-        "heading_font": heading, "body_font": body,
-        "google_fonts": sorted({heading["g"], body["g"]}),
+        "heading_font": heading, "body_font": body, "accent_font": accent_face,
+        "google_fonts": sorted({heading["g"], body["g"], accent_face["g"]}),
     }
+
+
+def _hex(c: str) -> tuple[int, int, int]:
+    c = (c or "#000000").lstrip("#")
+    if len(c) == 3:
+        c = "".join(ch * 2 for ch in c)
+    try:
+        return int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+    except ValueError:
+        return 0, 0, 0
+
+
+def _tint(colour: str, ground: str, amount: float) -> str:
+    """Mix `amount` of the accent into the page ground — the soft wash used for
+    badges and hover fills. Computed here so a custom accent gets a matching
+    soft tint instead of keeping the theme's original one."""
+    r1, g1, b1 = _hex(colour)
+    r2, g2, b2 = _hex(ground)
+    mix = lambda a, b: round(b + (a - b) * amount)  # noqa: E731
+    return "#%02x%02x%02x" % (mix(r1, r2), mix(g1, g2), mix(b1, b2))
+
+
+def _readable_on(colour: str) -> str:
+    """Black or white text on a chosen accent, whichever actually reads."""
+    r, g, b = _hex(colour)
+    lin = lambda v: (v / 255) ** 2.2  # noqa: E731 - close enough for a UI choice
+    lum = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+    return "#12100e" if lum > 0.32 else "#ffffff"
 
 
 def public_site(handle: str) -> dict | None:
@@ -548,11 +751,18 @@ def preview_site(email: str) -> dict:
 
 def _payload(email: str, site: dict) -> dict:
     items = products.storefront_payload(email)
-    cats: list[str] = []
+    cats: list[dict] = []
+    seen: dict[str, dict] = {}
     for p in items:
         c = (p.get("category") or "").strip()
-        if c and c not in cats:
-            cats.append(c)
+        if not c:
+            continue
+        if c not in seen:
+            seen[c] = {"name": c, "image": p.get("image_url") or "", "count": 0}
+            cats.append(seen[c])
+        seen[c]["count"] += 1
+        if not seen[c]["image"]:
+            seen[c]["image"] = p.get("image_url") or ""
     public = {k: v for k, v in site.items() if k not in ("policies",)}
     public["policies"] = site.get("policies") or {}
     return {
@@ -560,5 +770,6 @@ def _payload(email: str, site: dict) -> dict:
         "style": resolved_style(site),
         "products": items,
         "categories": cats,
+        "icons": ICONS,
         "seller": email,
     }

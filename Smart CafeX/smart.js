@@ -2105,88 +2105,128 @@ async function viewAdsMetrics(id) {
 }
 
 // =========================================================================
-// MODULE: Website Builder (Site Management)
+// MODULE: Website Builder
+//
+// Five steps, with Back / Next at the bottom of each so the seller is never
+// hunting for the tab bar. Step three is the real workbench: the live site on
+// the left, an inspector on the right, and a two-way bridge between them —
+// click a photo, a headline or the footer on the site and the matching controls
+// open beside it; change a control and the site repaints without a reload.
 // =========================================================================
 let _site = null;        // the working copy the seller is editing
-let _siteMeta = null;    // themes, fonts, counts, stats from the server
-let _siteTab = "setup";
+let _siteMeta = null;    // themes, fonts, icons, counts, stats from the server
+let _step = "setup";
 let _siteDirty = false;
+let _openGroup = "hero";
+let _frameReady = false;
+let _liveTimer = null;
 
-async function openSite() {
+const STEPS = [
+  { id: "setup",    label: "Setup",     hint: "Name, address, contact" },
+  { id: "theme",    label: "Theme",     hint: "Pick the look" },
+  { id: "editor",   label: "Design",    hint: "Edit on the live site" },
+  { id: "checkout", label: "Checkout",  hint: "Shipping, tax, payment" },
+  { id: "publish",  label: "Publish",   hint: "Go live" },
+];
+const stepIndex = () => STEPS.findIndex((s) => s.id === _step);
+
+async function openSite(step) {
   moduleShell("Website Builder", `<div class="ap-empty">Loading your site…</div>`);
   try {
     const d = await api("/api/site/state");
     _siteMeta = d;
     _site = JSON.parse(JSON.stringify(d.site));
     if (!_site.handle) _site.handle = d.suggested_handle;
-    _siteDirty = false;
+    _siteDirty = false; _frameReady = false;
+    _step = step || (_site.handle && _site.brand ? "editor" : "setup");
     renderSite();
   } catch (e) { moduleShell("Website Builder", `<div class="card">${esc(e.message)}</div>`); }
 }
 
-const SITE_TABS = [
-  { id: "setup",    label: "Setup",    ico: "🪪" },
-  { id: "theme",    label: "Theme",    ico: "🎨" },
-  { id: "design",   label: "Design",   ico: "🖌️" },
-  { id: "content",  label: "Content",  ico: "✍️" },
-  { id: "commerce", label: "Checkout", ico: "🧾" },
-  { id: "preview",  label: "Preview",  ico: "👁️" },
-];
+/** SVG from the shared icon set (same drawings the storefront uses). */
+function sic(name, cls) {
+  const path = (_siteMeta && _siteMeta.icons && _siteMeta.icons[name]) || "";
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+    stroke-linecap="round" stroke-linejoin="round"${cls ? ` class="${cls}"` : ""}>${path}</svg>`;
+}
 
-function siteMark() { _siteDirty = true; const b = $("siteSave"); if (b) { b.disabled = false; b.textContent = "Save changes"; } const d = $("siteDirty"); if (d) d.hidden = false; }
+function siteMark() {
+  _siteDirty = true;
+  const b = $("siteSave");
+  if (b) { b.disabled = false; b.textContent = "Save"; }
+  const d = $("siteDirty"); if (d) d.hidden = false;
+  pushLive();
+}
 
 function renderSite() {
   const live = _site.published && _site.handle;
   const url = _site.handle ? `/s/${_site.handle}` : "";
-  const c = _siteMeta.counts;
 
-  const banner = `
+  const rail = STEPS.map((st, i) => {
+    const done = i < stepIndex();
+    return `<button class="wz ${_step === st.id ? "on" : ""} ${done ? "done" : ""}" data-step="${st.id}">
+        <span class="wz-n">${done ? "✓" : i + 1}</span>
+        <span class="wz-t"><b>${st.label}</b><i>${st.hint}</i></span>
+      </button>`;
+  }).join("");
+
+  const bar = `
     <div class="site-bar">
       <div class="site-bar-l">
-        <span class="chan-ico">${live ? "🟢" : "⚪"}</span>
+        <span class="site-dot ${live ? "live" : ""}"></span>
         <div>
           <b>${esc(_site.brand || "Your website")}</b>
-          <div class="muted tiny">${live ? `Live at <a href="${esc(url)}" target="_blank" rel="noopener">${esc(location.origin + url)}</a>` : "Not published yet — only you can see it"}</div>
+          <div class="muted tiny">${live
+            ? `Live at <a href="${esc(url)}" target="_blank" rel="noopener">${esc(location.origin + url)}</a>`
+            : "Draft — only you can see it"}</div>
         </div>
       </div>
       <div class="site-bar-r">
-        <span class="muted tiny" id="siteDirty" hidden>Unsaved changes</span>
-        <button class="btn ghost sm" id="siteSave" ${_siteDirty ? "" : "disabled"}>${_siteDirty ? "Save changes" : "Saved"}</button>
-        <button class="btn ${live ? "ghost" : "primary"} sm" id="sitePub">${live ? "Unpublish" : "🚀 Publish site"}</button>
+        <span class="muted tiny" id="siteDirty" ${_siteDirty ? "" : "hidden"}>Unsaved changes</span>
+        <button class="btn ghost sm" id="siteSave" ${_siteDirty ? "" : "disabled"}>${_siteDirty ? "Save" : "Saved"}</button>
+        <button class="btn ${live ? "ghost" : "primary"} sm" id="sitePub">${live ? "Unpublish" : "Publish"}</button>
       </div>
     </div>`;
 
-  const health = `
-    <div class="site-health">
-      <div class="sh"><b>${fmt(c.listed)}</b><span>listed on site</span></div>
-      <div class="sh ${c.no_image ? "warn" : ""}"><b>${fmt(c.no_image)}</b><span>without a photo</span></div>
-      <div class="sh ${c.no_price ? "warn" : ""}"><b>${fmt(c.no_price)}</b><span>without a price</span></div>
-      <div class="sh"><b>${fmt(_siteMeta.stats.orders)}</b><span>orders received</span></div>
-      <div class="sh"><b>₹${fmt(_siteMeta.stats.revenue)}</b><span>site revenue</span></div>
-    </div>`;
-
-  const tabs = `<div class="site-tabs">${SITE_TABS.map((t) =>
-    `<button class="${_siteTab === t.id ? "on" : ""}" data-stab="${t.id}">${t.ico} ${t.label}</button>`).join("")}</div>`;
-
-  moduleShell("Website Builder", banner + health + tabs + `<div id="siteBody"></div>`);
+  moduleShell("Website Builder", bar + `<div class="wz-rail">${rail}</div><div id="siteBody"></div>`);
   $("siteSave").onclick = saveSite;
   $("sitePub").onclick = togglePublish;
-  document.querySelectorAll("[data-stab]").forEach((b) => b.onclick = () => { _siteTab = b.dataset.stab; renderSite(); });
-  renderSiteTab();
+  document.querySelectorAll("[data-step]").forEach((b) => b.onclick = () => goStep(b.dataset.step));
+  renderStep();
 }
 
-function renderSiteTab() {
+function goStep(id) {
+  _step = id; _frameReady = false;
+  renderSite();
+  document.querySelector(".main").scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function stepNav() {
+  const i = stepIndex();
+  const prev = i > 0 ? STEPS[i - 1] : null;
+  const next = i < STEPS.length - 1 ? STEPS[i + 1] : null;
+  return `<div class="wz-nav">
+      ${prev ? `<button class="btn ghost" data-step="${prev.id}">← ${esc(prev.label)}</button>` : `<span></span>`}
+      <span class="muted tiny">Step ${i + 1} of ${STEPS.length}</span>
+      ${next ? `<button class="btn primary" data-step="${next.id}">${esc(next.label)} →</button>`
+             : `<button class="btn primary" id="wzFinish">Finish</button>`}
+    </div>`;
+}
+
+function renderStep() {
   const b = $("siteBody");
-  if (_siteTab === "setup") b.innerHTML = tabSetup();
-  else if (_siteTab === "theme") b.innerHTML = tabTheme();
-  else if (_siteTab === "design") b.innerHTML = tabDesign();
-  else if (_siteTab === "content") b.innerHTML = tabContent();
-  else if (_siteTab === "commerce") b.innerHTML = tabCommerce();
-  else b.innerHTML = tabPreview();
-  wireSiteTab();
+  if (_step === "setup") b.innerHTML = stepSetup() + stepNav();
+  else if (_step === "theme") b.innerHTML = stepTheme() + stepNav();
+  else if (_step === "editor") b.innerHTML = stepEditor() + stepNav();
+  else if (_step === "checkout") b.innerHTML = stepCheckout() + stepNav();
+  else b.innerHTML = stepPublish() + stepNav();
+  wireStep();
+  document.querySelectorAll("#siteBody [data-step]").forEach((n) => n.onclick = () => goStep(n.dataset.step));
+  const fin = $("wzFinish");
+  if (fin) fin.onclick = async () => { if (_siteDirty) await saveSite(); goHome(); };
 }
 
-// ---- bind any [data-bind="a.b"] control straight onto the site document ----
+/* ---- bind any [data-bind="a.b"] control straight onto the site document ---- */
 function bindPath(path, value) {
   const parts = path.split(".");
   let o = _site;
@@ -2194,11 +2234,11 @@ function bindPath(path, value) {
   o[parts[parts.length - 1]] = value;
   siteMark();
 }
-function readPath(path) {
-  return path.split(".").reduce((o, k) => (o == null ? o : o[k]), _site);
-}
+function readPath(path) { return path.split(".").reduce((o, k) => (o == null ? o : o[k]), _site); }
+
 function wireBinds(scope) {
   (scope || document).querySelectorAll("[data-bind]").forEach((n) => {
+    if (n._bound) return; n._bound = true;
     const path = n.dataset.bind;
     const ev = n.type === "checkbox" || n.tagName === "SELECT" || n.type === "color" ? "change" : "input";
     n.addEventListener(ev, () => {
@@ -2229,8 +2269,8 @@ function field(label, path, opts = {}) {
   return `<label>${label}${hint}<input type="${opts.type || "text"}" data-bind="${path}" ${opts.num ? 'data-num="1" min="0" step="any"' : ""} value="${esc(v == null ? "" : v)}" placeholder="${esc(opts.ph || "")}" /></label>`;
 }
 
-// ---------------------------------------------------------------- SETUP ---
-function tabSetup() {
+/* ============================== STEP 1: SETUP ============================ */
+function stepSetup() {
   return `
   <div class="card sup-form form-v">
     <div class="sup-sub">Your brand</div>
@@ -2238,11 +2278,10 @@ function tabSetup() {
       ${field("Brand name", "brand", { ph: "Aureva" })}
       ${field("Tagline", "tagline", { hint: "(one line, shown under the logo)", ph: "Handmade fragrance, made in Bengaluru" })}
       ${imageField("siteLogo", _site.logo_url, "Logo", "square or wide, transparent PNG works best")}
-      ${field("Announcement bar", "announcement", { hint: "(optional strip across the top)", ph: "Free shipping over ₹999 · Ships in 24h" })}
     </div>
 
     <div class="sup-sub">Web address</div>
-    <p class="muted tiny" style="margin:0 0 10px;">Your site lives at this address today. A custom domain of your own can be attached later — the address below keeps working either way.</p>
+    <p class="muted tiny" style="margin:0 0 10px;">Your site lives here today. A domain of your own can be attached later — this address keeps working either way.</p>
     <div class="handle-row">
       <span class="handle-pre">${esc(location.origin)}/s/</span>
       <input id="siteHandle" value="${esc(_site.handle || "")}" placeholder="your-brand" />
@@ -2260,139 +2299,221 @@ function tabSetup() {
   </div>`;
 }
 
-// ---------------------------------------------------------------- THEME ---
-function tabTheme() {
+/* ============================== STEP 2: THEME ============================ */
+function stepTheme() {
   const cards = _siteMeta.themes.map((t) => {
     const sel = _site.theme === t.id;
     const p = t.light;
     return `
       <div class="theme-card ${sel ? "sel" : ""}" data-theme-pick="${t.id}">
         <div class="tc-mock" style="background:${p.bg};border-color:${p.border}">
-          <div class="tc-bar" style="background:${p.accent}"></div>
-          <div class="tc-title" style="color:${p.ink};font-family:${esc(fontStack(t.fonts.heading))}">${esc(t.label)}</div>
-          <div class="tc-lines"><i style="background:${p.border}"></i><i style="background:${p.border};width:60%"></i></div>
+          <div class="tc-row"><span class="tc-dot" style="background:${p.accent}"></span>
+            <span class="tc-nav" style="background:${p.border}"></span><span class="tc-nav" style="background:${p.border}"></span></div>
+          <div class="tc-title" style="color:${p.ink};font-family:${esc(fontStack(t.fonts.heading))};letter-spacing:${(t.layout.track || 0) / 100}em;text-transform:${t.layout.case === "upper" ? "uppercase" : "none"}">${esc(t.label)}</div>
+          <div class="tc-lines"><i style="background:${p.muted};opacity:.4"></i><i style="background:${p.muted};opacity:.4;width:52%"></i></div>
           <div class="tc-grid">
-            <span style="background:${p.surface};border-color:${p.border}"></span>
-            <span style="background:${p.surface};border-color:${p.border}"></span>
-            <span style="background:${p.surface};border-color:${p.border}"></span>
+            <span style="background:${p.surface};border-color:${p.border};border-radius:${Math.min(8, t.layout.radius)}px"></span>
+            <span style="background:${p.surface};border-color:${p.border};border-radius:${Math.min(8, t.layout.radius)}px"></span>
+            <span style="background:${p.surface};border-color:${p.border};border-radius:${Math.min(8, t.layout.radius)}px"></span>
           </div>
+          <div class="tc-btn" style="background:${p.accent};color:${p.accent_ink};border-radius:${Math.min(8, t.layout.radius)}px">Shop</div>
         </div>
         <div class="tc-body">
-          <div class="tc-head"><b>${t.icon} ${esc(t.label)}</b>${sel ? `<span class="chan-pill live">Selected</span>` : ""}</div>
-          <div class="muted tiny" style="margin:2px 0 6px;">${esc(t.genre)}</div>
+          <div class="tc-head"><b>${esc(t.label)}</b>${sel ? `<span class="chan-pill live">Selected</span>` : ""}</div>
+          <div class="muted tiny" style="margin:2px 0 7px;">${esc(t.genre)}</div>
           <p class="muted tiny">${esc(t.blurb)}</p>
           <div class="motion-chips">${t.motion.map((m) => `<span>${esc(MOTION_LABEL[m] || m)}</span>`).join("")}</div>
         </div>
       </div>`;
   }).join("");
-  return `<p class="muted" style="margin:6px 0 14px;">Each theme is a different website — its own layout, type scale and motion, not just a colour swap. Pick the one closest to what you sell, then fine-tune everything in <b>Design</b>.</p>
+  return `<p class="muted" style="margin:6px 0 16px;">Each theme is a different website — its own layout, type scale and motion, not a colour swap. Pick the closest one; you can change every detail in the next step.</p>
     <div class="theme-grid">${cards}</div>`;
 }
 
 const MOTION_LABEL = {
-  reveal: "Fade-up on scroll", parallax: "Vertical parallax", hscroll: "Horizontal rails",
+  reveal: "Fade-up on scroll", parallax: "Parallax", hscroll: "Horizontal rails",
   pin: "Pinned sections", marquee: "Scrolling band", zoom: "Image zoom",
+  split: "Headline rise", mask: "Mask reveal", shine: "Shine sweep", drift: "Drifting gradient",
 };
 function fontStack(id) {
   const f = (_siteMeta.fonts || []).find((x) => x.id === id);
   return f ? f.stack : "system-ui, sans-serif";
-}
-
-// --------------------------------------------------------------- DESIGN ---
-function tabDesign() {
-  const t = _siteMeta.themes.find((x) => x.id === _site.theme) || _siteMeta.themes[0];
-  const fontOpts = (sel) => _siteMeta.fonts.map((f) =>
-    `<option value="${f.id}" ${sel === f.id ? "selected" : ""}>${esc(f.label)} · ${f.kind}</option>`).join("");
-  return `
-  <div class="card sup-form form-v">
-    <div class="sup-sub">Typography</div>
-    <p class="muted tiny" style="margin:0 0 10px;">Leave a font on “Theme default” to follow ${esc(t.label)}, or choose your own — the change applies everywhere on your site.</p>
-    <div class="sup-form-grid">
-      <label>Headings font
-        <select data-bind="style.heading_font"><option value="">Theme default (${esc(fontLabel(t.fonts.heading))})</option>${fontOpts(_site.style.heading_font)}</select></label>
-      <label>Body font
-        <select data-bind="style.body_font"><option value="">Theme default (${esc(fontLabel(t.fonts.body))})</option>${fontOpts(_site.style.body_font)}</select></label>
-    </div>
-
-    <div class="sup-sub">Colour</div>
-    <div class="sup-form-grid">
-      <label>Accent — light mode
-        <span class="colour-row"><input type="color" data-bind="style.accent" value="${esc(_site.style.accent || t.light.accent)}" />
-        <button type="button" class="btn ghost tiny" data-reset="style.accent">Use theme colour</button></span></label>
-      <label>Accent — dark mode
-        <span class="colour-row"><input type="color" data-bind="style.accent_dark" value="${esc(_site.style.accent_dark || t.dark.accent)}" />
-        <button type="button" class="btn ghost tiny" data-reset="style.accent_dark">Use theme colour</button></span></label>
-      ${field("Colour mode", "style.mode", { type: "select", options: [["auto", "Follow the visitor's device"], ["light", "Always light"], ["dark", "Always dark"]] })}
-    </div>
-
-    <div class="sup-sub">Shape &amp; motion</div>
-    <div class="sup-form-grid">
-      ${field("Corner radius", "style.radius", { type: "range", min: 0, max: 28, def: t.layout.radius, hint: "px" })}
-      ${field("Animation", "style.motion", { type: "select", options: [["full", "Full — everything this theme does"], ["subtle", "Subtle — fades and rails only"], ["none", "None — completely static"]] })}
-      ${field("Product layout", "style.card_style", { type: "select", options: [["", `Theme default (${t.layout.grid})`], ["cards", "Cards — bordered tiles"], ["editorial", "Editorial — big imagery, no borders"], ["list", "List — a menu-style row per product"]] })}
-      ${field("Page width", "style.width", { type: "select", options: [["wide", "Wide"], ["compact", "Compact"]] })}
-    </div>
-    <p class="muted tiny">This theme animates with: ${t.motion.map((m) => MOTION_LABEL[m] || m).join(" · ")}.</p>
-  </div>`;
 }
 function fontLabel(id) {
   const f = (_siteMeta.fonts || []).find((x) => x.id === id);
   return f ? f.label : id;
 }
 
-// -------------------------------------------------------------- CONTENT ---
-function tabContent() {
-  const sec = _site.sections;
+/* ====================== STEP 3: SIDE-BY-SIDE EDITOR ====================== */
+const GROUPS = [
+  { key: "brand",        label: "Brand & logo",     body: gBrand },
+  { key: "announcement", label: "Announcement bar", body: gAnnounce },
+  { key: "hero",         label: "Hero",             body: gHero },
+  { key: "__type",       label: "Typography",       body: gType },
+  { key: "__colour",     label: "Colour",           body: gColour },
+  { key: "__shape",      label: "Shape & motion",   body: gShape },
+  { key: "highlights",   label: "Promise strip",    body: gHighlights },
+  { key: "categories",   label: "Category rail",    body: gCategories },
+  { key: "featured",     label: "Featured rail",    body: gFeatured },
+  { key: "products",     label: "Product grid",     body: gProducts },
+  { key: "story",        label: "Our story",        body: gStory },
+  { key: "testimonials", label: "Reviews",          body: gTestimonials },
+  { key: "newsletter",   label: "Newsletter",       body: gNewsletter },
+  { key: "footer",       label: "Footer & contact", body: gFooter },
+];
+
+function stepEditor() {
+  if (!_site.handle) return `<div class="ap-empty">Give your site an address in <b>Setup</b> first.</div>` ;
+  const src = `/s/${encodeURIComponent(_site.handle)}?preview=${encodeURIComponent(state.token || "")}&edit=1`;
+  const groups = GROUPS.map((g) => `
+    <section class="insp-g ${_openGroup === g.key ? "open" : ""}" data-group="${g.key}">
+      <button class="insp-h" data-ghead="${g.key}"><span>${esc(g.label)}</span>${sic("chevron-down")}</button>
+      <div class="insp-b"><div class="insp-in">${g.body()}</div></div>
+    </section>`).join("");
+
   return `
-  <div class="card sup-form form-v">
-    <div class="sup-sub">Hero — the first thing visitors see</div>
-    <div class="sup-form-grid">
-      ${imageField("siteHero", _site.hero.image_url, "Hero image", "wide, at least 1600px")}
-      ${field("Headline", "hero.heading", { ph: "Scent that stays with you" })}
-      ${field("Sub-headline", "hero.sub", { type: "textarea", rows: 2, ph: "Small-batch perfume, bottled in Bengaluru." })}
-      ${field("Button text", "hero.cta_text", { ph: "Shop now" })}
-      ${field("Text alignment", "hero.align", { type: "select", options: [["left", "Left"], ["center", "Centred"]] })}
-      ${field("Image darkening", "hero.overlay", { type: "range", min: 0, max: 90, def: 45, hint: "% — keeps text readable over the photo" })}
+  <div class="ed-shell">
+    <div class="ed-canvas">
+      <div class="ed-toolbar">
+        <div class="ed-devices">
+          <button class="on" data-dev="desktop">Desktop</button>
+          <button data-dev="tablet">Tablet</button>
+          <button data-dev="phone">Phone</button>
+        </div>
+        <div class="ed-routes">
+          <button class="on" data-route="home">Home</button>
+          <button data-route="shop">Shop</button>
+          <button data-route="product">Product</button>
+        </div>
+        <div class="ed-tools">
+          <button class="btn ghost tiny" id="edReload">Reload</button>
+          <a class="btn ghost tiny" href="${esc(src)}" target="_blank" rel="noopener">Open ↗</a>
+        </div>
+      </div>
+      <div class="ed-stage" id="edStage"><iframe id="edFrame" src="${esc(src)}" title="Live site"></iframe></div>
+      <p class="ed-hint muted tiny">Click anything on the site — a photo, a headline, the footer — and its controls open on the right.</p>
     </div>
-
-    <div class="sup-sub">Sections on your home page</div>
-    <div class="sup-form-grid">
-      ${field("Featured products rail", "sections.featured", { type: "check" })}
-      ${field("Shop by category", "sections.categories", { type: "check" })}
-      ${field("Promise strip (delivery, returns…)", "sections.highlights", { type: "check" })}
-      ${field("Our story", "sections.story", { type: "check" })}
-      ${field("Customer reviews", "sections.testimonials", { type: "check" })}
-      ${field("Newsletter signup", "sections.newsletter", { type: "check" })}
-    </div>
-
-    <div class="sup-sub">Our story</div>
-    <div class="sup-form-grid">
-      ${field("Title", "story.title", { ph: "Our story" })}
-      ${field("Story", "story.body", { type: "textarea", rows: 5, ph: "Why you started, what you make, who makes it." })}
-      ${imageField("siteStory", _site.story.image_url, "Story image", "")}
-    </div>
-
-    <div class="sup-sub">Promise strip</div>
-    <div id="hlEditor" class="rep-list"></div>
-
-    <div class="sup-sub">Customer reviews</div>
-    <div id="tsEditor" class="rep-list"></div>
-
-    <div class="sup-sub">Policies <span class="muted tiny">(shown as footer links when filled in)</span></div>
-    <div class="sup-form-grid">
-      ${field("Shipping policy", "policies.shipping", { type: "textarea", rows: 3 })}
-      ${field("Returns &amp; refunds", "policies.returns", { type: "textarea", rows: 3 })}
-      ${field("Privacy", "policies.privacy", { type: "textarea", rows: 3 })}
-    </div>
+    <aside class="ed-panel">
+      <div class="ed-panel-head">
+        <b>Editing</b>
+        <span class="muted tiny" id="edSel">Nothing selected</span>
+      </div>
+      <div class="ed-groups" id="edGroups">${groups}</div>
+    </aside>
   </div>`;
 }
 
+/* ---- inspector groups ---- */
+function gBrand() {
+  return `<div class="sup-form-grid">
+    ${field("Brand name", "brand", { ph: "Aureva" })}
+    ${field("Tagline", "tagline", { ph: "Small-batch perfume" })}
+    ${imageField("edLogo", _site.logo_url, "Logo", "")}
+  </div>`;
+}
+function gAnnounce() {
+  return `<div class="sup-form-grid">
+    ${field("Announcement text", "announcement", { hint: "(leave blank to hide the bar)", ph: "Free shipping over ₹999" })}
+  </div>`;
+}
+function gHero() {
+  return `<div class="sup-form-grid">
+    ${imageField("edHero", _site.hero.image_url, "Hero image", "wide, at least 1600px")}
+    ${field("Headline", "hero.heading", { ph: "Scent that stays with you" })}
+    ${field("Sub-headline", "hero.sub", { type: "textarea", rows: 2 })}
+    ${field("Button text", "hero.cta_text", { ph: "Shop now" })}
+    ${field("Alignment", "hero.align", { type: "select", options: [["left", "Left"], ["center", "Centred"]] })}
+    ${field("Image darkening", "hero.overlay", { type: "range", min: 0, max: 90, def: 45, hint: "%" })}
+  </div>`;
+}
+function gType() {
+  const t = _siteMeta.themes.find((x) => x.id === _site.theme) || _siteMeta.themes[0];
+  const opts = (sel) => _siteMeta.fonts.map((f) =>
+    `<option value="${f.id}" ${sel === f.id ? "selected" : ""}>${esc(f.label)} · ${f.kind}</option>`).join("");
+  return `<div class="sup-form-grid">
+    <label>Headings<select data-bind="style.heading_font"><option value="">Theme default (${esc(fontLabel(t.fonts.heading))})</option>${opts(_site.style.heading_font)}</select></label>
+    <label>Body text<select data-bind="style.body_font"><option value="">Theme default (${esc(fontLabel(t.fonts.body))})</option>${opts(_site.style.body_font)}</select></label>
+  </div>
+  <div class="font-preview" id="fontPrev"></div>`;
+}
+function gColour() {
+  const t = _siteMeta.themes.find((x) => x.id === _site.theme) || _siteMeta.themes[0];
+  return `<div class="sup-form-grid">
+    <label>Accent — light mode
+      <span class="colour-row"><input type="color" data-bind="style.accent" value="${esc(_site.style.accent || t.light.accent)}" />
+      <button type="button" class="btn ghost tiny" data-reset="style.accent">Theme colour</button></span></label>
+    <label>Accent — dark mode
+      <span class="colour-row"><input type="color" data-bind="style.accent_dark" value="${esc(_site.style.accent_dark || t.dark.accent)}" />
+      <button type="button" class="btn ghost tiny" data-reset="style.accent_dark">Theme colour</button></span></label>
+    ${field("Colour mode", "style.mode", { type: "select", options: [["auto", "Follow the visitor's device"], ["light", "Always light"], ["dark", "Always dark"]] })}
+  </div>`;
+}
+function gShape() {
+  const t = _siteMeta.themes.find((x) => x.id === _site.theme) || _siteMeta.themes[0];
+  return `<div class="sup-form-grid">
+    ${field("Corner radius", "style.radius", { type: "range", min: 0, max: 28, def: t.layout.radius, hint: "px" })}
+    ${field("Animation", "style.motion", { type: "select", options: [["full", "Full — everything this theme does"], ["subtle", "Subtle — fades and rails only"], ["none", "None — completely static"]] })}
+    ${field("Page width", "style.width", { type: "select", options: [["wide", "Wide"], ["compact", "Compact"]] })}
+  </div>
+  <p class="muted tiny">${esc(t.label)} animates with: ${t.motion.map((m) => MOTION_LABEL[m] || m).join(" · ")}.</p>`;
+}
+function gHighlights() {
+  return `${field("Show the promise strip", "sections.highlights", { type: "check" })}
+    <div id="hlEditor" class="rep-list"></div>`;
+}
+function gCategories() {
+  return `${field("Show the category rail", "sections.categories", { type: "check" })}
+    <p class="muted tiny">Categories come from the Category field on each product, and each tile uses that category's first photo.</p>`;
+}
+function gFeatured() {
+  return `${field("Show the featured rail", "sections.featured", { type: "check" })}
+    <p class="muted tiny">The first ten products you have listed, in name order.</p>`;
+}
+function gProducts() {
+  const t = _siteMeta.themes.find((x) => x.id === _site.theme) || _siteMeta.themes[0];
+  return `${field("Product layout", "style.card_style", { type: "select", options: [["", `Theme default (${t.layout.grid})`], ["cards", "Cards — square photos in a grid"], ["editorial", "Editorial — tall photos, no borders"], ["list", "List — a menu-style row per product"]] })}
+    <p class="muted tiny">Photos, prices and stock live in <b>Product Management</b>. ${fmt(_siteMeta.counts.listed)} product${_siteMeta.counts.listed === 1 ? "" : "s"} listed${_siteMeta.counts.no_image ? `, ${fmt(_siteMeta.counts.no_image)} still without a photo` : ""}.</p>
+    <button class="btn ghost sm" id="edToProducts">Open Product Management →</button>`;
+}
+function gStory() {
+  return `${field("Show this section", "sections.story", { type: "check" })}
+    <div class="sup-form-grid">
+      ${field("Title", "story.title", { ph: "Our story" })}
+      ${field("Story", "story.body", { type: "textarea", rows: 5 })}
+      ${imageField("edStory", _site.story.image_url, "Image", "")}
+    </div>`;
+}
+function gTestimonials() {
+  return `${field("Show customer reviews", "sections.testimonials", { type: "check" })}
+    <div id="tsEditor" class="rep-list"></div>`;
+}
+function gNewsletter() {
+  return `${field("Show the newsletter band", "sections.newsletter", { type: "check" })}
+    <p class="muted tiny">Sign-ups are collected on the page; wire them to your mailing tool whenever you're ready.</p>`;
+}
+function gFooter() {
+  return `<div class="sup-form-grid">
+    ${field("Email", "contact.email", { type: "email" })}
+    ${field("Phone", "contact.phone")}
+    ${field("WhatsApp number", "contact.whatsapp", { hint: "(digits only)" })}
+    ${field("Instagram handle", "contact.instagram")}
+    ${field("Address", "contact.address", { type: "textarea", rows: 2 })}
+  </div>
+  <div class="sup-sub">Policies <span class="muted tiny">(shown as footer links when filled in)</span></div>
+  <div class="sup-form-grid">
+    ${field("Shipping", "policies.shipping", { type: "textarea", rows: 3 })}
+    ${field("Returns &amp; refunds", "policies.returns", { type: "textarea", rows: 3 })}
+    ${field("Privacy", "policies.privacy", { type: "textarea", rows: 3 })}
+  </div>`;
+}
+
+/* ---- repeaters ---- */
 function renderRepeaters() {
   const hl = $("hlEditor");
   if (hl) {
     hl.innerHTML = _site.highlights.map((h, i) => `
       <div class="rep-row">
-        <input class="rep-ico" value="${esc(h.icon)}" data-hl="${i}" data-k="icon" />
+        <button class="icon-pick" data-iconpick="${i}" title="Change icon">${sic(h.icon || "check")}</button>
         <input value="${esc(h.title)}" data-hl="${i}" data-k="title" placeholder="Fast dispatch" />
         <input value="${esc(h.text)}" data-hl="${i}" data-k="text" placeholder="Orders leave within 24 hours." />
         <button class="btn ghost tiny" data-hlrm="${i}">✕</button>
@@ -2400,7 +2521,11 @@ function renderRepeaters() {
       `<button class="btn ghost sm" id="hlAdd">＋ Add a promise</button>`;
     hl.querySelectorAll("[data-hl]").forEach((n) => n.oninput = () => { _site.highlights[+n.dataset.hl][n.dataset.k] = n.value; siteMark(); });
     hl.querySelectorAll("[data-hlrm]").forEach((b) => b.onclick = () => { _site.highlights.splice(+b.dataset.hlrm, 1); siteMark(); renderRepeaters(); });
-    $("hlAdd").onclick = () => { if (_site.highlights.length >= 6) { toast("Six is the maximum."); return; } _site.highlights.push({ icon: "✅", title: "", text: "" }); siteMark(); renderRepeaters(); };
+    hl.querySelectorAll("[data-iconpick]").forEach((b) => b.onclick = () => openIconPicker(+b.dataset.iconpick));
+    $("hlAdd").onclick = () => {
+      if (_site.highlights.length >= 6) { toast("Six is the maximum."); return; }
+      _site.highlights.push({ icon: "check", title: "", text: "" }); siteMark(); renderRepeaters();
+    };
   }
   const ts = $("tsEditor");
   if (ts) {
@@ -2421,11 +2546,73 @@ function renderRepeaters() {
   }
 }
 
-// ------------------------------------------------------------- COMMERCE ---
-function tabCommerce() {
+function openIconPicker(index) {
+  const names = _siteMeta.promise_icons || Object.keys(_siteMeta.icons || {});
+  $("addModal").hidden = true;
+  const wrap = document.createElement("div");
+  wrap.className = "modal-back";
+  wrap.innerHTML = `<div class="modal">
+      <div class="modal-head"><b>Pick an icon</b><button class="btn ghost tiny" data-ipclose>✕</button></div>
+      <div class="icon-grid">${names.map((n) => `<button data-icon="${n}" title="${n}">${sic(n)}</button>`).join("")}</div>
+    </div>`;
+  document.body.appendChild(wrap);
+  const shut = () => wrap.remove();
+  wrap.querySelector("[data-ipclose]").onclick = shut;
+  wrap.onclick = (e) => { if (e.target === wrap) shut(); };
+  wrap.querySelectorAll("[data-icon]").forEach((b) => b.onclick = () => {
+    _site.highlights[index].icon = b.dataset.icon; siteMark(); renderRepeaters(); shut();
+  });
+}
+
+/* ---- the live bridge ---- */
+function frame() { return $("edFrame"); }
+function sendFrame(msg) {
+  const f = frame();
+  if (f && f.contentWindow) f.contentWindow.postMessage({ source: "cs-builder", ...msg }, "*");
+}
+function pushLive() {
+  if (_step !== "editor" || !_frameReady) return;
+  clearTimeout(_liveTimer);
+  _liveTimer = setTimeout(async () => {
+    try {
+      const r = await api("/api/site/resolve", { method: "POST", json: { site: _site } });
+      sendFrame({ type: "apply", site: _site, style: r.style, categories: r.categories });
+    } catch (e) { /* the canvas keeps the last good render */ }
+  }, 240);
+}
+
+function openGroup(key, fromCanvas) {
+  _openGroup = key;
+  document.querySelectorAll(".insp-g").forEach((g) => g.classList.toggle("open", g.dataset.group === key));
+  const g = document.querySelector(`.insp-g[data-group="${CSS.escape(key)}"]`);
+  const label = (GROUPS.find((x) => x.key === key) || {}).label || "";
+  const sel = $("edSel"); if (sel) sel.textContent = label || "Nothing selected";
+  if (g) {
+    g.scrollIntoView({ behavior: "smooth", block: "start" });
+    g.classList.add("flash"); setTimeout(() => g.classList.remove("flash"), 900);
+    const first = g.querySelector("input, textarea, select");
+    if (first && !fromCanvas) first.focus();
+  }
+  if (!fromCanvas) sendFrame({ type: "highlight", key });
+  if (key === "highlights" || key === "testimonials") renderRepeaters();
+}
+
+addEventListener("message", (e) => {
+  const m = e.data || {};
+  if (m.source !== "cs-store") return;
+  if (m.type === "ready") {
+    _frameReady = true;
+    pushLive();
+  } else if (m.type === "select") {
+    openGroup(m.key, true);
+  }
+});
+
+/* ============================ STEP 4: CHECKOUT =========================== */
+function stepCheckout() {
   return `
   <div class="card sup-form form-v">
-    <p class="muted tiny" style="margin:0 0 12px;">These are the numbers your checkout calculates with. Shoppers create an account on your store before ordering, and every order lands in the Orders module.</p>
+    <p class="muted tiny" style="margin:0 0 12px;">What your checkout charges and collects. Shoppers create an account on your store before ordering, and every order lands in the Orders app.</p>
     <div class="sup-sub">Delivery</div>
     <div class="sup-form-grid">
       ${field("Shipping fee ₹", "commerce.shipping_fee", { type: "number", num: true, ph: "49" })}
@@ -2445,35 +2632,54 @@ function tabCommerce() {
   </div>`;
 }
 
-// -------------------------------------------------------------- PREVIEW ---
-function tabPreview() {
-  if (!_site.handle) return `<div class="ap-empty">Give your site an address in <b>Setup</b> first.</div>`;
-  const src = `/s/${encodeURIComponent(_site.handle)}?preview=${encodeURIComponent(state.token || "")}`;
+/* ============================= STEP 5: PUBLISH =========================== */
+function stepPublish() {
+  const c = _siteMeta.counts;
+  const url = location.origin + "/s/" + (_site.handle || "");
+  const checks = [
+    [!!_site.brand, "Brand name set"],
+    [!!_site.handle, "Web address chosen"],
+    [c.listed > 0, `${fmt(c.listed)} product${c.listed === 1 ? "" : "s"} listed on the site`],
+    [c.no_price === 0, c.no_price ? `${fmt(c.no_price)} listed product${c.no_price === 1 ? " has" : "s have"} no price` : "Every listed product has a price"],
+    [c.no_image === 0, c.no_image ? `${fmt(c.no_image)} listed product${c.no_image === 1 ? " has" : "s have"} no photo` : "Every listed product has a photo"],
+    [!!_site.hero.heading, "Hero headline written"],
+  ];
+  const ready = checks.every(([ok]) => ok);
   return `
-    <div class="prev-bar">
-      <div class="prev-devices">
-        <button class="on" data-dev="desktop">🖥 Desktop</button>
-        <button data-dev="tablet">▭ Tablet</button>
-        <button data-dev="phone">▯ Phone</button>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn ghost sm" id="prevReload">↻ Reload</button>
-        <a class="btn ghost sm" href="${esc(src)}" target="_blank" rel="noopener">Open in a tab ↗</a>
+  <div class="pub-grid">
+    <div class="card">
+      <h4 style="margin:0 0 12px;">Before you go live</h4>
+      <ul class="check-list">${checks.map(([ok, t]) =>
+        `<li class="${ok ? "ok" : "warn"}">${sic(ok ? "check" : "close")}<span>${esc(t)}</span></li>`).join("")}</ul>
+      <p class="muted tiny" style="margin-top:14px;">${ready
+        ? "Everything's in place. Publishing makes your site reachable by anyone with the link."
+        : "You can still publish — the warnings above are things shoppers will notice."}</p>
+      <div class="row" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+        <button class="btn ${_site.published ? "ghost" : "primary"}" id="pubBtn">${_site.published ? "Unpublish site" : "Publish my site"}</button>
+        ${_site.published ? `<a class="btn ghost" href="/s/${esc(_site.handle)}" target="_blank" rel="noopener">Visit site ↗</a>` : ""}
       </div>
     </div>
-    <p class="muted tiny" style="margin:0 0 10px;">${_site.published ? "This is your live site." : "This is a private preview — publish when you're happy with it."} Save your changes to see them here.</p>
-    <div class="prev-stage" id="prevStage"><iframe id="prevFrame" src="${esc(src)}" title="Site preview"></iframe></div>`;
+    <div class="card">
+      <h4 style="margin:0 0 12px;">Your link</h4>
+      <div class="share-row"><input id="shareUrl" readonly value="${esc(url)}" /><button class="btn ghost sm" id="copyUrl">Copy</button></div>
+      <p class="muted tiny" style="margin-top:10px;">Share this anywhere — Instagram bio, WhatsApp, a QR code on your packaging.</p>
+      <div class="sup-sub">Custom domain</div>
+      <p class="muted tiny" style="margin:0;">Not set up yet. When you're ready to point your own domain here, say the word and we'll wire it up.</p>
+    </div>
+  </div>`;
 }
 
-function wireSiteTab() {
-  wireBinds($("siteBody"));
-  wireImageFields($("siteBody"));
+/* ------------------------------ wiring ---------------------------------- */
+function wireStep() {
+  const body = $("siteBody");
+  wireBinds(body);
+  wireImageFields(body);
 
-  // image fields write back into the site document
-  const map = { siteLogo: "logo_url", siteHero: "hero.image_url", siteStory: "story.image_url" };
+  const map = { siteLogo: "logo_url", edLogo: "logo_url", edHero: "hero.image_url", edStory: "story.image_url" };
   Object.entries(map).forEach(([id, path]) => {
     const n = $(id);
-    if (!n) return;
+    if (!n || n._imgBound) return;
+    n._imgBound = true;
     const push = () => bindPath(path, n.value.trim());
     n.addEventListener("change", push);
     n.addEventListener("blur", push);
@@ -2484,7 +2690,9 @@ function wireSiteTab() {
     h.addEventListener("input", () => {
       const clean = h.value.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-");
       if (clean !== h.value) h.value = clean;
-      _site.handle = clean; siteMark();
+      _site.handle = clean; _siteDirty = true;
+      const b = $("siteSave"); if (b) { b.disabled = false; b.textContent = "Save"; }
+      const d = $("siteDirty"); if (d) d.hidden = false;
       clearTimeout(h._t);
       h._t = setTimeout(async () => {
         const st = $("handleState");
@@ -2505,43 +2713,62 @@ function wireSiteTab() {
     _site.style.heading_font = ""; _site.style.body_font = "";
     _site.style.radius = null; _site.style.card_style = "";
     siteMark(); renderSite();
-    toast(`Theme set to ${c.querySelector("b").textContent.trim()} — save to apply`);
+    toast(`Theme set to ${c.querySelector("b").textContent.trim()}`);
   });
 
   document.querySelectorAll("[data-reset]").forEach((b) => b.onclick = () => {
-    bindPath(b.dataset.reset, ""); renderSiteTab(); toast("Back to the theme colour");
+    bindPath(b.dataset.reset, ""); renderStep(); openGroup("__colour");
   });
 
-  if (_siteTab === "content") renderRepeaters();
-
-  const pr = $("prevReload");
-  if (pr) pr.onclick = () => { const f = $("prevFrame"); f.src = f.src; };
+  // editor step
+  document.querySelectorAll("[data-ghead]").forEach((b) => b.onclick = () => openGroup(b.dataset.ghead));
+  const rl = $("edReload"); if (rl) rl.onclick = () => { _frameReady = false; frame().src = frame().src; };
   document.querySelectorAll("[data-dev]").forEach((b) => b.onclick = () => {
     document.querySelectorAll("[data-dev]").forEach((x) => x.classList.remove("on"));
     b.classList.add("on");
-    $("prevStage").className = "prev-stage dev-" + b.dataset.dev;
+    $("edStage").className = "ed-stage dev-" + b.dataset.dev;
   });
+  document.querySelectorAll("[data-route]").forEach((b) => b.onclick = () => {
+    document.querySelectorAll("[data-route]").forEach((x) => x.classList.remove("on"));
+    b.classList.add("on");
+    sendFrame({ type: "route", name: b.dataset.route });
+  });
+  const tp = $("edToProducts"); if (tp) tp.onclick = () => openProducts();
+  if (_step === "editor") renderRepeaters();
+
+  // publish step
+  const pb = $("pubBtn"); if (pb) pb.onclick = togglePublish;
+  const cu = $("copyUrl");
+  if (cu) cu.onclick = async () => {
+    const inp = $("shareUrl"); inp.select();
+    try { await navigator.clipboard.writeText(inp.value); toast("Link copied"); }
+    catch (e) { document.execCommand("copy"); toast("Link copied"); }
+  };
 }
 
 async function saveSite() {
-  const btn = $("siteSave"); btn.disabled = true; btn.textContent = "Saving…";
+  const btn = $("siteSave"); if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
   try {
     const d = await api("/api/site/save", { method: "POST", json: { site: _site } });
     _siteMeta = d; _site = JSON.parse(JSON.stringify(d.site)); _siteDirty = false;
-    renderSite(); toast("✅ Saved");
+    const keep = _step;
+    renderSite();
+    _step = keep;
+    toast("Saved");
   } catch (e) {
-    toast(e.message, 5000); btn.disabled = false; btn.textContent = "Save changes";
+    toast(e.message, 5000);
+    if (btn) { btn.disabled = false; btn.textContent = "Save"; }
   }
 }
 
 async function togglePublish() {
   const want = !_site.published;
-  if (want && _siteDirty) { await saveSite(); }
+  if (want && _siteDirty) await saveSite();
   try {
     const d = await api("/api/site/publish", { method: "POST", json: { published: want } });
     _siteMeta = d; _site = JSON.parse(JSON.stringify(d.site)); _siteDirty = false;
     renderSite();
-    toast(want ? `🚀 Live at ${location.origin}/s/${_site.handle}` : "Site unpublished");
+    toast(want ? `Live at ${location.origin}/s/${_site.handle}` : "Site unpublished");
   } catch (e) { toast(e.message, 5000); }
 }
 
