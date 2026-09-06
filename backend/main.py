@@ -2307,6 +2307,7 @@ class ProductBody(BaseModel):
     track_stock: bool | None = True
     listed: bool | None = True
     unit_label: str | None = ""
+    video_url: str | None = ""
 
 
 class ProductIdBody(BaseModel):
@@ -2472,26 +2473,40 @@ def site_preview(authorization: str | None = Header(default=None)):
     return sitebuilder.preview_site(require_user(authorization))
 
 
+_IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".avif")
+_VIDEO_EXT = (".mp4", ".webm", ".mov", ".m4v")
+
+
 @app.post("/api/site/image")
 async def site_image(files: list[UploadFile] = File(...),
                      authorization: str | None = Header(default=None)):
-    """One image endpoint for logos, hero art, story art and product photos —
-    saved to the same public folder the content module already serves from."""
+    """One upload endpoint for every piece of media the seller adds — logos,
+    hero art, hero video, story stills, lookbook clips and product photos —
+    saved to the same public folder the content module already serves from.
+
+    Video is allowed and gets a larger budget than stills: a background clip is
+    the single biggest upgrade a storefront can have, and asking sellers to host
+    it somewhere else is how that never happens."""
     require_user(authorization)
     if not files:
         raise HTTPException(400, "No file uploaded.")
     f = files[0]
     ext = os.path.splitext(f.filename or "")[1].lower()
-    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"):
-        raise HTTPException(400, "Use a PNG, JPG, WEBP, GIF or SVG image.")
+    is_video = ext in _VIDEO_EXT
+    if ext not in _IMAGE_EXT and not is_video:
+        raise HTTPException(400, "Use a PNG, JPG, WEBP, GIF or SVG image, or an MP4/WEBM video.")
     content = await f.read()
-    if len(content) > 8 * 1024 * 1024:
-        raise HTTPException(400, "Image is over 8MB - please compress it first.")
+    cap = 48 * 1024 * 1024 if is_video else 10 * 1024 * 1024
+    if len(content) > cap:
+        raise HTTPException(400, f"That file is over {cap // (1024 * 1024)}MB — "
+                                 f"{'compress the clip (1080p, ~8 seconds is plenty)' if is_video else 'please compress it first'}.")
     import uuid as _uuid
     fname = f"{_uuid.uuid4().hex}{ext}"
     with open(os.path.join(_IMG_DIR, fname), "wb") as out:
         out.write(content)
-    return {"ok": True, "image_url": f"/generated_images/{fname}", "filename": f.filename}
+    url = f"/generated_images/{fname}"
+    return {"ok": True, "image_url": url, "url": url,
+            "kind": "video" if is_video else "image", "filename": f.filename}
 
 
 @app.post("/api/products/listed")

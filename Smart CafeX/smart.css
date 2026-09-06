@@ -869,3 +869,46 @@ td { color: var(--text-2); }
   border: 1px solid var(--border-strong); border-radius: var(--radius);
   background: var(--surface-2); color: var(--text);
 }
+/* checkbox rows sit outside .sup-form-grid inside the inspector, so they need
+   their own sizing rather than inheriting a full-width input */
+.inline-check input[type="checkbox"] { flex: none; width: 16px; height: 16px; }
+.insp-in .inline-check { padding: 4px 0 12px; }
+.insp-in .rep-row { grid-template-columns: 40px 1fr auto; row-gap: 6px; }
+.insp-in .rep-row > input:nth-child(3) { grid-column: 1 / -1; grid-row: 2; }
+.insp-in .rep-row > .btn { grid-column: 3; grid-row: 1; }
+.insp-in .rep-list { gap: 14px; }
+
+/* ---------- media slots, nudges and type previews ---------- */
+.if-preview { overflow: hidden; position: relative; }
+.if-preview video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.if-ph { color: var(--muted); display: grid; place-items: center; }
+.if-ph svg { width: 22px; height: 22px; }
+.if-actions { flex-wrap: wrap; }
+
+.nudge {
+  display: flex; gap: 11px; align-items: flex-start; margin: 0 0 14px;
+  border: 1px dashed var(--primary-line); border-radius: var(--radius);
+  background: var(--primary-soft); padding: 12px 14px; font-size: 12.5px;
+  color: var(--text-2); line-height: 1.5;
+}
+.nudge svg { width: 18px; height: 18px; flex: none; color: var(--primary); margin-top: 1px; }
+.nudge b { display: block; color: var(--text); margin-bottom: 2px; font-size: 13px; }
+
+.type-prev {
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-3);
+  padding: 14px 16px; color: var(--text); line-height: 1.2; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.type-prev.sm { font-size: 14px; line-height: 1.5; white-space: normal; }
+.type-prev.lbl { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 650; }
+
+/* lookbook tiles in the inspector */
+.gal-item.is-vid { background: var(--surface-2); }
+.gal-item video { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; }
+.gal-cap {
+  position: absolute; left: 4px; right: 4px; bottom: 4px; border: 0; border-radius: 5px;
+  background: rgba(0,0,0,.62); color: #fff; font: inherit; font-size: 10px; padding: 3px 6px;
+}
+.gal-cap:focus { outline: none; background: rgba(0,0,0,.82); }
+.insp-in .gal-wrap { gap: 8px; }
+.insp-in .gal-item, .insp-in .gal-add { width: 68px; height: 68px; }

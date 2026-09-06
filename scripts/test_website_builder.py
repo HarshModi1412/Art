@@ -236,5 +236,55 @@ c.post("/api/site/save", headers=H, json={"site": site3})
 healed = c.get("/api/site/state", headers=H).json()["site"]["highlights"][0]["icon"]
 must(healed == "truck", f"a stored emoji becomes a real icon (got {healed!r})")
 
+print("\n== 14. media, type roles and the new blocks ==")
+site4 = c.get("/api/site/state", headers=H).json()["site"]
+must("video_url" in site4["hero"], "hero carries a video slot")
+must(len(site4["copy"]) >= 15, f"{len(site4['copy'])} editable labels on the page")
+must("stats" in site4["sections"] and "drop" in site4["sections"]
+     and "gallery" in site4["sections"] and "manifesto" in site4["sections"],
+     "numbers, scarcity, lookbook and statement blocks exist")
+site4["sections"].update({"stats": True, "drop": True, "gallery": True, "manifesto": True})
+site4["stats"] = [{"value": "2,400+", "label": "shipped"}, {"value": "4.9", "label": "rating"}]
+site4["gallery"] = [{"url": "/generated_images/a.jpg", "caption": "Drop 01"},
+                    {"url": "/generated_images/b.mp4", "caption": ""}]
+site4["manifesto"] = "We make small batches and stop when the batch is done."
+site4["hero"]["video_url"] = "/generated_images/hero.mp4"
+site4["style"].update({"accent_font": "syne", "heading_scale": 118, "heading_weight": 500,
+                       "heading_track": -3, "body_scale": 104, "preloader": False, "width": "full"})
+r = c.post("/api/site/save", headers=H, json={"site": site4})
+must(r.status_code == 200, f"save the new blocks ({r.status_code})", r.text[:300])
+saved4 = r.json()["site"]
+must(saved4["hero"]["video_url"].endswith(".mp4"), "hero video persists")
+must(len(saved4["stats"]) == 2 and len(saved4["gallery"]) == 2, "figures and lookbook persist")
+must(saved4["style"]["width"] == "full", "edge-to-edge width accepted")
+rs4 = r.json()["resolved"]
+must(rs4["accent_font"]["id"] == "syne", "the label typeface is its own role")
+must(rs4["type"]["heading_scale"] == 118 and rs4["type"]["heading_weight"] == 500
+     and rs4["type"]["heading_track"] == -3 and rs4["type"]["body_scale"] == 104,
+     "display scale, weight, tracking and body scale all resolve")
+must(rs4["preloader"] is False, "the loading screen can be switched off")
+must(len(rs4["google_fonts"]) >= 3, "all three typefaces are requested from Google")
+
+site4["style"]["heading_scale"] = 9999
+r = c.post("/api/site/save", headers=H, json={"site": site4})
+must(r.json()["site"]["style"]["heading_scale"] == 145, "a silly type scale is clamped, not stored")
+
+print("\n== 15. scarcity reads real stock ==")
+pub2 = c.get(f"/api/shop/{HANDLE}/site").json()
+sc = pub2.get("scarce")
+must(sc and sc["left"] > 0, f"the countdown picks a product still in stock (got {sc})")
+must(sc["name"] != "Amber Musk 30ml" or sc["left"] > 0, "never counts down a sold-out piece")
+must(pub2["products"][0].get("video_url") is not None, "products expose their clip to the storefront")
+
+print("\n== 16. media upload accepts video ==")
+import io as _io
+r = c.post("/api/site/image", headers=H,
+           files={"files": ("clip.mp4", _io.BytesIO(b"\x00\x00\x00\x18ftypmp42" + b"0" * 400), "video/mp4")})
+must(r.status_code == 200 and r.json()["kind"] == "video", f"an MP4 uploads ({r.status_code})", r.text[:200])
+must(r.json()["url"].endswith(".mp4"), "the clip keeps its extension")
+r = c.post("/api/site/image", headers=H,
+           files={"files": ("bad.exe", _io.BytesIO(b"MZ" + b"0" * 100), "application/octet-stream")})
+must(r.status_code == 400, "anything that isn't an image or a clip is refused")
+
 print("\nALL CHECKS PASSED \u2713")
 shutil.rmtree(TMP, ignore_errors=True)

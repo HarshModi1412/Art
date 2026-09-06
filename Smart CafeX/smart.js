@@ -762,9 +762,9 @@ function renderProducts(d) {
 }
 
 // ---- shared image picker: uploads to /api/site/image and returns the URL ----
-function pickImage(onUrl, multiple) {
+function pickImage(onUrl, multiple, accept) {
   const inp = document.createElement("input");
-  inp.type = "file"; inp.accept = "image/*"; inp.multiple = !!multiple;
+  inp.type = "file"; inp.accept = accept || "image/*"; inp.multiple = !!multiple;
   inp.onchange = async () => {
     const files = Array.from(inp.files || []);
     if (!files.length) return;
@@ -783,44 +783,52 @@ function pickImage(onUrl, multiple) {
 
 // A single-image field: thumbnail + upload + paste-a-URL, used for the product
 // photo, the logo, the hero and the story image.
-function imageField(id, url, label, hint) {
+const isVid = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(String(u || ""));
+
+/** A single media slot. `video: true` also accepts MP4/WEBM — used for the
+ *  hero, the lookbook and product clips, where a few seconds of motion does
+ *  more for a storefront than any amount of styling. */
+function imageField(id, url, label, hint, video) {
+  const vid = isVid(url);
   return `
     <div class="img-field" data-imgfield="${id}">
-      <div class="if-preview" id="${id}Prev" style="${url ? `background-image:url('${esc(url)}')` : ""}">${url ? "" : "🖼️"}</div>
+      <div class="if-preview ${vid ? "is-vid" : ""}" id="${id}Prev"
+style="${url && !vid ? `background-image:url('${esc(url)}')` : ""}">${
+        url ? (vid ? `<video src="${esc(url)}" muted loop autoplay playsinline></video>` : "")
+            : `<span class="if-ph">${sic("image")}</span>`}</div>
       <div class="if-body">
         <label class="if-label">${label}${hint ? ` <span class="muted tiny">${hint}</span>` : ""}</label>
-        <input id="${id}" value="${esc(url || "")}" placeholder="Paste an image URL, or upload →" />
+        <input id="${id}" value="${esc(url || "")}" placeholder="${video ? "Paste a URL, or upload an image or clip →" : "Paste an image URL, or upload →"}" />
         <div class="if-actions">
-          <button type="button" class="btn ghost tiny" data-imgup="${id}">⬆ Upload</button>
+          <button type="button" class="btn ghost tiny" data-imgup="${id}">↑ Upload${video ? " image" : ""}</button>
+          ${video ? `<button type="button" class="btn ghost tiny" data-vidup="${id}">↑ Upload video</button>` : ""}
           <button type="button" class="btn ghost tiny" data-imgclear="${id}">Clear</button>
         </div>
       </div>
     </div>`;
 }
 
+function paintMediaPreview(id, url) {
+  const pv = $(id + "Prev");
+  if (!pv) return;
+  pv.classList.toggle("is-vid", isVid(url));
+  if (!url) { pv.style.backgroundImage = ""; pv.innerHTML = `<span class="if-ph">${sic("image")}</span>`; return; }
+  if (isVid(url)) { pv.style.backgroundImage = ""; pv.innerHTML = `<video src="${esc(url)}" muted loop autoplay playsinline></video>`; }
+  else { pv.innerHTML = ""; pv.style.backgroundImage = `url('${url}')`; }
+}
+
 function wireImageFields(scope) {
-  (scope || document).querySelectorAll("[data-imgup]").forEach((b) => b.onclick = () => {
-    const id = b.dataset.imgup;
-    pickImage((url) => {
-      $(id).value = url;
-      const pv = $(id + "Prev");
-      if (pv) { pv.style.backgroundImage = `url('${url}')`; pv.textContent = ""; }
-      $(id).dispatchEvent(new Event("change"));
-    });
-  });
-  (scope || document).querySelectorAll("[data-imgclear]").forEach((b) => b.onclick = () => {
-    const id = b.dataset.imgclear;
-    $(id).value = "";
-    const pv = $(id + "Prev");
-    if (pv) { pv.style.backgroundImage = ""; pv.textContent = "🖼️"; }
+  const set = (id, url) => {
+    $(id).value = url; paintMediaPreview(id, url);
     $(id).dispatchEvent(new Event("change"));
-  });
-  (scope || document).querySelectorAll("[data-imgfield] input").forEach((inp) => inp.onblur = () => {
-    const pv = $(inp.id + "Prev");
-    if (!pv) return;
-    if (inp.value.trim()) { pv.style.backgroundImage = `url('${inp.value.trim()}')`; pv.textContent = ""; }
-    else { pv.style.backgroundImage = ""; pv.textContent = "🖼️"; }
-  });
+  };
+  (scope || document).querySelectorAll("[data-imgup]").forEach((b) => b.onclick = () =>
+    pickImage((url) => set(b.dataset.imgup, url), false, "image/*"));
+  (scope || document).querySelectorAll("[data-vidup]").forEach((b) => b.onclick = () =>
+    pickImage((url) => set(b.dataset.vidup, url), false, "video/mp4,video/webm,video/quicktime"));
+  (scope || document).querySelectorAll("[data-imgclear]").forEach((b) => b.onclick = () => set(b.dataset.imgclear, ""));
+  (scope || document).querySelectorAll("[data-imgfield] input").forEach((inp) => inp.onblur = () =>
+    paintMediaPreview(inp.id, inp.value.trim()));
 }
 
 // ---- product form: one field per row, storefront fields included ----------
@@ -861,8 +869,11 @@ function openProductForm(id, prefillName) {
         <span class="tlbl">List this product on my website<span class="muted tiny"> — on by default</span></span>
       </label>
 
+      ${v("image_url") ? "" : `<div class="nudge">${sic("image")}<div><b>Add a photo</b>
+        A product without one is the single biggest reason a storefront looks unfinished.</div></div>`}
       <div class="sup-form-grid">
         ${imageField("pfImg", v("image_url"), "Main photo", "square images look best")}
+        ${imageField("pfVid", v("video_url"), "Product clip", "plays when a shopper hovers the card", true)}
         <label>Description<textarea id="pfDesc" rows="4" placeholder="What it is, what it's made of, why someone should buy it.">${esc(v("description"))}</textarea></label>
         <label>Key points <span class="muted tiny">(one per line — shown as ticks on the product page)</span>
           <textarea id="pfHl" rows="3" placeholder="100% cotton&#10;Ships in 24 hours&#10;Free returns">${esc((v("highlights", []) || []).join("\n"))}</textarea></label>
@@ -903,6 +914,7 @@ function openProductForm(id, prefillName) {
       status: $("pfStatus").value,
       listed: $("pfListed").checked,
       image_url: $("pfImg").value.trim(),
+      video_url: $("pfVid").value.trim(),
       images: _pfGallery,
       description: $("pfDesc").value.trim(),
       highlights: $("pfHl").value.split("\n").map((x) => x.trim()).filter(Boolean),
@@ -2195,10 +2207,18 @@ function renderSite() {
   renderStep();
 }
 
-function goStep(id) {
+async function goStep(id) {
+  // The live canvas loads the real site, and the site only has an address once
+  // it has been saved once. Entering Design saves silently so the seller never
+  // has to publish (step 5) just to see step 3.
+  if (id === "editor" && (_siteDirty || !_siteMeta.site.handle)) {
+    if (!_site.brand) _site.brand = _site.brand || (state.email || "My store").split("@")[0];
+    await saveSite({ quiet: true });
+  }
   _step = id; _frameReady = false;
   renderSite();
-  document.querySelector(".main").scrollTo({ top: 0, behavior: "smooth" });
+  const main = document.querySelector(".main");
+  if (main) main.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function stepNav() {
@@ -2353,10 +2373,15 @@ const GROUPS = [
   { key: "__colour",     label: "Colour",           body: gColour },
   { key: "__shape",      label: "Shape & motion",   body: gShape },
   { key: "highlights",   label: "Promise strip",    body: gHighlights },
+  { key: "spotlight",    label: "Spotlight product", body: gSpotlight },
   { key: "categories",   label: "Category rail",    body: gCategories },
   { key: "featured",     label: "Featured rail",    body: gFeatured },
+  { key: "stats",        label: "Numbers",          body: gStats },
   { key: "products",     label: "Product grid",     body: gProducts },
+  { key: "gallery",      label: "Lookbook",         body: gGallery },
   { key: "story",        label: "Our story",        body: gStory },
+  { key: "manifesto",    label: "Statement",        body: gManifesto },
+  { key: "drop",         label: "Scarcity block",   body: gDrop },
   { key: "testimonials", label: "Reviews",          body: gTestimonials },
   { key: "newsletter",   label: "Newsletter",       body: gNewsletter },
   { key: "footer",       label: "Footer & contact", body: gFooter },
@@ -2417,8 +2442,14 @@ function gAnnounce() {
   </div>`;
 }
 function gHero() {
-  return `<div class="sup-form-grid">
-    ${imageField("edHero", _site.hero.image_url, "Hero image", "wide, at least 1600px")}
+  const hasVid = !!_site.hero.video_url;
+  return `
+  ${hasVid ? "" : `<div class="nudge">${sic("spark")}<div><b>Add a hero clip</b>
+    Eight seconds of your product moving does more than any amount of styling.
+    MP4 or WEBM, 1080p, under 48MB.</div></div>`}
+  <div class="sup-form-grid">
+    ${imageField("edHeroVid", _site.hero.video_url, "Hero video", "plays muted on loop behind the headline", true)}
+    ${imageField("edHero", _site.hero.image_url, "Hero image", hasVid ? "used as the video's poster frame" : "wide, at least 1600px")}
     ${field("Headline", "hero.heading", { ph: "Scent that stays with you" })}
     ${field("Sub-headline", "hero.sub", { type: "textarea", rows: 2 })}
     ${field("Button text", "hero.cta_text", { ph: "Shop now" })}
@@ -2430,11 +2461,28 @@ function gType() {
   const t = _siteMeta.themes.find((x) => x.id === _site.theme) || _siteMeta.themes[0];
   const opts = (sel) => _siteMeta.fonts.map((f) =>
     `<option value="${f.id}" ${sel === f.id ? "selected" : ""}>${esc(f.label)} · ${f.kind}</option>`).join("");
-  return `<div class="sup-form-grid">
-    <label>Headings<select data-bind="style.heading_font"><option value="">Theme default (${esc(fontLabel(t.fonts.heading))})</option>${opts(_site.style.heading_font)}</select></label>
-    <label>Body text<select data-bind="style.body_font"><option value="">Theme default (${esc(fontLabel(t.fonts.body))})</option>${opts(_site.style.body_font)}</select></label>
+  const cur = (id, fallback) => fontStack(id || fallback);
+  return `
+  <p class="muted tiny" style="margin:0 0 12px;">Three roles. <b>Display</b> is every headline,
+  <b>body</b> is the reading text, and <b>labels</b> is the small uppercase type on eyebrows,
+  buttons and prices.</p>
+  <div class="sup-form-grid">
+    <label>Display<select data-bind="style.heading_font"><option value="">Theme default (${esc(fontLabel(t.fonts.heading))})</option>${opts(_site.style.heading_font)}</select></label>
+    <div class="type-prev" style="font-family:${esc(cur(_site.style.heading_font, t.fonts.heading))};font-size:26px;letter-spacing:${(_site.style.heading_track != null ? _site.style.heading_track : (t.layout.track || 0)) / 100}em;${t.layout.case === "upper" ? "text-transform:uppercase;" : ""}">${esc(_site.brand || "Your headline")}</div>
+
+    <label>Body<select data-bind="style.body_font"><option value="">Theme default (${esc(fontLabel(t.fonts.body))})</option>${opts(_site.style.body_font)}</select></label>
+    <div class="type-prev sm" style="font-family:${esc(cur(_site.style.body_font, t.fonts.body))}">The quick brown fox jumps over the lazy dog.</div>
+
+    <label>Labels &amp; buttons<select data-bind="style.accent_font"><option value="">Same as body</option>${opts(_site.style.accent_font)}</select></label>
+    <div class="type-prev lbl" style="font-family:${esc(cur(_site.style.accent_font, _site.style.body_font || t.fonts.body))}">Shop the collection</div>
   </div>
-  <div class="font-preview" id="fontPrev"></div>`;
+  <div class="sup-sub">Fine tuning</div>
+  <div class="sup-form-grid">
+    ${field("Display size", "style.heading_scale", { type: "range", min: 75, max: 145, def: 100, hint: "%" })}
+    ${field("Display weight", "style.heading_weight", { type: "select", options: [["", "Theme default"], [300, "Light"], [400, "Regular"], [500, "Medium"], [600, "Semibold"], [700, "Bold"], [800, "Extrabold"], [900, "Black"]] })}
+    ${field("Display letter-spacing", "style.heading_track", { type: "range", min: -8, max: 30, def: t.layout.track || 0, hint: "/100 em" })}
+    ${field("Body size", "style.body_scale", { type: "range", min: 88, max: 118, def: 100, hint: "%" })}
+  </div>`;
 }
 function gColour() {
   const t = _siteMeta.themes.find((x) => x.id === _site.theme) || _siteMeta.themes[0];
@@ -2453,7 +2501,8 @@ function gShape() {
   return `<div class="sup-form-grid">
     ${field("Corner radius", "style.radius", { type: "range", min: 0, max: 28, def: t.layout.radius, hint: "px" })}
     ${field("Animation", "style.motion", { type: "select", options: [["full", "Full — everything this theme does"], ["subtle", "Subtle — fades and rails only"], ["none", "None — completely static"]] })}
-    ${field("Page width", "style.width", { type: "select", options: [["wide", "Wide"], ["compact", "Compact"]] })}
+    ${field("Page width", "style.width", { type: "select", options: [["wide", "Wide"], ["compact", "Compact"], ["full", "Edge to edge"]] })}
+    ${field("Show a loading screen on first visit", "style.preloader", { type: "check", hint: "— your name, a counter, then the site" })}
   </div>
   <p class="muted tiny">${esc(t.label)} animates with: ${t.motion.map((m) => MOTION_LABEL[m] || m).join(" · ")}.</p>`;
 }
@@ -2461,23 +2510,85 @@ function gHighlights() {
   return `${field("Show the promise strip", "sections.highlights", { type: "check" })}
     <div id="hlEditor" class="rep-list"></div>`;
 }
+function gSpotlight() {
+  return `${field("Show the spotlight", "sections.spotlight", { type: "check" })}
+    <p class="muted tiny">Puts your first listed product against a sticky photo, with its own copy and
+    key points. Everything shown here comes from that product in <b>Product Management</b> —
+    give it a clip there and it plays in the spotlight.</p>`;
+}
+
 function gCategories() {
   return `${field("Show the category rail", "sections.categories", { type: "check" })}
+    <div class="sup-form-grid">
+      ${field("Label", "copy.cat_eyebrow", { ph: "Browse" })}
+      ${field("Heading", "copy.cat_title", { ph: "Shop by category" })}
+    </div>
     <p class="muted tiny">Categories come from the Category field on each product, and each tile uses that category's first photo.</p>`;
 }
 function gFeatured() {
   return `${field("Show the featured rail", "sections.featured", { type: "check" })}
+    <div class="sup-form-grid">
+      ${field("Label", "copy.feat_eyebrow", { ph: "Handpicked" })}
+      ${field("Heading", "copy.feat_title", { ph: "Featured" })}
+    </div>
     <p class="muted tiny">The first ten products you have listed, in name order.</p>`;
+}
+
+function gStats() {
+  return `${field("Show the numbers band", "sections.stats", { type: "check" })}
+    <div class="sup-form-grid">${field("Label", "copy.stats_eyebrow", { ph: "By the numbers" })}</div>
+    <p class="muted tiny">Each figure counts itself up the first time a visitor scrolls past it.
+    Write it however you like — “2,400+”, “6 weeks”, “4.9”.</p>
+    <div id="stEditor" class="rep-list"></div>`;
+}
+
+function gGallery() {
+  const n = (_site.gallery || []).length;
+  return `${field("Show the lookbook", "sections.gallery", { type: "check" })}
+    <div class="sup-form-grid">
+      ${field("Label", "copy.gallery_eyebrow", { ph: "Lookbook" })}
+      ${field("Heading", "copy.gallery_title", { ph: "In the wild" })}
+    </div>
+    ${n ? "" : `<div class="nudge">${sic("image")}<div><b>Add four or five photos</b>
+      Your product being used, held, worn, opened. Clips work here too — they autoplay
+      muted in the rail.</div></div>`}
+    <div id="glEditor" class="gal-wrap"></div>`;
+}
+
+function gManifesto() {
+  return `${field("Show the statement", "sections.manifesto", { type: "check" })}
+    <div class="sup-form-grid">
+      ${field("Statement", "manifesto", { type: "textarea", rows: 3, ph: "We make small batches, rest them properly, and stop when the batch is done." })}
+    </div>
+    <p class="muted tiny">One sentence, set large. It brightens word by word as the visitor scrolls
+    through it — keep it short and it lands.</p>`;
+}
+
+function gDrop() {
+  return `${field("Show the scarcity block", "sections.drop", { type: "check" })}
+    <div class="sup-form-grid">
+      ${field("Label", "copy.drop_eyebrow", { ph: "Limited" })}
+      ${field("Heading", "copy.drop_title", { ph: "When it's gone, it's gone" })}
+    </div>
+    <p class="muted tiny">Reads your real stock: whichever listed product has the fewest units left
+    is the one it counts down, with a bar that fills as it scrolls into view. It hides itself when
+    nothing is running low.</p>`;
 }
 function gProducts() {
   const t = _siteMeta.themes.find((x) => x.id === _site.theme) || _siteMeta.themes[0];
-  return `${field("Product layout", "style.card_style", { type: "select", options: [["", `Theme default (${t.layout.grid})`], ["cards", "Cards — square photos in a grid"], ["editorial", "Editorial — tall photos, no borders"], ["list", "List — a menu-style row per product"]] })}
+  return `<div class="sup-form-grid">
+      ${field("Label", "copy.all_eyebrow", { ph: "Catalogue" })}
+      ${field("Heading", "copy.all_title", { ph: "All products" })}
+      ${field("Shop page heading", "copy.shop_title", { ph: "Everything we sell" })}
+    </div>
+    ${field("Product layout", "style.card_style", { type: "select", options: [["", `Theme default (${t.layout.grid})`], ["cards", "Cards — square photos in a grid"], ["editorial", "Editorial — tall photos, no borders"], ["list", "List — a menu-style row per product"]] })}
     <p class="muted tiny">Photos, prices and stock live in <b>Product Management</b>. ${fmt(_siteMeta.counts.listed)} product${_siteMeta.counts.listed === 1 ? "" : "s"} listed${_siteMeta.counts.no_image ? `, ${fmt(_siteMeta.counts.no_image)} still without a photo` : ""}.</p>
     <button class="btn ghost sm" id="edToProducts">Open Product Management →</button>`;
 }
 function gStory() {
   return `${field("Show this section", "sections.story", { type: "check" })}
     <div class="sup-form-grid">
+      ${field("Label", "copy.story_eyebrow", { ph: "About us" })}
       ${field("Title", "story.title", { ph: "Our story" })}
       ${field("Story", "story.body", { type: "textarea", rows: 5 })}
       ${imageField("edStory", _site.story.image_url, "Image", "")}
@@ -2485,10 +2596,19 @@ function gStory() {
 }
 function gTestimonials() {
   return `${field("Show customer reviews", "sections.testimonials", { type: "check" })}
+    <div class="sup-form-grid">
+      ${field("Label", "copy.rev_eyebrow", { ph: "Reviews" })}
+      ${field("Heading", "copy.rev_title", { ph: "What buyers say" })}
+    </div>
     <div id="tsEditor" class="rep-list"></div>`;
 }
 function gNewsletter() {
   return `${field("Show the newsletter band", "sections.newsletter", { type: "check" })}
+    <div class="sup-form-grid">
+      ${field("Heading", "copy.news_title", { ph: "Stay in the loop" })}
+      ${field("Sub-line", "copy.news_sub", { ph: "New drops and offers. No spam, ever." })}
+      ${field("Button", "copy.news_cta", { ph: "Join" })}
+    </div>
     <p class="muted tiny">Sign-ups are collected on the page; wire them to your mailing tool whenever you're ready.</p>`;
 }
 function gFooter() {
@@ -2527,6 +2647,50 @@ function renderRepeaters() {
       _site.highlights.push({ icon: "check", title: "", text: "" }); siteMark(); renderRepeaters();
     };
   }
+  const st = $("stEditor");
+  if (st) {
+    st.innerHTML = (_site.stats || []).map((x, i) => `
+      <div class="rep-row">
+        <input class="rep-ico" value="${esc(x.value)}" data-st="${i}" data-k="value" placeholder="2,400+" />
+        <input value="${esc(x.label)}" data-st="${i}" data-k="label" placeholder="bottles shipped" />
+        <button class="btn ghost tiny" data-strm="${i}">✕</button>
+      </div>`).join("") + `<button class="btn ghost sm" id="stAdd">＋ Add a figure</button>`;
+    st.querySelectorAll("[data-st]").forEach((n) => n.oninput = () => {
+      _site.stats[+n.dataset.st][n.dataset.k] = n.value; siteMark();
+    });
+    st.querySelectorAll("[data-strm]").forEach((b) => b.onclick = () => {
+      _site.stats.splice(+b.dataset.strm, 1); siteMark(); renderRepeaters();
+    });
+    $("stAdd").onclick = () => {
+      if ((_site.stats || []).length >= 4) { toast("Four figures is the maximum."); return; }
+      _site.stats.push({ value: "", label: "" }); siteMark(); renderRepeaters();
+    };
+  }
+
+  const gl = $("glEditor");
+  if (gl) {
+    gl.innerHTML = (_site.gallery || []).map((g, i) => `
+      <div class="gal-item ${isVid(g.url) ? "is-vid" : ""}" style="${isVid(g.url) ? "" : `background-image:url('${esc(g.url)}')`}">
+        ${isVid(g.url) ? `<video src="${esc(g.url)}" muted loop autoplay playsinline></video>` : ""}
+        <button class="gal-x" data-glrm="${i}" title="Remove">✕</button>
+        <input class="gal-cap" value="${esc(g.caption || "")}" data-glcap="${i}" placeholder="Caption" />
+      </div>`).join("") +
+      `<button class="gal-add" id="glAdd">＋<span>Add photos</span></button>
+       <button class="gal-add" id="glAddV">▶<span>Add a clip</span></button>`;
+    gl.querySelectorAll("[data-glrm]").forEach((b) => b.onclick = () => {
+      _site.gallery.splice(+b.dataset.glrm, 1); siteMark(); renderRepeaters();
+    });
+    gl.querySelectorAll("[data-glcap]").forEach((n) => n.oninput = () => {
+      _site.gallery[+n.dataset.glcap].caption = n.value; siteMark();
+    });
+    const addMedia = (accept) => pickImage((url) => {
+      if ((_site.gallery || []).length >= 12) { toast("Twelve is the maximum."); return; }
+      _site.gallery.push({ url, caption: "" }); siteMark(); renderRepeaters();
+    }, true, accept);
+    $("glAdd").onclick = () => addMedia("image/*");
+    $("glAddV").onclick = () => addMedia("video/mp4,video/webm,video/quicktime");
+  }
+
   const ts = $("tsEditor");
   if (ts) {
     ts.innerHTML = (_site.testimonials.length ? _site.testimonials.map((t, i) => `
@@ -2594,7 +2758,7 @@ function openGroup(key, fromCanvas) {
     if (first && !fromCanvas) first.focus();
   }
   if (!fromCanvas) sendFrame({ type: "highlight", key });
-  if (key === "highlights" || key === "testimonials") renderRepeaters();
+  if (["highlights", "testimonials", "stats", "gallery"].includes(key)) renderRepeaters();
 }
 
 addEventListener("message", (e) => {
@@ -2675,7 +2839,8 @@ function wireStep() {
   wireBinds(body);
   wireImageFields(body);
 
-  const map = { siteLogo: "logo_url", edLogo: "logo_url", edHero: "hero.image_url", edStory: "story.image_url" };
+  const map = { siteLogo: "logo_url", edLogo: "logo_url", edHero: "hero.image_url",
+                edHeroVid: "hero.video_url", edStory: "story.image_url" };
   Object.entries(map).forEach(([id, path]) => {
     const n = $(id);
     if (!n || n._imgBound) return;
@@ -2746,24 +2911,28 @@ function wireStep() {
   };
 }
 
-async function saveSite() {
+async function saveSite(opts) {
+  const quiet = !!(opts && opts.quiet);
   const btn = $("siteSave"); if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
   try {
     const d = await api("/api/site/save", { method: "POST", json: { site: _site } });
     _siteMeta = d; _site = JSON.parse(JSON.stringify(d.site)); _siteDirty = false;
-    const keep = _step;
-    renderSite();
-    _step = keep;
-    toast("Saved");
+    if (!quiet) {
+      const keep = _step;
+      renderSite();
+      _step = keep;
+      toast("Saved");
+    }
   } catch (e) {
     toast(e.message, 5000);
     if (btn) { btn.disabled = false; btn.textContent = "Save"; }
+    throw e;
   }
 }
 
 async function togglePublish() {
   const want = !_site.published;
-  if (want && _siteDirty) await saveSite();
+  if (want && _siteDirty) await saveSite({ quiet: true });
   try {
     const d = await api("/api/site/publish", { method: "POST", json: { published: want } });
     _siteMeta = d; _site = JSON.parse(JSON.stringify(d.site)); _siteDirty = false;

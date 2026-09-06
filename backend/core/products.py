@@ -112,7 +112,7 @@ def _str_list(v, limit=8, maxlen=300) -> list[str]:
 # Supabase writer can drop them cleanly on a database that has not run
 # supabase/site.sql yet (see _upsert_row).
 STOREFRONT_FIELDS = ("description", "image_url", "images", "mrp", "stock",
-                     "track_stock", "listed", "highlights", "unit_label")
+                     "track_stock", "listed", "highlights", "unit_label", "video_url")
 
 
 def _norm_product(raw: dict) -> dict:
@@ -136,6 +136,8 @@ def _norm_product(raw: dict) -> dict:
         "listed": _bool(raw.get("listed"), True),
         "highlights": _str_list(raw.get("highlights"), limit=6, maxlen=200),
         "unit_label": (raw.get("unit_label") or "").strip()[:40],
+        # a short muted clip that plays when a shopper hovers the card
+        "video_url": (raw.get("video_url") or "").strip()[:500],
     }
 
 
@@ -442,6 +444,7 @@ def storefront_payload(email: str) -> list[dict]:
             "images": p.get("images") or [],
             "highlights": p.get("highlights") or [],
             "unit_label": p.get("unit_label") or "",
+            "video_url": p.get("video_url") or "",
             "in_stock": in_stock(p),
             "available": available_units(p),
         })

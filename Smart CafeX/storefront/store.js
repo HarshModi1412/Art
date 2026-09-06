@@ -101,6 +101,12 @@ function applyTheme(style, site) {
   set("--grain", L.grain || 0);
   set("--fh", style.heading_font.stack);
   set("--fb", style.body_font.stack);
+  set("--fa", (style.accent_font || style.body_font).stack);
+  const ty = style.type || {};
+  if (ty.heading_weight) set("--hw", ty.heading_weight);
+  if (ty.heading_track != null) set("--track", ty.heading_track / 100 + "em");
+  set("--hs", (ty.heading_scale || 100) / 100);
+  set("--bs", (ty.body_scale || 100) / 100);
 
   ["reveal", "parallax", "hscroll", "pin", "marquee", "zoom", "split", "mask", "shine", "drift"]
     .forEach((m) => root.classList.toggle("m-" + m, (style.motion || []).includes(m)));
@@ -173,6 +179,11 @@ function bindParallax() { _pxNodes = Array.from(document.querySelectorAll("[data
 function onScroll() {
   const hdr = el("hdr");
   if (hdr) hdr.classList.toggle("stuck", window.scrollY > 12);
+  if (S.spine) {
+    const h = document.documentElement.scrollHeight - innerHeight;
+    S.spine.style.height = (h > 0 ? (window.scrollY / h) * 100 : 0) + "%";
+  }
+  scrubManifesto();
   if (!document.documentElement.classList.contains("m-parallax")) return;
   for (const n of _pxNodes) {
     const r = n.getBoundingClientRect();
@@ -227,7 +238,103 @@ function afterRender() {
   observeReveals();
   bindParallax();
   bindRails();
+  bindCountUps();
+  bindBars();
+  bindCardVideo();
+  bindMagnets();
+  numberSections();
+  _manWords = Array.from(document.querySelectorAll(".manifesto .w"));
+  scrubManifesto();
   if (EDIT) bindEditRegions();
+}
+
+/* Figures that count themselves up the first time they are seen. Any prefix or
+   suffix the seller typed ("₹", "+", "k", "%") is preserved — only the digits
+   animate. */
+function bindCountUps() {
+  const nodes = document.querySelectorAll("[data-count]:not([data-counted])");
+  if (!nodes.length) return;
+  if (prefersReduced()) { nodes.forEach((n) => n.setAttribute("data-counted", "1")); return; }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      const n = e.target; io.unobserve(n); n.setAttribute("data-counted", "1");
+      const raw = n.dataset.count || "";
+      const m = raw.match(/([^\d]*)([\d][\d,.]*)(.*)/);
+      if (!m) return;
+      const [, pre, digits, post] = m;
+      const target = parseFloat(digits.replace(/,/g, ""));
+      if (!isFinite(target)) return;
+      const dec = (digits.split(".")[1] || "").length;
+      const t0 = performance.now(), dur = 1500;
+      (function step(t) {
+        const k = Math.min(1, (t - t0) / dur);
+        const v = target * (1 - Math.pow(1 - k, 4));
+        n.textContent = pre + v.toLocaleString("en-IN", {
+          minimumFractionDigits: dec, maximumFractionDigits: dec }) + post;
+        if (k < 1) requestAnimationFrame(step); else n.textContent = raw;
+      })(t0);
+    });
+  }, { threshold: 0.4 });
+  nodes.forEach((n) => io.observe(n));
+}
+
+/* Progress bars fill once, when they scroll into view. */
+function bindBars() {
+  const bars = document.querySelectorAll("[data-bar]:not([data-filled])");
+  if (!bars.length) return;
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      io.unobserve(e.target); e.target.setAttribute("data-filled", "1");
+      requestAnimationFrame(() => { e.target.style.width = e.target.dataset.bar + "%"; });
+    });
+  }, { threshold: 0.5 });
+  bars.forEach((b) => io.observe(b));
+}
+
+/* Cards with a clip play it on hover and rewind on the way out — nothing
+   downloads until the shopper shows interest. */
+function bindCardVideo() {
+  if (prefersReduced()) return;
+  document.querySelectorAll(".card.has-vid").forEach((card) => {
+    if (card._vid) return; card._vid = true;
+    const v = card.querySelector(".card-vid");
+    if (!v) return;
+    card.addEventListener("pointerenter", () => {
+      if (!v.src || v.readyState === 0) v.load();
+      const play = v.play(); if (play && play.catch) play.catch(() => {});
+    });
+    card.addEventListener("pointerleave", () => { v.pause(); v.currentTime = 0; });
+  });
+}
+
+/* Buttons lean very slightly towards the cursor. Pointer-fine only. */
+function bindMagnets() {
+  if (prefersReduced() || !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+  document.querySelectorAll(".b, .rail-nav button").forEach((n) => {
+    if (n._mag) return; n._mag = true; n.classList.add("mag");
+    n.addEventListener("pointermove", (e) => {
+      const r = n.getBoundingClientRect();
+      const dx = (e.clientX - (r.left + r.width / 2)) / r.width;
+      const dy = (e.clientY - (r.top + r.height / 2)) / r.height;
+      n.style.transform = `translate(${(dx * 7).toFixed(1)}px, ${(dy * 5).toFixed(1)}px)`;
+    });
+    n.addEventListener("pointerleave", () => { n.style.transform = ""; });
+  });
+}
+
+/* The statement brightens word by word, tied to scroll position rather than a
+   timer, so it reads at whatever pace the visitor scrolls. */
+let _manWords = [];
+function scrubManifesto() {
+  if (!_manWords.length) return;
+  const host = _manWords[0].parentElement;
+  const r = host.getBoundingClientRect();
+  const span = r.height + innerHeight * 0.65;
+  const p = Math.max(0, Math.min(1, (innerHeight * 0.82 - r.top) / span));
+  const lit = Math.round(p * _manWords.length * 1.35);
+  _manWords.forEach((w, i) => w.classList.toggle("lit", i < lit));
 }
 
 /* ----------------------------------------------------------------- routing */
@@ -274,6 +381,7 @@ function header() {
       <div class="hdr-r">
         <button class="icon-b" id="accBtn" aria-label="${S.customer ? "Your account" : "Log in"}">${ic(S.customer ? "user" : "lock")}</button>
         <button class="icon-b" id="cartBtn" aria-label="Your bag">${ic("bag")}<span class="cart-n" id="cartN" hidden>0</span></button>
+        <button class="icon-b burger" id="burger" aria-label="Menu">${ic("menu")}</button>
       </div>
     </div>
   </header>`;
@@ -326,9 +434,10 @@ function productCard(p, i = 0) {
   const off = p.mrp && p.price && p.mrp > p.price ? Math.round((1 - p.price / p.mrp) * 100) : 0;
   const img = p.image_url || (p.images || [])[0] || "";
   return `
-  <article class="card rv zm d${(i % 4) + 1} ${p.in_stock ? "" : "sold"}" data-p="${esc(p.id)}">
+  <article class="card rv zm d${(i % 4) + 1} ${p.in_stock ? "" : "sold"} ${p.video_url ? "has-vid" : ""}" data-p="${esc(p.id)}">
     <div class="card-img" style="${img ? `background-image:url('${esc(img)}')` : ""}">
       ${img ? "" : `<div class="ph">${ic("image")}</div>`}
+      ${p.video_url ? `<video class="card-vid" muted loop playsinline preload="none" src="${esc(p.video_url)}"></video>` : ""}
       ${p.in_stock ? "" : `<span class="tag-out">Sold out</span>`}
       ${p.in_stock ? `<button class="card-quick" data-add="${esc(p.id)}">${ic("bag")}<span>Add to bag</span></button>` : ""}
     </div>
@@ -347,15 +456,24 @@ function productCard(p, i = 0) {
 function secHead(idx, eyebrow, title, action) {
   return `<div class="sec-head rv">
       <div><div class="eyebrow">${esc(eyebrow)}</div><h2>${esc(title)}</h2></div>
-      <div class="sec-idx">${action || esc(idx)}</div>
+      <div class="sec-idx"${action ? "" : " data-autonum"}>${action || ""}</div>
     </div>`;
+}
+
+/* Sections are numbered by where they land on the page, not the order the
+   template happened to build them in. */
+function numberSections() {
+  let n = 0;
+  document.querySelectorAll("[data-autonum]").forEach((el2) => {
+    el2.textContent = String(++n).padStart(2, "0");
+  });
 }
 
 function railSection(id, idx, eyebrow, title, cardsHtml, count, editKey, editLabel) {
   const nav = count > 3 ? `<div class="rail-nav">
       <button data-rail-nav="${id}" data-dir="prev" aria-label="Previous">${ic("arrow-left")}</button>
       <button data-rail-nav="${id}" data-dir="next" aria-label="Next">${ic("arrow-right")}</button>
-    </div>` : `<span class="sec-idx">${esc(idx)}</span>`;
+    </div>` : `<span class="sec-idx" data-autonum></span>`;
   return `
   <section class="sec"${editKey ? ed(editKey, editLabel) : ""}><div class="wrap">
     <div class="sec-head rv">
@@ -371,8 +489,9 @@ function viewHome() {
   const s = S.site, sec = s.sections || {}, hero = s.hero || {};
   const featured = S.products.slice(0, 10);
   const heroImg = hero.image_url || "";
+  const heroVid = hero.video_url || "";
   const full = S.style.layout.hero === "full";
-  const onImage = !!heroImg && full;
+  const onImage = (!!heroImg || !!heroVid) && full;
   let n = 0;
   const idx = () => String(++n).padStart(2, "0");
 
@@ -380,7 +499,9 @@ function viewHome() {
   const heroHtml = `
   <section class="hero ${onImage ? "on-image" : ""}" data-align="${esc(hero.align || "left")}"${ed("hero", "Hero section")}>
     ${onImage ? `
-      <div class="hero-img" data-px="0.12" style="background-image:url('${esc(heroImg)}')"></div>
+      ${heroVid
+        ? `<video class="hero-vid" data-px="0.10" autoplay muted loop playsinline ${heroImg ? `poster="${esc(heroImg)}"` : ""} src="${esc(heroVid)}"></video>`
+        : `<div class="hero-img" data-px="0.12" style="background-image:url('${esc(heroImg)}')"></div>`}
       <div class="hero-veil" style="background:linear-gradient(102deg, rgba(0,0,0,${(hero.overlay || 45) / 100}) 8%, rgba(0,0,0,${Math.max(0, (hero.overlay || 45) - 26) / 100}) 82%)"></div>` : ""}
     <div class="wrap hero-in">
       <div class="hero-copy rv in">
@@ -392,7 +513,9 @@ function viewHome() {
           ${sec.story && (s.story || {}).body ? `<a class="b g" href="#story">Our story</a>` : ""}
         </div>
       </div>
-      ${full ? "" : `<div class="hero-art rv mk d2"><div style="${heroImg ? `background-image:url('${esc(heroImg)}')` : "background:var(--surface)"}"></div></div>`}
+      ${full ? "" : `<div class="hero-art rv mk d2">${heroVid
+        ? `<video autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover" ${heroImg ? `poster="${esc(heroImg)}"` : ""} src="${esc(heroVid)}"></video>`
+        : `<div style="${heroImg ? `background-image:url('${esc(heroImg)}')` : "background:var(--surface)"}"></div>`}</div>`}
     </div>
     ${full ? `<div class="scroll-cue"><span>Scroll</span><i></i></div>` : ""}
   </section>`;
@@ -411,8 +534,9 @@ function viewHome() {
           <b>${esc(h.title)}</b><p>${esc(h.text)}</p></div>`).join("")}</div>
     </div></section>` : "";
 
+  const C = s.copy || {};
   const cats = sec.categories && (S.data.categories || []).length ? railSection(
-    "cats", idx(), "Browse", "Shop by category",
+    "cats", idx(), C.cat_eyebrow || "Browse", C.cat_title || "Shop by category",
     S.data.categories.map((c, i) => `
       <button class="cat-chip rv d${(i % 4) + 1}" data-cat="${esc(c.name)}">
         <div class="cimg" style="${c.image ? `background-image:url('${esc(c.image)}')` : "background:var(--surface)"}"></div>
@@ -421,12 +545,75 @@ function viewHome() {
       </button>`).join(""), S.data.categories.length, "categories", "Category rail") : "";
 
   const feat = sec.featured && featured.length ? railSection(
-    "feat", idx(), "Handpicked", "Featured", featured.map(productCard).join(""),
-    featured.length, "featured", "Featured rail") : "";
+    "feat", idx(), C.feat_eyebrow || "Handpicked", C.feat_title || "Featured",
+    featured.map(productCard).join(""), featured.length, "featured", "Featured rail") : "";
+
+  // ---- spotlight: one product, sticky media, copy scrolling past it ----
+  const hero_p = S.products[0];
+  const spot = sec.spotlight && hero_p ? (() => {
+    const img = hero_p.image_url || (hero_p.images || [])[0] || "";
+    const off = hero_p.mrp && hero_p.price && hero_p.mrp > hero_p.price
+      ? Math.round((1 - hero_p.price / hero_p.mrp) * 100) : 0;
+    return `
+    <section class="sec"${ed("spotlight", "Spotlight product")}><div class="wrap">
+      <div class="spot">
+        <div class="spot-media rv mk zm" style="position:sticky">
+          ${hero_p.video_url
+            ? `<video autoplay muted loop playsinline ${img ? `poster="${esc(img)}"` : ""} src="${esc(hero_p.video_url)}"></video>`
+            : img ? `<img src="${esc(img)}" alt="${esc(hero_p.name)}" />`
+                  : `<div class="ph" style="height:100%;display:grid;place-items:center;color:var(--muted);opacity:.3">${ic("image")}</div>`}
+          <span class="spot-plate">${esc(hero_p.category || "Signature")}</span>
+        </div>
+        <div class="spot-copy rv d2">
+          <div class="eyebrow">Signature</div>
+          <h2>${esc(hero_p.name)}</h2>
+          ${hero_p.description ? `<p class="lead">${esc(hero_p.description)}</p>` : ""}
+          ${(hero_p.highlights || []).length
+            ? `<ul class="pd-hl">${hero_p.highlights.map((h) => `<li>${ic("check")}${esc(h)}</li>`).join("")}</ul>` : ""}
+          <div class="spot-buy">
+            <span class="price">${hero_p.price != null ? money(hero_p.price) : "—"}</span>
+            ${off ? `<span class="mrp">${money(hero_p.mrp)}</span><span class="off">−${off}%</span>` : ""}
+            <span class="spot-stock">${hero_p.in_stock
+              ? (hero_p.available != null ? `${hero_p.available} left` : "In stock") : "Sold out"}</span>
+          </div>
+          <div class="hero-cta" style="margin-top:26px">
+            <button class="b p" data-p2="${esc(hero_p.id)}">View the piece${ic("arrow-right")}</button>
+            ${hero_p.in_stock ? `<button class="b g" data-add="${esc(hero_p.id)}">Add to bag</button>` : ""}
+          </div>
+        </div>
+      </div>
+    </div></section>`;
+  })() : "";
+
+  // ---- stats: figures that count up ----
+  const statRows = (s.stats || []).filter((x) => x.value && x.label);
+  const stats = sec.stats && statRows.length ? `
+    <section class="sec"${ed("stats", "Numbers")}><div class="wrap">
+      <div class="eyebrow rv" style="margin-bottom:34px">${esc(C.stats_eyebrow || "By the numbers")}</div>
+      <div class="stats">${statRows.map((x, i) => `
+        <div class="stat rv d${(i % 4) + 1}"><b data-count="${esc(x.value)}">${esc(x.value)}</b><span>${esc(x.label)}</span></div>`).join("")}</div>
+    </div></section>` : "";
+
+  // ---- drop: real scarcity from the catalogue ----
+  const sc = S.data.scarce;
+  const drop = sec.drop && sc ? (() => {
+    const claimed = Math.max(0, sc.of - sc.left);
+    const pct = Math.round((claimed / Math.max(sc.of, 1)) * 100);
+    return `
+    <section class="sec"${ed("drop", "Scarcity block")}><div class="wrap drop-wrap">
+      <div class="eyebrow rv" style="margin-inline:auto">${esc(C.drop_eyebrow || "Limited")}</div>
+      <h2 class="rv" style="margin-top:18px;max-width:16ch;margin-inline:auto">${esc(C.drop_title || "When it's gone, it's gone")}</h2>
+      <div class="drop-card rv d2">
+        <div class="drop-head"><span>${esc(sc.name)}</span><span><b>${claimed}</b> claimed</span></div>
+        <div class="drop-bar"><i data-bar="${pct}"></i></div>
+        <div class="drop-foot"><b>${sc.left}</b> ${sc.left === 1 ? "piece" : "pieces"} remaining</div>
+      </div>
+    </div></section>`;
+  })() : "";
 
   const all = `
     <section class="sec"${ed("products", "Product grid")}><div class="wrap">
-      ${secHead(idx(), "Catalogue", "All products",
+      ${secHead(idx(), C.all_eyebrow || "Catalogue", C.all_title || "All products",
         `<button class="b g sm" data-go="shop">View all${ic("arrow-right")}</button>`)}
       <div class="grid">${S.products.slice(0, 8).map(productCard).join("")}</div>
     </div></section>`;
@@ -436,16 +623,34 @@ function viewHome() {
       <div class="story">
         <div class="story-art rv mk"><div data-px="0.09" style="${s.story.image_url ? `background-image:url('${esc(s.story.image_url)}')` : "background:var(--surface)"}"></div></div>
         <div class="story-body rv d2">
-          <div class="eyebrow">About us</div>
+          <div class="eyebrow">${esc(C.story_eyebrow || "About us")}</div>
           <h2 style="margin-top:16px">${esc(s.story.title || "Our story")}</h2>
           <p>${esc(s.story.body)}</p>
         </div>
       </div>
     </div></section>` : "";
 
+  // ---- lookbook ----
+  const look = sec.gallery && (s.gallery || []).length ? `
+    <section class="sec"${ed("gallery", "Lookbook")}><div class="wrap">
+      ${secHead(idx(), C.gallery_eyebrow || "Lookbook", C.gallery_title || "In the wild")}
+      <div class="look">${s.gallery.map((g) => `
+        <figure class="rv"><div class="lk">${/\.(mp4|webm|mov|m4v)$/i.test(g.url)
+          ? `<video muted loop playsinline autoplay src="${esc(g.url)}"></video>`
+          : `<img src="${esc(g.url)}" alt="${esc(g.caption || "")}" loading="lazy" />`}</div>
+          ${g.caption ? `<figcaption>${esc(g.caption)}</figcaption>` : ""}</figure>`).join("")}</div>
+    </div></section>` : "";
+
+  // ---- manifesto: brightens word by word on scroll ----
+  const man = sec.manifesto && s.manifesto ? `
+    <section class="sec manifesto"${ed("manifesto", "Statement")}><div class="wrap">
+      <p id="manifesto">${s.manifesto.split(/\s+/).filter(Boolean)
+        .map((w) => `<span class="w">${esc(w)}</span>`).join(" ")}</p>
+    </div></section>` : "";
+
   const tst = sec.testimonials && (s.testimonials || []).length ? `
     <section class="sec"${ed("testimonials", "Customer reviews")}><div class="wrap">
-      ${secHead(idx(), "Reviews", "What buyers say")}
+      ${secHead(idx(), C.rev_eyebrow || "Reviews", C.rev_title || "What buyers say")}
       <div class="t-grid">${s.testimonials.map((t, i) => `
         <div class="t-card rv d${(i % 4) + 1}">
           <div class="stars">${Array.from({ length: t.rating || 5 }, () => ic("star")).join("")}</div>
@@ -455,12 +660,13 @@ function viewHome() {
 
   const news = sec.newsletter ? `
     <section class="sec"${ed("newsletter", "Newsletter")}><div class="wrap"><div class="news rv">
-      <h2>Stay in the loop</h2>
-      <p>New drops and offers. No spam, ever.</p>
-      <form id="newsForm"><input type="email" placeholder="you@email.com" required /><button class="b">Join${ic("arrow-right")}</button></form>
+      <h2>${esc(C.news_title || "Stay in the loop")}</h2>
+      <p>${esc(C.news_sub || "New drops and offers. No spam, ever.")}</p>
+      <form id="newsForm"><input type="email" placeholder="you@email.com" required /><button class="b">${esc(C.news_cta || "Join")}${ic("arrow-right")}</button></form>
     </div></div></section>` : "";
 
-  return header() + heroHtml + marquee + highlights + cats + feat + all + story + tst + news + footer();
+  return header() + heroHtml + marquee + highlights + spot + cats + feat + stats + all
+       + look + story + man + drop + tst + news + footer();
 }
 
 function viewShop() {
@@ -474,7 +680,7 @@ function viewShop() {
   return header() + `
     <div class="wrap" style="padding-top:52px">
       <div class="eyebrow">${list.length} product${list.length === 1 ? "" : "s"}</div>
-      <h1 style="font-size:clamp(30px,5vw,60px);margin:18px 0 34px">${S.filter ? esc(S.filter) : "Everything we sell"}</h1>
+      <h1 style="font-size:clamp(30px,5vw,60px);margin:18px 0 34px">${S.filter ? esc(S.filter) : esc((S.site.copy || {}).shop_title || "Everything we sell")}</h1>
       <div class="filters">${chips}</div>
       ${list.length ? `<div class="grid">${list.map(productCard).join("")}</div>`
         : `<div class="empty"><div class="i">${ic("search")}</div><h3>Nothing matches that</h3><p>Try another category or search term.</p></div>`}
@@ -713,6 +919,36 @@ function openCart() {
   if (co) co.onclick = () => { shut(); setTimeout(() => (S.customer ? startCheckout() : openAuth(startCheckout)), 440); };
 }
 
+function openMobileNav() {
+  const s2 = S.site, links = [["home", "Home"], ["shop", "Shop"]];
+  if ((s2.sections || {}).story && (s2.story || {}).body) links.push(["#story", "Our story"]);
+  links.push(["orders", "Orders"]);
+  el("layer").innerHTML = `
+    <nav class="mnav" id="mnav">
+      <div class="mnav-h">
+        <span class="brand">${s2.logo_url ? `<img src="${esc(s2.logo_url)}" alt="" />`
+          : `<span class="mark">${esc(initials(s2.brand))}</span>`}<span>${esc(s2.brand || "Store")}</span></span>
+        <button class="icon-b" id="mClose" aria-label="Close">${ic("close")}</button>
+      </div>
+      ${links.map(([k, l]) => k.startsWith("#")
+        ? `<a href="${k}" data-mclose>${l}</a>`
+        : `<a href="#" data-mgo="${k}">${l}</a>`).join("")}
+      <div class="msearch">${ic("search")}<input id="mq" placeholder="Search products" value="${esc(S.query)}" /></div>
+    </nav>`;
+  requestAnimationFrame(() => el("mnav").classList.add("on"));
+  const shut = () => { const n = el("mnav"); if (n) n.classList.remove("on"); setTimeout(closeLayer, 560); };
+  el("mClose").onclick = shut;
+  el("layer").querySelectorAll("[data-mgo]").forEach((a) => a.onclick = (e) => {
+    e.preventDefault(); shut(); setTimeout(() => go(a.dataset.mgo), 120);
+  });
+  el("layer").querySelectorAll("[data-mclose]").forEach((a) => a.onclick = shut);
+  const mq = el("mq");
+  mq.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    S.query = mq.value; shut(); setTimeout(() => go("shop"), 120);
+  });
+}
+
 function openAuth(after) {
   let mode = "login";
   const paint = () => {
@@ -845,7 +1081,11 @@ function bindView() {
   document.querySelectorAll("[data-cat]").forEach((n) => n.onclick = (e) => { e.preventDefault(); S.filter = n.dataset.cat; go("shop"); });
   document.querySelectorAll("[data-policy]").forEach((n) => n.onclick = (e) => { e.preventDefault(); openPolicy(n.dataset.policy); });
 
+  document.querySelectorAll("[data-p2]").forEach((n) => n.onclick = (e) => {
+    e.preventDefault(); go("product", { id: n.dataset.p2 });
+  });
   const cb = el("cartBtn"); if (cb) cb.onclick = openCart;
+  const bg = el("burger"); if (bg) bg.onclick = openMobileNav;
   const ab = el("accBtn"); if (ab) ab.onclick = () => (S.customer ? go("orders") : openAuth());
   const lc = el("loginCta"); if (lc) lc.onclick = () => openAuth(() => loadMe(true));
   const ll = el("logoutLink"); if (ll) ll.onclick = async (e) => {
@@ -978,7 +1218,55 @@ function scrollToRegion(key) {
   S.token = store(LS_TOKEN);
   readHash();
   el("boot").hidden = true; el("app").hidden = false;
+  mountSpine();
   render();
+  runPreloader();
   post({ type: "ready" });
   if (S.token) loadMe(S.route.name === "orders");
 })();
+
+/* -------------------------------------------------------------- preloader */
+function runPreloader() {
+  // Skipped in the builder canvas (the seller would sit through it on every
+  // repaint), when the seller has switched it off, and for repeat visits in
+  // the same tab session.
+  const seen = (() => { try { return sessionStorage.getItem("cs_seen_" + HANDLE); } catch (e) { return null; } })();
+  if (EDIT || !S.style.preloader || seen || prefersReduced()) return;
+  try { sessionStorage.setItem("cs_seen_" + HANDLE, "1"); } catch (e) { /* private mode */ }
+
+  const pre = document.createElement("div");
+  pre.className = "pre";
+  pre.innerHTML = `
+    <div class="pre-mark">${esc(S.site.brand || "Store")}</div>
+    <div class="pre-bar"><i></i></div>
+    <div class="pre-pct">00</div>`;
+  document.body.appendChild(pre);
+  document.body.style.overflow = "hidden";
+  const bar = pre.querySelector("i"), pct = pre.querySelector(".pre-pct");
+  const t0 = performance.now(), dur = 1250;
+  (function step(t) {
+    const k = Math.min(1, (t - t0) / dur);
+    const eased = 1 - Math.pow(1 - k, 3);
+    const v = Math.round(eased * 100);
+    bar.style.width = v + "%";
+    pct.textContent = (v < 10 ? "0" : "") + v;
+    if (k < 1) requestAnimationFrame(step);
+    else setTimeout(() => {
+      pre.classList.add("gone");
+      document.body.style.overflow = "";
+      setTimeout(() => pre.remove(), 1050);
+    }, 180);
+  })(t0);
+}
+
+const prefersReduced = () =>
+  window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ------------------------------------------------------------- scroll spine */
+function mountSpine() {
+  if (EDIT || prefersReduced()) return;
+  const sp = document.createElement("div");
+  sp.className = "spine"; sp.innerHTML = "<i></i>";
+  document.body.appendChild(sp);
+  S.spine = sp.firstElementChild;
+}

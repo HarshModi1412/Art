@@ -67,9 +67,34 @@ footer on the site and the matching controls open beside it; change a control
 and the canvas repaints in place — no reload, nothing saved until you say so.
 The bridge is `postMessage` in both directions, and the canvas repaints from
 `POST /api/site/resolve`, the same resolver the published site uses, so the
-preview can never drift from the real thing. Fonts, accent colours per mode,
-corner radius, motion strength, product layout and page width are all here,
-alongside every piece of copy.
+preview can never drift from the real thing. Entering this step saves the draft
+once, silently, so the canvas always has an address to load — a seller never has
+to publish just to see their own site.
+
+**Motion.** A brand curtain with a counter on first visit (once per session, and
+never in the editor), a hairline down the left edge that fills as you read, a
+spotlight product whose photo sticks while its copy scrolls past, figures that
+count themselves up, a statement that brightens word by word tied to scroll
+position, a scarcity bar that reads real stock, product cards that play their
+clip on hover, and buttons that lean towards the cursor. All of it is opt-in per
+theme and collapses cleanly under `prefers-reduced-motion` or the seller's
+"Animation: none".
+
+**Media.** One upload endpoint takes stills *and* video — hero clips, lookbook
+clips and a per-product clip that plays on card hover (48MB for video, 10MB for
+images). The builder nudges for the ones that matter most rather than leaving
+empty slots unexplained.
+
+**Type.** Three roles, each with its own family and a live preview: display,
+body, and the small uppercase face on eyebrows, buttons and prices. Display size,
+weight and letter-spacing plus body size are sliders on top. Every fixed label on
+the page — section eyebrows and headings, the newsletter copy, the shop page
+title — is editable text, not a string in the source.
+
+**Layout.** The page width tracks the viewport (`min(1660px, 92vw)`, or edge to
+edge) instead of stranding a fixed column on a wide monitor, with a real mobile
+pass: a full-screen nav drawer, collapsed grids and rails, and stacked product
+and checkout pages.
 
 **Products.** The storefront sells the Product Management catalogue — the same
 records, extended with a photo, gallery, description, key points, MRP and stock.

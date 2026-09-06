@@ -432,21 +432,54 @@ def default_site(email: str) -> dict:
         "style": {
             "accent": "", "accent_dark": "",         # blank = use the theme's own
             "mode": "auto",                          # auto | light | dark
-            "heading_font": "", "body_font": "",     # blank = theme default
+            # three type roles: display headings, body copy, and the small
+            # uppercase UI text (eyebrows, buttons, prices)
+            "heading_font": "", "body_font": "", "accent_font": "",
+            "heading_weight": None,                  # 300-900, None = theme default
+            "heading_track": None,                   # letter-spacing, hundredths of an em
+            "heading_scale": None,                   # 80-140 (% of the theme's display size)
+            "body_scale": None,                      # 90-115
             "radius": None,                          # None = theme default
             "motion": "full",                        # full | subtle | none
+            "preloader": True,                       # brand curtain on first load
             "card_style": "",                        # blank = theme default
             "cols": None,                            # products per row, None = theme default
             "grain": None,                           # film grain strength, None = theme default
-            "width": "wide",                         # wide | compact
+            "width": "wide",                         # wide | compact | full
         },
         "hero": {
-            "image_url": "", "heading": "", "sub": "",
+            "image_url": "", "video_url": "", "heading": "", "sub": "",
             "cta_text": "Shop now", "overlay": 45, "align": "left",
         },
+        # Every fixed label on the page, so nothing on the site is text the
+        # seller cannot change.
+        "copy": {
+            "cat_eyebrow": "Browse",       "cat_title": "Shop by category",
+            "feat_eyebrow": "Handpicked",  "feat_title": "Featured",
+            "all_eyebrow": "Catalogue",    "all_title": "All products",
+            "story_eyebrow": "About us",
+            "rev_eyebrow": "Reviews",      "rev_title": "What buyers say",
+            "news_title": "Stay in the loop",
+            "news_sub": "New drops and offers. No spam, ever.",
+            "news_cta": "Join",
+            "stats_eyebrow": "By the numbers",
+            "drop_eyebrow": "Limited",     "drop_title": "When it's gone, it's gone",
+            "gallery_eyebrow": "Lookbook", "gallery_title": "In the wild",
+            "shop_title": "Everything we sell",
+        },
+        # Count-up figures. Blank ones are simply not rendered.
+        "stats": [
+            {"value": "", "label": ""},
+            {"value": "", "label": ""},
+            {"value": "", "label": ""},
+        ],
+        "gallery": [],          # lookbook images / clips
+        "manifesto": "",        # the scrubbed, word-by-word statement
         "sections": {
             "featured": True, "categories": True, "story": True,
             "highlights": True, "testimonials": False, "newsletter": False,
+            "stats": False, "drop": False, "gallery": False,
+            "manifesto": False, "spotlight": True,
         },
         "story": {"title": "Our story", "body": "", "image_url": ""},
         "highlights": [
@@ -535,10 +568,21 @@ def save_site(email: str, patch: dict) -> dict:
     st = site["style"]
     st["mode"] = st.get("mode") if st.get("mode") in ("auto", "light", "dark") else "auto"
     st["motion"] = st.get("motion") if st.get("motion") in ("full", "subtle", "none") else "full"
-    st["width"] = st.get("width") if st.get("width") in ("wide", "compact") else "wide"
-    for k in ("heading_font", "body_font"):
+    for k in ("heading_font", "body_font", "accent_font"):
         if st.get(k) and st[k] not in FONT_IDS:
             st[k] = ""
+    st["preloader"] = _b(st.get("preloader"), True)
+    if st.get("width") not in ("wide", "compact", "full"):
+        st["width"] = "wide"
+    for k, lo, hi in (("heading_weight", 300, 900), ("heading_track", -8, 30),
+                      ("heading_scale", 75, 145), ("body_scale", 88, 118)):
+        if st.get(k) in (None, ""):
+            st[k] = None
+        else:
+            try:
+                st[k] = max(lo, min(hi, int(float(st[k]))))
+            except (TypeError, ValueError):
+                st[k] = None
     for k in ("accent", "accent_dark"):
         v = str(st.get(k) or "").strip()
         st[k] = v if re.fullmatch(r"#[0-9a-fA-F]{6}", v) else ""
@@ -578,6 +622,21 @@ def save_site(email: str, patch: dict) -> dict:
          "text": str(h.get("text") or "").strip()[:160]}
         for h in (site.get("highlights") or [])[:6] if isinstance(h, dict)
     ]
+    site["copy"] = {k: str(v or "").strip()[:120] for k, v in (site.get("copy") or {}).items()}
+    site["manifesto"] = str(site.get("manifesto") or "").strip()[:400]
+    site["stats"] = [
+        {"value": str(x.get("value") or "").strip()[:12],
+         "label": str(x.get("label") or "").strip()[:40]}
+        for x in (site.get("stats") or [])[:4] if isinstance(x, dict)
+    ]
+    site["gallery"] = [
+        {"url": str(x.get("url") or "").strip()[:500],
+         "caption": str(x.get("caption") or "").strip()[:80]}
+        for x in (site.get("gallery") or [])[:12]
+        if isinstance(x, dict) and str(x.get("url") or "").strip()
+    ]
+    site["hero"]["video_url"] = str(site["hero"].get("video_url") or "").strip()[:500]
+
     site["testimonials"] = [
         {"name": str(t.get("name") or "").strip()[:60],
          "text": str(t.get("text") or "").strip()[:300],
@@ -671,7 +730,15 @@ def resolved_style(site: dict) -> dict:
 
     heading = font(st.get("heading_font") or t["fonts"]["heading"])
     body = font(st.get("body_font") or t["fonts"]["body"])
-    accent_face = font((t.get("fonts") or {}).get("accent") or t["fonts"]["body"])
+    accent_face = font(st.get("accent_font")
+                       or (t.get("fonts") or {}).get("accent")
+                       or t["fonts"]["body"])
+    type_scale = {
+        "heading_weight": st.get("heading_weight"),
+        "heading_track": st["heading_track"] if st.get("heading_track") not in (None, "") else layout.get("track", 0),
+        "heading_scale": st.get("heading_scale") or 100,
+        "body_scale": st.get("body_scale") or 100,
+    }
 
     feel = {**DEFAULT_FEEL, **(t.get("feel") or {})}
     # a theme may carry its grain on the layout block instead
@@ -700,6 +767,8 @@ def resolved_style(site: dict) -> dict:
         "prefers_dark": bool(t.get("prefers_dark")) and mode == "auto",
         "width": st.get("width") or "wide",
         "heading_font": heading, "body_font": body, "accent_font": accent_face,
+        "type": type_scale,
+        "preloader": bool(st.get("preloader", True)),
         "google_fonts": sorted({heading["g"], body["g"], accent_face["g"]}),
     }
 
@@ -765,11 +834,26 @@ def _payload(email: str, site: dict) -> dict:
             seen[c]["image"] = p.get("image_url") or ""
     public = {k: v for k, v in site.items() if k not in ("policies",)}
     public["policies"] = site.get("policies") or {}
+    # the scarcity block reads the real catalogue: the listed, stock-tracked
+    # product with the fewest units left is the one worth counting down.
+    scarce = None
+    # a sold-out item is not a countdown — only pieces still buyable qualify
+    tracked = [p for p in items if p.get("available") not in (None, 0) and p.get("in_stock")]
+    if tracked:
+        low = min(tracked, key=lambda p: p["available"])
+        started = max(low["available"], 1)
+        scarce = {
+            "name": low["name"], "id": low["id"],
+            "left": low["available"],
+            "of": max(started, 20 if started < 20 else started),
+            "image": low.get("image_url") or "",
+        }
     return {
         "site": public,
         "style": resolved_style(site),
         "products": items,
         "categories": cats,
+        "scarce": scarce,
         "icons": ICONS,
         "seller": email,
     }
