@@ -29,6 +29,7 @@ import io
 
 import pandas as pd
 
+from backend.core import cache
 from backend.core import (analytics, complaints, content_gen, positioning, product_config,
                           templates, user_store)
 
@@ -235,7 +236,8 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
 
     if txns is not None and len(txns):
         # 1) win-back campaign
-        at_risk = analytics.at_risk_customers(txns)
+        # same shared pool the Today strip and the campaign generator read
+        at_risk = analytics.at_risk_cached(email, txns)
         if at_risk:
             out.append({
                 "id": "winback", "module": "sales", "page": "winback", "icon": "💌",
@@ -383,7 +385,7 @@ def insight_excel(email: str, insight_id: str) -> tuple[str, io.BytesIO] | None:
     review = load_review(email)
 
     if insight_id == "winback" and txns is not None:
-        rows = templates.build_winback_messages(analytics.at_risk_customers(txns))
+        rows = templates.build_winback_messages(analytics.at_risk_cached(email, txns))
         if not rows:
             return None
         df = pd.DataFrame(rows).rename(columns={

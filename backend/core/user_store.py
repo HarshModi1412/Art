@@ -174,6 +174,7 @@ def _track_key(email: str, key: str, present: bool) -> None:
 
 
 def save_df(email: str, key: str, df: pd.DataFrame) -> None:
+    _DF_CACHE.pop((email, key), None)
     if db.SUPABASE_ENABLED:
         raw = pickle.dumps(df)
         enc = _fernet().encrypt(raw)
@@ -183,21 +184,56 @@ def save_df(email: str, key: str, df: pd.DataFrame) -> None:
     df.to_pickle(_df_path(email, key))
 
 
+# Loaded datasets, kept in memory between requests. On Supabase every load is a
+# network download + Fernet decrypt + pickle parse, and the home screen alone
+# used to do it several times per visit. Keyed on the account's data stamp, so
+# an upload or a new order invalidates it rather than a timer.
+_DF_CACHE: dict[tuple, object] = {}
+_DF_CACHE_MAX = 24
+
+
+def _df_cache_get(email: str, key: str):
+    from backend.core import cache
+    hit = _DF_CACHE.get((email, key))
+    if not hit:
+        return None
+    saved_stamp, df = hit
+    if saved_stamp != cache.stamp(email):
+        _DF_CACHE.pop((email, key), None)
+        return None
+    # hand out a copy: callers routinely mutate what they are given
+    return df.copy()
+
+
+def _df_cache_put(email: str, key: str, df):
+    from backend.core import cache
+    if df is None:
+        return None
+    if len(_DF_CACHE) >= _DF_CACHE_MAX:
+        _DF_CACHE.clear()
+    _DF_CACHE[(email, key)] = (cache.stamp(email), df)
+    return df.copy()
+
+
 def load_df(email: str, key: str):
+    cached = _df_cache_get(email, key)
+    if cached is not None:
+        return cached
+
     if db.SUPABASE_ENABLED:
         enc = db.download_blob(_blob_path(email, key))
         if not enc:
             return None
         try:
             raw = _fernet().decrypt(enc)
-            return pickle.loads(raw)
+            return _df_cache_put(email, key, pickle.loads(raw))
         except Exception:
             return None
     path = _df_path(email, key)
     if not os.path.exists(path):
         return None
     try:
-        return pd.read_pickle(path)
+        return _df_cache_put(email, key, pd.read_pickle(path))
     except Exception:
         return None
 
@@ -209,6 +245,7 @@ def has_df(email: str, key: str) -> bool:
 
 
 def delete_df(email: str, key: str) -> None:
+    _DF_CACHE.pop((email, key), None)
     if db.SUPABASE_ENABLED:
         db.remove_blob(_blob_path(email, key))
         _track_key(email, key, False)

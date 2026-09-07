@@ -31,6 +31,7 @@ from backend.core import sitebuilder, storefront
 from backend.core import messaging, password_reset, today as today_mod
 from backend.core import winback_proof
 from backend.core import media
+from backend.core import cache
 
 # ---------------------------------------------------------
 # numpy/pandas JSON safety net
@@ -924,16 +925,29 @@ def ads_metrics(connector: str, days: int = 30,
 _IMG_DIR = media.cache_dir()
 
 
+# Uploads are content-addressed — a fresh uuid per file — so the bytes behind a
+# URL never change and the browser can keep them forever. That one header is
+# what stops a storefront re-downloading every photo on every page view.
+_MEDIA_CACHE_HEADERS = {"Cache-Control": "public, max-age=31536000, immutable"}
+
+
 @app.get("/generated_images/{filename}")
-def serve_media(filename: str):
+def serve_media(filename: str, request: Request):
+    # A conditional request costs nothing to answer.
+    if request.headers.get("if-none-match") == f'"{filename}"':
+        return Response(status_code=304, headers={**_MEDIA_CACHE_HEADERS,
+                                                  "ETag": f'"{filename}"'})
+    path = media.local_path(filename)
+    if path:
+        # stream from disk rather than reading the whole file into memory
+        return FileResponse(path, media_type=media.content_type_for(filename),
+                            headers={**_MEDIA_CACHE_HEADERS, "ETag": f'"{filename}"'})
     got = media.read(filename)
     if not got:
         raise HTTPException(404, "That file is no longer available.")
     data, ctype = got
-    return Response(content=data, media_type=ctype, headers={
-        # content-addressed names (a uuid per upload) never change contents
-        "Cache-Control": "public, max-age=31536000, immutable",
-    })
+    return Response(content=data, media_type=ctype,
+                    headers={**_MEDIA_CACHE_HEADERS, "ETag": f'"{filename}"'})
 
 
 @app.post("/api/media/backfill")
@@ -1338,7 +1352,7 @@ def generate_winback(x_session_id: str | None = Header(default=None),
     sess = get_session(x_session_id)
     txns = _require_txns(sess, authorization)
 
-    customers = analytics.at_risk_customers(txns)
+    customers = analytics.at_risk_cached(email, txns)
     if not customers:
         return {"customers": [], "usage": _usage(email)}
 
@@ -2364,6 +2378,7 @@ def supply_state(authorization: str | None = Header(default=None)):
 def supply_item(body: SupplyItemBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
     try:
+        cache.clear(email)
         supply.upsert_item(email, body.dict())
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -2527,6 +2542,7 @@ def products_state(authorization: str | None = Header(default=None)):
 @app.post("/api/products/item")
 def products_item(body: ProductBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
+    cache.clear(email)
     try:
         products.upsert_product(email, body.dict())
     except ValueError as e:
@@ -2537,6 +2553,7 @@ def products_item(body: ProductBody, authorization: str | None = Header(default=
 @app.post("/api/products/item/delete")
 def products_item_delete(body: ProductIdBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
+    cache.clear(email)
     products.delete_product(email, body.id)
     return _products_payload(email)
 
@@ -2637,6 +2654,7 @@ def site_seed(authorization: str | None = Header(default=None), force: bool = Fa
 @app.post("/api/site/save")
 def site_save(body: SiteSaveBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
+    cache.clear(email)
     try:
         sitebuilder.save_site(email, body.site or {})
     except ValueError as e:
@@ -2647,6 +2665,7 @@ def site_save(body: SiteSaveBody, authorization: str | None = Header(default=Non
 @app.post("/api/site/publish")
 def site_publish(body: PublishBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
+    cache.clear(email)
     try:
         sitebuilder.set_published(email, body.published)
     except ValueError as e:
@@ -2719,6 +2738,7 @@ async def site_image(files: list[UploadFile] = File(...),
 def products_listed(body: ListedBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
     try:
+        cache.clear(email)
         products.set_listed(email, body.id, body.listed)
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -2768,6 +2788,7 @@ def channels_toggle(body: ChannelBody, authorization: str | None = Header(defaul
     email = require_user(authorization)
     if body.channel in ("flipkart", "myntra"):
         raise HTTPException(400, "That marketplace is not live yet.")
+    cache.clear(email)
     storefront.set_channel(email, body.channel, body.enabled)
     return channels_state(authorization)
 
@@ -2791,6 +2812,7 @@ def store_orders(status: str = "", authorization: str | None = Header(default=No
 def store_order_status(body: OrderStatusBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
     try:
+        cache.clear(email)
         storefront.set_status(email, body.order_id, body.status)
     except storefront.StoreError as e:
         raise HTTPException(400, str(e))

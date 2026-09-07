@@ -131,7 +131,10 @@ its sales count in analytics — turning the site off removes its rows and turni
 it back on restores them, with no double-counting either way.
 
 Run `python scripts/test_website_builder.py` to exercise the whole loop against a
-throwaway data directory.
+throwaway data directory, and `node scripts/test_storefront_render.js` to render
+the storefront's own views (signed in, and as a guest) with a minimal DOM — the
+guest-checkout crash was in the browser bundle, where no server-side test could
+have seen it.
 
 ## Site structure
 
@@ -298,6 +301,48 @@ target ids and date are snapshotted; every later refresh of the sales data
 answers how many came back and what they spent in the following 30 days. The
 headline lands on the home screen. The method is stated on screen rather than
 implied — it is not a controlled test, it is what their own sales data says.
+
+## Performance
+
+The home screen used to take about half a second of server work before it drew
+anything, and it got worse as an account's history grew. Four changes, in order
+of how much they mattered:
+
+1. **`market_basket_pairs` was the single slowest call in the app** (~143 ms on
+   90 days of data) because it built its baskets with a `groupby(...).apply()`
+   running a Python callable per order, then walked every ordered pair twice.
+   It now de-duplicates `(order, item)` vectorised, drops single-line orders
+   before the loop, and counts each unordered pair once with
+   `itertools.combinations`. Same output, byte for byte — **143 ms → 14 ms**.
+2. **`at_risk_customers` profiled every at-risk customer and then threw all but
+   `limit` away**, finding each one's rows with a full-frame scan and their RFM
+   row with a linear search. It now ranks by spend first, profiles only the
+   survivors, slices them from one `groupby`, and looks rows up in a dict.
+3. **The same work was being done twice per page.** `/api/smart/state` and
+   `/api/today` each loaded the dataset and each ran the at-risk pass.
+   `analytics.at_risk_cached()` computes one pool per account per data version
+   and every caller slices it to its own limit.
+4. **`backend/core/cache.py`** — a small in-process cache keyed on a
+   *fingerprint of the account's data* (dataset row counts, `updated_at`, order
+   count), not on a timer. Uploads, orders, product edits and channel toggles
+   change the fingerprint or call `cache.clear(email)`, so a seller never waits
+   out a TTL to see their own change. Loaded dataframes are cached the same
+   way, which matters most on Supabase where every load is a download plus a
+   decrypt plus a parse.
+
+Measured on 2,615 rows / 60 customers:
+
+| | before | after (cold) | after (warm) |
+|---|---|---|---|
+| `GET /api/smart/state` | 348 ms | 58 ms | 5 ms |
+| `GET /api/today` | 184 ms | 7 ms | 3 ms |
+| whole home screen | ~530 ms | — | 15 ms |
+
+On the client: uploaded media is served with `FileResponse` (streamed, not read
+into memory) plus an immutable cache header and ETag/304, so a storefront stops
+re-downloading its own photos; picking a size repaints one column instead of
+re-rendering the whole page; and the app's home screen fires its independent
+reads together rather than in sequence.
 
 ## Security & trust
 

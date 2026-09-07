@@ -558,16 +558,32 @@ def market_basket_pairs(txns: pd.DataFrame, item_field: str, min_pair_count: int
         return {}
 
     from collections import Counter, defaultdict
+    from itertools import combinations
 
-    order_baskets = txns.groupby("order_id")[item_field].apply(lambda s: list(set(s.dropna().astype(str))))
+    # Building the baskets used to be `groupby(...).apply(lambda s: ...)`, which
+    # runs a Python callable per order and was, on its own, the slowest thing on
+    # the home screen. Dropping duplicate (order, item) rows first and letting
+    # pandas group the values does the same work vectorised.
+    pairs_src = txns[["order_id", item_field]].dropna()
+    if pairs_src.empty:
+        return {}
+    pairs_src = pairs_src.astype({item_field: str}).drop_duplicates()
+
+    # orders with a single line can never produce a pair — drop them before the
+    # loop rather than testing inside it
+    sizes = pairs_src.groupby("order_id")[item_field].transform("size")
+    pairs_src = pairs_src[sizes > 1]
+    if pairs_src.empty:
+        return {}
+
     pair_counts: dict[str, Counter] = defaultdict(Counter)
-    for basket in order_baskets:
-        if len(basket) < 2:
-            continue
-        for i, item_a in enumerate(basket):
-            for item_b in basket:
-                if item_a != item_b:
-                    pair_counts[item_a][item_b] += 1
+    for _, basket in pairs_src.groupby("order_id", sort=False)[item_field]:
+        items = basket.to_numpy(dtype=object)
+        # count each unordered pair once and fan it out both ways: half the
+        # iterations of the old nested loop, and no per-item inequality test
+        for a, b in combinations(items, 2):
+            pair_counts[a][b] += 1
+            pair_counts[b][a] += 1
 
     best_pairs = {}
     for item, counter in pair_counts.items():
@@ -581,6 +597,25 @@ def market_basket_pairs(txns: pd.DataFrame, item_field: str, min_pair_count: int
 # =========================================================
 # AT-RISK CUSTOMER PROFILES  (feeds the AI win-back message generator)
 # =========================================================
+_AT_RISK_POOL = 400          # profile this many once, then slice per caller
+
+
+def at_risk_cached(email: str, txns: pd.DataFrame, limit: int = 60) -> list[dict]:
+    """The at-risk list, computed once per account per data version.
+
+    Three callers want this — the home insights, the Today strip and the
+    campaign generator — each with a different limit, and each used to run the
+    whole pass again. Profiles are ranked by spend before they are built, so
+    slicing the shared pool gives every caller exactly what a direct call with
+    its own limit would have given it.
+    """
+    from backend.core import cache
+    pool = cache.memo("at_risk", email,
+                      lambda: at_risk_customers(txns, limit=_AT_RISK_POOL) or [],
+                      ttl=180) or []
+    return pool[:limit] if limit else pool
+
+
 def at_risk_customers(txns: pd.DataFrame, limit: int = 60) -> list[dict]:
     """
     Re-run RFM, take the 'At Risk' segment, and build a marketing-analytics
@@ -607,23 +642,41 @@ def at_risk_customers(txns: pd.DataFrame, limit: int = 60) -> list[dict]:
     cols = rfm_result["columns"]
     rows = rfm_result["rows"]
     idx = {c: i for i, c in enumerate(cols)}
-    at_risk_ids = [r[idx["customer_id"]] for r in rows if r[idx["segment"]] == "At Risk"]
-    if not at_risk_ids:
-        return []
 
-    df = txns.copy()
+    # ---- three things that used to make this the slowest call in the app ----
+    # 1. Every at-risk customer was profiled and then all but `limit` of them
+    #    thrown away. Rank first, profile only the ones that survive.
+    # 2. Each customer's rows were found with `df[df.customer_id == cid]` — a
+    #    full-frame scan per customer, so cost grew with customers x rows.
+    #    One groupby gives every slice at once.
+    # 3. Their RFM row was found with a linear scan of `rows` per customer,
+    #    which is quadratic. A dict is not.
+    by_id = {r[idx["customer_id"]]: r for r in rows}
+    at_risk = [r for r in rows if r[idx["segment"]] == "At Risk"]
+    if not at_risk:
+        return []
+    at_risk.sort(key=lambda r: float(r[idx["monetary"]] or 0), reverse=True)
+    at_risk_ids = [r[idx["customer_id"]] for r in at_risk[:max(1, int(limit))]]
+
+    df = txns
     overall_avg_amount = df.groupby("order_id")["amount"].sum().mean() if "order_id" in df.columns else df["amount"].mean()
 
     # item_field and market-basket pairs are dataset-wide — compute once, not per customer
     item_field = next((f for f in ("product", "subcategory", "category") if f in df.columns), None)
     basket_pairs = market_basket_pairs(df, item_field) if item_field else {}
 
+    wanted = set(at_risk_ids)
+    slices = {cid: g.sort_values("date")
+              for cid, g in df[df["customer_id"].isin(wanted)].groupby("customer_id", sort=False)}
+
     profiles = []
     for cid in at_risk_ids:
-        cust_txns = df[df["customer_id"] == cid].sort_values("date")
-        if cust_txns.empty:
+        cust_txns = slices.get(cid)
+        if cust_txns is None or cust_txns.empty:
             continue
-        row = next(r for r in rows if r[idx["customer_id"]] == cid)
+        row = by_id.get(cid)
+        if row is None:
+            continue
         frequency = int(row[idx["frequency"]])
 
         # --- favorite item / category by revenue ---
@@ -694,5 +747,7 @@ def at_risk_customers(txns: pd.DataFrame, limit: int = 60) -> list[dict]:
             "signal_strength": signal_strength,
         })
 
+    # already ranked by monetary before profiling; this only re-orders the
+    # handful we built, and costs nothing
     profiles.sort(key=lambda p: p["monetary"], reverse=True)
     return profiles[:limit]

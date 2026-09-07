@@ -91,7 +91,9 @@ def _winback_items(email: str) -> list[dict]:
     txns = smart.load_sales(email)
     if txns is None or not len(txns):
         return []
-    at_risk = analytics.at_risk_customers(txns, limit=400) or []
+    # /api/smart/state runs this same pass; the shared pool means the home
+    # screen pays for it once, not twice.
+    at_risk = analytics.at_risk_cached(email, txns, limit=0)
     if len(at_risk) < 3:
         return []
     value = sum(float(c.get("monetary") or 0) for c in at_risk)
@@ -165,13 +167,23 @@ _SOURCES = (_orders_items, _supply_items, _winback_items,
 # public
 # ---------------------------------------------------------------------------
 def build(email: str, limit: int = 3) -> list[dict]:
-    """The ranked list. `limit=0` returns everything found."""
-    found: list[dict] = []
-    for src in _SOURCES:
-        got = _safe(src, email)
-        if got:
-            found.extend(got)
-    found.sort(key=lambda i: (i["weight"], -(float(i.get("value") or 0))))
+    """The ranked list. `limit=0` returns everything found.
+
+    Cached against the account's data stamp: the strip and the digest ask for
+    the same rows, and nothing here changes until the seller's data does.
+    """
+    from backend.core import cache
+
+    def _compute() -> list[dict]:
+        found: list[dict] = []
+        for src in _SOURCES:
+            got = _safe(src, email)
+            if got:
+                found.extend(got)
+        found.sort(key=lambda i: (i["weight"], -(float(i.get("value") or 0))))
+        return found
+
+    found = cache.memo("today", email, _compute, ttl=120) or []
     return found if not limit else found[:limit]
 
 

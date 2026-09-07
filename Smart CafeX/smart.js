@@ -267,9 +267,12 @@ async function goHome() {
   setCrumb(""); showRail(true);
   setView(`<div class="ap-empty">Loading your workspace…</div>`);
   try {
-    const s = await api("/api/smart/state");
+    const [s, pt] = await Promise.all([
+      api("/api/smart/state"),
+      api("/api/product-type").catch(() => null),
+    ]);
     state.lastState = s; state.data = s.data;
-    try { const pt = await api("/api/product-type"); state.productType = pt.product_type; state.productTypes = pt.types; } catch (e) {}
+    if (pt) { state.productType = pt.product_type; state.productTypes = pt.types; }
     renderHome(s);
     renderApprovals(s.insights);
   } catch (e) {
@@ -354,6 +357,7 @@ async function renderToday() {
   }
   _digest = d.digest || null;
   const items = d.items || [];
+  renderProof();          // independent request — do not make it wait for this one
 
   if (!items.length) {
     const e = d.empty || {};
@@ -379,7 +383,6 @@ async function renderToday() {
       else openModule(r);
     });
   }
-  renderProof();
   const db = $("digestBtn");
   if (db) {
     db.classList.toggle("on", !!(_digest && _digest.enabled));
@@ -526,6 +529,8 @@ function renderHome(s) {
     if (m.needs && !(state.data[m.needs] && state.data[m.needs].ready)) { toast(`Upload ${m.needs} data first`); return; }
     openModule(m.id);
   });
+  // three independent reads; firing them together rather than in sequence is
+  // the difference between one round-trip and three on a slow connection
   renderChannels();
   renderToday();
   document.querySelectorAll("[data-up]").forEach((el) => el.onclick = () => startUpload(el.dataset.up));

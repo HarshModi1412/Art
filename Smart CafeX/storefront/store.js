@@ -835,7 +835,7 @@ function viewProduct(id) {
           ${imgs.length > 1 ? `<div class="pd-thumbs">${imgs.map((u, i) =>
             `<button class="${i === 0 ? "on" : ""}" data-img="${esc(u)}" style="background-image:url('${esc(u)}')" aria-label="View image ${i + 1}"></button>`).join("")}</div>` : ""}
         </div>
-        <div class="pd-info rv d2 in">
+        <div class="pd-info rv d2 in" id="pdInfo">
           ${p.category ? `<div class="eyebrow">${esc(p.category)}</div>` : ""}
           <h1 style="margin-top:16px">${esc(p.name)}</h1>
           <div class="price-row" style="margin:0 0 8px">
@@ -868,6 +868,53 @@ function viewProduct(id) {
     </div>` + footer();
 }
 
+/* Repaint only the product's info column after a variant choice. Falls back to
+   a full render if the panel is not on screen (nothing to patch). */
+function repaintProductInfo(pid) {
+  const host = el("pdInfo");
+  const p = S.products.find((x) => x.id === pid);
+  if (!host || !p) { render(); return; }
+  const fresh = document.createElement("div");
+  fresh.innerHTML = viewProduct(pid);
+  const next = fresh.querySelector("#pdInfo");
+  if (!next) { render(); return; }
+  host.innerHTML = next.innerHTML;
+
+  // swapping the gallery's main image is the only thing outside the panel that
+  // a variant can change
+  const chosen = chosenVariant(p);
+  const main = el("pdMain");
+  if (main) {
+    const img = (chosen && chosen.image_url) || p.image_url || (p.images || [])[0] || "";
+    if (img) main.style.backgroundImage = `url('${img}')`;
+  }
+  bindProductPanel(p);
+}
+
+/* Handlers that live inside the info panel — shared by the full render and the
+   targeted repaint so the two can never drift apart. */
+function bindProductPanel(p) {
+  document.querySelectorAll("[data-ax]").forEach((n) => n.onclick = () => {
+    const pid = n.dataset.pid;
+    S.chosen[pid] = { ...(S.chosen[pid] || {}) };
+    if (S.chosen[pid][n.dataset.ax] === n.dataset.val) delete S.chosen[pid][n.dataset.ax];
+    else S.chosen[pid][n.dataset.ax] = n.dataset.val;
+    repaintProductInfo(pid);
+  });
+  const qv = el("qVal");
+  if (!qv) return;
+  const v = chosenVariant(p);
+  const avail = v ? v.available : p.available;
+  const cap = avail == null ? 99 : Math.max(1, avail);
+  const vid = v ? v.id : "";
+  el("qMinus").onclick = () => { qv.textContent = Math.max(1, +qv.textContent - 1); };
+  el("qPlus").onclick = () => { qv.textContent = Math.min(cap, +qv.textContent + 1); };
+  el("pdAdd").onclick = () => addToCart(p.id, +qv.textContent, vid);
+  el("pdBuy").onclick = () => { addToCart(p.id, +qv.textContent, vid); startCheckout(); };
+  document.querySelectorAll(".acc-h").forEach((h) =>
+    h.onclick = () => h.parentElement.classList.toggle("open"));
+}
+
 function viewOrders() {
   if (!S.customer) {
     return header() + `<div class="wrap"><div class="empty">
@@ -882,7 +929,7 @@ function viewOrders() {
     <div class="wrap" style="padding-top:52px">
       <div class="eyebrow">Account</div>
       <h1 style="font-size:clamp(28px,4.4vw,52px);margin:18px 0 8px">Your orders</h1>
-      <p class="muted" style="margin-bottom:36px">${esc(S.customer.email)} · <a href="#" id="logoutLink" class="ul">log out</a></p>
+      <p class="muted" style="margin-bottom:36px">${esc((S.customer || {}).email || "your account")} · <a href="#" id="logoutLink" class="ul">log out</a></p>
       ${orders.length ? orders.map((o) => {
         const i = flow.indexOf(o.status);
         return `<div class="ord">
@@ -907,7 +954,11 @@ function viewCheckout() {
       <h3>Your bag is empty</h3><p>Add something you like and come back.</p>
       <button class="b p" data-go="shop">Shop products${ic("arrow-right")}</button></div></div>` + footer();
   }
-  const a = (S.customer && S.customer.address) || {};
+  // A guest has no customer record yet — that is the whole point of guest
+  // checkout — so every read below goes through this, never through
+  // S.customer directly. Dereferencing it was what broke the page.
+  const cust = S.customer || {};
+  const a = cust.address || {};
   const c = S.site.commerce || {};
   const guest = !S.customer;
   return header() + `
@@ -918,13 +969,13 @@ function viewCheckout() {
         ${guest
           ? `<p class="muted" style="margin:0 0 10px">No account needed. We'll create one from your phone number so you can track this order.</p>
              <p class="tiny muted" style="margin:0 0 34px">Already have an account? <a href="#" id="coLogin" class="ul">Log in</a> to use your saved address.</p>`
-          : `<p class="muted" style="margin:0 0 34px">Signed in as ${esc(S.customer.email)}</p>`}
+          : `<p class="muted" style="margin:0 0 34px">Signed in as ${esc(cust.email || "")}</p>`}
 
         <div class="co-box">
           <h3>Delivery address</h3>
           <div class="two">
-            <label class="field"><span>Full name</span><input id="coName" value="${esc(S.customer.name || "")}" placeholder="Your name" /></label>
-            <label class="field"><span>Phone</span><input id="coPhone" value="${esc(S.customer.phone || "")}" placeholder="10-digit mobile" inputmode="numeric" /></label>
+            <label class="field"><span>Full name</span><input id="coName" value="${esc(cust.name || "")}" placeholder="Your name" /></label>
+            <label class="field"><span>Phone</span><input id="coPhone" value="${esc(cust.phone || "")}" placeholder="10-digit mobile" inputmode="numeric" /></label>
           </div>
           ${guest ? `<label class="field"><span>Email <span class="muted">(optional — for the receipt)</span></span><input id="coEmail" type="email" value="" placeholder="you@email.com" /></label>` : ""}
           <label class="field"><span>Address</span><input id="coL1" value="${esc(a.line1 || "")}" placeholder="Flat / house, street" /></label>
@@ -1333,15 +1384,6 @@ function bindView() {
   document.querySelectorAll("[data-open]").forEach((n) => n.onclick = (e) => {
     e.stopPropagation(); go("product", { id: n.dataset.open });
   });
-  document.querySelectorAll("[data-ax]").forEach((n) => n.onclick = () => {
-    const pid = n.dataset.pid;
-    S.chosen[pid] = { ...(S.chosen[pid] || {}) };
-    // clicking the value you already have selected clears it, so a shopper can
-    // always get back to "show me everything"
-    if (S.chosen[pid][n.dataset.ax] === n.dataset.val) delete S.chosen[pid][n.dataset.ax];
-    else S.chosen[pid][n.dataset.ax] = n.dataset.val;
-    render();
-  });
   document.querySelectorAll("[data-cat]").forEach((n) => n.onclick = (e) => { e.preventDefault(); S.filter = n.dataset.cat; go("shop"); });
   document.querySelectorAll("[data-policy]").forEach((n) => n.onclick = (e) => { e.preventDefault(); openPolicy(n.dataset.policy); });
 
@@ -1369,14 +1411,7 @@ function bindView() {
   const qv = el("qVal");
   if (qv) {
     const p = S.products.find((x) => x.id === S.route.id) || {};
-    const v = p.id ? chosenVariant(p) : null;
-    const avail = v ? v.available : p.available;
-    const cap = avail == null ? 99 : Math.max(1, avail);
-    const vid = v ? v.id : "";
-    el("qMinus").onclick = () => { qv.textContent = Math.max(1, +qv.textContent - 1); };
-    el("qPlus").onclick = () => { qv.textContent = Math.min(cap, +qv.textContent + 1); };
-    el("pdAdd").onclick = () => addToCart(S.route.id, +qv.textContent, vid);
-    el("pdBuy").onclick = () => { addToCart(S.route.id, +qv.textContent, vid); startCheckout(); };
+    if (p.id) bindProductPanel(p);
     document.querySelectorAll("[data-img]").forEach((b) => b.onclick = () => {
       el("pdMain").style.backgroundImage = `url('${b.dataset.img}')`;
       document.querySelectorAll("[data-img]").forEach((x) => x.classList.remove("on"));

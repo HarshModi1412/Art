@@ -126,6 +126,28 @@ def _local_hit(filename: str) -> str | None:
     return None
 
 
+def local_path(filename: str) -> str | None:
+    """A path on this box, fetching from Storage into the cache if needed.
+
+    Serving from a path lets the web server stream the file (sendfile) instead
+    of the app reading every byte into memory on every request — which is what
+    it was doing for every photo on every storefront page.
+    """
+    filename = os.path.basename(filename or "")
+    if not filename:
+        return None
+    hit = _local_hit(filename)
+    if hit:
+        if durable() and os.path.dirname(hit) == _LEGACY_DIR:
+            read(filename)          # rescues it into storage + cache
+            hit = _local_hit(filename) or hit
+        return hit
+    got = read(filename)            # pulls from storage and fills the cache
+    if not got:
+        return None
+    return _local_hit(filename)
+
+
 def read(filename: str) -> tuple[bytes, str] | None:
     """Bytes + content type for one file, or None. Order: local cache, the old
     repo folder, then Storage. A file found only in the old folder is copied up

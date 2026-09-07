@@ -521,5 +521,68 @@ mt3 = [p for p in r.json()["products"] if p["id"] == mt["id"]][0]
 must(mt3["image_url"] == "" and mt3["video_url"] == vid_url,
      "clearing one image clears only that one")
 
+
+print("\n== 24. guest checkout renders without a customer record ==")
+# The full browser-side render check lives in scripts/test_storefront_render.js
+# (run it with node); these are the static guards that keep the bug from
+# returning even where node is not installed.
+# The crash was in the storefront bundle, not the API: viewCheckout read
+# S.customer.name while a guest has no customer at all. Guard it here by
+# proving the JS never dereferences S.customer directly again.
+import re as _re2, pathlib as _pl
+_store = _pl.Path("Smart CafeX/storefront/store.js").read_text(encoding="utf-8")
+bare = _re2.findall(r"S\.customer\.[a-zA-Z_]", _store)
+must(not bare, f"no bare S.customer.<field> reads remain (found {bare[:3]})")
+must("const cust = S.customer || {}" in _store, "checkout reads through a safe object")
+_ck = _store[_store.index("function viewCheckout"):]
+_ck = _ck[:_ck.index("function trustBlock")]
+must(not _re2.search(r"S\.customer\s*\.", _ck),
+     "the checkout view never dereferences S.customer")
+
+
+print("\n== 25. the cache must never serve a stale answer ==")
+from backend.core import cache as _cache, analytics as _an, smart as _sm
+_e = SELLER
+_before = c.get("/api/today", headers=H).json()
+must("items" in _before, "today reads")
+_s1 = _cache.stamp(_e)
+
+# a new order changes the data, so the fingerprint must change
+r = c.post(f"/api/shop/{HANDLE}/order", json={
+    "lines": [{"product_id": pid1, "qty": 1}],
+    "address": {"name": "Stale Check", "phone": "9333333333", "line1": "3 Third St",
+                "city": "Bengaluru", "state": "KA", "pincode": "560003"}})
+must(r.status_code == 200, f"place an order ({r.status_code})", r.text[:200])
+must(_cache.stamp(_e) != _s1, "an order changes the data fingerprint, so caches miss")
+
+# a product write clears explicitly
+_cache.put("probe", _e, "sentinel")
+must(_cache.get("probe", _e) == "sentinel", "the cache stores")
+c.post("/api/products/item", headers=H, json={"name": "Cache Probe", "price": 5})
+must(_cache.get("probe", _e) is None, "a product write clears the account's cache")
+
+# the shared at-risk pool must give each caller what its own limit would have
+_txns = _sm.load_sales(_e)
+if _txns is not None and len(_txns):
+    _cache.clear(_e)
+    _direct = _an.at_risk_customers(_txns, limit=5)
+    _cache.clear(_e)
+    _shared = _an.at_risk_cached(_e, _txns, limit=5)
+    must([x["customer_id"] for x in _direct] == [x["customer_id"] for x in _shared],
+         "the shared pool sliced to 5 == a direct call with limit 5")
+    must(len(_an.at_risk_cached(_e, _txns, limit=0)) >= len(_shared),
+         "limit=0 returns the whole pool")
+
+# the loaded-dataframe cache must not outlive the data it came from
+def _nrows(df):
+    return 0 if df is None else len(df)
+must(_nrows(_sm.load_sales(_e)) > 0, "sales data is loaded")
+c.post("/api/smart/clear?kind=sales", headers=H)
+must(_nrows(_sm.load_sales(_e)) == 0,
+     "clearing the dataset empties it immediately — no cached frame survives")
+c.post("/api/demo", headers=H)
+must(_nrows(_sm.load_sales(_e)) > 0,
+     f"a fresh upload is visible at once ({_nrows(_sm.load_sales(_e))} rows)")
+
 print("\nALL CHECKS PASSED \u2713")
 shutil.rmtree(TMP, ignore_errors=True)
