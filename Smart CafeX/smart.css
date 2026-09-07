@@ -1091,3 +1091,20 @@ td { color: var(--text-2); }
   .vx-axis { grid-template-columns: 1fr; }
   .pairs { grid-template-columns: 1fr 1fr; }
 }
+
+/* ----------------------------------------------------------
+   Media durability warning
+   Uploads used to be written into the checked-out repo folder, so every deploy
+   rebuilt it from git and silently deleted them. The app now knows whether
+   that is still the case, and says so where a seller is about to upload —
+   rather than letting them find out from their own broken storefront.
+   ---------------------------------------------------------- */
+.media-warn {
+  display: grid; grid-template-columns: 20px 1fr; gap: 11px; align-items: start;
+  padding: 12px 14px; margin: 0 0 14px;
+  background: var(--amber-soft); border: 1px solid var(--amber-soft);
+  border-left: 3px solid var(--amber); border-radius: var(--radius);
+}
+.media-warn svg { width: 17px; height: 17px; color: var(--amber); margin-top: 1px; }
+.media-warn b { display: block; font-size: 13px; font-weight: 650; color: var(--text); }
+.media-warn span { display: block; font-size: 12.2px; color: var(--text-2); line-height: 1.5; margin-top: 3px; }

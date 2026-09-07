@@ -57,6 +57,13 @@ def _resolve_root() -> str:
 
 
 _ROOT = _resolve_root()
+
+
+def root() -> str:
+    """The writable data directory actually in use (a mounted disk when one is
+    attached, otherwise the temp fallback). Anything that must survive a
+    restart belongs under here, never inside the checked-out repository."""
+    return _ROOT
 _lock = threading.Lock()
 
 

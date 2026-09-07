@@ -297,8 +297,16 @@ def _products_raw(email: str) -> list[dict]:
             merged = []
             for r in rows:
                 extra = side.get(r.get("id")) or {}
-                merged.append({**r, **{k: v for k, v in extra.items() if v not in (None, "")}}
-                              if extra else r)
+                # The sidecar is authoritative for the fields it holds — it is
+                # where they were written. Only a key the table also has may be
+                # skipped when the sidecar copy is empty, so a stale blank can
+                # never wipe a real column.
+                if extra:
+                    keep = {k: v for k, v in extra.items()
+                            if k not in r or v not in (None, "")}
+                    merged.append({**r, **keep})
+                else:
+                    merged.append(r)
             rows = merged
     else:
         rows = user_store.get_key(email, PROD_KEY, []) or []
@@ -336,25 +344,88 @@ def get_products(email: str) -> list[dict]:
     return out
 
 
-def _upsert_row(row: dict) -> None:
-    """Write a product row to Supabase, surviving a database that has not run
-    supabase/site.sql yet: on a column error we retry with the storefront
-    fields stripped and keep them in the per-account JSON state instead, so a
-    seller never loses a save because of a pending migration."""
+# The columns the `products` table actually has, discovered once per process.
+# The old code guessed — full write, and on any error a single retry with the
+# storefront fields stripped — which meant the day a NEW field was added that
+# the strip list didn't know about (has_variants), the retry failed too and
+# every product save returned a 500. Asking the table what it holds is both
+# cheaper (no failed round-trip per save) and impossible to break that way.
+_COLUMNS: set[str] | None = None
+_ALWAYS_SIDECAR = ("has_variants",)   # derived on read; never a column
+
+
+def _known_columns(email: str) -> set[str] | None:
+    """Column names on the products table, or None if we cannot tell (in which
+    case we write everything and let the caller's fallback handle it)."""
+    global _COLUMNS
+    if _COLUMNS is not None:
+        return _COLUMNS or None
     try:
-        db.upsert(T_PROD, row, on_conflict="id")
-        return
-    except Exception as e:  # noqa: BLE001 - column may not exist yet
+        rows = db.fetch_all(T_PROD, {"email": email}) or db.fetch_all(T_PROD) or []
+        if rows:
+            _COLUMNS = set(rows[0].keys())
+            return _COLUMNS
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _split_row(row: dict) -> tuple[dict, dict]:
+    """(columns the table can take, everything else for the JSON sidecar)."""
+    cols = _known_columns(row.get("email", ""))
+    if cols:
+        writable = {k: v for k, v in row.items() if k in cols}
+        extra = {k: v for k, v in row.items()
+                 if k not in cols and k not in ("id", "email")}
+    else:
+        # nothing to learn from (empty table): assume the base schema only
+        writable = {k: v for k, v in row.items()
+                    if k not in STOREFRONT_FIELDS and k not in _ALWAYS_SIDECAR}
+        extra = {k: row.get(k) for k in STOREFRONT_FIELDS}
+    return writable, extra
+
+
+def _write_sidecar(email: str, product_id: str, extra: dict) -> None:
+    side = user_store.get_key(email, SIDECAR_KEY, {}) or {}
+    side[product_id] = extra
+    user_store.set_key(email, SIDECAR_KEY, side)
+
+
+def _upsert_row(row: dict) -> None:
+    """Write a product row to Supabase.
+
+    Fields the table has no column for (because supabase/site.sql or
+    supabase/variants.sql has not been run) are kept in the per-account JSON
+    state instead and merged back on read — so a pending migration degrades to
+    "stored somewhere else", never to a failed save.
+    """
+    global _COLUMNS
+    row = {k: v for k, v in row.items() if k not in _ALWAYS_SIDECAR}
+    email, pid = row.get("email", ""), row.get("id", "")
+
+    writable, extra = _split_row(row)
+    try:
+        db.upsert(T_PROD, writable, on_conflict="id")
+    except Exception as e:  # noqa: BLE001 — a stale column guess; re-learn and retry
         import logging
         logging.getLogger("products").warning(
-            "product upsert with storefront columns failed (%s); "
-            "retrying without them — run supabase/site.sql to migrate.", e)
-    slim = {k: v for k, v in row.items() if k not in STOREFRONT_FIELDS}
-    db.upsert(T_PROD, slim, on_conflict="id")
-    extra = {k: row.get(k) for k in STOREFRONT_FIELDS}
-    side = user_store.get_key(row["email"], SIDECAR_KEY, {}) or {}
-    side[row["id"]] = extra
-    user_store.set_key(row["email"], SIDECAR_KEY, side)
+            "product upsert failed (%s); retrying with the base columns only. "
+            "Run supabase/site.sql and supabase/variants.sql to store these in "
+            "the database instead of the JSON sidecar.", e)
+        _COLUMNS = None
+        base = {k: v for k, v in row.items()
+                if k not in STOREFRONT_FIELDS and k not in _ALWAYS_SIDECAR}
+        db.upsert(T_PROD, base, on_conflict="id")
+        extra = {k: row.get(k) for k in STOREFRONT_FIELDS}
+
+    # Only write a sidecar when there is something the table could not hold —
+    # an empty one would shadow real columns on read.
+    if extra:
+        _write_sidecar(email, pid, extra)
+    else:
+        side = user_store.get_key(email, SIDECAR_KEY, {}) or {}
+        if side.pop(pid, None) is not None:
+            user_store.set_key(email, SIDECAR_KEY, side)
 
 
 def upsert_product(email: str, item: dict) -> list[dict]:

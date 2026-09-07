@@ -30,6 +30,7 @@ from backend.core import commerce, secrets_store, db, supply, products
 from backend.core import sitebuilder, storefront
 from backend.core import messaging, password_reset, today as today_mod
 from backend.core import winback_proof
+from backend.core import media
 
 # ---------------------------------------------------------
 # numpy/pandas JSON safety net
@@ -760,15 +761,13 @@ async def content_upload_image(insight_id: str = "",
     if len(content) > 8 * 1024 * 1024:
         raise HTTPException(400, "Image is over 8MB — please compress or use a smaller one.")
     import uuid as _uuid
-    fname = f"{_uuid.uuid4().hex}{ext}"
-    fpath = os.path.join(_IMG_DIR, fname)
-    with open(fpath, "wb") as out:
-        out.write(content)
-    public_url = f"/generated_images/{fname}"
+    saved = media.save(f"{_uuid.uuid4().hex}{ext}", content, email)
+    public_url = saved["url"]
     # Attach to the current suggestion so refreshing keeps the uploaded image.
     if insight_id:
         smart.save_content_suggestion(email, insight_id, {"image_url": public_url})
-    return {"ok": True, "image_url": public_url, "filename": f.filename}
+    return {"ok": True, "image_url": public_url, "filename": f.filename,
+            "durable": saved["durable"], "warning": saved["warning"]}
 
 
 @app.post("/api/content/regenerate-image")
@@ -912,11 +911,51 @@ def ads_metrics(connector: str, days: int = 30,
 
 
 # ---------------------------------------------------------
-# Serve locally-generated post images so Instagram can fetch them.
+# Uploaded media
+#
+# Everything a seller uploads keeps the URL it has always had —
+# /generated_images/<file> — but the bytes now come from backend.core.media,
+# which keeps the durable copy in Supabase Storage and a local cache under the
+# writable data dir. The old behaviour wrote into the checked-out repository,
+# so every deploy rebuilt that folder from git and silently deleted every image
+# and video a seller had ever uploaded. Nothing needs migrating: a file still
+# in the old folder is served from there and copied up to storage as it is read.
 # ---------------------------------------------------------
-_IMG_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "generated_images")
-os.makedirs(_IMG_DIR, exist_ok=True)
-app.mount("/generated_images", StaticFiles(directory=_IMG_DIR), name="generated_images")
+_IMG_DIR = media.cache_dir()
+
+
+@app.get("/generated_images/{filename}")
+def serve_media(filename: str):
+    got = media.read(filename)
+    if not got:
+        raise HTTPException(404, "That file is no longer available.")
+    data, ctype = got
+    return Response(content=data, media_type=ctype, headers={
+        # content-addressed names (a uuid per upload) never change contents
+        "Cache-Control": "public, max-age=31536000, immutable",
+    })
+
+
+@app.post("/api/media/backfill")
+def media_backfill(authorization: str | None = Header(default=None)):
+    """One-shot rescue: push anything still sitting only in the old repo folder
+    into durable storage before the next deploy erases it."""
+    require_user(authorization)
+    return media.backfill()
+
+
+@app.get("/api/media/status")
+def media_status(authorization: str | None = Header(default=None)):
+    """Is uploaded media actually safe here? The builder shows this, because a
+    seller should not find out at the next redeploy."""
+    require_user(authorization)
+    return {"durable": media.durable(), "cache_dir": media.cache_dir(),
+            "detail": "Uploads are stored in Supabase Storage and survive redeploys."
+            if media.durable() else
+            "Supabase is not configured, so uploads live on this server's disk "
+            "and will be lost when it restarts or redeploys. Set SUPABASE_URL "
+            "and the service key, or attach a persistent disk and point "
+            "CAFEX_DATA_DIR at it."}
 
 
 @app.get("/api/product-types")
@@ -2117,11 +2156,10 @@ def content_asset(insight_id: str, kind: str = "image", request: Request = None,
     ctype = "image/png"
     ext = "png"
     if url.startswith("/generated_images/"):
-        fpath = os.path.join(_IMG_DIR, os.path.basename(url))
-        if os.path.exists(fpath):
-            with open(fpath, "rb") as f:
-                data = f.read()
-            ext = (os.path.splitext(fpath)[1].lstrip(".") or "png").lower()
+        got = media.read(os.path.basename(url))
+        if got:
+            data, _ct = got
+            ext = (os.path.splitext(url)[1].lstrip(".") or "png").lower()
     if data is None:
         # remote or app-absolute URL — fetch it server-side
         try:
@@ -2651,12 +2689,12 @@ async def site_image(files: list[UploadFile] = File(...),
                      authorization: str | None = Header(default=None)):
     """One upload endpoint for every piece of media the seller adds — logos,
     hero art, hero video, story stills, lookbook clips and product photos —
-    saved to the same public folder the content module already serves from.
+    stored durably by backend.core.media so a redeploy cannot erase it.
 
     Video is allowed and gets a larger budget than stills: a background clip is
     the single biggest upgrade a storefront can have, and asking sellers to host
     it somewhere else is how that never happens."""
-    require_user(authorization)
+    email = require_user(authorization)
     if not files:
         raise HTTPException(400, "No file uploaded.")
     f = files[0]
@@ -2670,12 +2708,11 @@ async def site_image(files: list[UploadFile] = File(...),
         raise HTTPException(400, f"That file is over {cap // (1024 * 1024)}MB — "
                                  f"{'compress the clip (1080p, ~8 seconds is plenty)' if is_video else 'please compress it first'}.")
     import uuid as _uuid
-    fname = f"{_uuid.uuid4().hex}{ext}"
-    with open(os.path.join(_IMG_DIR, fname), "wb") as out:
-        out.write(content)
-    url = f"/generated_images/{fname}"
+    saved = media.save(f"{_uuid.uuid4().hex}{ext}", content, email)
+    url = saved["url"]
     return {"ok": True, "image_url": url, "url": url,
-            "kind": "video" if is_video else "image", "filename": f.filename}
+            "kind": "video" if is_video else "image", "filename": f.filename,
+            "durable": saved["durable"], "warning": saved["warning"]}
 
 
 @app.post("/api/products/listed")

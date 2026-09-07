@@ -1,4 +1,4 @@
-# Render blueprint for Cafe_X.
+# Render blueprint for One Tap Manager.
 # This file lets Render auto-configure the service when you use
 # "New +" -> "Blueprint" instead of clicking through settings manually.
 # (The step-by-step guide also covers doing this by hand, in case
@@ -18,6 +18,9 @@ services:
         sync: false               # https://<project>.supabase.co
       - key: SUPABASE_SECRET_KEY
         sync: false               # sb_secret_... key — server-side only
+      - key: SUPABASE_BUCKET
+        value: user-datasets      # also holds uploaded media under media/ — REQUIRED for images
+                                  # and clips to survive a redeploy
       - key: CS_SECRET_KEY
         sync: false               # Fernet key (stable) — encrypts creds + dataset blobs
       - key: CAFEX_DATA_DIR
@@ -32,5 +35,8 @@ services:
         value: 3.11.9
     disk:
       name: cafex-data
-      mountPath: /var/data        # only needed for the local-file fallback; with Supabase set, persistence lives in Supabase
+      mountPath: /var/data        # local cache + the file fallback. NOTE: uploaded images and
+                                  # videos are only durable when Supabase Storage is configured
+                                  # (or this disk is genuinely attached and writable) — without
+                                  # either, every deploy wipes them.
       sizeGB: 1

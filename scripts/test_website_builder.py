@@ -483,5 +483,43 @@ cid = proof["campaigns"][0]["id"]
 r = c.post("/api/rfm/winback/unsent", headers=H, json={"campaign_id": cid})
 must(r.json()["campaigns"] == [], "a mis-click can be undone")
 
+
+print("\n== 23. uploaded media survives, and product saves keep it ==")
+PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+                    "0000000a49444154789c636000000200010005fe02fea7d4f4b70000000049454e44ae426082")
+r = c.post("/api/site/image", headers=H, files={"files": ("shot.png", PNG, "image/png")})
+must(r.status_code == 200, f"upload an image ({r.status_code})", r.text[:200])
+img_url = r.json()["url"]
+must(img_url.startswith("/generated_images/"), "the URL shape never changed")
+g = c.get(img_url)
+must(g.status_code == 200 and g.content == PNG, "the bytes come back byte-for-byte")
+must("immutable" in (g.headers.get("cache-control") or ""), "content-addressed files cache hard")
+MP4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64
+r = c.post("/api/site/image", headers=H, files={"files": ("clip.mp4", MP4, "video/mp4")})
+must(r.status_code == 200 and r.json()["kind"] == "video", "upload a clip")
+vid_url = r.json()["url"]
+must(c.get(vid_url).status_code == 200, "the clip serves back")
+must(c.get("/generated_images/does-not-exist.png").status_code == 404,
+     "a missing file 404s instead of 500ing")
+st = c.get("/api/media/status", headers=H).json()
+must("durable" in st and st["detail"], "the app can say whether uploads are safe here")
+
+r = c.post("/api/products/item", headers=H, json={
+    "name": "Media Test", "price": 500, "image_url": img_url, "video_url": vid_url,
+    "images": [img_url], "options": [{"name": "Size", "values": ["S", "M"]}]})
+must(r.status_code == 200, f"save a product carrying image + clip + variants ({r.status_code})",
+     r.text[:300])
+mt = [p for p in r.json()["products"] if p["name"] == "Media Test"][0]
+must(mt["image_url"] == img_url and mt["video_url"] == vid_url, "both survive the save")
+must(mt["images"] == [img_url] and len(mt["variants"]) == 2, "gallery and matrix survive too")
+r = c.post("/api/products/item", headers=H, json={**mt, "price": 600})
+mt2 = [p for p in r.json()["products"] if p["id"] == mt["id"]][0]
+must(mt2["image_url"] == img_url and mt2["video_url"] == vid_url,
+     "and survive an edit — the save path that was failing")
+r = c.post("/api/products/item", headers=H, json={**mt2, "image_url": ""})
+mt3 = [p for p in r.json()["products"] if p["id"] == mt["id"]][0]
+must(mt3["image_url"] == "" and mt3["video_url"] == vid_url,
+     "clearing one image clears only that one")
+
 print("\nALL CHECKS PASSED \u2713")
 shutil.rmtree(TMP, ignore_errors=True)

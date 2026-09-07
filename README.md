@@ -218,6 +218,40 @@ With no SMTP configured, sends land in an in-memory outbox readable at
 Point a cron at `POST /api/digest/run` hourly; it sends only the sellers whose
 chosen hour is now.
 
+## Where uploaded media is saved
+
+`backend/core/media.py`. Logos, hero art, hero clips, story stills, lookbook
+clips and product photos.
+
+**The bug this replaced.** Uploads were written to
+`backend/../data/generated_images/` — a folder inside the checked-out
+repository. Render rebuilds that from git on every deploy, so every image and
+video a seller had ever uploaded was deleted on the next restart, while their
+site document kept pointing at `/generated_images/<name>` and showed broken
+slots. Re-uploading never fixed it, because the next deploy wiped those too.
+
+**Where files go now**, in order of durability:
+
+1. **Supabase Storage** — `SUPABASE_BUCKET` (default `user-datasets`) under a
+   `media/` prefix. Survives redeploys, restarts and changing host. The bucket
+   can stay private: bytes are served through the app, never by a public link.
+2. **A local cache** under `CAFEX_DATA_DIR` (a mounted Render disk when one is
+   attached, otherwise a temp dir), re-filled from Storage on a miss. Losing
+   the cache costs a round-trip, never data.
+
+The URL never changed — still `/generated_images/<filename>` — so every site
+document and product row already saved keeps working. A file still sitting in
+the old repo folder is served from there **and copied up to Storage as it is
+read**, so the estate heals itself; `POST /api/media/backfill` does the whole
+folder in one go.
+
+`GET /api/media/status` reports whether uploads are actually durable on this
+deployment, and the app shows a warning above every upload control when they
+are not — rather than letting a seller find out from their own storefront.
+
+Run `supabase/variants.sql` once: it adds the `video_url`, `options` and
+`variants` columns plus a `media` index table.
+
 ## Password reset
 
 `backend/core/password_reset.py`, for sellers (`/api/forgot`, `/api/reset`) and

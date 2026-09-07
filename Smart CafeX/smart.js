@@ -56,6 +56,26 @@ function toast(msg, ms = 3200) {
    carried no weight or colour, and made the app look like a prototype next to
    the sites it produces. */
 const ICONS = Object.create(null);
+
+/* Are uploads actually safe on this deployment? Media used to be written into
+   the checked-out repo folder, which every redeploy rebuilds from git — so
+   images and clips vanished and nobody found out until they looked at their
+   own site. Now the app knows, and says so. */
+let _media = null;
+async function loadMediaStatus() {
+  try { _media = await api("/api/media/status"); }
+  catch (e) { _media = null; }
+  return _media;
+}
+
+/* One banner, rendered wherever a seller is about to upload something. */
+function mediaWarning() {
+  if (!_media || _media.durable) return "";
+  return `<div class="media-warn">${sic("shield")}
+    <div><b>Uploads are not safe on this server yet</b>
+    <span>${esc(_media.detail)}</span></div></div>`;
+}
+
 async function loadIcons() {
   try {
     const d = await fetch("/api/icons").then((r) => r.json());
@@ -991,15 +1011,22 @@ function pickImage(onUrl, multiple, accept) {
   inp.onchange = async () => {
     const files = Array.from(inp.files || []);
     if (!files.length) return;
-    toast(`Uploading ${files.length} image${files.length === 1 ? "" : "s"}…`);
+    toast(`Uploading ${files.length} file${files.length === 1 ? "" : "s"}…`);
+    let warned = "", failed = 0;
     for (const f of files) {
       const fd = new FormData(); fd.append("files", f);
       try {
         const r = await api("/api/site/image", { method: "POST", body: fd });
         onUrl(r.image_url);
-      } catch (e) { toast(e.message); }
+        if (r.warning) warned = r.warning;
+      } catch (e) { failed++; toast(e.message, 6000); }
     }
-    toast("Image ready");
+    if (failed) return;
+    // Say plainly when the durable copy did not happen, rather than showing a
+    // thumbnail that will be a broken slot after the next deploy.
+    toast(warned || (_media && !_media.durable
+      ? "Uploaded — but this server does not keep uploads. See the warning above."
+      : "Uploaded and stored."), warned || (_media && !_media.durable) ? 7000 : 3200);
   };
   inp.click();
 }
@@ -1121,6 +1148,7 @@ function openProductForm(id, prefillName) {
       </div>
 
       <div class="sup-sub">On my website</div>
+      ${mediaWarning()}
 
       <label class="site-toggle big" title="Show this product on your website">
         <input type="checkbox" id="pfListed" ${listed ? "checked" : ""} />
@@ -2993,6 +3021,7 @@ function gHero() {
     Eight seconds of your product moving does more than any amount of styling.
     MP4 or WEBM, 1080p, under 48MB.</div></div>`}
   <div class="sup-form-grid">
+    ${mediaWarning()}
     ${imageField("edHeroVid", _site.hero.video_url, "Hero video", "plays muted on loop behind the headline", true)}
     ${imageField("edHero", _site.hero.image_url, "Hero image", hasVid ? "used as the video's poster frame" : "wide, at least 1600px")}
     ${field("Headline", "hero.heading", { ph: "Scent that stays with you" })}
@@ -3667,7 +3696,7 @@ async function loadCustomers() {
 (async function init() {
   await loadIcons();
   if (state.token) {
-    try { await api("/api/me"); showShell(); }
+    try { await api("/api/me"); loadMediaStatus(); showShell(); }
     catch { state.token = null; localStorage.removeItem("cx_token"); $("loginView").hidden = false; }
   } else { $("loginView").hidden = false; }
 })();
