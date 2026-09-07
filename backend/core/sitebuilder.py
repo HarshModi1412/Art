@@ -96,6 +96,85 @@ FONTS = [
 FONT_IDS = {f["id"] for f in FONTS}
 
 
+# ---------------------------------------------------------------------------
+# Curated pairings
+# ---------------------------------------------------------------------------
+# Three free-choice dropdowns across thirty-five families is forty-two thousand
+# combinations, most of them bad, offered to someone who did not ask to become
+# a typographer. These are the pairings worth having: a display face, the body
+# face that sits under it, and the small uppercase face for eyebrows, buttons
+# and prices. "Choose your own" stays available behind a link — this is the
+# default, not a cage.
+PAIRINGS = [
+    {"id": "editorial", "name": "Editorial",
+     "note": "High-contrast serif over a quiet grotesk. Reads expensive without shouting.",
+     "heading": "bodoni", "body": "inter", "accent": "instrsans",
+     "suits": ["luxury", "jewellery", "beauty"]},
+    {"id": "quiet", "name": "Quiet Modern",
+     "note": "One family doing all three jobs at different weights. Never wrong.",
+     "heading": "intertight", "body": "inter", "accent": "inter",
+     "suits": ["basic", "tech", "fitness"]},
+    {"id": "gallery", "name": "Gallery",
+     "note": "Wide airy caps over a warm serif. For pieces that photograph well.",
+     "heading": "italiana", "body": "newsreader", "accent": "jost",
+     "suits": ["jewellery", "luxury", "beauty"]},
+    {"id": "counter", "name": "Counter",
+     "note": "Friendly geometric with a soft serif body. Approachable, not cute.",
+     "heading": "fraunces", "body": "dmsans", "accent": "dmsans",
+     "suits": ["cafe", "beauty", "basic"]},
+    {"id": "impact", "name": "Impact",
+     "note": "Condensed display at full volume over a plain workhorse.",
+     "heading": "anton", "body": "worksans", "accent": "archivo",
+     "suits": ["fitness", "tech", "fashion"]},
+    {"id": "atelier", "name": "Atelier",
+     "note": "Old-world serif headings, modern body. The catalogue look.",
+     "heading": "playfair", "body": "figtree", "accent": "jost",
+     "suits": ["fashion", "luxury", "cafe"]},
+    {"id": "studio", "name": "Studio",
+     "note": "Sculpted grotesk display with a neutral body. Quietly contemporary.",
+     "heading": "bricolage", "body": "schibsted", "accent": "spacegro",
+     "suits": ["tech", "basic", "fashion"]},
+    {"id": "press", "name": "Press",
+     "note": "Newsprint serif with a technical accent face. Good with lots of copy.",
+     "heading": "instrserif", "body": "lora", "accent": "spacemono",
+     "suits": ["cafe", "basic", "beauty"]},
+]
+
+
+def pairing(pairing_id: str) -> dict | None:
+    return next((p for p in PAIRINGS if p["id"] == pairing_id), None)
+
+
+def pairings_for(theme_id: str = "") -> list[dict]:
+    """Every pairing, the ones that suit this theme first — so the recommended
+    three sit at the top without hiding the rest."""
+    tid = (theme_id or "").strip().lower()
+    ranked = sorted(PAIRINGS, key=lambda p: (0 if tid in p.get("suits", []) else 1))
+    out = []
+    for p in ranked:
+        out.append({**p,
+                    "recommended": tid in p.get("suits", []),
+                    "heading_stack": font(p["heading"])["stack"],
+                    "body_stack": font(p["body"])["stack"],
+                    "accent_stack": font(p["accent"])["stack"],
+                    "google": sorted({font(p["heading"])["g"], font(p["body"])["g"],
+                                      font(p["accent"])["g"]})})
+    return out
+
+
+def apply_pairing(site: dict, pairing_id: str) -> dict:
+    """Write a pairing into a site's style. Returns the patched style dict."""
+    pr = pairing(pairing_id)
+    if not pr:
+        return site.get("style") or {}
+    style = dict(site.get("style") or {})
+    style["heading_font"] = pr["heading"]
+    style["body_font"] = pr["body"]
+    style["accent_font"] = pr["accent"]
+    style["pairing"] = pr["id"]
+    return style
+
+
 def font(font_id: str) -> dict:
     return next((f for f in FONTS if f["id"] == font_id), FONTS[0])
 
@@ -107,6 +186,26 @@ def font(font_id: str) -> dict:
 # with a 1.6 stroke and no fill; the renderer supplies the <svg> wrapper.
 # =========================================================================
 ICONS = {
+    # ---- app modules -------------------------------------------------------
+    # Drawn on the same 24x24 grid and the same 1.6 stroke as everything below,
+    # because the seller app and the storefronts it publishes should not look
+    # like two different products.
+    "chart": '<path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 16v-5"/>'
+             '<path d="M13 16V8"/><path d="M18 16v-3"/>',
+    "layers": '<path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"/><path d="m4 12.5 8 4.5 8-4.5"/>'
+              '<path d="m4 16.5 8 4.5 8-4.5"/>',
+    "tag": '<path d="M4 11V4h7l9 9-7 7-9-9Z"/><circle cx="8" cy="8" r="1.4"/>',
+    "compass": '<circle cx="12" cy="12" r="8.5"/><path d="m15 9-2 5-4 1 2-5 4-1Z"/>',
+    "trend": '<path d="m4 16 5-5 3.5 3.5L20 7"/><path d="M15 7h5v5"/>',
+    "receipt": '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6"/><path d="M9 12h6"/>',
+    "edit": '<path d="M4 20h4l10-10-4-4L4 16v4Z"/><path d="m14 6 4 4"/>',
+    "bell": '<path d="M6 9a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 13 6 9Z"/>'
+            '<path d="M10 18a2 2 0 0 0 4 0"/>',
+    "undo": '<path d="M4 10h9a5 5 0 0 1 0 10h-4"/><path d="m4 10 4-4M4 10l4 4"/>',
+    "grid": '<rect x="4" y="4" width="7" height="7" rx="1.2"/>'
+            '<rect x="13" y="4" width="7" height="7" rx="1.2"/>'
+            '<rect x="4" y="13" width="7" height="7" rx="1.2"/>'
+            '<rect x="13" y="13" width="7" height="7" rx="1.2"/>',
     # chrome
     "bag": '<path d="M6 7h12l1 13H5L6 7Z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/>',
     "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>',
@@ -446,6 +545,7 @@ def default_site(email: str) -> dict:
             "cols": None,                            # products per row, None = theme default
             "grain": None,                           # film grain strength, None = theme default
             "width": "wide",                         # wide | compact | full
+            "pairing": "",                           # id of a curated font pairing
         },
         "hero": {
             "image_url": "", "video_url": "", "heading": "", "sub": "",
@@ -501,6 +601,21 @@ def default_site(email: str) -> dict:
             "min_order": 0.0,
         },
         "policies": {"shipping": "", "returns": "", "privacy": ""},
+        # What a pasted link shows in WhatsApp, and what a search engine reads.
+        # Blank fields fall back to the brand, tagline and hero image, so a
+        # seller never has to fill this in to get a decent card.
+        "seo": {"title": "", "description": "", "og_image": "", "keywords": ""},
+        # Legal / trust block shown at checkout. Indian shoppers buying from a
+        # brand they have never heard of need this more than they would on a
+        # marketplace, not less.
+        "trust": {
+            "business_name": "", "gstin": "", "address": "",
+            "support_phone": "", "support_email": email,
+            "returns_days": 7, "dispatch_days": 2,
+            "show": True,
+        },
+        "seeded": False,
+        "published_at": "",
         "created_at": _now(),
         "updated_at": _now(),
     }
@@ -568,9 +683,23 @@ def save_site(email: str, patch: dict) -> dict:
     st = site["style"]
     st["mode"] = st.get("mode") if st.get("mode") in ("auto", "light", "dark") else "auto"
     st["motion"] = st.get("motion") if st.get("motion") in ("full", "subtle", "none") else "full"
+    # A pairing is a shorthand for the three faces: naming one writes all three,
+    # and choosing a face by hand afterwards simply clears the pairing label.
+    if st.get("pairing") and pairing(st["pairing"]):
+        pr = pairing(st["pairing"])
+        if (patch or {}).get("style", {}).get("pairing"):
+            st["heading_font"], st["body_font"], st["accent_font"] = \
+                pr["heading"], pr["body"], pr["accent"]
     for k in ("heading_font", "body_font", "accent_font"):
         if st.get(k) and st[k] not in FONT_IDS:
             st[k] = ""
+    if st.get("pairing") and not pairing(st["pairing"]):
+        st["pairing"] = ""
+    chosen = (st.get("heading_font"), st.get("body_font"), st.get("accent_font"))
+    if st.get("pairing"):
+        pr = pairing(st["pairing"])
+        if chosen != (pr["heading"], pr["body"], pr["accent"]):
+            st["pairing"] = ""      # they have since hand-picked a face
     st["preloader"] = _b(st.get("preloader"), True)
     if st.get("width") not in ("wide", "compact", "full"):
         st["width"] = "wide"
@@ -655,6 +784,30 @@ def save_site(email: str, patch: dict) -> dict:
     c["currency"] = "INR"
     c["order_note"] = str(c.get("order_note") or "").strip()[:200]
 
+    # ---- link previews ----
+    seo = site.get("seo") or {}
+    site["seo"] = {
+        "title": str(seo.get("title") or "").strip()[:120],
+        "description": " ".join(str(seo.get("description") or "").split())[:300],
+        "og_image": str(seo.get("og_image") or "").strip()[:500],
+        "keywords": str(seo.get("keywords") or "").strip()[:300],
+    }
+
+    # ---- checkout trust block ----
+    tr = site.get("trust") or {}
+    site["trust"] = {
+        "business_name": str(tr.get("business_name") or "").strip()[:120],
+        "gstin": str(tr.get("gstin") or "").strip().upper()[:20],
+        "address": str(tr.get("address") or "").strip()[:300],
+        "support_phone": re.sub(r"[^0-9+ ]", "", str(tr.get("support_phone") or ""))[:20],
+        "support_email": str(tr.get("support_email") or "").strip()[:120],
+        "returns_days": max(0, min(90, int(_f(tr.get("returns_days"), 7)))),
+        "dispatch_days": max(0, min(30, int(_f(tr.get("dispatch_days"), 2)))),
+        "show": _b(tr.get("show"), True),
+    }
+    site["seeded"] = _b(site.get("seeded"), False)
+    site["published_at"] = str(site.get("published_at") or "")[:40]
+
     site["published"] = _b(site.get("published"), False)
     site["updated_at"] = _now()
 
@@ -686,6 +839,11 @@ def set_published(email: str, published: bool) -> dict:
         raise ValueError("Give your site a brand name before publishing it.")
     site["published"] = bool(published)
     site["updated_at"] = _now()
+    # Stamped so the builder can tell "saved" from "saved AND live" — a saved
+    # edit on a published site is not live until Publish is pressed again, and
+    # nothing on screen used to say so.
+    if published:
+        site["published_at"] = site["updated_at"]
     _persist(email, site)
     return site
 
@@ -799,6 +957,140 @@ def _readable_on(colour: str) -> str:
     lin = lambda v: (v / 255) ** 2.2  # noqa: E731 - close enough for a UI choice
     lum = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
     return "#12100e" if lum > 0.32 else "#ffffff"
+
+
+# ---------------------------------------------------------------------------
+# Seeding
+# ---------------------------------------------------------------------------
+# The brand, the products, the photos and the copy already exist in Product
+# Management by the time a seller opens the builder. Opening on five steps of
+# blank fields therefore asks them to type things the app already knows. This
+# fills the document from what is there, once, so step three opens on a
+# finished site they edit — the difference between "build me a website" and
+# "here is your website".
+_SEED_HEROES = {
+    "jewellery": ("Made to be kept", "Pieces finished by hand, in small numbers."),
+    "clothes":   ("Made to be worn out", "Cut, sewn and checked before it ships."),
+    "fashion":   ("Made to be worn out", "Cut, sewn and checked before it ships."),
+    "perfumes":  ("Scent that stays with you", "Small batches, rested before bottling."),
+    "beauty":    ("Honest formulas", "Short ingredient lists, nothing you cannot pronounce."),
+    "cafe":      ("Made this morning", "Small batches, gone by evening."),
+    "tech":      ("Built to last a decade", "Repairable, documented, no surprises."),
+    "fitness":   ("Show up. Repeat.", "Kit that survives the sessions you plan to do."),
+}
+
+
+def seed_from_catalogue(email: str, force: bool = False) -> dict:
+    """Fill an untouched site from the seller's real catalogue.
+
+    Only ever writes into fields the seller has left blank, and only when the
+    site has not been seeded before — so re-entering the builder can never
+    overwrite something they wrote themselves. Returns the site.
+    """
+    site = get_site(email)
+    if site.get("seeded") and not force:
+        return site
+
+    items = products.listed_products(email)
+    patch: dict = {}
+
+    brand = (site.get("brand") or "").strip()
+    if not brand:
+        brand = (email.split("@")[0] or "My store").replace(".", " ").replace("_", " ").title()
+        patch["brand"] = brand
+    if not (site.get("handle") or "").strip():
+        patch["handle"] = suggest_handle(brand, email)
+
+    ptype = ""
+    try:
+        from backend.core import smart
+        ptype = (smart.get_product_type(email) or "").strip().lower()
+    except Exception:  # noqa: BLE001
+        ptype = ""
+    head, sub = _SEED_HEROES.get(ptype) or _SEED_HEROES.get(site.get("theme") or "") or \
+        ("Everything we make, in one place", "Browse the full range and order in a few taps.")
+
+    hero = dict(site.get("hero") or {})
+    hero_patch = {}
+    if not (hero.get("heading") or "").strip():
+        hero_patch["heading"] = head
+    if not (hero.get("sub") or "").strip():
+        hero_patch["sub"] = sub
+    if not (hero.get("image_url") or "").strip():
+        # the first listed product photo beats an empty hero every time
+        shot = next((p.get("image_url") for p in items if p.get("image_url")), "")
+        if shot:
+            hero_patch["image_url"] = shot
+    if hero_patch:
+        patch["hero"] = hero_patch
+
+    story = dict(site.get("story") or {})
+    if not (story.get("body") or "").strip():
+        n = len(items)
+        cats = sorted({(p.get("category") or "").strip() for p in items if p.get("category")})
+        made = (", ".join(cats[:3]) + " and more") if len(cats) > 3 else ", ".join(cats)
+        patch["story"] = {
+            "title": story.get("title") or "Our story",
+            "body": (f"We are {brand}. We make {made.lower()} " if made else f"We are {brand}. We make things ") +
+                    (f"— {n} of them are listed here right now. " if n else "— the range is growing. ") +
+                    "Every order is packed by the same people who made it, and we answer our own phone.",
+            "image_url": story.get("image_url") or "",
+        }
+
+    if not (site.get("tagline") or "").strip():
+        patch["tagline"] = sub
+
+    if not (site.get("announcement") or "").strip():
+        c = site.get("commerce") or {}
+        above = _f(c.get("free_shipping_above"))
+        if above:
+            patch["announcement"] = f"Free shipping over ₹{above:,.0f} · Dispatched within 24 hours"
+
+    # a pairing that matches the theme beats three empty font dropdowns
+    style = dict(site.get("style") or {})
+    if not (style.get("heading_font") or style.get("pairing")):
+        best = next((p for p in pairings_for(site.get("theme") or "") if p["recommended"]), None)
+        if best:
+            patch["style"] = {**apply_pairing(site, best["id"])}
+
+    trust = dict(site.get("trust") or {})
+    if not (trust.get("business_name") or "").strip():
+        patch["trust"] = {**trust, "business_name": brand,
+                          "support_email": trust.get("support_email") or email}
+
+    patch["seeded"] = True
+    return save_site(email, patch)
+
+
+def seo_meta(handle: str, site: dict, product: dict | None = None) -> dict:
+    """The tags that decide whether a pasted link becomes a card or grey text.
+
+    Every page falls back to the brand's own words, so a seller who never opens
+    the SEO fields still gets a real preview in WhatsApp.
+    """
+    seo = site.get("seo") or {}
+    brand = (site.get("brand") or handle or "Store").strip()
+    hero = site.get("hero") or {}
+    if product:
+        title = f"{product.get('name')} — {brand}"
+        desc = (product.get("description") or "").strip() or \
+            (f"{product.get('name')} from {brand}." +
+             (f" ₹{float(product['price']):,.0f}." if product.get("price") else ""))
+        image = product.get("image_url") or seo.get("og_image") or hero.get("image_url") or ""
+    else:
+        title = (seo.get("title") or "").strip() or \
+            (f"{brand} — {site.get('tagline')}" if site.get("tagline") else brand)
+        desc = (seo.get("description") or "").strip() or \
+            (site.get("tagline") or hero.get("sub") or
+             f"Shop {brand}. Ordering takes a few taps.")
+        image = seo.get("og_image") or hero.get("image_url") or site.get("logo_url") or ""
+    return {
+        "title": title[:120],
+        "description": " ".join(str(desc).split())[:300],
+        "image": image,
+        "site_name": brand,
+        "keywords": (seo.get("keywords") or "").strip()[:300],
+    }
 
 
 def public_site(handle: str) -> dict | None:

@@ -1,4 +1,4 @@
-/* Cafe_X frontend — replaces Streamlit's rerun model with a small SPA. */
+/* One Tap Manager frontend — replaces Streamlit's rerun model with a small SPA. */
 
 // ---------- state ----------
 // SHARED LOGIN + SESSION with the Smart app: both read/write the same cx_*
@@ -438,11 +438,11 @@ function setAuthMode(mode) {
   $("authTitle").textContent = signup ? "🛍️ Create your free account" : "👋 Welcome back";
   $("authSub").textContent = signup
     ? "Free during launch — no card needed. Your data and insights stay private to you."
-    : "Log in to your Content Seller account — your data and insights stay private to you.";
+    : "Log in to your One Tap Manager account — your data and insights stay private to you.";
   $("pw2Row").hidden = !signup;
   $("authSecurityNote").hidden = !signup;
   $("loginSubmit").textContent = signup ? "Create account" : "Log in";
-  $("authToggleText").textContent = signup ? "Already have an account?" : "New to Content Seller?";
+  $("authToggleText").textContent = signup ? "Already have an account?" : "New to One Tap Manager?";
   $("authToggle").textContent = signup ? "Log in instead" : "Create a free account";
   $("loginError").hidden = true;
 }
@@ -479,7 +479,7 @@ async function doLogin() {
     closeLogin();
     refreshUserUI(data.usage, data.plan);
     syncLockedPreviews();
-    toast(authMode === "signup" ? "🎉 Account created — welcome to Content Seller!" : "Welcome back 👋");
+    toast(authMode === "signup" ? "🎉 Account created — welcome to One Tap Manager!" : "Welcome back 👋");
     if (state.pendingPage) { const p = state.pendingPage; state.pendingPage = null; go(p); }
   } catch (e) {
     $("loginError").textContent = e.message;
@@ -500,12 +500,13 @@ $("logoutBtn").onclick = async () => {
 function refreshUserUI(usage, plan) {
   if (usage === undefined) usage = state.lastUsage; else state.lastUsage = usage;
   if (usage && usage.plan) state.plan = usage.plan;
-  else if (plan !== undefined) state.plan = plan === "pro" ? "chain" : plan;
+  else if (plan !== undefined) state.plan = plan;
   if (usage && usage.launch_mode !== undefined) state.launchMode = usage.launch_mode;
   if (state.email) {
     $("userLabel").textContent = state.email;
     $("userHint").textContent =
-      state.plan === "chain" ? "🏢 Chain plan — unlimited" :
+      state.plan === "pro" || state.plan === "chain" ? "Pro — unlimited" :
+      state.plan === "semipro" ? "Semi Pro — campaigns and reports included" :
       state.launchMode ? "Launch access — everything free" : "Free plan · 5 AI uses/day";
     $("logoutBtn").hidden = false;
   } else {
@@ -1481,11 +1482,11 @@ async function openPosModal() {
     body.innerHTML = `
       <div class="focus-box" style="border-left-color:var(--green);">
         <div class="focus-head" style="font-size:14.5px;">📧 Set it once, forget it forever</div>
-        <p class="subtle" style="margin:4px 0 8px;">Your POS can already email your sales report on a schedule — most owners set this up for their accountant. Add one more address and Content Seller updates itself. No login, no file, no website.</p>
+        <p class="subtle" style="margin:4px 0 8px;">Your POS can already email your sales report on a schedule — most owners set this up for their accountant. Add one more address and One Tap Manager updates itself. No login, no file, no website.</p>
         <ol class="steps" style="margin:0 0 4px 18px; font-size:12.5px;">
           <li>In your POS (PetPooja: Reports → Automate report alerts), turn on scheduled email reports</li>
           <li>Add <b>reports@cafex.app</b> as a recipient (or CC)</li>
-          <li>That's it — your next scheduled report becomes your next Content Seller dashboard, automatically</li>
+          <li>That's it — your next scheduled report becomes your next One Tap Manager dashboard, automatically</li>
         </ol>
       </div>
       <p class="subtle" style="margin:12px 0 4px;">Prefer to do it right now instead? These formats are recognised automatically — no mapping screen:</p>
@@ -1583,7 +1584,12 @@ on("chartDownloadBtn", downloadModalChart);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && _currentModalChart) closeChartModal(); });
 })();
 
-const PRODUCT_ICONS = { winback_campaign: "💌", positioning_report: "📍", ai_topup: "⚡", chain_monthly: "🏢" };
+// Plans first, then the credit packs — the same two ways to pay the landing
+// page offers, so nobody meets a third pricing model inside the app.
+const PRODUCT_ICONS = {
+  semipro: "▲", pro: "◆",
+  credits_100: "•", credits_300: "••", credits_1000: "•••",
+};
 
 async function loadPricing() {
   if (state.pricing) return state.pricing;
@@ -1599,14 +1605,15 @@ async function openPricing(highlightProduct, message) {
   $("pricingIntro").textContent = message ||
     (p.launch_mode
       ? "Everything is free during launch — this is what pricing will look like later."
-      : "Analytics, category trends and your at-risk list are free forever. Pay only for the actions below, when you need them.");
+      : "Analytics, category trends, your at-risk list and your own selling website are free forever. Below: a flat monthly plan, or credits that never expire — whichever suits how you work.");
   const list = $("pricingList");
   list.innerHTML = "";
   p.products.forEach((prod) => {
     const div = document.createElement("div");
     div.className = "price-item" + (prod.id === highlightProduct ? " highlight" : "");
     const per = prod.kind === "subscription" ? "/month" : "";
-    const owned = prod.id === "chain_monthly" && state.plan === "chain";
+    const owned = (prod.kind === "subscription" && prod.id === state.plan)
+      || (prod.id === "semipro" && state.plan === "pro");
     div.innerHTML = `
       <div class="price-item-head">
         <span>${PRODUCT_ICONS[prod.id] || "•"} <b>${prod.name}</b></span>

@@ -1,5 +1,5 @@
 /* ==========================================================
-   Content Seller — workspace UI, muted slate-indigo palette.
+   One Tap Manager — workspace UI, muted slate-indigo palette.
    Full light + dark themes driven by [data-theme] on <html>.
    ========================================================== */
 :root {
@@ -253,7 +253,7 @@ input:focus, select:focus { outline: none; border-color: var(--primary); box-sha
 [data-theme="dark"] .tile-strategy  { --tile-accent: #9aa4c8; }
 [data-theme="dark"] .tile-sub       { --tile-accent: #a6a3cf; }
 
-/* ---------- Content Seller additions ---------- */
+/* ---------- One Tap Manager additions ---------- */
 /* image-like charts + maximize */
 .chart-card { position: relative; }
 .chart-expand {
@@ -912,3 +912,182 @@ td { color: var(--text-2); }
 .gal-cap:focus { outline: none; background: rgba(0,0,0,.82); }
 .insp-in .gal-wrap { gap: 8px; }
 .insp-in .gal-item, .insp-in .gal-add { width: 68px; height: 68px; }
+
+/* ==========================================================
+   Today · digest · undo · variants · pairings · save state
+   ========================================================== */
+
+/* ---- module icons are drawings now, not emoji ---- */
+.app-ico svg { width: 21px; height: 21px; }
+.app-tile .meta .go { display: inline-flex; align-items: center; gap: 4px; }
+.app-tile .meta .go svg { width: 13px; height: 13px; }
+.btn svg { width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; }
+.btn.tiny svg { width: 12px; height: 12px; margin-right: 4px; }
+.pt-chip svg { width: 13px; height: 13px; }
+.data-card-ico svg { width: 20px; height: 20px; }
+
+/* ----------------------------------------------------------
+   Today
+   Twelve tiles is a filing cabinet. This is the answer: what to
+   do this morning, ranked, each row one click from the doing.
+   ---------------------------------------------------------- */
+.today {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 18px 20px 16px; margin-bottom: 22px;
+  box-shadow: var(--shadow);
+}
+.today-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.today-eyebrow {
+  font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 4px;
+}
+.today-h h3 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.today-rows { display: flex; flex-direction: column; gap: 2px; }
+.today-row {
+  display: grid; grid-template-columns: 10px 1fr 16px; align-items: start; gap: 12px;
+  width: 100%; text-align: left; cursor: pointer;
+  background: none; border: 0; border-radius: var(--radius);
+  padding: 11px 10px; color: inherit; font: inherit;
+  transition: background .15s ease;
+}
+.today-row:hover { background: var(--surface-2); }
+.today-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.today-dot {
+  width: 8px; height: 8px; border-radius: 50%; margin-top: 6px;
+  background: var(--muted);
+}
+/* severity is a colour AND a position: urgent things sort to the top anyway,
+   so the dot is confirmation, never the only signal */
+.today-row.sev-urgent .today-dot { background: var(--red); }
+.today-row.sev-attention .today-dot { background: var(--amber); }
+.today-row.sev-opportunity .today-dot { background: var(--green); }
+.today-row.sev-setup .today-dot { background: var(--blue); }
+.today-txt { min-width: 0; }
+.today-txt b { display: block; font-size: 13.8px; font-weight: 600; line-height: 1.35; }
+.today-txt span { display: block; font-size: 12.3px; color: var(--muted); line-height: 1.5; margin-top: 2px; }
+.today-arrow { width: 15px; height: 15px; color: var(--muted); margin-top: 4px; flex: none; }
+.today-row:hover .today-arrow { color: var(--primary); }
+.today-empty {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  flex-wrap: wrap; padding: 6px 10px 10px; color: var(--muted); font-size: 12.8px;
+}
+.today-proof {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border);
+  font-size: 12.8px; color: var(--text-2);
+}
+.today-proof svg { width: 15px; height: 15px; color: var(--green); flex: none; }
+.today-proof span { flex: 1; min-width: 200px; }
+#digestBtn.on { color: var(--primary); border-color: var(--primary-line); background: var(--primary-soft); }
+
+/* ---- generic modal body + fields ---- */
+.modal-body { padding-top: 6px; }
+.fld { display: block; margin-bottom: 12px; font-size: 12.5px; color: var(--text-2); }
+.fld > span { display: block; margin-bottom: 5px; font-weight: 600; color: var(--text); }
+.fld input, .fld select {
+  width: 100%; padding: 9px 11px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit;
+}
+.fld input:focus, .fld select:focus { outline: none; border-color: var(--primary); }
+
+/* ----------------------------------------------------------
+   Undo
+   Delete, then offer it back. A confirm() asks people to be sure
+   before they can see what happens; an undo lets them find out.
+   ---------------------------------------------------------- */
+.toast { display: flex; align-items: center; gap: 14px; }
+.toast-undo {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: inherit; font: inherit; font-weight: 700; text-decoration: underline;
+  text-underline-offset: 3px; opacity: .9; flex: none;
+}
+.toast-undo:hover { opacity: 1; }
+.toast-undo:disabled { opacity: .5; cursor: default; text-decoration: none; }
+
+/* ----------------------------------------------------------
+   Save state — three states, always on screen. A saved change on
+   a live site is NOT live until Publish, and nothing used to say so.
+   ---------------------------------------------------------- */
+.save-state {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .01em;
+  padding: 4px 10px; border-radius: 99px; border: 1px solid transparent;
+}
+.save-state i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.save-state.unsaved { color: var(--amber); background: var(--amber-soft); border-color: var(--amber-soft); }
+.save-state.draft { color: var(--muted); background: var(--surface-2); border-color: var(--border); }
+.save-state.ahead { color: var(--blue); background: var(--blue-soft); border-color: var(--blue-soft); }
+.save-state.live { color: var(--green); background: var(--green-soft); border-color: var(--green-soft); }
+
+/* ----------------------------------------------------------
+   Media slots — the thumbnail is the control, not the path
+   ---------------------------------------------------------- */
+.if-name {
+  font-size: 11.5px; color: var(--muted); margin: 2px 0 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.img-field.has-media .if-name { color: var(--text-2); }
+.img-field .if-preview { cursor: pointer; }
+.if-url { margin-top: 8px; }
+.if-url-toggle.on { color: var(--primary); border-color: var(--primary-line); }
+
+/* ----------------------------------------------------------
+   Font pairings — three faces chosen together, not 42,000 combinations
+   ---------------------------------------------------------- */
+.pairs { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 10px; }
+.pair {
+  display: flex; flex-direction: column; gap: 4px; text-align: left; cursor: pointer;
+  padding: 14px 15px 13px; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); color: var(--text); font: inherit;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.pair:hover { border-color: var(--primary-line); }
+.pair.on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.pair-demo { font-size: 25px; line-height: 1.1; }
+.pair-body { font-size: 12.5px; color: var(--text-2); }
+.pair-lbl { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.pair-meta { display: flex; align-items: baseline; gap: 7px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+.pair-meta b { font-size: 12.5px; font-weight: 650; }
+.pair-rec { font-size: 10px; font-style: normal; color: var(--green); font-weight: 600; }
+.pair-note { font-size: 11px; color: var(--muted); line-height: 1.45; }
+
+/* ----------------------------------------------------------
+   Variants — a shirt is twelve things to count
+   ---------------------------------------------------------- */
+.vx { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.vx-axis { display: grid; grid-template-columns: 130px 1fr 32px; gap: 8px; align-items: center; }
+.vx-axis input {
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; width: 100%;
+}
+.vx-axis input:focus { outline: none; border-color: var(--primary); }
+.vx-empty {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; border: 1px dashed var(--border); border-radius: var(--radius-lg);
+  color: var(--muted); font-size: 12.5px;
+}
+.vx-grid-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.vx-grid { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 460px; }
+.vx-grid th {
+  text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted); padding: 9px 12px;
+  background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.vx-grid th .muted { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.vx-grid td { padding: 6px 12px; border-bottom: 1px solid var(--border); }
+.vx-grid tr:last-child td { border-bottom: 0; }
+.vx-grid td b { font-weight: 600; white-space: nowrap; }
+.vx-grid input {
+  width: 100%; min-width: 74px; padding: 7px 9px; font: inherit; font-size: 12.5px;
+  border: 1px solid transparent; border-radius: var(--radius);
+  background: var(--surface-3); color: var(--text);
+}
+.vx-grid input:focus { outline: none; border-color: var(--primary); background: var(--surface); }
+.vx-grid input[type="number"] { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 720px) {
+  .today-h { flex-direction: column; }
+  .vx-axis { grid-template-columns: 1fr; }
+  .pairs { grid-template-columns: 1fr 1fr; }
+}

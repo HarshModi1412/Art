@@ -135,17 +135,22 @@ def register(email: str, password: str, plan: str = "free") -> None:
     df.to_csv(users_file, index=False)
 
 
+# Plan ids that may live in the users table. "pro"/"chain" are legacy rows that
+# backend.core.pricing normalises to the Pro tier.
+_KNOWN_PLANS = ("free", "semipro", "pro", "chain")
+
+
 def get_plan(email: str) -> str:
     email = (email or "").strip().lower()
     if db.SUPABASE_ENABLED:
         row = db.fetch_one("users", {"email": email})
         plan = str((row or {}).get("plan", "free")).strip().lower()
-        return plan if plan in ("free", "pro", "chain") else "free"
+        return plan if plan in _KNOWN_PLANS else "free"
     df, _ = _read_users_df()
     row = df[df["email"].astype(str).str.strip().str.lower() == email]
     if len(row):
         plan = str(row.iloc[-1].get("plan", "free")).strip().lower()
-        return plan if plan in ("free", "pro", "chain") else "free"
+        return plan if plan in _KNOWN_PLANS else "free"
     return "free"
 
 
@@ -157,6 +162,24 @@ def set_plan(email: str, plan: str) -> None:
     df, users_file = _read_users_df()
     mask = df["email"].astype(str).str.strip().str.lower() == email
     df.loc[mask, "plan"] = plan
+    df.to_csv(users_file, index=False)
+
+
+def set_password(email: str, password: str) -> None:
+    """Replace an account's password with a fresh hash. Used by the reset flow;
+    raises if the account does not exist, so a reset can never create one."""
+    email = (email or "").strip().lower()
+    stored = hash_password(password)
+    if db.SUPABASE_ENABLED:
+        if not db.fetch_one("users", {"email": email}):
+            raise ValueError("No account with that email.")
+        db.upsert("users", {"email": email, "password_hash": stored}, on_conflict="email")
+        return
+    df, users_file = _read_users_df()
+    mask = df["email"].astype(str).str.strip().str.lower() == email
+    if not mask.any():
+        raise ValueError("No account with that email.")
+    df.loc[mask, "password"] = stored
     df.to_csv(users_file, index=False)
 
 

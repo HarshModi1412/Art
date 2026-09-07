@@ -1,0 +1,486 @@
+<title>Content Seller Backlog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<style>
+:root{
+  --bg:#eef0f4; --surface:#ffffff; --surface-2:#f6f7fb;
+  --ink:#171922; --ink-2:#3c4152; --muted:#6b7186;
+  --line:#d9dce6; --line-soft:#e7e9f1;
+  --accent:#3a4a86; --accent-soft:#e5e9f6;
+  --hi:#8a3346; --mid:#7c6122; --lo:#3f6355;
+  --hi-bg:#f6e9ec; --mid-bg:#f6f0e0; --lo-bg:#e6efea;
+  --shadow:0 1px 2px rgba(23,25,34,.05), 0 8px 24px -18px rgba(23,25,34,.28);
+  --display:"Instrument Serif",Georgia,serif;
+  --ui:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1118; --surface:#191c25; --surface-2:#1e222d;
+    --ink:#e9ebf2; --ink-2:#c3c7d5; --muted:#8d93a6;
+    --line:#2b2f3d; --line-soft:#232734;
+    --accent:#9aa7e0; --accent-soft:#222840;
+    --hi:#dd909c; --mid:#d5b76c; --lo:#7fc0a4;
+    --hi-bg:#2c1b21; --mid-bg:#2a2417; --lo-bg:#17271f;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1118; --surface:#191c25; --surface-2:#1e222d;
+  --ink:#e9ebf2; --ink-2:#c3c7d5; --muted:#8d93a6;
+  --line:#2b2f3d; --line-soft:#232734;
+  --accent:#9aa7e0; --accent-soft:#222840;
+  --hi:#dd909c; --mid:#d5b76c; --lo:#7fc0a4;
+  --hi-bg:#2c1b21; --mid-bg:#2a2417; --lo-bg:#17271f;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.6;margin:0;
+     -webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:0 22px 96px}
+
+/* ---------- masthead ---------- */
+.mast{padding:56px 0 30px;border-bottom:1px solid var(--line)}
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:0 0 16px}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(40px,6.4vw,68px);line-height:1.02;margin:0 0 18px;
+   letter-spacing:-.01em;text-wrap:balance}
+h1 em{font-style:italic;color:var(--accent)}
+.stand{font-size:17px;line-height:1.62;color:var(--ink-2);max-width:63ch;margin:0}
+.stand + .stand{margin-top:14px}
+
+/* ---------- diagnosis ---------- */
+.diag{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);
+      margin:34px 0 0;border-radius:3px;overflow:hidden}
+.diag > div{background:var(--surface);padding:20px 22px}
+.diag h3{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+         margin:0 0 9px;font-weight:500}
+.diag p{margin:0;font-size:14.5px;line-height:1.55;color:var(--ink-2)}
+.diag b{color:var(--ink);font-weight:600}
+
+/* ---------- legend ---------- */
+.legend{margin:44px 0 0;padding:22px 24px;background:var(--surface-2);border:1px solid var(--line-soft);border-radius:3px}
+.legend h2{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 14px;
+           color:var(--muted);font-weight:500}
+.legend dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));gap:16px 28px;margin:0}
+.legend dt{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink);margin-bottom:2px}
+.legend dd{margin:0;font-size:13.5px;color:var(--muted);line-height:1.5}
+.formula{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);font-family:var(--mono);font-size:12.5px;
+         color:var(--ink-2)}
+
+/* ---------- toolbar ---------- */
+.bar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 90%,transparent);
+     backdrop-filter:saturate(180%) blur(14px);border-bottom:1px solid var(--line);margin:44px 0 0;
+     padding:12px 0;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--ui);font-size:12.5px;font-weight:500;padding:6px 13px;border-radius:99px;cursor:pointer;
+      border:1px solid var(--line);background:var(--surface);color:var(--ink-2);transition:.16s}
+.chip:hover{border-color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip .n{font-family:var(--mono);font-size:11px;opacity:.65;margin-left:6px}
+.bar .right{margin-left:auto;display:flex;gap:6px;align-items:center}
+.count{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+button:focus-visible,.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- sections ---------- */
+.sec{margin:46px 0 0}
+.sec-h{display:flex;align-items:baseline;gap:14px;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.sec-h h2{font-family:var(--display);font-weight:400;font-size:29px;margin:0;letter-spacing:-.005em}
+.sec-h span{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+/* ---------- rows ---------- */
+.rows{display:flex;flex-direction:column;gap:8px}
+.row{display:grid;grid-template-columns:64px 1fr 210px;gap:20px;background:var(--surface);border:1px solid var(--line-soft);
+     border-left:3px solid var(--band);border-radius:3px;padding:16px 18px 16px 15px;box-shadow:var(--shadow)}
+.row[data-band="hi"]{--band:var(--hi)} .row[data-band="mid"]{--band:var(--mid)} .row[data-band="lo"]{--band:var(--lo)}
+.row.picked{border-color:var(--accent);background:var(--accent-soft)}
+.row.dropped{opacity:.42}
+.g-score{text-align:center}
+.g-score b{display:block;font-family:var(--mono);font-size:22px;font-weight:600;line-height:1;color:var(--band);
+           font-variant-numeric:tabular-nums}
+.g-score .meter{height:3px;background:var(--line);border-radius:2px;margin:8px 0 6px;overflow:hidden}
+.g-score .meter i{display:block;height:100%;background:var(--band)}
+.g-score code{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.02em}
+.g-main h4{margin:0 0 5px;font-size:15.5px;font-weight:600;line-height:1.38;text-wrap:balance}
+.g-main p{margin:0;font-size:13.8px;line-height:1.56;color:var(--muted)}
+.g-main p b{color:var(--ink-2);font-weight:600}
+.g-meta{display:flex;flex-direction:column;gap:10px}
+.vars{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);
+      border-radius:2px;overflow:hidden}
+.vars div{background:var(--surface-2);padding:5px 0 6px;text-align:center}
+.vars dt{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0}
+.vars dd{margin:1px 0 0;font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink)}
+.acts{display:flex;gap:4px}
+.acts button{flex:1;font-family:var(--ui);font-size:11.5px;font-weight:500;padding:5px 0;border-radius:2px;cursor:pointer;
+             border:1px solid var(--line);background:var(--surface-2);color:var(--muted);transition:.15s}
+.acts button:hover{color:var(--ink);border-color:var(--accent)}
+.acts button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.acts button[data-d="skip"][aria-pressed="true"]{background:var(--muted);border-color:var(--muted)}
+
+/* ---------- shortlist ---------- */
+.short{margin:56px 0 0;padding:30px 32px;background:var(--surface);border:1px solid var(--line);border-radius:3px}
+.short h2{font-family:var(--display);font-weight:400;font-size:31px;margin:0 0 6px}
+.short > p{margin:0 0 22px;color:var(--muted);font-size:14.5px;max-width:62ch}
+.short ol{margin:0;padding:0;list-style:none;counter-reset:s;display:grid;gap:14px}
+.short li{counter-increment:s;display:grid;grid-template-columns:34px 1fr;gap:14px;padding-bottom:14px;
+          border-bottom:1px solid var(--line-soft)}
+.short li:last-child{border-bottom:0;padding-bottom:0}
+.short li::before{content:counter(s,decimal-leading-zero);font-family:var(--mono);font-size:12px;font-weight:600;
+                  color:var(--accent);padding-top:3px}
+.short strong{display:block;font-size:15px;font-weight:600;margin-bottom:3px}
+.short span{font-size:13.6px;color:var(--muted);line-height:1.55}
+
+/* ---------- shipped ---------- */
+.ship{margin:44px 0 0;padding:24px 28px;border:1px solid var(--accent);border-radius:3px;background:var(--accent-soft)}
+.ship h2{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 12px;color:var(--accent)}
+.ship p{margin:0 0 10px;font-size:14.5px;line-height:1.6;color:var(--ink-2);max-width:70ch}
+.ship p:last-child{margin-bottom:0}
+.ship code{font-family:var(--mono);font-size:12.5px;background:var(--surface);border:1px solid var(--line);
+           border-radius:2px;padding:1px 5px}
+
+/* ---------- sources ---------- */
+.src{margin:48px 0 0;padding-top:22px;border-top:1px solid var(--line)}
+.src h2{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 12px;color:var(--muted);font-weight:500}
+.src ul{margin:0;padding-left:18px;display:grid;gap:6px}
+.src li{font-size:13.5px;color:var(--muted)}
+.src a{color:var(--accent)}
+
+.note{font-size:12.5px;color:var(--muted);margin:10px 0 0;font-family:var(--mono)}
+
+@media (max-width:860px){
+  .diag{grid-template-columns:1fr}
+  .row{grid-template-columns:52px 1fr;gap:14px}
+  .g-meta{grid-column:1/-1}
+  .bar{position:static}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Product review · 07 Sep 2026 · Content Seller</p>
+  <h1>Fifty-three things<br>worth <em>arguing about</em></h1>
+  <p class="stand">A pass over the whole platform — the seller app in <code>D:\Claude\Art</code> and the storefronts it publishes at <code>/s/&lt;handle&gt;</code> — read three ways: as an Office&nbsp;Hours grilling of the value proposition, as a UI/UX audit of both surfaces, and against what the research says actually breaks small sellers on Shopify.</p>
+  <p class="stand">Nothing here is a decision. Score each item, argue with the scores, then mark <b>Build / Later / Skip</b> and the page keeps your marks.</p>
+</header>
+
+<section class="diag">
+  <div>
+    <h3>The uncomfortable one</h3>
+    <p>The product is <b>twelve doors and no answer</b>. Analytics, supply, catalogue, site, orders, content, ads — every module is equally prominent and none of them tells the seller what to do this morning. The Approval panel is the right idea, buried two clicks deep.</p>
+  </div>
+  <div>
+    <h3>The wedge is backwards</h3>
+    <p>You lead with the <b>website builder</b> — the one thing Shopify, Dukaan and Wix have already won. Your actual edge is RFM, win-back, complaint mining, positioning and EOQ on sales the seller <em>already has</em>. Lead with that; give the site away.</p>
+  </div>
+  <div>
+    <h3>What you can actually take</h3>
+    <p>Merchants describe app costs as <b>"worse than the mafia"</b> — free → $29/mo → a percentage of sales, and "you don't know what you don't know" about which you need. You replace four to six of them for one flat number. That is the pricing page.</p>
+  </div>
+</section>
+
+<section class="legend">
+  <h2>How each item is scored</h2>
+  <dl>
+    <div><dt>V — Value</dt><dd>1–5. How much money, time or churn this moves for the seller or their shopper.</dd></div>
+    <div><dt>S — Strength</dt><dd>1–5. How much it changes what the product <em>feels</em> like. 1 = cosmetic, 5 = repositioning.</dd></div>
+    <div><dt>R — Reach</dt><dd>1–3. How many users hit it. 3 = everyone, every session. 1 = a minority.</dd></div>
+    <div><dt>E — Effort</dt><dd>S/M/L → 1/2/3. Your build days, not story points.</dd></div>
+  </dl>
+  <p class="formula">Priority = round( V × S × R ÷ E ÷ 75 × 100 ) &nbsp;·&nbsp; band: <b style="color:var(--hi)">≥50 high</b> · <b style="color:var(--mid)">25–49 medium</b> · <b style="color:var(--lo)">&lt;25 low</b></p>
+  <p class="note">Effort is the denominator on purpose. A cheap change that shifts perception beats an expensive one that shifts a number.</p>
+</section>
+
+<nav class="bar" aria-label="Filters">
+  <div class="chips" id="filters"></div>
+  <div class="right">
+    <div class="chips">
+      <button class="chip" id="sortBtn" aria-pressed="true">Sort: priority</button>
+      <button class="chip" id="pickedBtn" aria-pressed="false">Only marked</button>
+    </div>
+    <span class="count" id="count"></span>
+  </div>
+</nav>
+
+<div id="list"></div>
+
+<section class="short">
+  <h2>If you only ship eight things</h2>
+  <p>Picked for the ratio of perceived change to build days, not for score alone. Together they take the product from "twelve modules" to "one thing that works", and they are roughly six weeks.</p>
+  <ol>
+    <li><strong>Pick one seller and write one sentence</strong><span>Clothing sellers doing ₹2–20L a month across Instagram, Amazon and one own site. Every screen, every price, every post speaks to her. "Content Seller" is not that sentence.</span></li>
+    <li><strong>Price against the app stack, out loud</strong><span>"Replaces Lifetimely + Stocky + Judge.me + a win-back app + your inventory spreadsheet. ₹999. One number, no percentage of sales." That's the whole landing page.</span></li>
+    <li><strong>"See it with sample data" on every empty module</strong><span>The demo endpoint already exists. Right now it only serves the landing page. Nobody should have to find a CSV to see what you built.</span></li>
+    <li><strong>A "Today" strip above the tiles</strong><span>Three lines: 2 new orders, 4 items below reorder point, 12 customers slipping away. Each one clicks straight into the action. This is the product; the tiles are the filing cabinet.</span></li>
+    <li><strong>Guest checkout on storefronts</strong><span>Forcing a first-time COD buyer on a phone to invent a password is the most expensive line in the codebase. Create the account silently from the phone number after the order.</span></li>
+    <li><strong>UPI at checkout</strong><span>COD-only both loses orders and pays for every RTO. Razorpay is already wired on the seller side — reuse the keys.</span></li>
+    <li><strong>WhatsApp-shaped sharing</strong><span>Per-product title, description and OG image so a pasted store link renders a card. In Indian D2C the share sheet is the storefront.</span></li>
+    <li><strong>Seed the site on first entry</strong><span>Brand, products, photos and copy already exist in Product Management. Step three should open on a finished site the seller edits — not five steps of blank fields.</span></li>
+  </ol>
+</section>
+
+<section class="ship">
+  <h2>Already shipped this session</h2>
+  <p><b>SITE-16 — storefront sign-in typography.</b> The shopper login on published sites was borrowing the seller's <em>display</em> face for its tabs and leaving the input fields to the body face. On a store running Anton, Bebas, Italiana or Bodoni that turned "Log in / Sign up" into decoration at 12px, and on Cormorant it rendered the password field as thin grey hairlines.</p>
+  <p>The greeting still uses the brand's display face — capped at 700 weight, tracking clamped, forced out of all-caps so a wide face reads as a welcome rather than a banner. Everything that does work — tabs, labels, inputs, errors — moved to <code>--fa</code>, the small UI face the seller already picked, with extra letter-spacing on the password field so the dots can be counted. No colour, size or face is hard-coded: it is the same three type roles, reassigned to the right jobs.</p>
+  <p><code>Smart CafeX/storefront/store.css</code> · <code>store.js</code> · asset version bumped to <code>v=2</code>.</p>
+</section>
+
+<section class="src">
+  <h2>Sources</h2>
+  <ul>
+    <li><a href="https://community.shopify.com/t/apps-have-become-worse-than-the-mafia/388157">"Apps Have Become Worse Than the Mafia" — Shopify Community</a> (app pricing escalation, percentage-of-sales models, tier traps)</li>
+    <li><a href="https://getperspective.ai/blog/2026-customer-onboarding-benchmark-activation-rates-by-industry">2026 Customer Onboarding Benchmark: Activation Rates by Industry</a></li>
+    <li><a href="https://www.flowjam.com/blog/saas-onboarding-best-practices-2025-guide-checklist">SaaS Onboarding: the activation trap</a> · <a href="https://www.digitalapplied.com/blog/customer-onboarding-time-to-value-2026-saas-metrics-framework">Time to Value framework</a></li>
+    <li><a href="https://www.nngroup.com/articles/dashboards-preattentive/">NN/g — Dashboards: making charts and graphs easier to understand</a> · <a href="https://www.nngroup.com/videos/designing-tables-desktop-apps/">Designing tables for data-heavy apps</a></li>
+    <li><a href="https://www.base2brand.com/blog/shopify-theme-customization-issues">Shopify theme customisation issues</a> (where non-technical merchants get stuck)</li>
+    <li><a href="https://base.com/en-IN/blog/how-can-multi-channel-sellers-manage-orders-across-amazon-flipkart-myntra-and-more/">Multi-channel order management for Indian sellers</a> · <a href="https://unicommerce.com/blog/stock-management-for-ecommerce-multi-channel-inventory/">Multi-channel inventory control</a></li>
+  </ul>
+  <p class="note">Code read directly: backend/main.py · backend/core/sitebuilder.py, storefront.py, smart.py, supply.py · Smart CafeX/smart.js · storefront/store.{html,css,js} · README.md · the eight screenshots in Claude outputs/.</p>
+</section>
+
+</div>
+
+<script>
+const ITEMS = [
+ // ---- A. Positioning & value proposition ----
+ {id:"VP-1", sec:"vp", t:"Lead with 'connect what you already sell on', not the website builder",
+  d:"The builder is the hardest market to win and the one you're weakest in. RFM, win-back, complaint mining, positioning and EOQ on <b>sales the seller already has</b> is where you're differentiated and already deep. Reverse the funnel: analytics is the hook, the site is the free upsell.", v:5,s:5,r:3,e:2},
+ {id:"VP-2", sec:"vp", t:"Price against the Shopify app stack, explicitly",
+  d:"Merchants document apps going free → $29/mo → percentage-of-sales, one citing <b>$2,000 over five years</b> for a single app, and 'you don't know what you don't know' about which they need. You replace 4–6 apps for one flat ₹999. Put the comparison table on the pricing page with the app names in it.", v:5,s:5,r:3,e:1},
+ {id:"VP-3", sec:"vp", t:"One product sentence — and a name that isn't 'Content Seller'",
+  d:"The name says content; the product is operations. A seller can't repeat what it does to a friend, which is fatal for a GTM with no calls and no emails. Land the sentence first, the name follows.", v:4,s:4,r:3,e:1},
+ {id:"VP-4", sec:"vp", t:"Close the proof loop: mark win-backs 'sent', measure ₹ recovered at 30 days",
+  d:"You generate a win-back list and never learn if it worked. Ask for one tick — 'sent' — then watch those customer IDs return. <b>'₹42,000 recovered since March'</b> is the entire renewal conversation and no competitor can show it.", v:5,s:5,r:2,e:2},
+ {id:"VP-5", sec:"vp", t:"Stop charging per outcome (₹199/campaign, ₹349/report)",
+  d:"You are taxing the exact behaviour that proves your value and creates the habit. Every win-back a seller doesn't run is a retention loop that doesn't close. Make outcomes unlimited; charge per outlet or per seat.", v:4,s:4,r:3,e:1},
+ {id:"VP-6", sec:"vp", t:"Define the permanent free tier now, before LAUNCH_MODE flips",
+  d:"<code>LAUNCH_MODE=true</code> makes everything free until a day when it silently doesn't. Everyone who onboards in that window churns on the flip. Label the free tier today so the flip is a non-event.", v:4,s:3,r:3,e:1},
+ {id:"VP-7", sec:"vp", t:"Put a 'Made with …' line on every artefact that leaves the building",
+  d:"The PDF purchase order goes to a supplier. The positioning report gets forwarded. The storefront is public. With no calls and no emails in the GTM, these <b>are</b> the distribution channel — and none of them carries a link back.", v:3,s:3,r:3,e:1},
+ {id:"VP-8", sec:"vp", t:"Hide the 'coming soon' surfaces",
+  d:"Instagram is a dead tile, Flipkart and Myntra say 'yet to come', paid ad connectors are demos. Four unfinished doors on a twelve-door home screen reads as an unfinished product. Collapse them into one 'More channels' row.", v:3,s:4,r:3,e:1},
+ {id:"VP-9", sec:"vp", t:"Import from where Indian sellers actually are",
+  d:"You support Shopify and Amazon. A large share of small sellers' orders never touch a POS at all — they arrive on Instagram DM and WhatsApp, and their books are in Tally or a notebook. Meesho, Tally and a WhatsApp order-book import reach a market the connectors can't.", v:4,s:4,r:2,e:3},
+ {id:"VP-10", sec:"vp", t:"Pick one ICP — clothing sellers — and cut every other word",
+  d:"Jewellery, clothes, perfumes, 'other products', cafés in the codebase, MSMEs on the landing page. Nobody sees themselves. Clothing is the segment where your variant gap, your size-based returns and your seasonal EOQ all matter at once. Write for her only.", v:4,s:5,r:3,e:1},
+
+ // ---- B. Seller app ----
+ {id:"APP-1", sec:"app", t:"Replace the emoji icons with the stroke set you already shipped",
+  d:"Twelve module tiles are 📊🗂️📦🏷️🌐🧺⭐😤🧭✨📸📈, and the Orders tabs are 🧺👥 — while the storefront runs a proper stroke set (<code>sitebuilder.ICONS</code>) with 'no emoji anywhere' as a stated rule. The published site looks like software; the app looks like a hackathon. Same icons, both surfaces.", v:3,s:5,r:3,e:2},
+ {id:"APP-2", sec:"app", t:"A 'Today' strip above the tiles — three things worth your time",
+  d:"2 new orders · 4 items below reorder point · 12 customers slipping away · 1 complaint theme rising. Each row clicks into the action. This is the product; the twelve tiles are the filing cabinet behind it.", v:5,s:5,r:3,e:2},
+ {id:"APP-3", sec:"app", t:"Tiles carry state and reorder themselves",
+  d:"Modules with <code>needs: sales</code> or <code>needs: review</code> look identical to ones that work, so a new seller clicks into four dead ends before finding a live screen. Ready / Needs sales data / Not set up, with the ready ones first.", v:4,s:3,r:3,e:2},
+ {id:"APP-4", sec:"app", t:"'See it with sample data' inside every empty module",
+  d:"<code>POST /api/demo</code> already loads 90 days of pre-mapped transactions — and only the landing page uses it. Time-to-value goes from 'find a CSV on this laptop' to one click, which is the single most-cited driver of B2B activation.", v:5,s:4,r:3,e:1},
+ {id:"APP-5", sec:"app", t:"Remember the column mapping per file signature",
+  d:"A PetPooja export has the same headers every month, and the seller re-maps it every month. Hash the header row, store the mapping, and re-uploads skip the wall entirely.", v:5,s:3,r:3,e:2},
+ {id:"APP-6", sec:"app", t:"Show live parsed rows while mapping",
+  d:"Mapping is currently an act of faith — you pick fields and find out later whether dates parsed or amounts came through as text. Five real rows updating under the dropdowns removes an entire class of silent wrong analysis.", v:4,s:3,r:3,e:2},
+ {id:"APP-7", sec:"app", t:"Orders: table view, search, date range, sort, pagination, bulk status",
+  d:"One card per order with no search and no filters beyond status chips. At 20 orders it's charming; at 200 a month it's unusable, and the seller goes back to the marketplace panel you were replacing.", v:5,s:4,r:2,e:2},
+ {id:"APP-8", sec:"app", t:"Status as a stepper with timestamps, plus a WhatsApp template per transition",
+  d:"Status is a bare <code>&lt;select&gt;</code> with no history — nobody can answer 'when did this ship'. Add the audit trail, and hang a pre-written WhatsApp message on each transition. In India that message <em>is</em> the order-tracking system.", v:5,s:4,r:2,e:2},
+ {id:"APP-9", sec:"app", t:"Packing slip, shipping label and an AWB field",
+  d:"An order can't leave the building from this screen. Whatever else the seller uses to print and dispatch is the tool they'll actually keep open.", v:4,s:3,r:2,e:2},
+ {id:"APP-10", sec:"app", t:"Number and grammar pass: '1 orders', duplicate AOV, Indian digit grouping",
+  d:"At n=1 the Orders header reads '1 orders' and shows ₹948 twice (revenue and average order). Amounts render as ₹123456 where an Indian seller expects ₹1,23,456. Small, but these are the details that decide whether software looks trustworthy with money.", v:2,s:2,r:3,e:1},
+ {id:"APP-11", sec:"app", t:"Undo on every destructive action",
+  d:"Delete a product, delete a supplier, clear uploaded data — all irreversible, all one click. A toast with Undo costs almost nothing and removes the biggest reason a seller hesitates before touching anything.", v:4,s:3,r:3,e:2},
+ {id:"APP-12", sec:"app", t:"Unsaved-changes guard on forms",
+  d:"The site builder autosaves its draft; nothing else does. Product, supplier and inventory forms lose edits on navigation with no warning.", v:3,s:2,r:3,e:1},
+ {id:"APP-13", sec:"app", t:"Show the AI quota before it runs out",
+  d:"Five uses a day, enforced by a 402 that arrives as a surprise mid-thought. '3 of 5 left today' next to the button turns a wall into a budget — and is also where the top-up sells itself.", v:3,s:3,r:2,e:1},
+ {id:"APP-14", sec:"app", t:"Cmd-K across modules, products, orders, customers, inventory",
+  d:"Twelve modules plus four record types and no way to jump to a thing you can name. In a multi-module app this is the cheapest navigation win there is.", v:3,s:4,r:2,e:2},
+ {id:"APP-15", sec:"app", t:"Collapse Classic and Smart into one product",
+  d:"Classic vs Smart is a history artefact of how this was built, promoted to a permanent header toggle the seller must have an opinion about. Smart is the product; Classic's screens become 'Reports' inside it. Frees the header and removes a fork in onboarding.", v:4,s:5,r:3,e:3},
+ {id:"APP-16", sec:"app", t:"'As of' timestamp and a source badge on every metric",
+  d:"A number can come from an uploaded file, mirrored site orders or a marketplace connector, and nothing on screen says which or how old it is. With channel toggles able to add and remove rows, a seller who can't age a number won't trust any of them.", v:4,s:3,r:3,e:1},
+ {id:"APP-17", sec:"app", t:"A real mobile pass — but only for Orders, Approvals and stock alerts",
+  d:"Sellers check orders on a phone and build sites on a laptop. Don't responsive-ify twelve modules; make three of them excellent on a phone and leave the builder desktop-only, deliberately and visibly.", v:4,s:3,r:2,e:2},
+ {id:"APP-18", sec:"app", t:"Explain Supply's separate sales dataset where it bites",
+  d:"Supply deliberately runs on its own <code>supply_sales</code> upload, so its numbers differ from Sales Analytics by design — and nothing on the page says so. Add the one-line reason inline, plus a 'use my main sales data' button for sellers who don't want the split.", v:4,s:2,r:2,e:1},
+ {id:"APP-19", sec:"app", t:"Staff accounts with per-module roles",
+  d:"One login is one business. A packer needs Orders and nothing else; sharing the owner's password is the current answer. Blocks every seller with more than one employee — which is every seller you want to charge.", v:3,s:4,r:1,e:3},
+ {id:"APP-20", sec:"app", t:"A digest that arrives without opening the app",
+  d:"Low stock, new orders, a complaint theme rising, ad spend spiking — all of it requires remembering to log in. For a tool used a handful of times a month, the WhatsApp or email digest <b>is</b> the retention mechanism, and it doesn't exist.", v:5,s:4,r:3,e:2},
+ {id:"APP-21", sec:"app", t:"Label AI output as AI output",
+  d:"The per-page liability disclaimer doesn't distinguish a computed RFM segment from a generated recommendation. Anything a model wrote should say so at the point of reading, not in a footer.", v:2,s:2,r:3,e:1},
+
+ // ---- C. Storefront ----
+ {id:"SITE-1", sec:"site", t:"Guest checkout — stop forcing account creation",
+  d:"'A shopper must be signed in to place an order' is, by a distance, the most expensive rule in the codebase. A first-time COD buyer on a phone will not invent a password for a brand they met ten seconds ago. Take the order; create the account silently from the phone number afterwards.", v:5,s:5,r:3,e:2},
+ {id:"SITE-2", sec:"site", t:"Phone + OTP as the identity, email optional",
+  d:"Email-and-password is a Western pattern. Indian shoppers identify by mobile number and expect an OTP — and you need the number for delivery, WhatsApp updates and abandoned-cart recovery anyway.", v:5,s:5,r:3,e:3},
+ {id:"SITE-3", sec:"site", t:"Password reset",
+  d:"There isn't one. A shopper who forgets is permanently locked out of their order history with no path back and no way for the seller to help them.", v:5,s:2,r:3,e:1},
+ {id:"SITE-4", sec:"site", t:"Make sign-in a route, not a modal",
+  d:"Login lives in an overlay with no URL: it can't be linked from an email, survives no refresh, and vanishes if the shopper backs out mid-checkout. <code>/s/&lt;handle&gt;/account</code> fixes all three.", v:3,s:2,r:3,e:1},
+ {id:"SITE-5", sec:"site", t:"UPI at checkout, beside COD",
+  d:"COD-only loses the orders that would have paid up front and pays for every return-to-origin. Razorpay is already integrated on the seller side — the keys, the verification and the HMAC check all exist.", v:5,s:5,r:3,e:2},
+ {id:"SITE-6", sec:"site", t:"Product variants — size and colour",
+  d:"The catalogue is one product, one price, one stock number. A clothing store cannot operate on that, and clothing is the segment you're targeting. This is the largest functional gap in the storefront.", v:5,s:5,r:3,e:3},
+ {id:"SITE-7", sec:"site", t:"Make a pasted store link render a card",
+  d:"Every page is <code>&lt;title&gt;Store&lt;/title&gt;</code> with no per-product meta, no OG image, no sitemap, no structured data. A store link shared to WhatsApp — which is how Indian D2C actually sells — arrives as naked grey text.", v:5,s:4,r:3,e:2},
+ {id:"SITE-8", sec:"site", t:"A tracking page for the shopper",
+  d:"The seller moves an order through five statuses; the shopper sees a pill on an orders list. Give them a page and a WhatsApp message per step, and the seller stops answering 'where is it' by hand.", v:4,s:4,r:2,e:2},
+ {id:"SITE-9", sec:"site", t:"Abandoned-cart nudge on WhatsApp",
+  d:"You have the phone number, the cart contents and the stock level. One message a few hours later is the highest-ROI feature in ecommerce and it's a cron job away.", v:5,s:4,r:2,e:2},
+ {id:"SITE-10", sec:"site", t:"A trust block in checkout",
+  d:"No returns policy at the point of payment, no contact route, no GST or business address. A shopper handing money to a brand they've never heard of needs these <em>more</em> than they would on Amazon, not less.", v:4,s:3,r:3,e:1},
+ {id:"SITE-11", sec:"site", t:"Fix the mobile hero collision",
+  d:"On phones the 'SCROLL' cue sits on top of the second hero button. It's the first screen of every store you publish.", v:2,s:1,r:3,e:1},
+ {id:"SITE-12", sec:"site", t:"Reviews on product pages — feeding Review Analytics",
+  d:"You built a whole module that mines review text for positioning and complaints, and the storefront collects none. Closing that loop makes the seller's own store the input to their own insights.", v:4,s:4,r:2,e:3},
+ {id:"SITE-13", sec:"site", t:"'Notify me' on out-of-stock items",
+  d:"Right now a stockout is silent lost revenue. Captured, it becomes a demand signal — straight into Supply Management's safety-stock and EOQ maths, which currently only sees what did sell.", v:4,s:4,r:2,e:2},
+ {id:"SITE-14", sec:"site", t:"Contrast and focus-ring audit across all eight themes",
+  d:"<code>prefers-reduced-motion</code> is handled properly. Contrast isn't verified: <code>--muted</code> on <code>--bg</code> is borderline in several palettes, and keyboard focus has no visible state on a motion-heavy page.", v:3,s:2,r:3,e:2},
+ {id:"SITE-15", sec:"site", t:"Custom domain",
+  d:"Deferred, and reasonably so — but <code>/s/&lt;handle&gt;</code> on someone else's domain is the reason a seller keeps treating this as a side experiment rather than their real store.", v:4,s:5,r:2,e:3},
+
+ // ---- D. Site builder ----
+ {id:"BLD-1", sec:"bld", t:"Three recommended themes, not eight",
+  d:"Merchant research on theme customisation is unanimous that choice plus configurability is where non-technical sellers stall. You already ask for a product type — use it to recommend three and put the other five behind 'More looks'.", v:4,s:3,r:3,e:1},
+ {id:"BLD-2", sec:"bld", t:"Undo and 'Restore last published' in the editor",
+  d:"The builder saves the draft silently on entering step three — which means a seller can wreck their site and have no way back. Version history of published states, one click to restore.", v:5,s:3,r:3,e:2},
+ {id:"BLD-3", sec:"bld", t:"Replace the raw image path with a thumbnail",
+  d:"The hero control shows <code>/generated_images/hero.jpg</code> as editable text. A seller who edits that string breaks their homepage. Thumbnail, Replace, Remove — never a path.", v:3,s:3,r:3,e:1},
+ {id:"BLD-4", sec:"bld", t:"Always-visible save state: Draft · Unsaved · Published",
+  d:"Silent autosave is right, invisible autosave isn't. The seller can't tell whether what they're looking at is live for shoppers — the one thing they most need to know.", v:4,s:3,r:3,e:1},
+ {id:"BLD-5", sec:"bld", t:"A pre-publish checklist",
+  d:"No hero image, nothing listed on the site, a headline that wraps to six lines on a phone, shipping not configured. Catch it at Publish, not from the first shopper who bounces.", v:4,s:4,r:3,e:2},
+ {id:"BLD-6", sec:"bld", t:"Seed the site from the catalogue on first entry",
+  d:"Brand, products, photos, descriptions and key points already exist in Product Management. Step three should open on a <b>finished site</b> the seller then edits — the difference between 'build me a website' and 'here's your website'.", v:5,s:5,r:3,e:2},
+ {id:"BLD-7", sec:"bld", t:"Font pairing presets instead of three dropdowns × 35 faces",
+  d:"Three type roles free-chosen from thirty-five families is 42,000 combinations, most of them bad, offered to someone who doesn't want to be a typographer. Six curated pairings per theme, with 'choose your own' behind a link.", v:4,s:3,r:3,e:1},
+];
+
+const SECS = {
+  vp:  {label:"Positioning", title:"Value proposition", sub:"What the product is, who it's for, and what it costs"},
+  app: {label:"Seller app",  title:"The seller app",     sub:"Content Seller / Smart — UI, UX and missing operations"},
+  site:{label:"Storefront",  title:"The published storefront", sub:"What the seller's shoppers actually meet"},
+  bld: {label:"Site builder",title:"The site builder",   sub:"The five-step flow that produces those storefronts"},
+};
+const EF = {1:"S",2:"M",3:"L"};
+const score = (i) => Math.round(i.v * i.s * i.r / i.e / 75 * 100);
+const band  = (n) => n >= 50 ? "hi" : n >= 25 ? "mid" : "lo";
+ITEMS.forEach(i => { i.score = score(i); i.band = band(i.score); });
+
+let filter = "all", sortBy = "priority", onlyMarked = false;
+const decisions = Object.create(null);
+let dbns = null;
+
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function paintFilters(){
+  const counts = {all: ITEMS.length};
+  Object.keys(SECS).forEach(k => counts[k] = ITEMS.filter(i => i.sec === k).length);
+  const opts = [["all","Everything"]].concat(Object.keys(SECS).map(k => [k, SECS[k].label]));
+  document.getElementById("filters").innerHTML = opts.map(([k,l]) =>
+    `<button class="chip" data-f="${k}" aria-pressed="${k===filter}">${l}<span class="n">${counts[k]}</span></button>`
+  ).join("");
+  document.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { filter = b.dataset.f; paintFilters(); paint(); });
+}
+
+function rowHTML(i){
+  const d = decisions[i.id];
+  const cls = d === "build" || d === "later" ? "picked" : d === "skip" ? "dropped" : "";
+  const btn = (k,l) => `<button data-id="${i.id}" data-d="${k}" aria-pressed="${d===k}">${l}</button>`;
+  return `<article class="row ${cls}" data-band="${i.band}">
+    <div class="g-score">
+      <b>${i.score}</b>
+      <div class="meter"><i style="width:${i.score}%"></i></div>
+      <code>${i.id}</code>
+    </div>
+    <div class="g-main"><h4>${esc(i.t)}</h4><p>${i.d}</p></div>
+    <div class="g-meta">
+      <dl class="vars">
+        <div><dt>V</dt><dd>${i.v}</dd></div><div><dt>S</dt><dd>${i.s}</dd></div>
+        <div><dt>R</dt><dd>${i.r}</dd></div><div><dt>E</dt><dd>${EF[i.e]}</dd></div>
+      </dl>
+      <div class="acts">${btn("build","Build")}${btn("later","Later")}${btn("skip","Skip")}</div>
+    </div>
+  </article>`;
+}
+
+function paint(){
+  let rows = ITEMS.filter(i => filter === "all" || i.sec === filter);
+  if (onlyMarked) rows = rows.filter(i => decisions[i.id]);
+  const list = document.getElementById("list");
+
+  if (sortBy === "priority") {
+    const sorted = rows.slice().sort((a,b) => b.score - a.score || a.id.localeCompare(b.id));
+    list.innerHTML = sorted.length
+      ? `<section class="sec"><div class="sec-h"><h2>By priority</h2><span>${sorted.length} items · highest ratio first</span></div>
+         <div class="rows">${sorted.map(rowHTML).join("")}</div></section>`
+      : emptyHTML();
+  } else {
+    const order = Object.keys(SECS).filter(k => filter === "all" || k === filter);
+    const parts = order.map(k => {
+      const set = rows.filter(i => i.sec === k).sort((a,b) => b.score - a.score);
+      if (!set.length) return "";
+      return `<section class="sec"><div class="sec-h"><h2>${SECS[k].title}</h2><span>${SECS[k].sub}</span></div>
+              <div class="rows">${set.map(rowHTML).join("")}</div></section>`;
+    }).filter(Boolean);
+    list.innerHTML = parts.length ? parts.join("") : emptyHTML();
+  }
+
+  document.querySelectorAll(".acts button").forEach(b => b.onclick = () => decide(b.dataset.id, b.dataset.d));
+  const marked = Object.keys(decisions).filter(k => decisions[k]).length;
+  const built  = Object.keys(decisions).filter(k => decisions[k] === "build").length;
+  document.getElementById("count").textContent = `${marked} marked · ${built} to build`;
+}
+
+function emptyHTML(){
+  return `<section class="sec"><div class="sec-h"><h2>Nothing here yet</h2>
+    <span>mark a few items, or turn “Only marked” off</span></div></section>`;
+}
+
+function decide(id, d){
+  decisions[id] = decisions[id] === d ? null : d;
+  paint();
+  if (!dbns) return;
+  const val = decisions[id];
+  const ref = dbns.doc("decisions/" + id);
+  (val ? ref.set({status: val, at: new Date().toISOString()}) : ref.delete())
+    .catch(() => {});
+}
+
+paintFilters();
+paint();
+
+document.getElementById("sortBtn").onclick = (e) => {
+  sortBy = sortBy === "priority" ? "section" : "priority";
+  e.currentTarget.textContent = "Sort: " + sortBy;
+  paint();
+};
+document.getElementById("pickedBtn").onclick = (e) => {
+  onlyMarked = !onlyMarked;
+  e.currentTarget.setAttribute("aria-pressed", String(onlyMarked));
+  paint();
+};
+
+// Decisions persist in the artifact's own store, so they survive a reload and
+// can be read back in a later session. Absent the capability the page still
+// works — the marks just live for this visit only.
+(async () => {
+  try {
+    if (!window.claude || typeof window.claude.use !== "function") return;
+    const db = await window.claude.use("db");
+    if (!db) return;
+    dbns = db;
+    db.collection("decisions").onSnapshot((snap) => {
+      Object.keys(decisions).forEach(k => delete decisions[k]);
+      snap.docs.forEach(doc => {
+        const body = doc.data() || {};
+        if (body.status) decisions[doc.id] = body.status;
+      });
+      paint();
+    }, () => {});
+  } catch (e) { /* page works without it */ }
+})();
+</script>

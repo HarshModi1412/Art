@@ -28,6 +28,8 @@ from backend.core import (ad_analytics, ai, analytics, auth, billing, complaints
                           report_pdf, smart, templates, user_store)
 from backend.core import commerce, secrets_store, db, supply, products
 from backend.core import sitebuilder, storefront
+from backend.core import messaging, password_reset, today as today_mod
+from backend.core import winback_proof
 
 # ---------------------------------------------------------
 # numpy/pandas JSON safety net
@@ -137,6 +139,33 @@ class RegisterBody(BaseModel):
     password: str
     plan: str = "free"
 
+class ForgotBody(BaseModel):
+    email: str
+
+
+class ResetBody(BaseModel):
+    email: str
+    token: str
+    password: str
+
+
+class DigestBody(BaseModel):
+    enabled: bool | None = None
+    email: str | None = None
+    phone: str | None = None
+    hour: int | None = None
+
+
+class WinbackSentBody(BaseModel):
+    customers: list[dict] = []
+    channel: str | None = "whatsapp"
+    note: str | None = ""
+
+
+class WinbackUnsentBody(BaseModel):
+    campaign_id: str
+
+
 class MappingBody(BaseModel):
     file_id: str
     mapping: dict
@@ -171,6 +200,63 @@ def register(body: RegisterBody):
     return {"token": token, "email": email, "usage": _usage(email), "plan": billing.get_plan(email)}
 
 
+@app.post("/api/forgot")
+def forgot_password(body: ForgotBody, request: Request):
+    """Always answers the same way, whether or not the address has an account —
+    telling an attacker which emails exist is not a feature."""
+    return password_reset.request_seller(body.email, _public_base_url(request))
+
+
+@app.post("/api/reset")
+def reset_password(body: ResetBody):
+    try:
+        return password_reset.reset_seller(body.email, body.token, body.password)
+    except password_reset.ResetError as e:
+        raise HTTPException(400, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/today")
+def today_strip(authorization: str | None = Header(default=None)):
+    """The three things worth the seller's time. Same rows the digest sends."""
+    email = require_user(authorization)
+    items = today_mod.build(email, limit=4)
+    return {"items": items,
+            "empty": today_mod.empty_state(email) if not items else None,
+            "digest": today_mod.get_prefs(email)}
+
+
+@app.post("/api/digest")
+def digest_settings(body: DigestBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    patch = {k: v for k, v in body.dict().items() if v is not None}
+    return {"digest": today_mod.set_prefs(email, patch),
+            "email_ready": messaging.smtp_configured(),
+            "whatsapp_ready": messaging.whatsapp_enabled()}
+
+
+@app.post("/api/digest/test")
+def digest_test(authorization: str | None = Header(default=None)):
+    """Send one now, so a seller can see the digest before trusting it."""
+    return today_mod.send_digest(require_user(authorization), force=True)
+
+
+@app.post("/api/digest/run")
+def digest_run(hour: int | None = None):
+    """Cron target: send every seller whose digest hour is now."""
+    return today_mod.run_due(hour)
+
+
+@app.get("/api/dev/outbox")
+def dev_outbox():
+    """What we tried to send but had nowhere to send it — visible only while
+    SMTP is unconfigured, so a first deploy can still test password reset."""
+    if messaging.smtp_configured():
+        raise HTTPException(404, "Not available once SMTP is configured.")
+    return {"outbox": messaging.outbox()}
+
+
 @app.post("/api/logout")
 def logout(authorization: str | None = Header(default=None)):
     auth.logout((authorization or "").removeprefix("Bearer ").strip())
@@ -189,11 +275,24 @@ def _usage(email: str) -> dict:
     }
 
 
-def _paywall(product_id: str, message: str) -> HTTPException:
-    """402 with a structured detail the frontend recognises to open the pricing modal."""
-    return HTTPException(status_code=402, detail={
-        "code": "paywall", "product": product_id, "message": message,
-    })
+def _paywall(product_id: str, message: str = "") -> HTTPException:
+    """402 with a structured detail the frontend recognises to open the pricing
+    modal. The body names BOTH ways past it — the tier that includes this, and
+    what it costs in credits — because a seller who works in bursts should not
+    be told a monthly subscription is their only option."""
+    detail = billing.paywall(product_id)
+    if message:
+        detail["message"] = message
+    return HTTPException(status_code=402, detail=detail)
+
+
+@app.get("/api/icons")
+def icon_set():
+    """The one stroke icon set, shared by the app and every storefront it
+    publishes. The app used to draw its modules with emoji while the sites it
+    produced used these — which is why the published site looked like software
+    and the app looked like a prototype."""
+    return {"icons": sitebuilder.ICONS}
 
 
 @app.get("/api/pricing")
@@ -351,16 +450,12 @@ async def analyze_complaints_endpoint(product_type: str | None = None,
                                       authorization: str | None = Header(default=None)):
     """Complaint Trends Report (premium): raw reviews in -> prescriptive
     fix-first actions, monthly complaint trends, severity quadrant, deep table.
-    Free during launch; ₹249/report after (included in Chain)."""
+    Free during launch; included in Semi Pro and Pro, or 12 credits, after."""
     sess = get_session(x_session_id)
     if not pricing.launch_mode():
         email = require_user(authorization)
-        if not billing.check_and_consume(email, "complaints_report"):
-            raise _paywall(
-                "complaints_report",
-                "The Complaint Trends Report is ₹249 per report — a fix-first action plan "
-                "plus complaint trends and a severity quadrant from your own reviews.",
-            )
+        if not billing.check_and_consume(email, "complaints"):
+            raise _paywall("complaints")
     pt = _resolve_product_type(authorization, product_type)
     f = files[0]
     content = await f.read()
@@ -1050,21 +1145,41 @@ SAMPLE_FILE = os.path.join(_ROOT_DATA_DIR := os.path.join(os.path.dirname(__file
 
 
 @app.post("/api/demo")
-def load_demo(x_session_id: str | None = Header(default=None)):
-    """Load 90 days of realistic sample café transactions into the session,
-    pre-mapped, so a visitor sees full value before uploading anything."""
+def load_demo(x_session_id: str | None = Header(default=None),
+              authorization: str | None = Header(default=None)):
+    """Load 90 days of realistic sample transactions, pre-mapped, so nobody has
+    to find a CSV on this laptop before they can see what the app does.
+
+    Loads into BOTH stores: the guest session (which is what the landing page
+    and Classic mode read) and, when someone is signed in, their Smart account
+    store — otherwise "See it with sample data" appears to do nothing in the
+    mode most people are actually using.
+    """
     sess = get_session(x_session_id)
     if not os.path.exists(SAMPLE_FILE):
         raise HTTPException(503, "Sample dataset missing on the server.")
     df = pd.read_csv(SAMPLE_FILE)
     fid = secrets.token_hex(6)
     sess.raw_dfs[fid] = df
-    sess.file_names[fid] = "Sample Café (90 days)"
+    sess.file_names[fid] = "Sample data (90 days)"
     identity = {c: c for c in ["date", "customer_id", "customer_name", "order_id",
                                "product", "category", "subcategory", "quantity", "amount"]}
     sess.txns_df, _ = mapper.build_transactions(df, identity)
     sess.mapped_file_id = fid
-    return {"files": [_file_info(fid, sess)], "mapped": True}
+
+    saved_to_account = False
+    email = optional_user(authorization)
+    if email and not (smart.data_status(email).get("sales") or {}).get("ready"):
+        # never overwrite real data someone has already uploaded
+        try:
+            smart.save_sales(email, sess.txns_df,
+                             {"source": "sample", "name": "Sample data (90 days)"},
+                             mode="replace")
+            saved_to_account = True
+        except Exception:  # noqa: BLE001 — the session copy is still usable
+            pass
+    return {"files": [_file_info(fid, sess)], "mapped": True,
+            "saved_to_account": saved_to_account}
 
 
 # ---------------------------------------------------------
@@ -1126,17 +1241,13 @@ async def analyze_positioning(lang: str = "en", product_type: str | None = None,
                               x_session_id: str | None = Header(default=None),
                               authorization: str | None = Header(default=None)):
     """Upload a café's own reviews file -> brand positioning vs the benchmark cafés.
-    GTM gate: this is the moat product (₹349/report) once launch mode ends —
-    free for everyone (no login) during launch, included in the Chain plan."""
+    GTM gate: free for everyone during launch; afterwards it is included in
+    Semi Pro and Pro, or costs 15 credits on the usage plan."""
     get_session(x_session_id)
     if not pricing.launch_mode():
         email = require_user(authorization)
-        if not billing.check_and_consume(email, "positioning_report"):
-            raise _paywall(
-                "positioning_report",
-                "The Market Position & Reputation Report is ₹349 per report — see how "
-                "customers rank you vs. nearby cafés, straight from review language.",
-            )
+        if not billing.check_and_consume(email, "positioning"):
+            raise _paywall("positioning")
     f = files[0]
     ext = os.path.splitext(f.filename or "")[1].lower()
     if ext not in SUPPORTED_EXTENSIONS:
@@ -1192,21 +1303,48 @@ def generate_winback(x_session_id: str | None = Header(default=None),
     if not customers:
         return {"customers": [], "usage": _usage(email)}
 
-    # GTM gate: the at-risk LIST (RFM page) is free forever; generating the
-    # ready-to-send campaign is the paid action (₹199/campaign) once launch
-    # mode ends. Chain plan includes unlimited campaigns.
+    # The at-risk LIST is free forever. Generating the ready-to-send campaign is
+    # included from Semi Pro upwards — deliberately NOT charged per campaign,
+    # because charging per campaign taxes the exact behaviour that proves the
+    # product works and creates the habit worth renewing.
     if not billing.check_and_consume(email, "winback_campaign"):
-        raise _paywall(
-            "winback_campaign",
-            "Your at-risk list is free — generating the ready-to-send campaign is ₹199. "
-            "One campaign round: personalized messages + coupons + Excel export.",
-        )
+        raise _paywall("winback_campaign")
 
     # template + market-basket-analysis based — no OpenAI call, no rate limit needed
     results = templates.build_winback_messages(customers)
 
     _winback_cache.setdefault(x_session_id, WinbackSession()).rows = results
     return {"customers": results, "usage": _usage(email)}
+
+
+@app.get("/api/rfm/winback/proof")
+def winback_proof_summary(authorization: str | None = Header(default=None)):
+    """What every campaign actually recovered — the renewal conversation."""
+    return winback_proof.summary(require_user(authorization))
+
+
+@app.post("/api/rfm/winback/sent")
+def winback_mark_sent(body: WinbackSentBody,
+                      x_session_id: str | None = Header(default=None),
+                      authorization: str | None = Header(default=None)):
+    """One tick: this campaign went out. From here the app can measure it."""
+    email = require_user(authorization)
+    rows = body.customers or []
+    if not rows:
+        cached = _winback_cache.get(x_session_id)
+        rows = (cached.rows if cached else []) or []
+    try:
+        winback_proof.mark_sent(email, rows, body.channel or "whatsapp", body.note or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return winback_proof.summary(email)
+
+
+@app.post("/api/rfm/winback/unsent")
+def winback_unmark(body: WinbackUnsentBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    winback_proof.unmark(email, body.campaign_id)
+    return winback_proof.summary(email)
 
 
 @app.get("/api/rfm/winback/download")
@@ -1294,18 +1432,19 @@ def export_winback_edited(body: WinbackExportBody,
 # ---------------------------------------------------------
 def _consume_ai_use(email: str, feature: str) -> None:
     """Daily free quota first, then paid top-up credits, else paywall.
-    Launch mode and the Chain plan are unlimited."""
+    Launch mode and Pro are unlimited."""
     if pricing.launch_mode() or billing.is_unlimited(email):
         auth.check_usage_limit(email, feature)  # still log usage for analytics; never blocks here
         return
     if auth.check_usage_limit(email, feature):
         return
-    if billing.consume_credit(email, "ai_topup"):
+    if billing.spend_credits(email, pricing.credits_for("ai_use")):
         return
+    quota = pricing.ai_quota(billing.get_plan(email))
     raise _paywall(
-        "ai_topup",
-        "You've used today's 5 free AI runs. Add 10 more for ₹99 (used automatically), "
-        "come back tomorrow, or go unlimited with the Chain plan.",
+        "ai_use",
+        f"You've used today's {quota} free AI runs. Semi Pro raises it to 50 a day and Pro "
+        f"removes the limit — or spend credits, which never expire.",
     )
 
 
@@ -1352,7 +1491,7 @@ def chat_history(x_session_id: str | None = Header(default=None)):
 # Billing / Payments (Razorpay)
 # ---------------------------------------------------------
 class OrderBody(BaseModel):
-    product: str  # catalog product_id: winback_campaign | positioning_report | ai_topup | chain_monthly
+    product: str  # a plan id (semipro | pro) or a credit pack (credits_100 | ...)
 
 
 class VerifyBody(BaseModel):
@@ -1365,8 +1504,11 @@ class VerifyBody(BaseModel):
 @app.post("/api/pay/create-order")
 def create_order(body: OrderBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
-    if body.product == "chain_monthly" and billing.get_plan(email) == "chain":
-        raise HTTPException(400, "You are already on the Chain plan 🎉")
+    current = billing.get_plan(email)
+    if body.product == current:
+        raise HTTPException(400, f"You are already on {pricing.get_plan(current)['name']}.")
+    if body.product == "semipro" and current == "pro":
+        raise HTTPException(400, "Pro already includes everything in Semi Pro.")
     try:
         return billing.create_order(email, body.product)
     except ValueError as e:
@@ -2308,6 +2450,12 @@ class ProductBody(BaseModel):
     listed: bool | None = True
     unit_label: str | None = ""
     video_url: str | None = ""
+    # ---- variants ----
+    # `options` are the axes (Size, Colour); `variants` is the matrix they
+    # expand into. The seller sends whichever they edited — the backend
+    # rebuilds the matrix from the axes and carries existing cells over.
+    options: list[dict] = []
+    variants: list[dict] = []
 
 
 class ProductIdBody(BaseModel):
@@ -2425,6 +2573,27 @@ def _site_state(email: str) -> dict:
 @app.get("/api/site/state")
 def site_state(authorization: str | None = Header(default=None)):
     return _site_state(require_user(authorization))
+
+
+@app.get("/api/site/pairings")
+def site_pairings(theme: str = "", authorization: str | None = Header(default=None)):
+    """Curated font pairings, the ones suiting this theme first."""
+    require_user(authorization)
+    return {"pairings": sitebuilder.pairings_for(theme), "fonts": sitebuilder.FONTS}
+
+
+@app.post("/api/site/seed")
+def site_seed(authorization: str | None = Header(default=None), force: bool = False):
+    """Fill an untouched site from the seller's own catalogue, so the builder
+    opens on a finished site rather than five steps of blank fields. Only
+    writes where the seller has left a field empty."""
+    email = require_user(authorization)
+    was = bool(sitebuilder.get_site(email).get("seeded"))
+    try:
+        sitebuilder.seed_from_catalogue(email, force=force)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {**_site_state(email), "seeded_now": (not was) or bool(force)}
 
 
 @app.post("/api/site/save")
@@ -2638,6 +2807,23 @@ class ShopOrderBody(BaseModel):
     address: dict = {}
     payment: str = "cod"
     note: str | None = ""
+    # Guest checkout: a shopper with no account still gives us these, because
+    # the parcel cannot be delivered without them.
+    guest: bool = False
+    name: str | None = ""
+    phone: str | None = ""
+    email: str | None = ""
+
+
+
+class ShopForgotBody(BaseModel):
+    email: str
+
+
+class ShopResetBody(BaseModel):
+    token: str
+    password: str
+
 
 
 def _seller_for(handle: str) -> str:
@@ -2722,13 +2908,54 @@ def shop_cart(handle: str, body: ShopCartBody):
 @app.post("/api/shop/{handle}/order")
 def shop_order(handle: str, body: ShopOrderBody,
                x_store_token: str | None = Header(default=None)):
-    seller, cust = _shopper(handle, x_store_token)
+    """Place an order — signed in, or as a guest.
+
+    A guest is not a lesser record: they become a real customer keyed on the
+    phone number they had to give us anyway, and they show up in the seller's
+    RFM and Win-Back lists like anyone else. They can claim the account later
+    by setting a password.
+    """
+    seller = _seller_for(handle)
+    cust = storefront.customer_from_token(seller, (x_store_token or "").strip())
+    if not cust:
+        addr = body.address or {}
+        try:
+            cust = storefront.guest_customer(
+                seller,
+                name=body.name or addr.get("name") or "",
+                phone=body.phone or addr.get("phone") or "",
+                email=body.email or addr.get("email") or "",
+            )
+        except storefront.StoreError as e:
+            raise HTTPException(400, str(e))
     try:
         order = storefront.place_order(seller, cust, body.lines or [], body.address or {},
                                        body.payment or "cod", body.note or "")
     except storefront.StoreError as e:
         raise HTTPException(400, str(e))
-    return {"order": order}
+    # a guest gets a session too, so "your orders" works on the thank-you page
+    token = (x_store_token or "").strip() or storefront.issue_token(seller, cust["id"])
+    return {"order": order, "token": token,
+            "customer": storefront._public_customer(cust)}
+
+
+@app.post("/api/shop/{handle}/forgot")
+def shop_forgot(handle: str, body: ShopForgotBody, request: Request):
+    seller = _seller_for(handle)
+    site = sitebuilder.get_site(seller) or {}
+    return password_reset.request_shopper(
+        seller, body.email, _public_base_url(request), handle,
+        store_name=(site.get("brand") or {}).get("name") if isinstance(site.get("brand"), dict)
+        else str(site.get("brand") or handle))
+
+
+@app.post("/api/shop/{handle}/reset")
+def shop_reset(handle: str, body: ShopResetBody):
+    seller = _seller_for(handle)
+    try:
+        return password_reset.reset_shopper(seller, body.token, body.password)
+    except password_reset.ResetError as e:
+        raise HTTPException(400, str(e))
 
 
 # ---------------------------------------------------------
@@ -2743,15 +2970,95 @@ if os.path.isdir(STORE_DIR):
     app.mount("/store-static", StaticFiles(directory=STORE_DIR), name="store-static")
 
 
-@app.get("/s/{handle}")
-def storefront_page(handle: str):
-    """A seller's own website. One page app; it fetches /api/shop/<handle>/site."""
+def _meta_tags(meta: dict, url: str) -> str:
+    """The head a crawler and a WhatsApp link preview actually read.
+
+    The storefront is a one-page app, so without this every page of every store
+    is `<title>Store</title>` and a pasted link arrives as naked grey text —
+    which, in a market where the share sheet is the shopfront, is the whole
+    difference between a link that sells and one that does not.
+    """
+    def esc(v: str) -> str:
+        return (str(v or "").replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;").replace('"', "&quot;"))
+
+    img = meta.get("image") or ""
+    if img and img.startswith("/"):
+        img = url.split("/s/")[0].rstrip("/") + img
+    tags = [
+        f"<title>{esc(meta['title'])}</title>",
+        f'<meta name="description" content="{esc(meta["description"])}" />',
+        f'<link rel="canonical" href="{esc(url)}" />',
+        f'<meta property="og:type" content="website" />',
+        f'<meta property="og:site_name" content="{esc(meta["site_name"])}" />',
+        f'<meta property="og:title" content="{esc(meta["title"])}" />',
+        f'<meta property="og:description" content="{esc(meta["description"])}" />',
+        f'<meta property="og:url" content="{esc(url)}" />',
+        f'<meta name="twitter:card" content="{"summary_large_image" if img else "summary"}" />',
+        f'<meta name="twitter:title" content="{esc(meta["title"])}" />',
+        f'<meta name="twitter:description" content="{esc(meta["description"])}" />',
+    ]
+    if img:
+        tags.append(f'<meta property="og:image" content="{esc(img)}" />')
+        tags.append(f'<meta name="twitter:image" content="{esc(img)}" />')
+    if meta.get("keywords"):
+        tags.append(f'<meta name="keywords" content="{esc(meta["keywords"])}" />')
+    return "\n".join(tags)
+
+
+def _render_store(handle: str, request: Request, product_id: str = "") -> Response:
     index = os.path.join(STORE_DIR, "store.html")
     if not os.path.exists(index):
         raise HTTPException(404, "Storefront UI not found.")
-    if not sitebuilder.resolve_handle(handle):
+    owner = sitebuilder.resolve_handle(handle)
+    if not owner:
         raise HTTPException(404, "No store at this address.")
-    return FileResponse(index, headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
+
+    site = sitebuilder.get_site(owner)
+    product = None
+    if product_id:
+        product = next((p for p in products.storefront_payload(owner)
+                        if p["id"] == product_id), None)
+    meta = sitebuilder.seo_meta(handle, site, product)
+    url = f"{_public_base_url(request)}/s/{handle}" + (f"/p/{product_id}" if product else "")
+
+    with open(index, encoding="utf-8") as fh:
+        html = fh.read()
+    html = html.replace("<title>Store</title>", _meta_tags(meta, url))
+    return Response(content=html, media_type="text/html",
+                    headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
+
+
+@app.get("/s/{handle}")
+def storefront_page(handle: str, request: Request):
+    """A seller's own website. One page app; it fetches /api/shop/<handle>/site."""
+    return _render_store(handle, request)
+
+
+@app.get("/s/{handle}/p/{product_id}")
+def storefront_product_page(handle: str, product_id: str, request: Request):
+    """A product's own address, so a shopper can share the thing, not the shop."""
+    return _render_store(handle, request, product_id)
+
+
+@app.get("/s/{handle}/sitemap.xml")
+def storefront_sitemap(handle: str, request: Request):
+    owner = sitebuilder.resolve_handle(handle)
+    if not owner or not sitebuilder.get_site(owner).get("published"):
+        raise HTTPException(404, "No store at this address.")
+    base = f"{_public_base_url(request)}/s/{handle}"
+    urls = [base] + [f"{base}/p/{p['id']}" for p in products.storefront_payload(owner)]
+    body = "".join(f"<url><loc>{u}</loc></url>" for u in urls)
+    return Response(
+        content=f'<?xml version="1.0" encoding="UTF-8"?>'
+                f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>',
+        media_type="application/xml")
+
+
+@app.get("/robots.txt")
+def robots(request: Request):
+    return Response(content=f"User-agent: *\nAllow: /\nSitemap: {_public_base_url(request)}/sitemap.xml\n",
+                    media_type="text/plain")
 
 
 @app.get("/smart")

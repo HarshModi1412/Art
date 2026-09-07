@@ -106,8 +106,26 @@ must("unit_cost" not in pub["products"][0] and "sku" not in pub["products"][0], 
 must(pub["products"][0]["in_stock"] != pub["products"][1]["in_stock"], "stock state differs per product")
 
 print("\n== 5. shopper account ==")
-r = c.post(f"/api/shop/{HANDLE}/order", json={"lines": [{"product_id": pid1, "qty": 1}]})
-must(r.status_code == 401, "ordering without an account is refused")
+# Guest checkout: a first-time buyer must be able to pay without inventing a
+# password. They still become a real customer, keyed on the phone number the
+# parcel needs anyway.
+r = c.post(f"/api/shop/{HANDLE}/order", json={
+    "lines": [{"product_id": pid1, "qty": 1}],
+    "address": {"name": "Guest Buyer", "phone": "9000000001", "line1": "1 First St",
+                "city": "Bengaluru", "state": "KA", "pincode": "560001"},
+    "guest": True, "name": "Guest Buyer", "phone": "9000000001"})
+must(r.status_code == 200, f"a guest can place an order ({r.status_code})", r.text[:300])
+must(r.json().get("token"), "a guest gets a session so 'your orders' works")
+guest_order_total = r.json()["order"]["total"]
+r = c.post(f"/api/shop/{HANDLE}/order", json={
+    "lines": [{"product_id": pid1, "qty": 1}],
+    "address": {"name": "", "phone": "123", "line1": "1 First St",
+                "city": "Bengaluru", "state": "KA", "pincode": "560001"}})
+must(r.status_code == 400, "a guest without a real phone number is still refused")
+r = c.get("/api/store/customers", headers=H)
+must(any(cu.get("phone", "").endswith("9000000001") for cu in r.json().get("customers", [])),
+     "the guest shows up in the seller's customer list")
+
 r = c.post(f"/api/shop/{HANDLE}/register", json={"email": BUYER, "password": "shop123", "name": "Riya", "phone": "9876543210"})
 must(r.status_code == 200, f"shopper signup ({r.status_code})", r.text[:300])
 stok = r.json()["token"]
@@ -129,7 +147,7 @@ must(pc["total"] == 2998.0, "inclusive GST is not added twice")
 r = c.post(f"/api/shop/{HANDLE}/cart", json={"lines": [{"product_id": pid1, "qty": 1}]})
 must(r.json()["shipping"] == 49.0, "shipping charged below the threshold")
 r = c.post(f"/api/shop/{HANDLE}/cart", json={"lines": [{"product_id": pid1, "qty": 99}]})
-must(r.json()["items"][0]["qty"] == 5, "quantity clamped to available stock")
+must(r.json()["items"][0]["qty"] == 4, "quantity clamped to available stock")
 
 print("\n== 7. order -> stock -> sales ==")
 addr = {"name": "Riya", "phone": "9876543210", "line1": "12 MG Road", "city": "Bengaluru",
@@ -142,36 +160,38 @@ must(order["status"] == "new", "order starts as new")
 
 r = c.get("/api/products/state", headers=H)
 stock = [p for p in r.json()["products"] if p["id"] == pid1][0]["stock"]
-must(stock == 3, f"stock deducted 5 -> 3 (got {stock})")
+must(stock == 2, f"stock deducted 5 -> 2 after guest + shopper orders (got {stock})")
 
 r = c.get("/api/analytics", headers=H)
 must(r.status_code == 200, f"analytics reads the site sale ({r.status_code})", r.text[:200])
 r = c.get("/api/smart/state", headers=H)
 sales = r.json()["data"]["sales"]
-must(sales["ready"] and sales["rows"] == 1, f"1 sales row from the site (got {sales.get('rows')})")
+must(sales["ready"] and sales["rows"] == 2, f"2 sales rows from the site (got {sales.get('rows')})")
 
 r = c.post(f"/api/shop/{HANDLE}/order", headers=SH, json={"lines": [{"product_id": pid1, "qty": 1}], "address": addr})
 must(r.status_code == 200, "second order")
 r = c.get("/api/smart/state", headers=H)
-must(r.json()["data"]["sales"]["rows"] == 2, "sales rebuild stays idempotent (2 rows, not 3)")
+must(r.json()["data"]["sales"]["rows"] == 3, "sales rebuild stays idempotent (3 rows, not 4)")
 
 print("\n== 8. seller order management ==")
 r = c.get("/api/store/orders", headers=H)
-must(r.status_code == 200 and len(r.json()["orders"]) == 2, "seller sees both orders")
-must(r.json()["stats"]["revenue"] == 2998.0 + 1548.0, f"revenue stats incl. shipping (got {r.json()['stats']['revenue']})")
+must(r.status_code == 200 and len(r.json()["orders"]) == 3, "seller sees all three orders")
+must(r.json()["stats"]["revenue"] == 2998.0 + 1548.0 + guest_order_total, f"revenue stats incl. shipping (got {r.json()['stats']['revenue']})")
 top = r.json()["orders"][0]
 oid, oqty = top["id"], sum(i["qty"] for i in top["items"])
+before = [p for p in c.get("/api/products/state", headers=H).json()["products"]
+          if p["id"] == pid1][0]["stock"]
 r = c.post("/api/store/orders/status", headers=H, json={"order_id": oid, "status": "cancelled"})
 must(r.status_code == 200, "cancel an order")
 r = c.get("/api/products/state", headers=H)
 stock = [p for p in r.json()["products"] if p["id"] == pid1][0]["stock"]
-must(stock == 2 + oqty, f"cancelling returns its {oqty} unit(s) of stock (got {stock})")
+must(stock == before + oqty, f"cancelling returns its {oqty} unit(s) of stock (got {stock})")
 must(r.json()["products"] and True, "catalogue still reads")
 r = c.get("/api/smart/state", headers=H)
-must(r.json()["data"]["sales"]["rows"] == 1, "cancelled order drops out of sales")
+must(r.json()["data"]["sales"]["rows"] == 2, "cancelled order drops out of sales (3 -> 2)")
 
 r = c.get("/api/store/customers", headers=H)
-must(r.json()["customers"][0]["email"] == BUYER, "customer list")
+must(any(cu["email"] == BUYER for cu in r.json()["customers"]), "customer list")
 r = c.get("/api/store/orders/export", headers=H)
 must(r.status_code == 200 and "order_no" in r.text, "CSV export")
 
@@ -189,7 +209,7 @@ must(not r.json()["data"]["sales"]["ready"] or r.json()["data"]["sales"]["rows"]
      "site sales excluded from insights when toggled off")
 c.post("/api/channels/toggle", headers=H, json={"channel": "site", "enabled": True})
 r = c.get("/api/smart/state", headers=H)
-must(r.json()["data"]["sales"]["rows"] == 1, "toggling back restores the sale")
+must(r.json()["data"]["sales"]["rows"] == 2, "toggling back restores the sales")
 r = c.post("/api/channels/toggle", headers=H, json={"channel": "flipkart", "enabled": True})
 must(r.status_code == 400, "cannot toggle a marketplace that isn't live")
 
@@ -285,6 +305,183 @@ must(r.json()["url"].endswith(".mp4"), "the clip keeps its extension")
 r = c.post("/api/site/image", headers=H,
            files={"files": ("bad.exe", _io.BytesIO(b"MZ" + b"0" * 100), "application/octet-stream")})
 must(r.status_code == 400, "anything that isn't an image or a clip is refused")
+
+print("\n== 17. pricing: three tiers + a usage plan ==")
+r = c.get("/api/pricing")
+pc = r.json()
+must([p["id"] for p in pc["plans"]] == ["free", "semipro", "pro"], "Free / Semi Pro / Pro")
+must(pc["plans"][1]["price_inr"] == 499 and pc["plans"][2]["price_inr"] == 999, "tier prices")
+must(len(pc["credit_packs"]) == 3, "credit packs offered alongside the tiers")
+must(pc["stack"]["saving_inr"] > 0, "the Shopify app-stack comparison computes")
+must(pc["stack"]["ours_inr"] == 999, "compared against Pro")
+from backend.core import pricing as _pr
+must(_pr.plan_allows("free", "analytics"), "analytics is free forever")
+_lm = _pr.launch_mode
+_pr.launch_mode = lambda: False
+try:
+    must(not _pr.plan_allows("free", "supply"), "Supply is gated on Free once launch ends")
+    must(_pr.plan_allows("pro", "supply"), "Pro includes Supply")
+    must(_pr.plan_allows("semipro", "winback_campaign"), "Semi Pro includes campaigns")
+    must(_pr.credits_for("winback_campaign") == 10, "a campaign also costs credits")
+    must(_pr.upgrade_target("supply")["id"] == "pro", "the paywall names the right tier")
+finally:
+    _pr.launch_mode = _lm
+
+print("\n== 18. product variants: size x colour ==")
+axes = [{"name": "Size", "values": ["S", "M", "L"]},
+        {"name": "Colour", "values": ["Black", "Blue"]}]
+r = c.post("/api/products/item", headers=H, json={
+    "name": "Field Shirt", "category": "Shirts", "price": 1499, "unit_cost": 600,
+    "options": axes, "listed": True, "track_stock": True,
+    "description": "Cotton twill.", "image_url": "/generated_images/x.png"})
+must(r.status_code == 200, f"create a product with two option axes ({r.status_code})", r.text[:300])
+shirt = [p for p in r.json()["products"] if p["name"] == "Field Shirt"][0]
+must(len(shirt["variants"]) == 6, f"3 sizes x 2 colours = 6 cells (got {len(shirt['variants'])})")
+must(shirt["has_variants"], "the product knows it has variants")
+vs = shirt["variants"]
+for v, qty, price in zip(vs, [4, 0, 7, 2, 0, 3], [None, None, 1699, None, None, None]):
+    v["stock"] = qty
+    if price:
+        v["price"] = price
+    v["sku"] = "FS-" + v["label"].replace(" / ", "-")
+r = c.post("/api/products/item", headers=H, json={**shirt, "variants": vs})
+shirt = [p for p in r.json()["products"] if p["id"] == shirt["id"]][0]
+must(shirt["stock"] == 16, f"product stock rolls up from the matrix (got {shirt['stock']})")
+must(all(v["sku"] for v in shirt["variants"]), "per-variant SKUs persist")
+
+# adding a size must not reset the twelve cells already filled in
+grown = [{"name": "Size", "values": ["S", "M", "L", "XL"]},
+         {"name": "Colour", "values": ["Black", "Blue"]}]
+r = c.post("/api/products/item", headers=H, json={**shirt, "options": grown})
+shirt = [p for p in r.json()["products"] if p["id"] == shirt["id"]][0]
+must(len(shirt["variants"]) == 8, "adding a size grows the matrix to 8")
+must(shirt["stock"] == 16, "existing cells keep their stock when the matrix grows")
+
+pub = c.get(f"/api/shop/{HANDLE}/site").json()
+sh = [p for p in pub["products"] if p["id"] == shirt["id"]][0]
+must(len(sh["variants"]) == 8 and sh["options"], "the storefront receives the matrix")
+must(all("sku" not in v for v in sh["variants"]), "SKU never leaks to shoppers")
+priced_v = next(v for v in sh["variants"] if v["price"] == 1699)
+plain_v = next(v for v in sh["variants"] if v["price"] == 1499 and v["in_stock"])
+
+r = c.post(f"/api/shop/{HANDLE}/cart", json={"lines": [{"product_id": shirt["id"], "qty": 1}]})
+must(any(i["reason"] == "choose_variant" for i in r.json()["issues"]),
+     "a variant product cannot be bought without picking a variant")
+r = c.post(f"/api/shop/{HANDLE}/cart", json={
+    "lines": [{"product_id": shirt["id"], "variant_id": priced_v["id"], "qty": 1}]})
+must(r.json()["items"][0]["unit_price"] == 1699.0, "the variant's price override is used")
+must(r.json()["items"][0]["variant_label"], "the line carries a human label")
+oos = next(v for v in sh["variants"] if not v["in_stock"])
+r = c.post(f"/api/shop/{HANDLE}/cart", json={
+    "lines": [{"product_id": shirt["id"], "variant_id": oos["id"], "qty": 1}]})
+must(any(i["reason"] == "out_of_stock" for i in r.json()["issues"]),
+     "a sold-out cell is refused even when the product has stock")
+
+before_cell = next(v for v in shirt["variants"] if v["id"] == plain_v["id"])["stock"]
+r = c.post(f"/api/shop/{HANDLE}/order", json={
+    "lines": [{"product_id": shirt["id"], "variant_id": plain_v["id"], "qty": 1}],
+    "address": {"name": "V Buyer", "phone": "9000000002", "line1": "2 Second St",
+                "city": "Bengaluru", "state": "KA", "pincode": "560002"}})
+must(r.status_code == 200, f"order one variant ({r.status_code})", r.text[:300])
+shirt = [p for p in c.get("/api/products/state", headers=H).json()["products"]
+         if p["id"] == shirt["id"]][0]
+after_cell = next(v for v in shirt["variants"] if v["id"] == plain_v["id"])["stock"]
+must(after_cell == before_cell - 1, f"only that cell is decremented ({before_cell} -> {after_cell})")
+must(shirt["stock"] == 15, f"the roll-up follows (got {shirt['stock']})")
+
+print("\n== 19. password reset ==")
+r = c.post("/api/forgot", json={"email": "nobody-at-all@example.com"})
+must(r.status_code == 200 and r.json()["ok"], "an unknown address answers the same way")
+r = c.post("/api/forgot", json={"email": SELLER})
+must(r.status_code == 200, "reset requested for a real seller")
+ob = c.get("/api/dev/outbox").json()["outbox"]
+link = next((m for m in ob if "reset" in (m.get("body") or "")), None)
+must(link is not None, "a reset mail was produced")
+import re as _re
+tok = _re.search(r"token=([A-Za-z0-9_\-]+)", link["body"]).group(1)
+r = c.post("/api/reset", json={"email": SELLER, "token": "not-a-real-token", "password": "newpw123"})
+must(r.status_code == 400, "a bogus token is refused")
+r = c.post("/api/reset", json={"email": SELLER, "token": tok, "password": "newpw123"})
+must(r.status_code == 200, f"password changed ({r.status_code})", r.text[:200])
+r = c.post("/api/reset", json={"email": SELLER, "token": tok, "password": "otherpw1"})
+must(r.status_code == 400, "the same token cannot be used twice")
+must(c.post("/api/login", json={"email": SELLER, "password": "newpw123"}).status_code == 200,
+     "the new password works")
+tok_new = c.post("/api/login", json={"email": SELLER, "password": "newpw123"}).json()["token"]
+H["Authorization"] = "Bearer " + tok_new
+
+r = c.post(f"/api/shop/{HANDLE}/forgot", json={"email": BUYER})
+must(r.status_code == 200, "a shopper can ask for a reset on the store")
+ob = c.get("/api/dev/outbox").json()["outbox"]
+stok_link = next((m for m in ob if "reset=" in (m.get("body") or "")), None)
+must(stok_link is not None, "the shopper reset mail speaks for the store")
+stoken = _re.search(r"reset=([A-Za-z0-9_\-]+)", stok_link["body"]).group(1)
+r = c.post(f"/api/shop/{HANDLE}/reset", json={"token": stoken, "password": "shopnew1"})
+must(r.status_code == 200, f"shopper password changed ({r.status_code})", r.text[:200])
+must(c.post(f"/api/shop/{HANDLE}/login",
+            json={"email": BUYER, "password": "shopnew1"}).status_code == 200,
+     "the shopper's new password works")
+
+print("\n== 20. today strip + digest ==")
+r = c.get("/api/today", headers=H)
+must(r.status_code == 200, f"today strip ({r.status_code})", r.text[:200])
+body = r.json()
+must("items" in body and "digest" in body, "the strip carries items and digest prefs")
+must(all(i.get("route") and i.get("title") for i in body["items"]),
+     "every row names a place to go")
+r = c.post("/api/digest", headers=H, json={"enabled": True, "hour": 8})
+must(r.json()["digest"]["enabled"] and r.json()["digest"]["hour"] == 8, "digest can be switched on")
+r = c.post("/api/digest", headers=H, json={"hour": 99})
+must(r.json()["digest"]["hour"] == 23, "a silly hour is clamped")
+r = c.post("/api/digest/test", headers=H)
+must(r.status_code == 200, "a test digest can be triggered")
+
+print("\n== 21. font pairings + seeding + link previews ==")
+r = c.get("/api/site/pairings?theme=luxury", headers=H)
+prs = r.json()["pairings"]
+must(len(prs) >= 6, f"curated pairings offered (got {len(prs)})")
+must(prs[0]["recommended"], "the theme's own pairings come first")
+must(all(p["heading_stack"] and p["accent_stack"] for p in prs), "each pairing resolves real stacks")
+site_now = c.get("/api/site/state", headers=H).json()["site"]
+site_now["style"]["pairing"] = prs[0]["id"]
+r = c.post("/api/site/save", headers=H, json={"site": site_now})
+saved = r.json()["site"]["style"]
+must(saved["heading_font"] == prs[0]["heading"] and saved["body_font"] == prs[0]["body"],
+     "choosing a pairing writes all three faces")
+
+r = c.post("/api/site/seed?force=true", headers=H)
+must(r.status_code == 200, f"seeding runs ({r.status_code})", r.text[:200])
+seeded = r.json()["site"]
+must(seeded["seeded"], "the site records that it was seeded")
+must(seeded["hero"]["heading"] and seeded["story"]["body"], "hero and story are filled from the catalogue")
+before_brand = seeded["brand"]
+r = c.post("/api/site/seed", headers=H)
+must(r.json()["site"]["brand"] == before_brand, "seeding never runs twice over the seller's own words")
+
+r = c.get(f"/s/{HANDLE}")
+html = r.text
+must("og:title" in html and "og:description" in html, "the store page carries link-preview tags")
+must("<title>Store</title>" not in html, "the generic title is gone")
+must(f"/s/{HANDLE}" in html, "canonical URL points at the store")
+r = c.get(f"/s/{HANDLE}/p/{shirt['id']}")
+must(r.status_code == 200 and "Field Shirt" in r.text, "a product has its own shareable address")
+r = c.get(f"/s/{HANDLE}/sitemap.xml")
+must(r.status_code == 200 and "<urlset" in r.text, "the store has a sitemap")
+
+print("\n== 22. win-back proof loop ==")
+r = c.get("/api/rfm/winback/proof", headers=H)
+must(r.status_code == 200 and r.json()["campaigns"] == [], "no campaigns to begin with")
+r = c.post("/api/rfm/winback/sent", headers=H, json={"customers": [
+    {"customer_id": "c1", "customer_name": "A", "monetary": 4000},
+    {"customer_id": "c2", "customer_name": "B", "monetary": 2500}], "channel": "whatsapp"})
+must(r.status_code == 200, f"mark a campaign sent ({r.status_code})", r.text[:300])
+proof = r.json()
+must(proof["totals"]["contacted"] == 2, "both customers recorded")
+must(proof["headline"], "there is a headline to put on the home screen")
+must(proof["method"], "the method is stated rather than implied")
+cid = proof["campaigns"][0]["id"]
+r = c.post("/api/rfm/winback/unsent", headers=H, json={"campaign_id": cid})
+must(r.json()["campaigns"] == [], "a mis-click can be undone")
 
 print("\nALL CHECKS PASSED \u2713")
 shutil.rmtree(TMP, ignore_errors=True)

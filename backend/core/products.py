@@ -112,10 +112,141 @@ def _str_list(v, limit=8, maxlen=300) -> list[str]:
 # Supabase writer can drop them cleanly on a database that has not run
 # supabase/site.sql yet (see _upsert_row).
 STOREFRONT_FIELDS = ("description", "image_url", "images", "mrp", "stock",
-                     "track_stock", "listed", "highlights", "unit_label", "video_url")
+                     "track_stock", "listed", "highlights", "unit_label", "video_url",
+                     "options", "variants")
+
+# A product may carry up to two option axes (in practice Size and Colour). The
+# cross product of their values is the variant matrix, and each cell is a real
+# record with its own SKU, its own stock and — optionally — its own price. A
+# clothing seller cannot operate without this: one shirt is twelve things to
+# count, not one.
+MAX_OPTION_AXES = 2
+MAX_OPTION_VALUES = 24
+MAX_VARIANTS = 120
+
+
+def _norm_options(raw) -> list[dict]:
+    """[{name, values[]}] — at most two axes, de-duplicated, order preserved."""
+    if isinstance(raw, str):
+        try:
+            import json as _json
+            raw = _json.loads(raw)
+        except Exception:
+            return []
+    if not isinstance(raw, (list, tuple)):
+        return []
+    out, seen_axis = [], set()
+    for ax in raw[:MAX_OPTION_AXES]:
+        if not isinstance(ax, dict):
+            continue
+        name = str(ax.get("name") or "").strip()[:40]
+        if not name or _norm(name) in seen_axis:
+            continue
+        values, seen = [], set()
+        for v in (ax.get("values") or [])[:MAX_OPTION_VALUES]:
+            sv = str(v or "").strip()[:60]
+            if sv and _norm(sv) not in seen:
+                seen.add(_norm(sv))
+                values.append(sv)
+        if not values:
+            continue
+        seen_axis.add(_norm(name))
+        out.append({"name": name, "values": values})
+    return out
+
+
+def variant_key(options: dict, axes: list[dict]) -> str:
+    """A stable identity for one cell of the matrix, independent of ordering."""
+    parts = []
+    for ax in axes:
+        parts.append(f"{_norm(ax['name'])}={_norm((options or {}).get(ax['name']))}")
+    return "|".join(parts)
+
+
+def variant_label(options: dict, axes: list[dict]) -> str:
+    """'M / Black' — what a shopper and a packing slip both need to read."""
+    vals = [str((options or {}).get(ax["name"]) or "").strip() for ax in axes]
+    return " / ".join([v for v in vals if v])
+
+
+def _norm_variants(raw, axes: list[dict]) -> list[dict]:
+    if isinstance(raw, str):
+        try:
+            import json as _json
+            raw = _json.loads(raw)
+        except Exception:
+            raw = []
+    rows = raw if isinstance(raw, (list, tuple)) else []
+    out, seen = [], set()
+    for r in rows[:MAX_VARIANTS]:
+        if not isinstance(r, dict):
+            continue
+        opts = r.get("options") or {}
+        if not isinstance(opts, dict):
+            continue
+        # a variant naming an axis or value the product no longer has is stale
+        clean_opts, ok = {}, True
+        for ax in axes:
+            val = str(opts.get(ax["name"]) or "").strip()
+            match = next((v for v in ax["values"] if _norm(v) == _norm(val)), None)
+            if not match:
+                ok = False
+                break
+            clean_opts[ax["name"]] = match
+        if not ok or not clean_opts:
+            continue
+        key = variant_key(clean_opts, axes)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "id": r.get("id") or secrets.token_hex(6),
+            "key": key,
+            "options": clean_opts,
+            "label": variant_label(clean_opts, axes),
+            "sku": str(r.get("sku") or "").strip()[:80],
+            "price": _opt_num(r.get("price")),          # None = use product price
+            "mrp": _opt_num(r.get("mrp")),
+            "stock": _int(r.get("stock"), 0),
+            "image_url": str(r.get("image_url") or "").strip()[:500],
+        })
+    return out
+
+
+def build_matrix(axes: list[dict], existing: list[dict] | None = None) -> list[dict]:
+    """Expand the axes into every combination, carrying over the SKU, stock and
+    price of any cell that already existed. Editing 'Sizes: S,M,L' to add XL
+    must not reset the twelve cells the seller already filled in."""
+    import itertools
+
+    axes = _norm_options(axes)
+    if not axes:
+        return []
+    by_key = {v.get("key"): v for v in (existing or []) if v.get("key")}
+    rows = []
+    for combo in itertools.product(*[ax["values"] for ax in axes]):
+        opts = {ax["name"]: val for ax, val in zip(axes, combo)}
+        key = variant_key(opts, axes)
+        prev = by_key.get(key) or {}
+        rows.append({
+            "id": prev.get("id") or secrets.token_hex(6),
+            "key": key,
+            "options": opts,
+            "label": variant_label(opts, axes),
+            "sku": prev.get("sku") or "",
+            "price": prev.get("price"),
+            "mrp": prev.get("mrp"),
+            "stock": _int(prev.get("stock"), 0),
+            "image_url": prev.get("image_url") or "",
+        })
+        if len(rows) >= MAX_VARIANTS:
+            break
+    return rows
 
 
 def _norm_product(raw: dict) -> dict:
+    _axes = _norm_options(raw.get("options"))
+    _vars = _norm_variants(raw.get("variants"), _axes) if _axes else []
     return {
         "id": raw.get("id") or secrets.token_hex(8),
         "name": (raw.get("name") or "").strip(),
@@ -138,6 +269,10 @@ def _norm_product(raw: dict) -> dict:
         "unit_label": (raw.get("unit_label") or "").strip()[:40],
         # a short muted clip that plays when a shopper hovers the card
         "video_url": (raw.get("video_url") or "").strip()[:500],
+        # ---- variants ----
+        "options": _axes,
+        "variants": _vars,
+        "has_variants": bool(_vars),
     }
 
 
@@ -238,6 +373,17 @@ def upsert_product(email: str, item: dict) -> list[dict]:
         clean["status"] = "active"
     if clean["stock"] < 0:
         clean["stock"] = 0
+    # With axes defined, the matrix is the truth and product-level stock becomes
+    # its roll-up — so every caller that only knows about `stock` (Supply, the
+    # old storefront payload, the tiles) keeps reading a correct total.
+    if clean["options"]:
+        clean["variants"] = build_matrix(clean["options"], clean["variants"])
+        clean["has_variants"] = bool(clean["variants"])
+        if clean["variants"]:
+            clean["stock"] = sum(max(0, _int(v.get("stock"), 0)) for v in clean["variants"])
+    else:
+        clean["variants"] = []
+        clean["has_variants"] = False
     # an archived product is never on the storefront
     if clean["status"] == "archived":
         clean["listed"] = False
@@ -393,28 +539,77 @@ def listed_products(email: str) -> list[dict]:
             if p.get("listed") and p.get("status") != "archived"]
 
 
-def in_stock(p: dict) -> bool:
+def get_variant(p: dict, variant_id: str | None) -> dict | None:
+    """One cell of the matrix, by id or by key. None when unknown."""
+    if not variant_id:
+        return None
+    vid = str(variant_id).strip()
+    for v in (p.get("variants") or []):
+        if v.get("id") == vid or v.get("key") == vid:
+            return v
+    return None
+
+
+def variant_price(p: dict, v: dict | None) -> float:
+    """A variant's price, falling back to the product's when not overridden."""
+    if v and v.get("price") not in (None, ""):
+        return float(v["price"])
+    return float(p.get("price") or 0)
+
+
+def variant_mrp(p: dict, v: dict | None):
+    if v and v.get("mrp") not in (None, ""):
+        return float(v["mrp"])
+    return p.get("mrp")
+
+
+def in_stock(p: dict, variant_id: str | None = None) -> bool:
     if not p.get("track_stock", True):
         return True
+    if p.get("variants"):
+        if variant_id:
+            v = get_variant(p, variant_id)
+            return bool(v) and _int(v.get("stock"), 0) > 0
+        return any(_int(v.get("stock"), 0) > 0 for v in p["variants"])
     return _int(p.get("stock"), 0) > 0
 
 
-def available_units(p: dict) -> int | None:
+def available_units(p: dict, variant_id: str | None = None) -> int | None:
     """Units a shopper may buy, or None when this product is not stock-tracked."""
     if not p.get("track_stock", True):
         return None
+    if p.get("variants"):
+        if variant_id:
+            v = get_variant(p, variant_id)
+            return max(0, _int((v or {}).get("stock"), 0))
+        return max(0, sum(_int(v.get("stock"), 0) for v in p["variants"]))
     return max(0, _int(p.get("stock"), 0))
 
 
-def adjust_stock(email: str, product_id: str, delta: int) -> dict | None:
-    """Move a stock-tracked product's units by `delta` (negative = sold).
-    No-ops for products that do not track stock. Returns the updated product."""
+def adjust_stock(email: str, product_id: str, delta: int,
+                 variant_id: str | None = None) -> dict | None:
+    """Move stock by `delta` (negative = sold). With a variant id the cell moves
+    and the product total is recomputed from the matrix; without one, and with
+    no matrix, the product's own count moves. No-ops when stock is not tracked."""
     email = _email(email)
     raw = next((p for p in _products_raw(email) if p["id"] == product_id), None)
     if not raw or not raw.get("track_stock", True):
         return raw
     updated = dict(raw)
-    updated["stock"] = max(0, _int(raw.get("stock"), 0) + int(delta))
+    variants = [dict(v) for v in (raw.get("variants") or [])]
+    if variants and variant_id:
+        hit = next((v for v in variants
+                    if v.get("id") == variant_id or v.get("key") == variant_id), None)
+        if hit is None:
+            return raw
+        hit["stock"] = max(0, _int(hit.get("stock"), 0) + int(delta))
+        updated["variants"] = variants
+        updated["stock"] = sum(max(0, _int(v.get("stock"), 0)) for v in variants)
+    elif variants:
+        # no variant named on a variant product — nothing safe to decrement
+        return raw
+    else:
+        updated["stock"] = max(0, _int(raw.get("stock"), 0) + int(delta))
     upsert_product(email, updated)
     return updated
 
@@ -447,5 +642,20 @@ def storefront_payload(email: str) -> list[dict]:
             "video_url": p.get("video_url") or "",
             "in_stock": in_stock(p),
             "available": available_units(p),
+            "options": p.get("options") or [],
+            "variants": [
+                {
+                    "id": v["id"],
+                    "label": v.get("label") or "",
+                    "options": v.get("options") or {},
+                    "price": variant_price(p, v),
+                    "mrp": variant_mrp(p, v),
+                    "image_url": v.get("image_url") or "",
+                    "in_stock": (not p.get("track_stock", True)) or _int(v.get("stock"), 0) > 0,
+                    "available": (None if not p.get("track_stock", True)
+                                  else max(0, _int(v.get("stock"), 0))),
+                }
+                for v in (p.get("variants") or [])
+            ],
         })
     return out

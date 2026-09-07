@@ -38,17 +38,30 @@ _pending_orders: dict[str, tuple[str, str]] = {}
 
 # ---------------- plans ----------------
 def get_plan(email: str) -> str:
-    """'free' or 'chain'. Legacy 'pro' accounts count as chain."""
-    plan = auth.get_plan(email)
-    return "chain" if plan in ("pro", "chain") else "free"
+    """'free' | 'semipro' | 'pro'. Legacy 'chain'/'pro' rows normalise to pro."""
+    return pricing.normalize_plan(auth.get_plan(email))
 
 
 def set_plan(email: str, plan: str) -> None:
-    auth.set_plan(email, plan)
+    auth.set_plan(email, pricing.normalize_plan(plan))
 
 
 def is_unlimited(email: str) -> bool:
-    return get_plan(email) == "chain"
+    return get_plan(email) == "pro"
+
+
+def plan_summary(email: str) -> dict:
+    """Everything the UI needs to render entitlements without a second call."""
+    pid = get_plan(email)
+    plan = pricing.get_plan(pid)
+    return {
+        "plan": pid,
+        "plan_name": plan["name"],
+        "price_inr": plan["price_inr"],
+        "limits": plan["limits"],
+        "credits": credit_pool(email),
+        "launch_mode": pricing.launch_mode(),
+    }
 
 
 # ---------------- purchase ledger (local CSV mode) ----------------
@@ -135,18 +148,75 @@ def consume_credit(email: str, product_id: str) -> bool:
     return True
 
 
+# ---------------- the usage plan: one shared credit pool ----------------
+# Credits bought in any pack land in one pool. A gated action either comes with
+# the seller's tier, or costs credits from the pool — never both, and never a
+# cut of their sales.
+def credit_pool(email: str) -> int:
+    return sum(credit_balance(email, pack_id) for pack_id in pricing.CREDIT_PACKS)
+
+
+def spend_credits(email: str, n: int) -> bool:
+    """Spend n credits from the pool, oldest pack first. All-or-nothing."""
+    n = int(n)
+    if n <= 0:
+        return True
+    if credit_pool(email) < n:
+        return False
+    for pack_id in pricing.CREDIT_PACKS:
+        while n > 0 and credit_balance(email, pack_id) > 0:
+            if not consume_credit(email, pack_id):
+                break
+            n -= 1
+        if n <= 0:
+            return True
+    return n <= 0
+
+
 # ---------------- entitlement checks (the actual gates) ----------------
 def can_use_free(feature_or_product: str) -> bool:
     """True when no gate applies at all: launch mode, or a free-forever feature."""
     return pricing.launch_mode() or feature_or_product in pricing.FREE_FOREVER
 
 
-def check_and_consume(email: str, product_id: str) -> bool:
-    """Gate for one-shot paid features (winback_campaign, positioning_report).
-    Returns True if the action may proceed (and burns a credit when one is due)."""
-    if pricing.launch_mode() or is_unlimited(email):
+def can_use(email: str, feature: str) -> bool:
+    """Does this seller have access — by tier, or by credits they hold?"""
+    if pricing.plan_allows(get_plan(email), feature):
         return True
-    return consume_credit(email, product_id)
+    cost = pricing.credits_for(feature)
+    return bool(cost) and credit_pool(email) >= cost
+
+
+def check_and_consume(email: str, product_id: str) -> bool:
+    """Gate for a paid action. True if it may proceed — spending credits only
+    when the seller's tier does not already include it."""
+    if pricing.plan_allows(get_plan(email), product_id):
+        return True
+    cost = pricing.credits_for(product_id)
+    if not cost:
+        return False
+    return spend_credits(email, cost)
+
+
+def paywall(feature: str) -> dict:
+    """The 402 body: what they hit, and the two honest ways past it."""
+    plan = pricing.upgrade_target(feature)
+    cost = pricing.credits_for(feature)
+    return {
+        "code": "paywall",
+        "product": feature,
+        "upgrade_to": plan["id"] if plan else None,
+        "upgrade_name": plan["name"] if plan else None,
+        "upgrade_price_inr": plan["price_inr"] if plan else None,
+        "credits_needed": cost or None,
+        "message": (
+            f"{plan['name']} at ₹{plan['price_inr']}/month includes this, or spend "
+            f"{cost} credit{'s' if cost != 1 else ''} from a pack — no monthly commitment."
+            if plan and cost else
+            (f"{plan['name']} at ₹{plan['price_inr']}/month includes this."
+             if plan else "This action needs a paid plan.")
+        ),
+    }
 
 
 # ---------------- razorpay ----------------
@@ -174,7 +244,7 @@ def create_order(email: str, product_id: str) -> dict:
     order = client.order.create({
         "amount": amount_paise,
         "currency": "INR",
-        "receipt": f"cx_{product_id[:12]}_{email[:20]}",
+        "receipt": f"otm_{product_id[:12]}_{email[:20]}",
         "notes": {"email": email, "product": product_id},
     })
     _pending_orders[order["id"]] = (email, product_id)
@@ -183,7 +253,7 @@ def create_order(email: str, product_id: str) -> dict:
         "order_id": order["id"],
         "amount": amount_paise,
         "currency": "INR",
-        "name": f"Cafe_X — {product['name']}",
+        "name": f"One Tap Manager — {product['name']}",
         "description": f"{product['name']} — ₹{product['price_inr']}"
                        + ("/month" if product["kind"] == "subscription" else ""),
         "product": product_id,
@@ -207,7 +277,7 @@ def verify_payment(email: str, order_id: str, payment_id: str, signature: str,
     if not product_id or not pricing.get_product(product_id):
         return None
 
-    if product_id == "chain_monthly":
-        set_plan(email, "chain")
+    if product_id in pricing.PLANS or product_id in pricing.PLAN_ALIASES:
+        set_plan(email, product_id)
     record_purchase(email, product_id, order_id, payment_id)
     return product_id

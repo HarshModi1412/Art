@@ -128,29 +128,73 @@ function loadFonts(list) {
 }
 
 /* ------------------------------------------------------------------- cart */
-const cartLines = () => Object.entries(S.cart).map(([product_id, qty]) => ({ product_id, qty }));
+/* A shirt is not one thing to count, it is twelve. So a cart key is the
+   product AND the cell of its size x colour matrix: "prod123|var456". A
+   product with no variants keeps an empty second half, which also means carts
+   saved before variants existed still load. */
+const KEY_SEP = "|";
+const cartKey = (pid, vid) => pid + KEY_SEP + (vid || "");
+const splitKey = (k) => {
+  const i = String(k).indexOf(KEY_SEP);
+  return i < 0 ? { pid: k, vid: "" } : { pid: k.slice(0, i), vid: k.slice(i + 1) };
+};
+const cartLines = () => Object.entries(S.cart).map(([k, qty]) => {
+  const { pid, vid } = splitKey(k);
+  return vid ? { product_id: pid, variant_id: vid, qty } : { product_id: pid, qty };
+});
 const cartCount = () => Object.values(S.cart).reduce((a, b) => a + b, 0);
 function saveCart() { store(LS_CART, S.cart); paintCartCount(); }
 function paintCartCount() {
   const n = cartCount(), b = el("cartN");
   if (b) { b.textContent = n; b.hidden = n === 0; }
 }
-function addToCart(id, qty = 1) {
+
+/* Resolve a cart key back to what it is: the product, the chosen cell, the
+   price that applies, and the label a human reads. */
+function lineInfo(key) {
+  const { pid, vid } = splitKey(key);
+  const p = S.products.find((x) => x.id === pid);
+  if (!p) return null;
+  const v = vid ? (p.variants || []).find((x) => x.id === vid) : null;
+  if (vid && !v) return null;
+  return {
+    key, product: p, variant: v,
+    id: pid, variantId: vid,
+    name: p.name,
+    label: v ? v.label : "",
+    display: v ? `${p.name} — ${v.label}` : p.name,
+    price: v ? v.price : p.price,
+    image_url: (v && v.image_url) || p.image_url || (p.images || [])[0] || "",
+    available: v ? v.available : p.available,
+    in_stock: v ? v.in_stock : p.in_stock,
+  };
+}
+
+function addToCart(id, qty = 1, variantId = "") {
   const p = S.products.find((x) => x.id === id);
   if (!p) return;
-  if (!p.in_stock) { toast("That one is out of stock right now.", "close"); return; }
-  const next = (S.cart[id] || 0) + qty;
-  if (p.available != null && next > p.available) {
-    S.cart[id] = p.available;
-    toast(`Only ${p.available} left — cart updated.`, "package");
+  if ((p.variants || []).length && !variantId) {
+    // never guess a size on the shopper's behalf
+    go("product", { id });
+    toast("Pick a size and colour first.", "package");
+    return;
+  }
+  const info = lineInfo(cartKey(id, variantId));
+  if (!info) return;
+  if (!info.in_stock) { toast("That one is out of stock right now.", "close"); return; }
+  const k = info.key;
+  const next = (S.cart[k] || 0) + qty;
+  if (info.available != null && next > info.available) {
+    S.cart[k] = info.available;
+    toast(`Only ${info.available} left — cart updated.`, "package");
   } else {
-    S.cart[id] = next;
-    toast(`${p.name} added to your bag`, "bag");
+    S.cart[k] = next;
+    toast(`${info.display} added to your bag`, "bag");
   }
   saveCart();
 }
-function setQty(id, qty) {
-  if (qty <= 0) delete S.cart[id]; else S.cart[id] = qty;
+function setQty(key, qty) {
+  if (qty <= 0) delete S.cart[key]; else S.cart[key] = qty;
   saveCart();
 }
 
@@ -424,12 +468,22 @@ function footer() {
     </div>
     <div class="ftr-bot">
       <span>© ${new Date().getFullYear()} ${esc(s.brand || "Store")}</span>
-      <span>Powered by Content Seller</span>
+      <span>Powered by One Tap Manager</span>
     </div>
   </div></footer>`;
 }
 
 /* ------------------------------------------------------------- components */
+/* With per-variant price overrides a product has a range, not a price. Showing
+   the lowest with "from" is the honest shorthand. */
+function priceLabel(p) {
+  const vs = (p.variants || []).filter((v) => v.price != null);
+  if (!vs.length) return p.price != null ? money(p.price) : "—";
+  const lo = Math.min(...vs.map((v) => v.price));
+  const hi = Math.max(...vs.map((v) => v.price));
+  return lo === hi ? money(lo) : `from ${money(lo)}`;
+}
+
 function productCard(p, i = 0) {
   const off = p.mrp && p.price && p.mrp > p.price ? Math.round((1 - p.price / p.mrp) * 100) : 0;
   const img = p.image_url || (p.images || [])[0] || "";
@@ -439,16 +493,21 @@ function productCard(p, i = 0) {
       ${img ? "" : `<div class="ph">${ic("image")}</div>`}
       ${p.video_url ? `<video class="card-vid" muted loop playsinline preload="none" src="${esc(p.video_url)}"></video>` : ""}
       ${p.in_stock ? "" : `<span class="tag-out">Sold out</span>`}
-      ${p.in_stock ? `<button class="card-quick" data-add="${esc(p.id)}">${ic("bag")}<span>Add to bag</span></button>` : ""}
+      ${p.in_stock ? ((p.variants || []).length
+        ? `<button class="card-quick" data-open="${esc(p.id)}">${ic("arrow-right")}<span>Choose options</span></button>`
+        : `<button class="card-quick" data-add="${esc(p.id)}">${ic("bag")}<span>Add to bag</span></button>`) : ""}
     </div>
     <div class="card-body">
       ${p.category ? `<div class="card-cat">${esc(p.category)}</div>` : ""}
       <div class="card-name">${esc(p.name)}</div>
       ${p.description ? `<div class="card-desc">${esc(p.description)}</div>` : ""}
       <div class="price-row">
-        <span class="price">${p.price != null ? money(p.price) : "—"}</span>
+        <span class="price">${priceLabel(p)}</span>
         ${off ? `<span class="mrp">${money(p.mrp)}</span><span class="off">−${off}%</span>` : ""}
       </div>
+      ${(p.options || []).length ? `<div class="card-opts">${p.options.map((ax) =>
+        `${esc(ax.name)}: ${ax.values.slice(0, 4).map(esc).join(", ")}${ax.values.length > 4 ? "…" : ""}`
+      ).join(" · ")}</div>` : ""}
     </div>
   </article>`;
 }
@@ -688,13 +747,76 @@ function viewShop() {
     </div>` + footer();
 }
 
+/* Which cell of the matrix is selected on the product page, per product.
+   Held here rather than in the DOM so re-rendering never loses the choice. */
+S.chosen = S.chosen || {};
+
+function axisValues(p, axisName) {
+  const ax = (p.options || []).find((a) => a.name === axisName);
+  return ax ? ax.values : [];
+}
+
+/* The cell matching the current selection — null until every axis is chosen. */
+function chosenVariant(p) {
+  const pick = S.chosen[p.id] || {};
+  if (!(p.options || []).length) return null;
+  if ((p.options || []).some((ax) => !pick[ax.name])) return null;
+  return (p.variants || []).find((v) =>
+    (p.options || []).every((ax) => v.options[ax.name] === pick[ax.name])) || null;
+}
+
+/* Would choosing `value` on `axis` leave anything in stock? Greying out the
+   combinations that cannot be bought is the difference between a size picker
+   and a guessing game. */
+function valueBuyable(p, axisName, value) {
+  const pick = { ...(S.chosen[p.id] || {}), [axisName]: value };
+  return (p.variants || []).some((v) =>
+    v.in_stock && Object.entries(pick).every(([k, val]) => v.options[k] === val));
+}
+
+function variantPicker(p) {
+  if (!(p.options || []).length) return "";
+  const pick = S.chosen[p.id] || {};
+  return `<div class="opts">` + p.options.map((ax) => `
+    <div class="opt-ax">
+      <div class="opt-h"><span>${esc(ax.name)}</span>${
+        pick[ax.name] ? `<b>${esc(pick[ax.name])}</b>` : `<i class="muted">Choose</i>`}</div>
+      <div class="opt-vals">
+        ${ax.values.map((val) => {
+          const on = pick[ax.name] === val;
+          const buyable = valueBuyable(p, ax.name, val);
+          return `<button class="opt-v${on ? " on" : ""}${buyable ? "" : " gone"}"
+            data-ax="${esc(ax.name)}" data-val="${esc(val)}" data-pid="${esc(p.id)}"
+            ${buyable ? "" : 'aria-disabled="true"'}
+            title="${buyable ? esc(val) : esc(val) + " — sold out"}">${esc(val)}</button>`;
+        }).join("")}
+      </div>
+    </div>`).join("") + `</div>`;
+}
+
 function viewProduct(id) {
   const p = S.products.find((x) => x.id === id);
   if (!p) return header() + `<div class="wrap"><div class="empty"><div class="i">${ic("package")}</div>
       <h3>No longer listed</h3><p>That product isn't available any more.</p>
       <button class="b g" data-go="shop">Back to shop${ic("arrow-right")}</button></div></div>` + footer();
-  const imgs = [p.image_url, ...(p.images || [])].filter(Boolean);
-  const off = p.mrp && p.price && p.mrp > p.price ? Math.round((1 - p.price / p.mrp) * 100) : 0;
+  const chosen = chosenVariant(p);
+  const needsChoice = (p.options || []).length && !chosen;
+  const imgs = [(chosen && chosen.image_url) || p.image_url, ...(p.images || [])].filter(Boolean);
+  const shownPrice = chosen ? chosen.price : p.price;
+  const shownMrp = chosen && chosen.mrp != null ? chosen.mrp : p.mrp;
+  const off = shownMrp && shownPrice && shownMrp > shownPrice
+    ? Math.round((1 - shownPrice / shownMrp) * 100) : 0;
+  const avail = chosen ? chosen.available : p.available;
+  const stockOn = chosen ? chosen.in_stock : p.in_stock;
+  const buyable = p.in_stock && !needsChoice && stockOn;
+  const buyLabel = needsChoice
+    ? `Choose ${(p.options || []).map((a) => a.name.toLowerCase()).join(" & ")}`
+    : (stockOn ? "Add to bag" : "Sold out");
+  const stockLine = needsChoice
+    ? "Pick your options to see what's in stock."
+    : (stockOn
+        ? (avail != null && avail <= 5 ? `Only ${avail} left` : "In stock, ready to ship")
+        : "Currently unavailable");
   const related = S.products.filter((x) => x.id !== p.id && (!p.category || x.category === p.category)).slice(0, 8);
   const c = S.site.commerce || {}, pol = S.site.policies || {};
   const acc = [
@@ -717,19 +839,18 @@ function viewProduct(id) {
           ${p.category ? `<div class="eyebrow">${esc(p.category)}</div>` : ""}
           <h1 style="margin-top:16px">${esc(p.name)}</h1>
           <div class="price-row" style="margin:0 0 8px">
-            <span class="price">${p.price != null ? money(p.price) : "—"}</span>
-            ${off ? `<span class="mrp">${money(p.mrp)}</span><span class="off">−${off}%</span>` : ""}
+            <span class="price">${chosen ? money(chosen.price) : priceLabel(p)}</span>
+            ${off ? `<span class="mrp">${money(shownMrp)}</span><span class="off">−${off}%</span>` : ""}
           </div>
           <div class="tiny muted">${c.gst_percent ? (c.gst_inclusive ? `Inclusive of ${c.gst_percent}% GST` : `+ ${c.gst_percent}% GST at checkout`) : "No tax added"}${p.unit_label ? ` · per ${esc(p.unit_label)}` : ""}</div>
           ${(p.highlights || []).length ? `<ul class="pd-hl">${p.highlights.map((h) => `<li>${ic("check")}${esc(h)}</li>`).join("")}</ul>` : ""}
+          ${variantPicker(p)}
           <div class="pd-buy">
             <div class="qty"><button id="qMinus" aria-label="Fewer">${ic("minus")}</button><span id="qVal">1</span><button id="qPlus" aria-label="More">${ic("plus")}</button></div>
-            <button class="b p" id="pdAdd" ${p.in_stock ? "" : "disabled"}>${p.in_stock ? "Add to bag" : "Sold out"}${p.in_stock ? ic("bag") : ""}</button>
-            <button class="b g" id="pdBuy" ${p.in_stock ? "" : "disabled"}>Buy now${ic("arrow-right")}</button>
+            <button class="b p" id="pdAdd" ${buyable ? "" : "disabled"}>${buyLabel}${buyable ? ic("bag") : ""}</button>
+            <button class="b g" id="pdBuy" ${buyable ? "" : "disabled"}>Buy now${ic("arrow-right")}</button>
           </div>
-          <div class="pd-stock ${p.in_stock ? "" : "out"}"><i></i>
-            ${p.in_stock ? (p.available != null && p.available <= 5 ? `Only ${p.available} left` : "In stock, ready to ship") : "Currently unavailable"}
-          </div>
+          <div class="pd-stock ${stockOn ? "" : "out"}"><i></i>${stockLine}</div>
           <div class="acc">
             ${acc.map(([t, b], i) => `
               <div class="acc-item ${i === 0 ? "open" : ""}">
@@ -738,7 +859,7 @@ function viewProduct(id) {
               </div>`).join("")}
             <div class="acc-item">
               <button class="acc-h">Delivery${ic("plus")}</button>
-              <div class="acc-b"><p>${c.free_shipping_above ? `Free delivery on orders over ${money(c.free_shipping_above)}, otherwise ${money(c.shipping_fee || 0)}.` : `Delivery ${money(c.shipping_fee || 0)}.`}${c.cod_enabled ? "\nCash on delivery available." : ""}\nYou'll sign in to this store before placing an order.</p></div>
+              <div class="acc-b"><p>${c.free_shipping_above ? `Free delivery on orders over ${money(c.free_shipping_above)}, otherwise ${money(c.shipping_fee || 0)}.` : `Delivery ${money(c.shipping_fee || 0)}.`}${c.cod_enabled ? "\nCash on delivery available." : ""}\nNo account needed — you can check out as a guest.</p></div>
             </div>
           </div>
         </div>
@@ -788,12 +909,16 @@ function viewCheckout() {
   }
   const a = (S.customer && S.customer.address) || {};
   const c = S.site.commerce || {};
+  const guest = !S.customer;
   return header() + `
     <div class="wrap"><div class="co">
       <div>
         <div class="eyebrow">Checkout</div>
         <h1 style="font-size:clamp(26px,3.6vw,44px);margin:16px 0 6px">Almost yours</h1>
-        <p class="muted" style="margin:0 0 34px">Signed in as ${esc(S.customer.email)}</p>
+        ${guest
+          ? `<p class="muted" style="margin:0 0 10px">No account needed. We'll create one from your phone number so you can track this order.</p>
+             <p class="tiny muted" style="margin:0 0 34px">Already have an account? <a href="#" id="coLogin" class="ul">Log in</a> to use your saved address.</p>`
+          : `<p class="muted" style="margin:0 0 34px">Signed in as ${esc(S.customer.email)}</p>`}
 
         <div class="co-box">
           <h3>Delivery address</h3>
@@ -801,6 +926,7 @@ function viewCheckout() {
             <label class="field"><span>Full name</span><input id="coName" value="${esc(S.customer.name || "")}" placeholder="Your name" /></label>
             <label class="field"><span>Phone</span><input id="coPhone" value="${esc(S.customer.phone || "")}" placeholder="10-digit mobile" inputmode="numeric" /></label>
           </div>
+          ${guest ? `<label class="field"><span>Email <span class="muted">(optional — for the receipt)</span></span><input id="coEmail" type="email" value="" placeholder="you@email.com" /></label>` : ""}
           <label class="field"><span>Address</span><input id="coL1" value="${esc(a.line1 || "")}" placeholder="Flat / house, street" /></label>
           <label class="field"><span>Area <span class="muted">(optional)</span></span><input id="coL2" value="${esc(a.line2 || "")}" /></label>
           <div class="two">
@@ -827,7 +953,7 @@ function viewCheckout() {
         <h3 style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:20px">Order summary</h3>
         ${priced.items.map((i) => `<div class="ci" style="grid-template-columns:56px 1fr auto;padding:14px 0">
           <div class="ci-img" style="width:56px;height:64px;${i.image_url ? `background-image:url('${esc(i.image_url)}')` : ""}"></div>
-          <div><b>${esc(i.name)}</b><div class="tiny muted">Qty ${i.qty}</div></div>
+          <div><b>${esc(i.display_name || i.name)}</b><div class="tiny muted">Qty ${i.qty}</div></div>
           <b>${money(i.line_total)}</b></div>`).join("")}
         <div class="sum" style="margin-top:22px">
           <div><span>Subtotal</span><span>${money(priced.subtotal)}</span></div>
@@ -838,8 +964,41 @@ function viewCheckout() {
         <button class="b p blk" id="placeBtn">Place order${ic("arrow-right")}</button>
         <div class="err" id="coErr" hidden></div>
         ${c.order_note ? `<p class="tiny muted" style="margin:16px 0 0">${esc(c.order_note)}</p>` : ""}
+        ${trustBlock()}
       </div>
     </div></div>` + footer();
+}
+
+/* Who you are actually paying. A shopper handing money to a brand they have
+   never heard of needs this more than they would on a marketplace, not less —
+   and every line here is something the seller filled in, never invented. */
+function trustBlock() {
+  const t = S.site.trust || {};
+  if (t.show === false) return "";
+  const pol = S.site.policies || {};
+  const rows = [];
+  if (t.returns_days) rows.push([ic("refresh"), `${t.returns_days}-day returns`,
+    pol.returns ? "See our returns policy" : "Unworn, with tags"]);
+  if (t.dispatch_days != null) rows.push([ic("truck"),
+    t.dispatch_days <= 1 ? "Dispatched next day" : `Dispatched in ${t.dispatch_days} working days`,
+    "You'll get a message at every step"]);
+  if (t.support_phone || t.support_email) rows.push([ic(t.support_phone ? "phone" : "mail"),
+    "A real person answers", t.support_phone || t.support_email]);
+  if (!rows.length && !t.business_name) return "";
+  const legal = [t.business_name, t.address, t.gstin ? `GSTIN ${t.gstin}` : ""]
+    .filter(Boolean).map(esc).join(" · ");
+  return `
+    <div class="trust">
+      ${rows.map(([icon, title, sub]) => `
+        <div class="trust-r"><span class="trust-i">${icon}</span>
+          <div><b>${esc(title)}</b><span>${esc(sub)}</span></div></div>`).join("")}
+      ${legal ? `<p class="trust-legal">${legal}</p>` : ""}
+      ${(pol.shipping || pol.returns || pol.privacy) ? `<p class="trust-legal">
+        ${pol.shipping ? `<a href="#" data-policy="shipping" class="ul">Shipping</a>` : ""}
+        ${pol.returns ? `<a href="#" data-policy="returns" class="ul">Returns</a>` : ""}
+        ${pol.privacy ? `<a href="#" data-policy="privacy" class="ul">Privacy</a>` : ""}
+      </p>` : ""}
+    </div>`;
 }
 
 function viewDone(order) {
@@ -851,7 +1010,7 @@ function viewDone(order) {
       <p>Thank you, ${esc(order.customer_name || "friend")}. Order <b>${esc(order.order_no)}</b> is confirmed for ${money(order.total)}.</p>
       <div class="ord" style="text-align:left;max-width:520px;margin:30px auto 0">
         <div class="ord-h"><b>${esc(order.order_no)}</b><span class="pill new">new</span></div>
-        <div class="tiny muted">${(order.items || []).map((i) => `${esc(i.name)} × ${i.qty}`).join(" · ")}</div>
+        <div class="tiny muted">${(order.items || []).map((i) => `${esc(i.display_name || i.name)} × ${i.qty}`).join(" · ")}</div>
         <div class="steps">${flow.map((_, i) => `<i class="${i === 0 ? "on" : ""}"></i>`).join("")}</div>
       </div>
       <div style="display:flex;gap:12px;justify-content:center;margin-top:30px;flex-wrap:wrap">
@@ -865,9 +1024,9 @@ function viewDone(order) {
 function closeLayer() { el("layer").innerHTML = ""; }
 
 function openCart() {
-  const items = cartLines().map((l) => {
-    const p = S.products.find((x) => x.id === l.product_id);
-    return p ? { ...p, qty: l.qty } : null;
+  const items = Object.entries(S.cart).map(([k, qty]) => {
+    const info = lineInfo(k);
+    return info ? { ...info, qty } : null;
   }).filter(Boolean);
   const subtotal = items.reduce((a, i) => a + (i.price || 0) * i.qty, 0);
   const c = S.site.commerce || {};
@@ -886,11 +1045,12 @@ function openCart() {
             <div class="ci-img" style="${i.image_url ? `background-image:url('${esc(i.image_url)}')` : ""}"></div>
             <div>
               <b>${esc(i.name)}</b>
+              ${i.label ? `<div class="ci-var">${esc(i.label)}</div>` : ""}
               <div class="tiny muted">${money(i.price)} each</div>
-              <div class="qty"><button data-dec="${esc(i.id)}" aria-label="Fewer">${ic("minus")}</button><span>${i.qty}</span><button data-inc="${esc(i.id)}" aria-label="More">${ic("plus")}</button></div>
+              <div class="qty"><button data-dec="${esc(i.key)}" aria-label="Fewer">${ic("minus")}</button><span>${i.qty}</span><button data-inc="${esc(i.key)}" aria-label="More">${ic("plus")}</button></div>
             </div>
             <div style="text-align:right"><b>${money((i.price || 0) * i.qty)}</b>
-              <div style="margin-top:10px;display:flex;justify-content:flex-end"><button class="ci-x" data-rm="${esc(i.id)}" aria-label="Remove">${ic("close")}</button></div></div>
+              <div style="margin-top:10px;display:flex;justify-content:flex-end"><button class="ci-x" data-rm="${esc(i.key)}" aria-label="Remove">${ic("close")}</button></div></div>
           </div>`).join("")
         : `<div class="empty" style="padding:70px 0"><div class="i">${ic("bag")}</div><h3>Your bag is empty</h3><p>Nothing here yet.</p></div>`}
         ${items.length && away > 0 ? `<div class="ship-bar"><i style="width:${pct}%"></i></div>
@@ -903,20 +1063,22 @@ function openCart() {
           <div><span>Shipping</span><span>${ship ? money(ship) : "Free"}</span></div>
           <div class="tot"><span>Total</span><span>${money(subtotal + ship)}</span></div>
         </div>
-        <button class="b p blk" id="coBtn">${S.customer ? "Checkout" : "Log in to check out"}${ic("arrow-right")}</button>
+        <button class="b p blk" id="coBtn">Checkout${ic("arrow-right")}</button>
       </div>` : ""}
     </aside>`;
 
   requestAnimationFrame(() => { el("cScrim").classList.add("on"); el("cDrawer").classList.add("on"); });
   const shut = () => { el("cScrim").classList.remove("on"); el("cDrawer").classList.remove("on"); setTimeout(closeLayer, 420); };
   el("cScrim").onclick = shut; el("cClose").onclick = shut;
-  el("layer").querySelectorAll("[data-inc]").forEach((b) => b.onclick = () => { addToCart(b.dataset.inc, 1); openCart(); });
+  el("layer").querySelectorAll("[data-inc]").forEach((b) => b.onclick = () => {
+    const { pid, vid } = splitKey(b.dataset.inc); addToCart(pid, 1, vid); openCart();
+  });
   el("layer").querySelectorAll("[data-dec]").forEach((b) => b.onclick = () => { setQty(b.dataset.dec, (S.cart[b.dataset.dec] || 1) - 1); openCart(); });
   el("layer").querySelectorAll("[data-rm]").forEach((b) => b.onclick = () => { setQty(b.dataset.rm, 0); openCart(); });
   const co = el("coBtn");
-  // shut() clears the layer after its slide-out finishes, so the next overlay
+  // shut() clears the layer after its slide-out finishes, so the next screen
   // has to open AFTER that or it gets wiped out from under the shopper.
-  if (co) co.onclick = () => { shut(); setTimeout(() => (S.customer ? startCheckout() : openAuth(startCheckout)), 440); };
+  if (co) co.onclick = () => { shut(); setTimeout(startCheckout, 440); };
 }
 
 function openMobileNav() {
@@ -949,32 +1111,58 @@ function openMobileNav() {
   });
 }
 
-function openAuth(after) {
-  let mode = "login";
+function openAuth(after, startMode) {
+  let mode = startMode || "login";
   const paint = () => {
     el("layer").innerHTML = `
-      <div class="modal-s" id="aScrim"><div class="modal">
-        <h3>${mode === "login" ? "Welcome back" : "Create your account"}</h3>
-        <p class="muted tiny" style="margin:0">Your account is specific to ${esc(S.site.brand)} — we never share it with other stores.</p>
-        <div class="tabs">
+      <div class="modal-s" id="aScrim"><div class="modal auth">
+        <h3>${mode === "login" ? "Welcome back" : mode === "signup" ? "Create your account" : "Reset your password"}</h3>
+        <p class="muted tiny" style="margin:0">${mode === "forgot"
+          ? `We'll email you a link. It works once and expires in an hour.`
+          : `Your account is specific to ${esc(S.site.brand)} — we never share it with other stores.`}</p>
+        ${mode === "forgot" ? "" : `<div class="tabs">
           <button class="${mode === "login" ? "on" : ""}" data-m="login">Log in</button>
           <button class="${mode === "signup" ? "on" : ""}" data-m="signup">Sign up</button>
-        </div>
+        </div>`}
+        ${mode === "forgot" ? `<div style="height:22px"></div>` : ""}
         ${mode === "signup" ? `<div class="two">
           <label class="field"><span>Name</span><input id="aName" placeholder="Your name" /></label>
           <label class="field"><span>Phone</span><input id="aPhone" placeholder="10-digit mobile" inputmode="numeric" /></label>
         </div>` : ""}
         <label class="field"><span>Email</span><input id="aEmail" type="email" autocomplete="username" placeholder="you@email.com" /></label>
-        <label class="field"><span>Password</span><input id="aPass" type="password" autocomplete="${mode === "login" ? "current-password" : "new-password"}" placeholder="${mode === "login" ? "Your password" : "At least 6 characters"}" /></label>
-        <button class="b p blk" id="aGo" style="margin-top:8px">${mode === "login" ? "Log in" : "Create account"}${ic("arrow-right")}</button>
+        ${mode === "forgot" ? "" : `<label class="field"><span>Password</span><input id="aPass" type="password" autocomplete="${mode === "login" ? "current-password" : "new-password"}" placeholder="${mode === "login" ? "Your password" : "At least 6 characters"}" /></label>`}
+        <button class="b p blk" id="aGo" style="margin-top:8px">${
+          mode === "login" ? "Log in" : mode === "signup" ? "Create account" : "Email me a link"}${ic("arrow-right")}</button>
         <div class="err" id="aErr" hidden></div>
+        <div class="ok" id="aOk" hidden></div>
+        ${mode === "login"
+          ? `<p class="tiny muted" style="margin:16px 0 0;text-align:center">
+               <a href="#" class="ul" data-m="forgot">Forgot your password?</a></p>`
+          : mode === "forgot"
+            ? `<p class="tiny muted" style="margin:16px 0 0;text-align:center">
+                 <a href="#" class="ul" data-m="login">Back to log in</a></p>` : ""}
         <button class="b g blk" id="aCancel" style="margin-top:10px">Cancel</button>
       </div></div>`;
-    el("layer").querySelectorAll("[data-m]").forEach((b) => b.onclick = () => { mode = b.dataset.m; paint(); });
+    el("layer").querySelectorAll("[data-m]").forEach((b) => b.onclick = (e) => {
+      e.preventDefault(); mode = b.dataset.m; paint();
+    });
     el("aCancel").onclick = closeLayer;
     el("aScrim").onclick = (e) => { if (e.target.id === "aScrim") closeLayer(); };
     const submit = async () => {
       const err = el("aErr"); err.hidden = true;
+      if (mode === "forgot") {
+        const go2 = el("aGo"); go2.disabled = true;
+        try {
+          const r = await api("/forgot", { method: "POST",
+            json: { email: el("aEmail").value.trim() } });
+          const ok = el("aOk");
+          ok.textContent = r.message; ok.hidden = false;
+        } catch (e2) {
+          err.textContent = e2.message; err.hidden = false;
+        }
+        go2.disabled = false;
+        return;
+      }
       const body = { email: el("aEmail").value.trim(), password: el("aPass").value };
       if (mode === "signup") { body.name = (el("aName") || {}).value || ""; body.phone = (el("aPhone") || {}).value || ""; }
       el("aGo").disabled = true;
@@ -990,7 +1178,56 @@ function openAuth(after) {
       }
     };
     el("aGo").onclick = submit;
-    el("aPass").addEventListener("keydown", (e) => e.key === "Enter" && submit());
+    const pw = el("aPass");
+    if (pw) pw.addEventListener("keydown", (e) => e.key === "Enter" && submit());
+    el("aEmail").addEventListener("keydown", (e) => e.key === "Enter" && submit());
+  };
+  paint();
+}
+
+/* The emailed link comes back here as /s/<handle>?reset=<token>. Catching it
+   on load is the whole difference between a shopper who is locked out of their
+   own order history for good and one who is back in a minute. */
+function openReset(token) {
+  const paint = () => {
+    el("layer").innerHTML = `
+      <div class="modal-s" id="rScrim"><div class="modal auth">
+        <h3>Choose a new password</h3>
+        <p class="muted tiny" style="margin:0">For your ${esc(S.site.brand || "store")} account.</p>
+        <div style="height:22px"></div>
+        <label class="field"><span>New password</span>
+          <input id="rPass" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></label>
+        <label class="field"><span>Repeat it</span>
+          <input id="rPass2" type="password" autocomplete="new-password" placeholder="Type it again" /></label>
+        <button class="b p blk" id="rGo" style="margin-top:8px">Set password${ic("arrow-right")}</button>
+        <div class="err" id="rErr" hidden></div>
+        <button class="b g blk" id="rCancel" style="margin-top:10px">Cancel</button>
+      </div></div>`;
+    const clean = () => {
+      closeLayer();
+      const u = new URL(location.href);
+      u.searchParams.delete("reset");
+      history.replaceState(null, "", u.pathname + (u.search || "") + u.hash);
+    };
+    el("rCancel").onclick = clean;
+    el("rScrim").onclick = (e) => { if (e.target.id === "rScrim") clean(); };
+    const submit = async () => {
+      const err = el("rErr"); err.hidden = true;
+      const a = el("rPass").value, b = el("rPass2").value;
+      if (a !== b) { err.textContent = "Those two don't match."; err.hidden = false; return; }
+      el("rGo").disabled = true;
+      try {
+        const r = await api("/reset", { method: "POST", json: { token, password: a } });
+        clean();
+        toast("Password set — log in with it now", "check");
+        setTimeout(() => openAuth(() => loadMe(true)), 500);
+      } catch (e) {
+        err.textContent = e.message; err.hidden = false;
+        el("rGo").disabled = false;
+      }
+    };
+    el("rGo").onclick = submit;
+    el("rPass2").addEventListener("keydown", (e) => e.key === "Enter" && submit());
   };
   paint();
 }
@@ -1007,14 +1244,21 @@ function openPolicy(kind) {
 }
 
 /* ------------------------------------------------------------- checkout fl */
+/* No account required to get here. A first-time buyer on a phone will not
+   invent a password for a brand they met ten seconds ago — we take the order
+   and make the account quietly afterwards. */
 async function startCheckout() {
-  if (!S.customer) { openAuth(startCheckout); return; }
   try {
     S.priced = await api("/cart", { method: "POST", json: { lines: cartLines() } });
     (S.priced.issues || []).forEach((i) => {
-      if (i.reason === "out_of_stock") { delete S.cart[i.product_id]; toast(`${i.name} sold out — removed`, "close"); }
-      if (i.reason === "reduced") { S.cart[i.product_id] = i.available; toast(`Only ${i.available} of ${i.name} left`, "package"); }
-      if (i.reason === "unavailable") delete S.cart[i.product_id];
+      const k = cartKey(i.product_id, i.variant_id || "");
+      if (i.reason === "out_of_stock") { delete S.cart[k]; toast(`${i.name} sold out — removed`, "close"); }
+      if (i.reason === "reduced") { S.cart[k] = i.available; toast(`Only ${i.available} of ${i.name} left`, "package"); }
+      if (i.reason === "unavailable") delete S.cart[k];
+      if (i.reason === "choose_variant") {
+        delete S.cart[k];
+        toast(`Pick a size for ${i.name} first`, "package");
+      }
     });
     if ((S.priced.issues || []).length) saveCart();
     go("checkout");
@@ -1030,6 +1274,10 @@ async function placeOrder() {
       method: "POST",
       json: {
         lines: cartLines(), payment: pay, note: el("coNote").value,
+        guest: !S.customer,
+        name: el("coName").value,
+        phone: el("coPhone").value,
+        email: (el("coEmail") || {}).value || "",
         address: {
           name: el("coName").value, phone: el("coPhone").value,
           line1: el("coL1").value, line2: el("coL2").value,
@@ -1038,6 +1286,10 @@ async function placeOrder() {
         },
       },
     });
+    // a guest gets a session back, so "your orders" works without them ever
+    // having chosen a password
+    if (r.token && !S.token) { S.token = r.token; store(LS_TOKEN, r.token); }
+    if (r.customer) S.customer = r.customer;
     S.cart = {}; saveCart();
     await refreshCatalogue();
     el("app").innerHTML = viewDone(r.order);
@@ -1078,6 +1330,18 @@ function bindView() {
     go("product", { id: n.dataset.p });
   });
   document.querySelectorAll("[data-add]").forEach((n) => n.onclick = (e) => { e.stopPropagation(); addToCart(n.dataset.add); });
+  document.querySelectorAll("[data-open]").forEach((n) => n.onclick = (e) => {
+    e.stopPropagation(); go("product", { id: n.dataset.open });
+  });
+  document.querySelectorAll("[data-ax]").forEach((n) => n.onclick = () => {
+    const pid = n.dataset.pid;
+    S.chosen[pid] = { ...(S.chosen[pid] || {}) };
+    // clicking the value you already have selected clears it, so a shopper can
+    // always get back to "show me everything"
+    if (S.chosen[pid][n.dataset.ax] === n.dataset.val) delete S.chosen[pid][n.dataset.ax];
+    else S.chosen[pid][n.dataset.ax] = n.dataset.val;
+    render();
+  });
   document.querySelectorAll("[data-cat]").forEach((n) => n.onclick = (e) => { e.preventDefault(); S.filter = n.dataset.cat; go("shop"); });
   document.querySelectorAll("[data-policy]").forEach((n) => n.onclick = (e) => { e.preventDefault(); openPolicy(n.dataset.policy); });
 
@@ -1105,11 +1369,14 @@ function bindView() {
   const qv = el("qVal");
   if (qv) {
     const p = S.products.find((x) => x.id === S.route.id) || {};
-    const cap = p.available == null ? 99 : p.available;
+    const v = p.id ? chosenVariant(p) : null;
+    const avail = v ? v.available : p.available;
+    const cap = avail == null ? 99 : Math.max(1, avail);
+    const vid = v ? v.id : "";
     el("qMinus").onclick = () => { qv.textContent = Math.max(1, +qv.textContent - 1); };
     el("qPlus").onclick = () => { qv.textContent = Math.min(cap, +qv.textContent + 1); };
-    el("pdAdd").onclick = () => addToCart(S.route.id, +qv.textContent);
-    el("pdBuy").onclick = () => { addToCart(S.route.id, +qv.textContent); S.customer ? startCheckout() : openAuth(startCheckout); };
+    el("pdAdd").onclick = () => addToCart(S.route.id, +qv.textContent, vid);
+    el("pdBuy").onclick = () => { addToCart(S.route.id, +qv.textContent, vid); startCheckout(); };
     document.querySelectorAll("[data-img]").forEach((b) => b.onclick = () => {
       el("pdMain").style.backgroundImage = `url('${b.dataset.img}')`;
       document.querySelectorAll("[data-img]").forEach((x) => x.classList.remove("on"));
@@ -1118,6 +1385,8 @@ function bindView() {
   }
   document.querySelectorAll(".acc-h").forEach((h) => h.onclick = () => h.parentElement.classList.toggle("open"));
 
+  const cl = el("coLogin");
+  if (cl) cl.onclick = (e) => { e.preventDefault(); openAuth(() => loadMe(true)); };
   const pb = el("placeBtn"); if (pb) pb.onclick = placeOrder;
   document.querySelectorAll(".pay-opt").forEach((n) => n.onclick = () => {
     document.querySelectorAll(".pay-opt").forEach((x) => x.classList.remove("on"));
@@ -1214,7 +1483,7 @@ function scrollToRegion(key) {
     return;
   }
   applyTheme(S.style, S.site);
-  S.cart = store(LS_CART) || {};
+  S.cart = migrateCart(store(LS_CART) || {});
   S.token = store(LS_TOKEN);
   readHash();
   el("boot").hidden = true; el("app").hidden = false;
@@ -1223,7 +1492,20 @@ function scrollToRegion(key) {
   runPreloader();
   post({ type: "ready" });
   if (S.token) loadMe(S.route.name === "orders");
+  // the emailed reset link comes back as ?reset=<token>
+  const rt = QS.get("reset");
+  if (rt) setTimeout(() => openReset(rt), 400);
 })();
+
+/* A cart saved before variants existed keys on the bare product id. Give those
+   lines the empty variant half so they still price and still check out. */
+function migrateCart(saved) {
+  const out = {};
+  Object.entries(saved || {}).forEach(([k, qty]) => {
+    out[String(k).includes(KEY_SEP) ? k : cartKey(k, "")] = qty;
+  });
+  return out;
+}
 
 /* -------------------------------------------------------------- preloader */
 function runPreloader() {

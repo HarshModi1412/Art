@@ -1,7 +1,18 @@
-# Cafe_X — Standalone Web Application
+# One Tap Manager
 
-Migration of the Streamlit app to an independent FastAPI + HTML/JS application.
-No Streamlit dependency anywhere.
+**Connect what you already sell on. Get told what to fix.**
+
+An operations tool for small Indian sellers — clothing, jewellery, perfume.
+It reads the sales they already make (marketplace exports, POS files, their own
+storefront) and answers the one question a seller opens a dashboard with: *what
+should I do this morning?* Restock these four. Win back these twelve. Fix this
+complaint theme. Then it does most of it for them.
+
+FastAPI + vanilla-JS SPA. No Streamlit dependency anywhere.
+
+Internal identifiers (`cx_*` storage keys, `CAFEX_DATA_DIR`, folder names) still
+carry the old CafeX name on purpose — renaming them would break every existing
+login, saved dataset and deployment.
 
 ## Architecture
 
@@ -128,30 +139,47 @@ throwaway data directory.
 - `/s/<handle>` — a seller's own storefront (Website Builder)
 - `/app` — the analytics application
 
-## Pricing model (GTM: à-la-carte, not subscription)
+## Pricing model — two ways to pay, offered side by side
 
 Everything is controlled by `backend/core/pricing.py` + the `LAUNCH_MODE` env var.
 
-**While `LAUNCH_MODE=true` (default): everything is free.** The pricing UI is
-visible (labelled "Free during launch") but no paywall ever fires and Razorpay
-is never called. When you hit ~30-50 active cafes, set `LAUNCH_MODE=false` and
-redeploy — no code changes.
+**While `LAUNCH_MODE=true` (default): nothing is gated.** Every account behaves
+as Pro and the UI labels paid rows "Free during launch". The permanent free tier
+is already written down, so flipping `LAUNCH_MODE=false` later is a non-event
+rather than a surprise bill.
 
-Once live:
+### 1. Subscription — three tiers, flat monthly, per outlet
 
-| Offering | Price | Gate |
+| Tier | Price | What it adds |
 |---|---|---|
-| Analytics, category trends, RFM, at-risk list | Free forever | never gated |
-| AI Analyst / Chatbot | 5 free uses per day per feature | daily quota (usage_logs.csv) |
-| Win-Back Campaign (messages + Excel) | ₹199 / campaign | 1 credit per generate |
-| Market Position & Reputation Report | ₹349 / report | 1 credit per analysis |
-| AI Top-Up (10 extra uses, shared pool) | ₹99 | consumed automatically after daily quota |
-| Chain plan (2+ outlets) | ₹999 / month | plan column in user.csv; unlimited everything |
+| **Free** | ₹0 forever | Sales analytics, category + sub-category trends, RFM segments, the at-risk list, **your own selling website + orders** (with our footer line), 25 products, 5 AI uses/day |
+| **Semi Pro** | ₹499 / month | Unlimited win-back campaigns, complaint analysis, positioning reports, the morning digest, 250 products, footer line removed, 50 AI uses/day |
+| **Pro** | ₹999 / month | Supply Management (ROP, EOQ, safety stock, waste), PDF purchase orders, Position Strategy, unlimited AI/products/outlets, custom domain |
 
-Purchases are a ledger in `data/purchases.csv` (email, product, credits_total,
-credits_used, amount, order/payment ids). Legacy `pro` accounts are treated as
-Chain so early users keep access. Gated endpoints return **HTTP 402** with
-`{code:"paywall", product, message}` — the frontend opens the pricing modal.
+Gating lives in `FEATURE_MIN_PLAN`. Legacy `pro` / `chain` rows in `user.csv`
+normalise to the Pro tier, so no existing account loses access.
+
+### 2. Usage — credits that never expire
+
+For sellers who work in bursts. `CREDIT_PACKS`: ₹299 / 100, ₹749 / 300,
+₹1,999 / 1000. `CREDIT_COST` prices the heavy actions — a win-back campaign is
+10, a positioning report 15, a complaint analysis 12, one AI run 1. Analytics,
+the storefront and Orders stay free on either path.
+
+Deliberately **not** priced per order and never a percentage of sales: that is
+the tax sellers already pay their app stack, and the thing they complain about
+loudest.
+
+### What it replaces
+
+`pricing.stack_comparison()` is the honest comparison the pricing page renders:
+analytics ₹1,600 + inventory ₹2,500 + win-back ₹1,500 + reviews ₹1,200 + order
+management ₹800 ≈ **₹7,600/month across four to six separate apps**, against
+₹999 for Pro.
+
+Gated endpoints return **HTTP 402** with a body from `billing.paywall()` that
+names *both* routes past it — the tier that includes the feature, and what it
+costs in credits — so a seller is never told a subscription is the only option.
 
 ## Payments (Razorpay)
 
@@ -166,6 +194,76 @@ Chain so early users keep access. Gated endpoints return **HTTP 402** with
 Note: `chain_monthly` is a monthly-price checkout as a one-time payment. For
 auto-recurring billing use Razorpay Subscriptions (create a Plan in the dashboard
 and swap order.create for subscription.create).
+
+## Today, and the morning digest
+
+`backend/core/today.py` builds one ranked list of what needs the seller now —
+new orders, items below their reorder point, customers slipping away, a rising
+complaint theme, an unpublished site, unlinked platform names. Every item names
+a module and a route, so each row is one click from the doing.
+
+Two surfaces render that same list, which is why they can never disagree:
+
+* the **Today** strip above the home tiles (`GET /api/today`)
+* the **morning digest** (`POST /api/digest`, `/api/digest/test`, `/api/digest/run`)
+
+Delivery goes through `backend/core/messaging.py`: **email works now** (set
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`; add
+`SMTP_TLS=false` for a plain relay), and **WhatsApp is stubbed behind
+`WHATSAPP_ENABLED`** — every message already carries a WhatsApp-shaped variant,
+so connecting a BSP is one function (`_send_whatsapp`) and no caller changes.
+With no SMTP configured, sends land in an in-memory outbox readable at
+`GET /api/dev/outbox`, so password reset is testable on a fresh deploy.
+
+Point a cron at `POST /api/digest/run` hourly; it sends only the sellers whose
+chosen hour is now.
+
+## Password reset
+
+`backend/core/password_reset.py`, for sellers (`/api/forgot`, `/api/reset`) and
+for shoppers on a seller's store (`/api/shop/<handle>/forgot`, `.../reset`).
+Only a SHA-256 hash of each token is stored, single use, one-hour expiry, and
+the reply is identical whether or not the address exists. A shopper reset also
+revokes every live session for that shopper.
+
+## Product variants
+
+A shirt is not one thing to count. `products.py` carries up to two option axes
+(`options`: Size, Colour) whose cross product is the `variants` matrix — each
+cell a real record with its own SKU, stock, and optional price override.
+
+* Editing the axes rebuilds the matrix and **carries over every cell already
+  filled in** (`build_matrix`), so adding XL never wipes twelve rows.
+* Product-level `stock` becomes the roll-up of the matrix, so every existing
+  caller (Supply, analytics, the tiles) keeps reading a correct total.
+* A cart line for a variant product **must** name a variant — `price_cart`
+  returns `reason: "choose_variant"` rather than guessing a size.
+* Orders decrement the individual cell; `name` on the line stays the canonical
+  product name so every roll-up keeps matching, with `display_name` for humans.
+
+## Guest checkout
+
+Forcing a first-time cash-on-delivery buyer to invent a password was the most
+expensive rule in the codebase. `storefront.guest_customer()` creates — or
+reuses — a real customer keyed on the phone number the parcel needs anyway, with
+no password set. Guests appear in RFM and Win-Back like anyone else, get a
+session back so "your orders" works, and can claim the account later by setting
+a password (`register()` upgrades a guest row instead of refusing it).
+
+## Link previews
+
+`sitebuilder.seo_meta()` + `_meta_tags()` in `main.py` render real `<title>`,
+description, canonical and Open Graph tags per store and per product, so a link
+pasted into WhatsApp arrives as a card rather than grey text. Each product has
+its own address at `/s/<handle>/p/<id>`, and each store a `sitemap.xml`.
+
+## Win-back proof loop
+
+`backend/core/winback_proof.py`. The seller ticks "I've sent it"; the campaign's
+target ids and date are snapshotted; every later refresh of the sales data
+answers how many came back and what they spent in the following 30 days. The
+headline lands on the home screen. The method is stated on screen rather than
+implied — it is not a controlled test, it is what their own sales data says.
 
 ## Security & trust
 

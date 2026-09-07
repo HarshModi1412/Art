@@ -1,4 +1,4 @@
-/* Content Seller — Smart workspace on top of the shared backend.
+/* One Tap Manager — Smart workspace on top of the shared backend.
    Pivoted from café analytics to a small social-media product seller. */
 
 const state = {
@@ -49,6 +49,49 @@ syncThemeButtons();
 function toast(msg, ms = 3200) {
   const t = $("toast"); t.textContent = msg; t.hidden = false;
   clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), ms);
+}
+
+/* The one stroke icon set, fetched once at boot and shared with every
+   storefront this app publishes. Emoji rendered differently on every machine,
+   carried no weight or colour, and made the app look like a prototype next to
+   the sites it produces. */
+const ICONS = Object.create(null);
+async function loadIcons() {
+  try {
+    const d = await fetch("/api/icons").then((r) => r.json());
+    Object.assign(ICONS, d.icons || {});
+  } catch (e) { /* icons degrade to empty glyphs, never to a broken page */ }
+}
+
+/* Undo. Every destructive action routes through here instead of doing the
+   thing directly: the change is applied, and the shopper — sorry, the seller —
+   gets a few seconds to take it back. Deleting a product used to be one click
+   with no way back, which is the main reason people are afraid to touch
+   anything in software they are still learning. */
+let _undo = null;
+function toastUndo(message, undoFn, ms = 7000) {
+  const t = $("toast");
+  clearTimeout(t._t);
+  if (_undo) clearTimeout(_undo.timer);
+  t.hidden = false;
+  t.innerHTML = "";
+  const span = document.createElement("span");
+  span.textContent = message;
+  const btn = document.createElement("button");
+  btn.className = "toast-undo";
+  btn.type = "button";
+  btn.textContent = "Undo";
+  t.appendChild(span);
+  t.appendChild(btn);
+  const close = () => { t.hidden = true; t.textContent = ""; _undo = null; };
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.textContent = "Undoing…";
+    try { await undoFn(); toast("Put back."); }
+    catch (e) { toast(e.message || "Could not undo that."); }
+    finally { _undo = null; }
+  };
+  _undo = { timer: setTimeout(close, ms) };
 }
 
 async function api(path, opts = {}) {
@@ -185,18 +228,18 @@ function redrawCharts() {
 
 // ---------- HOME ----------
 const MODULES = [
-  { id: "sales",      name: "Sales Analytics",        sub: "KPIs, revenue trends and a 30-day forecast from your order data.",             ico: "📊", cls: "tile-sales",     needs: "sales",  tag: "SALES" },
-  { id: "subcategory",name: "Sub-Category Analysis",  sub: "Which categories & sub-categories drive revenue — trends and drill-downs.",   ico: "🗂️", cls: "tile-sub",       needs: "sales",  tag: "SALES" },
-  { id: "supply",     name: "Supply Management",      sub: "Track inventory & suppliers, link products to materials, log waste, and get per-item EOQ/MOQ restock suggestions with PDF purchase orders.", ico: "📦", cls: "tile-supply",   needs: null,     tag: "SUPPLY" },
-  { id: "products",   name: "Product Management",     sub: "Your catalogue of products, each linked to the names it carries on Amazon, Shopify and other platforms — sales roll up to the product everywhere.", ico: "🏷️", cls: "tile-supply",   needs: null,     tag: "CATALOG" },
-  { id: "site",       name: "Website Builder",        sub: "Build your own selling website — pick a theme for your genre, set fonts, colours and images, then publish. Your listed products become its shop.", ico: "🌐", cls: "tile-site",     needs: null,     tag: "SITE" },
-  { id: "orders",     name: "Orders",                 sub: "Every order placed on your website — status, customer, address and export. Delivered orders feed straight into your sales analytics.", ico: "🧺", cls: "tile-orders",   needs: null,     tag: "ORDERS" },
-  { id: "review",     name: "Review Analytics",       sub: "Your brand positioning from your own reviews — what customers come to you for.", ico: "⭐", cls: "tile-review",    needs: "review", tag: "BRAND" },
-  { id: "complaints", name: "Complaint Analysis",     sub: "The fix-first plan for the complaint themes hurting your brand right now.",    ico: "😤", cls: "tile-complaint", needs: "review", tag: "BRAND" },
-  { id: "strategy",   name: "Position Strategy + AI", sub: "A levelled checklist to strengthen or reposition your brand, plus the AI Analyst.", ico: "🧭", cls: "tile-strategy", needs: "review", tag: "STRATEGY" },
-  { id: "content",    name: "Content Creator",        sub: "AI-generated posts (caption, hashtags, image) — edit, then save to your device.", ico: "✨", cls: "tile-content",   needs: null,     tag: "CONTENT" },
-  { id: "instagram",  name: "Instagram",              sub: "Auto-posting to Instagram is coming soon.",                                   ico: "📸", cls: "tile-ig",        needs: null,     tag: "CONNECT", upcoming: true },
-  { id: "ads",        name: "Ad Analytics",           sub: "Connect Google, Meta, Instagram and other ad accounts to see your spend.",    ico: "📈", cls: "tile-ads",       needs: null,     tag: "ADS" },
+  { id: "sales",      name: "Sales Analytics",        sub: "KPIs, revenue trends and a 30-day forecast from your order data.",             ico: "chart", cls: "tile-sales",     needs: "sales",  tag: "SALES" },
+  { id: "subcategory",name: "Sub-Category Analysis",  sub: "Which categories & sub-categories drive revenue — trends and drill-downs.",   ico: "layers", cls: "tile-sub",       needs: "sales",  tag: "SALES" },
+  { id: "supply",     name: "Supply Management",      sub: "Track inventory & suppliers, link products to materials, log waste, and get per-item EOQ/MOQ restock suggestions with PDF purchase orders.", ico: "package", cls: "tile-supply",   needs: null,     tag: "SUPPLY" },
+  { id: "products",   name: "Product Management",     sub: "Your catalogue of products, each linked to the names it carries on Amazon, Shopify and other platforms — sales roll up to the product everywhere.", ico: "tag", cls: "tile-supply",   needs: null,     tag: "CATALOG" },
+  { id: "site",       name: "Website Builder",        sub: "Build your own selling website — pick a theme for your genre, set fonts, colours and images, then publish. Your listed products become its shop.", ico: "globe", cls: "tile-site",     needs: null,     tag: "SITE" },
+  { id: "orders",     name: "Orders",                 sub: "Every order placed on your website — status, customer, address and export. Delivered orders feed straight into your sales analytics.", ico: "bag", cls: "tile-orders",   needs: null,     tag: "ORDERS" },
+  { id: "review",     name: "Review Analytics",       sub: "Your brand positioning from your own reviews — what customers come to you for.", ico: "star", cls: "tile-review",    needs: "review", tag: "BRAND" },
+  { id: "complaints", name: "Complaint Analysis",     sub: "The fix-first plan for the complaint themes hurting your brand right now.",    ico: "flame", cls: "tile-complaint", needs: "review", tag: "BRAND" },
+  { id: "strategy",   name: "Position Strategy + AI", sub: "A levelled checklist to strengthen or reposition your brand, plus the AI Analyst.", ico: "compass", cls: "tile-strategy", needs: "review", tag: "STRATEGY" },
+  { id: "content",    name: "Content Creator",        sub: "AI-generated posts (caption, hashtags, image) — edit, then save to your device.", ico: "spark", cls: "tile-content",   needs: null,     tag: "CONTENT" },
+  { id: "instagram",  name: "Instagram",              sub: "Your Instagram content manager — plan, generate and schedule posts, then auto-publish. In build.",                                   ico: "instagram", cls: "tile-ig",        needs: null,     tag: "CONNECT", upcoming: true },
+  { id: "ads",        name: "Ad Analytics",           sub: "Connect Google, Meta, Instagram and other ad accounts to see your spend.",    ico: "trend", cls: "tile-ads",       needs: null,     tag: "ADS" },
 ];
 
 async function goHome() {
@@ -224,18 +267,172 @@ function dataCard(kind, label, icon, hint) {
   const ready = d.ready;
   return `
     <div class="data-card">
-      <h4>${icon} ${label}</h4>
+      <h4><span class="data-card-ico">${icon}</span>${label}</h4>
       <div class="status">
         <span class="dot ${ready ? "ready" : "empty"}"></span>
         ${ready ? `${fmt(d.rows)} rows loaded${d.updated_at ? ` · saved ${esc(String(d.updated_at).slice(0, 10))}` : ""}` : `No ${label.toLowerCase()} yet — ${hint}`}
       </div>
       <div class="row">
-        <button class="btn primary sm" data-up="${kind}">${ready ? "↻ Update" : "⬆ Upload"} ${label}</button>
-        ${ready ? `<button class="btn ghost sm" data-add="${kind}" title="Add more rows to your saved data">➕ Add records</button>` : ""}
-        ${ready ? `<button class="btn ghost sm" data-remap="${kind}" title="Adjust which column is which">🧭 Map</button>` : ""}
+        <button class="btn primary sm" data-up="${kind}">${sic(ready ? "refresh" : "arrow-up-right")}${ready ? "Update" : "Upload"} ${label}</button>
+        ${ready ? `<button class="btn ghost sm" data-add="${kind}" title="Add more rows to your saved data">${sic("plus")}Add records</button>` : ""}
+        ${ready ? `<button class="btn ghost sm" data-remap="${kind}" title="Adjust which column is which">${sic("compass")}Map</button>` : ""}
         ${ready ? `<button class="btn ghost sm" data-clear="${kind}">Remove</button>` : ""}
       </div>
     </div>`;
+}
+
+/* ---- one modal helper, matching the shape openIconPicker already uses ---- */
+let _modalEl = null;
+function openModal(title, bodyHtml, opts = {}) {
+  closeModal();
+  const wrap = document.createElement("div");
+  wrap.className = "modal-back";
+  wrap.innerHTML = `<div class="modal${opts.wide ? " wide" : ""}">
+      <div class="modal-head"><b>${esc(title)}</b>
+        <button class="btn ghost tiny" data-mclose>${sic("close")}</button></div>
+      <div class="modal-body">${bodyHtml}</div>
+    </div>`;
+  document.body.appendChild(wrap);
+  _modalEl = wrap;
+  wrap.querySelector("[data-mclose]").onclick = closeModal;
+  wrap.onclick = (e) => { if (e.target === wrap) closeModal(); };
+  document.addEventListener("keydown", _escClose);
+  return wrap;
+}
+function closeModal() {
+  if (_modalEl) { _modalEl.remove(); _modalEl = null; }
+  document.removeEventListener("keydown", _escClose);
+}
+function _escClose(e) { if (e.key === "Escape") closeModal(); }
+
+/* Nobody should have to find a CSV on this laptop to see what the app does. */
+async function startDemo() {
+  try {
+    toast("Loading 90 days of sample data…");
+    await api("/api/demo", { method: "POST" });
+    await goHome();
+    toast("Sample data loaded — every module is live now.");
+  } catch (e) { toast(e.message); }
+}
+
+/* --------------------------------------------------------------- Today ----
+   Twelve tiles is a filing cabinet, not an answer. This is the answer: the
+   three things worth doing this morning, each one a click away from the place
+   it gets done. The same rows the morning digest sends, so the two can never
+   disagree. */
+let _digest = null;
+
+async function renderToday() {
+  const rows = $("todayRows"), title = $("todayTitle");
+  if (!rows) return;
+  let d;
+  try { d = await api("/api/today"); }
+  catch (e) {
+    rows.innerHTML = `<div class="ap-empty">Could not read your shop just now.</div>`;
+    if (title) title.textContent = "Today";
+    return;
+  }
+  _digest = d.digest || null;
+  const items = d.items || [];
+
+  if (!items.length) {
+    const e = d.empty || {};
+    title.textContent = e.title || "Nothing needs you this morning";
+    rows.innerHTML = `<div class="today-empty">
+      <span>${esc(e.detail || "")}</span>
+      ${e.cta ? `<button class="btn ghost sm" id="todayCta">${esc(e.cta)}</button>` : ""}</div>`;
+    const cta = $("todayCta");
+    if (cta) cta.onclick = startDemo;
+  } else {
+    title.textContent = items.length === 1
+      ? "One thing worth your time"
+      : `${items.length} things worth your time`;
+    rows.innerHTML = items.map((it) => `
+      <button class="today-row sev-${esc(it.severity)}" data-today="${esc(it.route)}">
+        <span class="today-dot"></span>
+        <span class="today-txt"><b>${esc(it.title)}</b><span>${esc(it.detail)}</span></span>
+        ${sic("arrow-right", "today-arrow")}
+      </button>`).join("");
+    document.querySelectorAll("[data-today]").forEach((b) => b.onclick = () => {
+      const r = b.dataset.today;
+      if (r === "rfm") { openModule("sales"); setTimeout(() => toast("Your at-risk customers are in the RFM section."), 400); }
+      else openModule(r);
+    });
+  }
+  renderProof();
+  const db = $("digestBtn");
+  if (db) {
+    db.classList.toggle("on", !!(_digest && _digest.enabled));
+    db.onclick = openDigest;
+  }
+}
+
+/* The renewal conversation, in one line, on the home screen. */
+async function renderProof() {
+  const box = $("proofLine");
+  if (!box) return;
+  try {
+    const p = await api("/api/rfm/winback/proof");
+    if (!p.headline || !(p.totals && p.totals.contacted)) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = `${sic("trend")}<span>${esc(p.headline)}</span>
+      <button class="btn ghost tiny" id="proofMore">How this is counted</button>`;
+    const m = $("proofMore");
+    if (m) m.onclick = () => toast(p.method, 7000);
+  } catch (e) { box.hidden = true; }
+}
+
+/* Low stock, new orders, a theme rising — none of it reaches a seller who has
+   to remember to log in. For a tool opened a handful of times a month, this
+   IS the retention mechanism. */
+function openDigest() {
+  const d = _digest || { enabled: false, email: state.email, phone: "", hour: 8 };
+  const hours = Array.from({ length: 24 }, (_, h) =>
+    `<option value="${h}"${h === d.hour ? " selected" : ""}>${String(h).padStart(2, "0")}:00</option>`).join("");
+  openModal("Morning digest", `
+    <p class="muted" style="margin-top:0;">One message a day with the same rows you see under
+      <b>Today</b> — new orders, items below their reorder point, customers slipping away.
+      Nothing else.</p>
+    <label class="fld"><span>Send it</span>
+      <select id="dgOn">
+        <option value="1"${d.enabled ? " selected" : ""}>Every morning</option>
+        <option value="0"${d.enabled ? "" : " selected"}>Never — I'll check myself</option>
+      </select></label>
+    <label class="fld"><span>At</span><select id="dgHour">${hours}</select></label>
+    <label class="fld"><span>Email</span><input id="dgEmail" value="${esc(d.email || state.email)}" /></label>
+    <label class="fld"><span>WhatsApp number <span class="muted">(optional)</span></span>
+      <input id="dgPhone" value="${esc(d.phone || "")}" placeholder="10-digit mobile" inputmode="numeric" /></label>
+    <p class="muted tiny">WhatsApp delivery switches on the moment a provider is connected —
+      your number is stored ready for it.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" id="dgTest">Send me one now</button>
+      <button class="btn primary" id="dgSave">Save</button>
+    </div>`);
+  $("dgSave").onclick = async () => {
+    try {
+      const r = await api("/api/digest", { method: "POST", json: {
+        enabled: $("dgOn").value === "1",
+        hour: +$("dgHour").value,
+        email: $("dgEmail").value.trim(),
+        phone: $("dgPhone").value.trim(),
+      }});
+      _digest = r.digest;
+      closeModal();
+      toast(r.digest.enabled
+        ? `Digest on — every morning at ${String(r.digest.hour).padStart(2, "0")}:00.`
+        : "Digest off.");
+      const db = $("digestBtn"); if (db) db.classList.toggle("on", !!r.digest.enabled);
+    } catch (e) { toast(e.message); }
+  };
+  $("dgTest").onclick = async () => {
+    const b = $("dgTest"); b.disabled = true; b.textContent = "Sending…";
+    try {
+      const r = await api("/api/digest/test", { method: "POST" });
+      toast(r.sent ? "Sent — check your inbox."
+                   : (r.reason || "Nothing worth sending right now."), 5000);
+    } catch (e) { toast(e.message); }
+    b.disabled = false; b.textContent = "Send me one now";
+  };
 }
 
 function renderHome(s) {
@@ -243,12 +440,12 @@ function renderHome(s) {
     const locked = m.needs && !(state.data[m.needs] && state.data[m.needs].ready);
     const upcoming = !!m.upcoming;
     return `<div class="app-tile ${m.cls} ${locked || upcoming ? "locked" : ""}" data-mod="${m.id}">
-        <div class="app-ico">${m.ico}</div>
+        <div class="app-ico">${sic(m.ico)}</div>
         <div class="name">${esc(m.name)}</div>
         <div class="sub">${esc(m.sub)}</div>
         <div class="meta">
-          <span class="badge">${upcoming ? "🔜 Upcoming" : (locked ? "🔒 " + m.needs + " needed" : m.tag)}</span>
-          <span>${upcoming ? "Coming soon" : (locked ? "Locked" : "Open →")}</span>
+          <span class="badge">${upcoming ? "Planned" : (locked ? "Needs " + m.needs + " data" : m.tag)}</span>
+          <span class="go">${upcoming ? "Soon" : (locked ? "Locked" : "Open")}${sic("arrow-right")}</span>
         </div>
       </div>`;
   }).join("");
@@ -258,18 +455,31 @@ function renderHome(s) {
       <div class="task-item ${t.done ? "done" : ""}" data-task="${t.id}">
         <input type="checkbox" ${t.done ? "checked" : ""} />
         <span class="t">${esc(t.text)}</span>
-        <button class="task-del" title="Delete">✕</button>
+        <button class="task-del" title="Delete">${sic("close")}</button>
       </div>`).join("") : `<div class="ap-empty">No tasks yet. Approving an insight adds one automatically.</div>`;
 
   setView(`
-    <div class="page-head"><h2>Welcome back 👋</h2><span class="muted">${esc(state.email)}</span></div>
+    <div class="page-head"><h2>Welcome back</h2><span class="muted">${esc(state.email)}</span></div>
+
+    <section class="today" id="todayBox">
+      <div class="today-h">
+        <div>
+          <div class="today-eyebrow">Today</div>
+          <h3 id="todayTitle">Looking at your shop…</h3>
+        </div>
+        <button class="btn ghost tiny" id="digestBtn" title="Get this by email each morning">
+          ${sic("bell")}Digest</button>
+      </div>
+      <div id="todayRows" class="today-rows"><div class="ap-empty">Checking orders, stock and customers…</div></div>
+      <div id="proofLine" class="today-proof" hidden></div>
+    </section>
 
     <div class="section-title">Your data
-      <button class="btn ghost tiny pt-chip" id="ptChip" title="What you sell — drives keyword tracking">🏷️ ${productLabel(state.productType)}</button>
+      <button class="btn ghost tiny pt-chip" id="ptChip" title="What you sell — drives keyword tracking">${sic("tag")}${productLabel(state.productType)}</button>
     </div>
     <div class="data-grid">
-      ${dataCard("sales", "Sales", "🧾", "upload your orders / sales export")}
-      ${dataCard("review", "Review", "⭐", "upload your reviews (Google / marketplace / Instagram)")}
+      ${dataCard("sales", "Sales", sic("receipt"), "upload your orders / sales export")}
+      ${dataCard("review", "Review", sic("star"), "upload your reviews (Google / marketplace / Instagram)")}
     </div>
 
     <div class="section-title">Listed platforms
@@ -292,11 +502,12 @@ function renderHome(s) {
 
   document.querySelectorAll("[data-mod]").forEach((el) => el.onclick = () => {
     const m = MODULES.find((x) => x.id === el.dataset.mod);
-    if (m.upcoming) { toast("📸 Instagram auto-posting is coming soon."); return; }
+    if (m.upcoming) { toast("The Instagram content manager is being built — it will live right here."); return; }
     if (m.needs && !(state.data[m.needs] && state.data[m.needs].ready)) { toast(`Upload ${m.needs} data first`); return; }
     openModule(m.id);
   });
   renderChannels();
+  renderToday();
   document.querySelectorAll("[data-up]").forEach((el) => el.onclick = () => startUpload(el.dataset.up));
   document.querySelectorAll("[data-add]").forEach((el) => el.onclick = () => openAddRecords(el.dataset.add));
   document.querySelectorAll("[data-clear]").forEach((el) => el.onclick = () => clearData(el.dataset.clear));
@@ -310,8 +521,8 @@ function renderHome(s) {
 // ---------- product type ----------
 function openProductTypePicker(afterSet) {
   const types = state.productTypes && state.productTypes.length ? state.productTypes :
-    [{ id: "jewellery", label: "Jewellery", icon: "💍" }, { id: "clothes", label: "Clothes", icon: "👗" },
-     { id: "perfumes", label: "Perfumes", icon: "🧴" }, { id: "generic", label: "Other products", icon: "🛍️" }];
+    [{ id: "jewellery", label: "Jewellery", icon: "spark" }, { id: "clothes", label: "Clothes", icon: "scissors" },
+     { id: "perfumes", label: "Perfumes", icon: "droplet" }, { id: "generic", label: "Other products", icon: "bag" }];
   $("ptGrid").innerHTML = types.map((t) => `
     <button class="pt-card ${t.id === state.productType ? "selected" : ""}" data-pt="${t.id}">
       <div class="pt-ico">${t.icon}</div><div>${esc(t.label)}</div>
@@ -349,8 +560,13 @@ function wireTasks() {
       refreshTaskList(r.tasks);
     };
     row.querySelector(".task-del").onclick = async () => {
+      const text = (row.querySelector(".t") || {}).textContent || "";
       const r = await api("/api/smart/tasks", { method: "POST", json: { action: "delete", task_id: row.dataset.task } });
       refreshTaskList(r.tasks);
+      toastUndo("Task deleted.", async () => {
+        const back = await api("/api/smart/tasks", { method: "POST", json: { action: "add", text } });
+        refreshTaskList(back.tasks);
+      });
     };
   });
 }
@@ -361,7 +577,7 @@ function refreshTaskList(tasks) {
       <div class="task-item ${t.done ? "done" : ""}" data-task="${t.id}">
         <input type="checkbox" ${t.done ? "checked" : ""} />
         <span class="t">${esc(t.text)}</span>
-        <button class="task-del" title="Delete">✕</button>
+        <button class="task-del" title="Delete">${sic("close")}</button>
       </div>`).join("") : `<div class="ap-empty">No tasks yet.</div>`;
   wireTasks();
 }
@@ -561,7 +777,14 @@ $("mapConfirm").onclick = async () => {
     if (_afterUpload) { const f = _afterUpload; _afterUpload = null; f(); } else goHome();
   } catch (e) { const el = $("mapErr"); el.textContent = e.message; el.hidden = false; }
 };
+/* Clearing an uploaded dataset is the one thing here that cannot be undone —
+   the rows are gone from the server. So this keeps the confirm, and says
+   plainly what will not come back. */
 async function clearData(kind) {
+  const label = kind === "sales" ? "sales" : "review";
+  if (!confirm(`Remove your uploaded ${label} data?\n\n`
+    + `This one cannot be undone — you would need to upload the file again. `
+    + `Everything built from it (insights, forecasts, segments) goes with it.`)) return;
   try { await api(`/api/smart/clear?kind=${kind}`, { method: "POST" }); toast("Removed"); goHome(); }
   catch (e) { toast(e.message); }
 }
@@ -584,7 +807,7 @@ function _addInputCell(col) {
   return `<td><input data-col="${esc(col.name)}" type="${type}" step="any"${req} placeholder="${esc(col.name)}"></td>`;
 }
 function _addRowHtml() {
-  return `<tr>${_addCtx.columns.map(_addInputCell).join("")}<td><button class="btn ghost tiny" data-delrow title="Remove row">✕</button></td></tr>`;
+  return `<tr>${_addCtx.columns.map(_addInputCell).join("")}<td><button class="btn ghost tiny" data-delrow title="Remove row">${sic("close")}</button></td></tr>`;
 }
 function renderAddGrid() {
   const head = `<thead><tr>${_addCtx.columns.map((c) => `<th>${esc(c.name)}${_addCtx.required.includes(c.name) ? " *" : ""}</th>`).join("")}<th></th></tr></thead>`;
@@ -656,7 +879,7 @@ async function openProducts() {
 function _prodCard(p) {
   const aliasChips = (p.aliases || []).length
     ? p.aliases.map((a) => `<span class="link-chip">${esc(a.alias)}${a.platform ? ` <i class="al-plat">${esc(a.platform)}</i>` : ""}
-        <button class="lc-x" data-delalias="${a.id}" title="Unlink">✕</button></span>`).join("")
+        <button class="lc-x" data-delalias="${a.id}" title="Unlink">${sic("close")}</button></span>`).join("")
     : `<span class="muted tiny">No platform names linked yet</span>`;
   const meta = [
     p.category ? esc(p.category) : null,
@@ -680,7 +903,7 @@ function _prodCard(p) {
         </div>
         <div class="sup-actions">
           <button class="btn ghost tiny" data-editprod="${p.id}" title="Edit">✎</button>
-          <button class="btn ghost tiny" data-delprod="${p.id}" title="Delete">✕</button>
+          <button class="btn ghost tiny" data-delprod="${p.id}" title="Delete">${sic("close")}</button>
         </div>
       </div>
       <label class="site-toggle" title="Show this product on your own website">
@@ -790,27 +1013,50 @@ const isVid = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(String(u || ""));
  *  more for a storefront than any amount of styling. */
 function imageField(id, url, label, hint, video) {
   const vid = isVid(url);
+  // The path is not the picture. Showing `/generated_images/hero.jpg` as an
+  // editable string invites a seller to edit it and break their own homepage,
+  // and tells them nothing about what is actually there. So: the thumbnail is
+  // the control, the filename is a caption, and the raw URL is one click away
+  // for the rare seller who genuinely wants to paste one.
   return `
-    <div class="img-field" data-imgfield="${id}">
+    <div class="img-field${url ? " has-media" : ""}" data-imgfield="${id}">
       <div class="if-preview ${vid ? "is-vid" : ""}" id="${id}Prev"
 style="${url && !vid ? `background-image:url('${esc(url)}')` : ""}">${
         url ? (vid ? `<video src="${esc(url)}" muted loop autoplay playsinline></video>` : "")
             : `<span class="if-ph">${sic("image")}</span>`}</div>
       <div class="if-body">
         <label class="if-label">${label}${hint ? ` <span class="muted tiny">${hint}</span>` : ""}</label>
-        <input id="${id}" value="${esc(url || "")}" placeholder="${video ? "Paste a URL, or upload an image or clip →" : "Paste an image URL, or upload →"}" />
+        <div class="if-name" id="${id}Name">${url ? esc(fileLabel(url)) : "Nothing here yet"}</div>
         <div class="if-actions">
-          <button type="button" class="btn ghost tiny" data-imgup="${id}">↑ Upload${video ? " image" : ""}</button>
-          ${video ? `<button type="button" class="btn ghost tiny" data-vidup="${id}">↑ Upload video</button>` : ""}
-          <button type="button" class="btn ghost tiny" data-imgclear="${id}">Clear</button>
+          <button type="button" class="btn ghost tiny" data-imgup="${id}">
+            ${sic("image")}${url ? "Replace" : "Upload"}${video ? " image" : ""}</button>
+          ${video ? `<button type="button" class="btn ghost tiny" data-vidup="${id}">
+            ${sic("spark")}${url && vid ? "Replace clip" : "Upload video"}</button>` : ""}
+          <button type="button" class="btn ghost tiny" data-imgclear="${id}"${url ? "" : " disabled"}>Remove</button>
+          <button type="button" class="btn ghost tiny if-url-toggle" data-imgurl="${id}">Use a URL</button>
         </div>
+        <input id="${id}" class="if-url" value="${esc(url || "")}" hidden
+               placeholder="${video ? "Paste an image or clip URL" : "Paste an image URL"}" />
       </div>
     </div>`;
+}
+
+/** The last meaningful part of a path — what a person would call the file. */
+function fileLabel(url) {
+  const clean = String(url || "").split(/[?#]/)[0];
+  const name = clean.split("/").filter(Boolean).pop() || clean;
+  return name.length > 42 ? name.slice(0, 20) + "…" + name.slice(-18) : name;
 }
 
 function paintMediaPreview(id, url) {
   const pv = $(id + "Prev");
   if (!pv) return;
+  const nm = $(id + "Name");
+  const field = pv.closest("[data-imgfield]");
+  if (field) field.classList.toggle("has-media", !!url);
+  const rm = field && field.querySelector("[data-imgclear]");
+  if (rm) rm.disabled = !url;
+  if (nm) nm.textContent = url ? fileLabel(url) : "Nothing here yet";
   pv.classList.toggle("is-vid", isVid(url));
   if (!url) { pv.style.backgroundImage = ""; pv.innerHTML = `<span class="if-ph">${sic("image")}</span>`; return; }
   if (isVid(url)) { pv.style.backgroundImage = ""; pv.innerHTML = `<video src="${esc(url)}" muted loop autoplay playsinline></video>`; }
@@ -827,6 +1073,19 @@ function wireImageFields(scope) {
   (scope || document).querySelectorAll("[data-vidup]").forEach((b) => b.onclick = () =>
     pickImage((url) => set(b.dataset.vidup, url), false, "video/mp4,video/webm,video/quicktime"));
   (scope || document).querySelectorAll("[data-imgclear]").forEach((b) => b.onclick = () => set(b.dataset.imgclear, ""));
+  (scope || document).querySelectorAll("[data-imgurl]").forEach((b) => b.onclick = () => {
+    const inp = $(b.dataset.imgurl);
+    if (!inp) return;
+    inp.hidden = !inp.hidden;
+    b.classList.toggle("on", !inp.hidden);
+    if (!inp.hidden) inp.focus();
+  });
+  // clicking the thumbnail is the obvious thing to do, so make it work
+  (scope || document).querySelectorAll("[data-imgfield] .if-preview").forEach((pv) => {
+    const f = pv.closest("[data-imgfield]");
+    const id = f && f.getAttribute("data-imgfield");
+    if (id) pv.onclick = () => pickImage((url) => set(id, url), false, "image/*");
+  });
   (scope || document).querySelectorAll("[data-imgfield] input").forEach((inp) => inp.onblur = () =>
     paintMediaPreview(inp.id, inp.value.trim()));
 }
@@ -880,10 +1139,16 @@ function openProductForm(id, prefillName) {
         <label>Sold by <span class="muted tiny">(piece / kg / box — optional)</span><input id="pfUnit" value="${esc(v("unit_label"))}" placeholder="piece" /></label>
       </div>
 
+      <div class="sup-sub">Sizes &amp; colours</div>
+      <p class="muted tiny" style="margin:-6px 0 10px;">A shirt in three sizes and two colours is
+      six things to count, not one. Name the options and each combination becomes a real record
+      with its own stock, its own SKU and — if you want — its own price.</p>
+      <div id="pfVarBox"></div>
+
       <div class="sup-sub">Stock</div>
       <div class="sup-form-grid">
         <label class="inline-check"><input type="checkbox" id="pfTrack" ${v("track_stock", true) === false ? "" : "checked"} /> Track stock for this product <span class="muted tiny">— sells out at zero, and site orders deduct from it</span></label>
-        <label>Units available<input id="pfStock" type="number" min="0" step="1" value="${it && it.stock != null ? it.stock : 0}" /></label>
+        <label id="pfStockRow">Units available<input id="pfStock" type="number" min="0" step="1" value="${it && it.stock != null ? it.stock : 0}" /></label>
       </div>
 
       <div class="sup-sub">Extra photos</div>
@@ -899,6 +1164,9 @@ function openProductForm(id, prefillName) {
   p.scrollIntoView({ behavior: "smooth", block: "nearest" });
   wireImageFields(p);
   renderGallery();
+  _pfAxes = JSON.parse(JSON.stringify((it && it.options) || []));
+  _pfVariants = JSON.parse(JSON.stringify((it && it.variants) || []));
+  renderVariants();
 
   $("pfCancel").onclick = () => { p.hidden = true; p.innerHTML = ""; };
   const numOrNull = (x) => ($(x).value === "" ? null : parseFloat($(x).value));
@@ -921,6 +1189,8 @@ function openProductForm(id, prefillName) {
       unit_label: $("pfUnit").value.trim(),
       track_stock: $("pfTrack").checked,
       stock: parseInt($("pfStock").value || "0", 10) || 0,
+      options: _pfAxes,
+      variants: readVariantInputs(),
     };
     if (!payload.name) { const e = $("pfErr"); e.textContent = "Product name is required."; e.hidden = false; return; }
     try { renderProducts(await api("/api/products/item", { method: "POST", json: payload })); toast("Saved"); }
@@ -928,12 +1198,157 @@ function openProductForm(id, prefillName) {
   };
 }
 
+/* ---------------------------------------------------------- variants ----
+   Two axes at most, because "Size" and "Colour" is what apparel actually
+   needs and a third axis produces a matrix nobody can fill in. Editing the
+   axes rebuilds the grid, carrying over every cell the seller already filled
+   — adding XL to a shirt must not wipe the twelve rows underneath. */
+let _pfAxes = [];
+let _pfVariants = [];
+
+const _vkey = (opts, axes) => axes.map((a) =>
+  `${String(a.name).trim().toLowerCase()}=${String(opts[a.name] || "").trim().toLowerCase()}`).join("|");
+
+function buildMatrix() {
+  if (!_pfAxes.length) return [];
+  const prev = {};
+  _pfVariants.forEach((v) => { prev[v.key || _vkey(v.options || {}, _pfAxes)] = v; });
+  const rows = [];
+  const walk = (i, acc) => {
+    if (rows.length >= 120) return;
+    if (i === _pfAxes.length) {
+      const key = _vkey(acc, _pfAxes);
+      const was = prev[key] || {};
+      rows.push({
+        id: was.id || "", key,
+        options: { ...acc },
+        label: _pfAxes.map((a) => acc[a.name]).filter(Boolean).join(" / "),
+        sku: was.sku || "", price: was.price == null ? "" : was.price,
+        mrp: was.mrp == null ? "" : was.mrp,
+        stock: was.stock == null ? 0 : was.stock,
+        image_url: was.image_url || "",
+      });
+      return;
+    }
+    _pfAxes[i].values.forEach((val) => walk(i + 1, { ...acc, [_pfAxes[i].name]: val }));
+  };
+  walk(0, {});
+  return rows;
+}
+
+function renderVariants() {
+  const box = $("pfVarBox");
+  if (!box) return;
+  const axisRow = (ax, i) => `
+    <div class="vx-axis">
+      <input class="vx-name" data-axname="${i}" value="${esc(ax.name)}" placeholder="Size" />
+      <input class="vx-vals" data-axvals="${i}" value="${esc((ax.values || []).join(", "))}"
+             placeholder="S, M, L, XL" />
+      <button type="button" class="btn ghost tiny" data-axrm="${i}" title="Remove this option">
+        ${sic("close")}</button>
+    </div>`;
+
+  if (!_pfAxes.length) {
+    box.innerHTML = `<div class="vx-empty">
+      <span>No options — this product is one thing with one stock count.</span>
+      <button type="button" class="btn ghost sm" id="vxAdd">${sic("plus")}Add sizes or colours</button>
+    </div>`;
+    $("vxAdd").onclick = () => {
+      _pfAxes = [{ name: "Size", values: ["S", "M", "L"] }];
+      _pfVariants = buildMatrix();
+      renderVariants();
+    };
+    const sr = $("pfStockRow"); if (sr) sr.hidden = false;
+    return;
+  }
+
+  _pfVariants = buildMatrix();
+  const total = _pfVariants.reduce((a, v) => a + (parseInt(v.stock, 10) || 0), 0);
+  box.innerHTML = `
+    <div class="vx">
+      ${_pfAxes.map(axisRow).join("")}
+      ${_pfAxes.length < 2
+        ? `<button type="button" class="btn ghost tiny" id="vxAdd2">${sic("plus")}Add a second option</button>`
+        : ""}
+    </div>
+    <div class="vx-grid-wrap">
+      <table class="vx-grid">
+        <thead><tr>
+          <th>Combination</th><th>SKU</th><th>Price ₹<span class="muted tiny"> (blank = product price)</span></th>
+          <th>Stock</th>
+        </tr></thead>
+        <tbody>${_pfVariants.map((v, i) => `
+          <tr>
+            <td><b>${esc(v.label)}</b></td>
+            <td><input data-vsku="${i}" value="${esc(v.sku)}" placeholder="—" /></td>
+            <td><input data-vprice="${i}" type="number" min="0" step="any" value="${v.price === "" ? "" : esc(String(v.price))}" placeholder="—" /></td>
+            <td><input data-vstock="${i}" type="number" min="0" step="1" value="${parseInt(v.stock, 10) || 0}" /></td>
+          </tr>`).join("")}</tbody>
+      </table>
+    </div>
+    <p class="muted tiny" style="margin:8px 0 0;">${_pfVariants.length} combination${_pfVariants.length === 1 ? "" : "s"}
+      · ${total} unit${total === 1 ? "" : "s"} in total. The product's own stock count is this total,
+      so everything else in the app keeps reading a correct number.</p>`;
+
+  const sr = $("pfStockRow"); if (sr) sr.hidden = true;
+  const sf = $("pfStock"); if (sf) sf.value = total;
+
+  box.querySelectorAll("[data-axname]").forEach((inp) => inp.onchange = () => {
+    _pfAxes[+inp.dataset.axname].name = inp.value.trim() || "Option";
+    renderVariants();
+  });
+  box.querySelectorAll("[data-axvals]").forEach((inp) => inp.onchange = () => {
+    const seen = new Set();
+    _pfAxes[+inp.dataset.axvals].values = inp.value.split(",")
+      .map((x) => x.trim()).filter((x) => {
+        const k = x.toLowerCase();
+        if (!x || seen.has(k)) return false;
+        seen.add(k); return true;
+      }).slice(0, 24);
+    if (!_pfAxes[+inp.dataset.axvals].values.length) _pfAxes.splice(+inp.dataset.axvals, 1);
+    renderVariants();
+  });
+  box.querySelectorAll("[data-axrm]").forEach((b) => b.onclick = () => {
+    _pfAxes.splice(+b.dataset.axrm, 1);
+    renderVariants();
+  });
+  const add2 = $("vxAdd2");
+  if (add2) add2.onclick = () => {
+    _pfAxes.push({ name: "Colour", values: ["Black", "White"] });
+    renderVariants();
+  };
+  // keep typed values without a full repaint, so the seller can tab across the grid
+  box.querySelectorAll("[data-vsku],[data-vprice],[data-vstock]").forEach((inp) =>
+    inp.oninput = () => {
+      const row = readVariantInputs();
+      _pfVariants = row;
+      const t = row.reduce((a, v) => a + (parseInt(v.stock, 10) || 0), 0);
+      const sf2 = $("pfStock"); if (sf2) sf2.value = t;
+    });
+}
+
+function readVariantInputs() {
+  if (!_pfAxes.length) return [];
+  const box = $("pfVarBox");
+  if (!box) return _pfVariants;
+  return _pfVariants.map((v, i) => {
+    const g = (sel) => (box.querySelector(`[data-${sel}="${i}"]`) || {}).value;
+    const price = g("vprice");
+    return {
+      ...v,
+      sku: (g("vsku") || "").trim(),
+      price: price === "" || price == null ? null : parseFloat(price),
+      stock: parseInt(g("vstock") || "0", 10) || 0,
+    };
+  });
+}
+
 function renderGallery() {
   const g = $("pfGal");
   if (!g) return;
   g.innerHTML = _pfGallery.map((u, i) => `
       <div class="gal-item" style="background-image:url('${esc(u)}')">
-        <button class="gal-x" data-galrm="${i}" title="Remove">✕</button>
+        <button class="gal-x" data-galrm="${i}" title="Remove">${sic("close")}</button>
       </div>`).join("") +
     `<button class="gal-add" id="galAdd">＋<span>Add photos</span></button>`;
   g.querySelectorAll("[data-galrm]").forEach((b) => b.onclick = () => {
@@ -942,11 +1357,27 @@ function renderGallery() {
   $("galAdd").onclick = () => pickImage((url) => { _pfGallery.push(url); renderGallery(); }, true);
 }
 
+/* Delete, then offer it back. A confirm() dialog asks the seller to be certain
+   before they can see what happens; an undo lets them find out safely, which
+   is the difference between software people poke at and software they are
+   afraid of. The product is re-created from the copy we held, aliases and all. */
 async function productDelete(id) {
   const it = (_productsData.products || []).find((x) => x.id === id);
-  if (it && !confirm(`Delete product "${it.name}" and its platform links?`)) return;
-  try { renderProducts(await api("/api/products/item/delete", { method: "POST", json: { id } })); toast("Deleted"); }
-  catch (e) { toast(e.message); }
+  if (!it) return;
+  const snapshot = JSON.parse(JSON.stringify(it));
+  try {
+    renderProducts(await api("/api/products/item/delete", { method: "POST", json: { id } }));
+  } catch (e) { toast(e.message); return; }
+  toastUndo(`Deleted “${it.name}”.`, async () => {
+    await api("/api/products/item", { method: "POST", json: snapshot });
+    for (const a of (snapshot.aliases || [])) {
+      try {
+        await api("/api/products/alias", { method: "POST",
+          json: { product_id: snapshot.id, alias: a.alias, platform: a.platform } });
+      } catch (e) { /* one lost link should not block the rest */ }
+    }
+    renderProducts(await api("/api/products/state"));
+  });
 }
 
 async function aliasAdd(product_id, alias, platform) {
@@ -956,8 +1387,17 @@ async function aliasAdd(product_id, alias, platform) {
 }
 
 async function aliasDelete(id) {
-  try { renderProducts(await api("/api/products/alias/delete", { method: "POST", json: { id } })); toast("Unlinked"); }
-  catch (e) { toast(e.message); }
+  let snap = null;
+  (_productsData.products || []).forEach((p) =>
+    (p.aliases || []).forEach((a) => { if (a.id === id) snap = { ...a, product_id: p.id }; }));
+  try { renderProducts(await api("/api/products/alias/delete", { method: "POST", json: { id } })); }
+  catch (e) { toast(e.message); return; }
+  if (!snap) { toast("Unlinked"); return; }
+  toastUndo(`Unlinked “${snap.alias}”.`, async () => {
+    await api("/api/products/alias", { method: "POST",
+      json: { product_id: snap.product_id, alias: snap.alias, platform: snap.platform } });
+    renderProducts(await api("/api/products/state"));
+  });
 }
 
 // ---------- MODULE: Supply Management ----------
@@ -1043,7 +1483,7 @@ function renderSupply(d) {
           ${it.suggestions_available ? `<button class="btn ghost tiny" data-apply="${it.id}" title="Apply the values suggested from your sales">✨</button>` : ""}
           <button class="btn ghost tiny" data-edit="${it.id}" title="Edit">✎</button>
           <button class="btn ghost tiny" data-waste="${it.id}" title="Record waste">🗑️</button>
-          <button class="btn ghost tiny" data-del="${it.id}" title="Remove item">✕</button>
+          <button class="btn ghost tiny" data-del="${it.id}" title="Remove item">${sic("close")}</button>
         </td>
       </tr>`).join("")
     : `<tr><td colspan="11" class="ap-empty">No inventory yet. Add an item, or pull products from your sales.</td></tr>`;
@@ -1074,7 +1514,7 @@ function renderSupply(d) {
     <p class="muted">${esc(salesNote)}</p>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;">
       <button class="btn primary sm" id="supAdd">＋ Add item</button>
-      <button class="btn ghost sm" id="supLoadSales" title="Upload &amp; map the past sales history used ONLY for these supply-chain calculations (separate from your main Sales Data)">🧾 Upload previous sales</button>
+      <button class="btn ghost sm" id="supLoadSales" title="Upload &amp; map the past sales history used ONLY for these supply-chain calculations (separate from your main Sales Data)">${sic("receipt")}Upload previous sales</button>
       <button class="btn ghost sm" id="supImport">⤵ Pull products from sales</button>
       <button class="btn ghost sm" id="supLinks">🔗 Product links</button>
       <button class="btn ghost sm" id="supWaste">🗑️ Record waste</button>
@@ -1205,9 +1645,13 @@ function openSupplyForm(id) {
 
 async function supplyDelete(id) {
   const it = (_supplyData.inventory || []).find((x) => x.id === id);
-  if (it && !confirm(`Remove "${it.name}" from inventory?`)) return;
-  try { _supAfter(await api("/api/supply/item/delete", { method: "POST", json: { id } })); toast("Removed"); }
-  catch (e) { toast(e.message); }
+  if (!it) return;
+  const snapshot = JSON.parse(JSON.stringify(it));
+  try { _supAfter(await api("/api/supply/item/delete", { method: "POST", json: { id } })); }
+  catch (e) { toast(e.message); return; }
+  toastUndo(`Removed “${it.name}” from inventory.`, async () => {
+    _supAfter(await api("/api/supply/item", { method: "POST", json: { item: snapshot } }));
+  });
 }
 
 async function supplyApplySuggested(id) {
@@ -1287,7 +1731,7 @@ function _renderLinks() {
     const chips = links.map((m) => {
       const it = byName[m.inventory_id];
       return `<span class="link-chip">${esc(it ? it.name : "?")} × ${fmt(m.qty_per_unit)} ${esc(it ? it.unit_label : "")}
-        <button class="lc-x" data-unmap="${m.id}" title="Remove">✕</button></span>`;
+        <button class="lc-x" data-unmap="${m.id}" title="Remove">${sic("close")}</button></span>`;
     }).join("") || `<span class="muted tiny">No items linked yet</span>`;
     return `
       <div class="link-row">
@@ -1326,10 +1770,18 @@ async function _linkAdd(product, inventory_id, qty_per_unit) {
 }
 
 async function _linkRemove(id) {
+  const snap = (_supplyData.maps || []).find((m) => m.id === id);
   try {
     const d = await api("/api/supply/map/delete", { method: "POST", json: { id } });
-    _supplyData = d; _renderLinks(); if (d.insights) renderApprovals(d.insights); toast("Removed");
-  } catch (e) { toast(e.message); }
+    _supplyData = d; _renderLinks(); if (d.insights) renderApprovals(d.insights);
+  } catch (e) { toast(e.message); return; }
+  if (!snap) { toast("Removed"); return; }
+  toastUndo("Recipe link removed.", async () => {
+    const d = await api("/api/supply/map", { method: "POST", json: {
+      product: snap.product, inventory_id: snap.inventory_id,
+      qty_per_unit: snap.qty_per_unit } });
+    _supplyData = d; _renderLinks();
+  });
 }
 
 // ---- Purchase orders ----
@@ -1634,7 +2086,7 @@ function renderWinbackTable() {
   const head = `<tr>${WB_COLS.map((c) => `<th>${c.label}</th>`).join("")}<th></th></tr>`;
   const body = _wbRows.map((r, i) => `<tr data-r="${i}">${WB_COLS.map((c) =>
     `<td><input data-k="${c.k}" value="${esc(r[c.k] == null ? "" : r[c.k])}" /></td>`).join("")}
-    <td><button class="btn ghost tiny" data-del="${i}">✕</button></td></tr>`).join("");
+    <td><button class="btn ghost tiny" data-del="${i}">${sic("close")}</button></td></tr>`).join("");
   $("wbTable").innerHTML = `<table class="wb-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
   $("wbTable").querySelectorAll("input").forEach((inp) => inp.onchange = (e) => {
     const tr = e.target.closest("tr"); _wbRows[+tr.dataset.r][e.target.dataset.k] = e.target.value;
@@ -1660,9 +2112,44 @@ $("wbExport").onclick = async () => {
     if (state.lastState) { state.lastState.insights = r.insights; if (r.history) state.lastState.history = r.history; if (r.tasks) state.lastState.tasks = r.tasks; }
     renderApprovals(r.insights); if (r.tasks) refreshTaskList(r.tasks);
     $("wbModal").hidden = true;
-    toast("✅ Exported & approved — moved to History.");
+    // Closing the loop: the app has just handed over a list it will never hear
+    // about again unless we ask. One tick, and every later refresh of the sales
+    // data can answer "did it work" — which is the only number that makes the
+    // subscription obviously worth keeping.
+    askWinbackSent(_wbRows.slice());
   } catch (e) { toast(e.message, 6000); }
 };
+
+function askWinbackSent(rows) {
+  openModal("Did you send it?", `
+    <p class="muted" style="margin-top:0;">Tell us when this campaign actually goes out and we can
+    measure it: of the <b>${rows.length}</b> customers on this list, how many come back, and how
+    much they spend, in the 30 days after.</p>
+    <p class="muted tiny">Nothing is sent from here — you send it your own way. This is just the
+    date we measure from. It is not a controlled test; it is what your own sales data says.</p>
+    <label class="fld"><span>How are you sending it?</span>
+      <select id="wbCh">
+        <option value="whatsapp">WhatsApp</option>
+        <option value="sms">SMS</option>
+        <option value="email">Email</option>
+        <option value="call">Phone calls</option>
+        <option value="other">Something else</option>
+      </select></label>
+    <div class="modal-actions">
+      <button class="btn ghost" id="wbLater">Not yet — I'll tick it later</button>
+      <button class="btn primary" id="wbSent">I've sent it</button>
+    </div>`);
+  $("wbLater").onclick = () => { closeModal(); toast("Exported & approved — moved to History."); };
+  $("wbSent").onclick = async () => {
+    try {
+      const p = await api("/api/rfm/winback/sent", { method: "POST",
+        json: { customers: rows, channel: $("wbCh").value } });
+      closeModal();
+      toast(p.headline || "Recorded — we'll measure it from today.", 6000);
+      renderProof();
+    } catch (e) { toast(e.message); }
+  };
+}
 
 $("refreshApprovals").onclick = async () => {
   try { const s = await api("/api/smart/state"); state.lastState = s; renderApprovals(s.insights); toast("Refreshed"); } catch (e) { toast(e.message); }
@@ -2065,7 +2552,7 @@ async function openAdsModule() {
             </div>
           </div>
           <div class="row" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-            ${c.connected ? `<button class="btn ghost sm" data-ads-view="${c.id}">📊 View metrics</button>
+            ${c.connected ? `<button class="btn ghost sm" data-ads-view="${c.id}">${sic("chart")}View metrics</button>
                               <button class="btn ghost sm" data-ads-dc="${c.id}">Disconnect</button>` :
                               `<button class="btn primary sm" data-ads-conn="${c.id}">Connect</button>`}
           </div>
@@ -2129,6 +2616,7 @@ let _site = null;        // the working copy the seller is editing
 let _siteMeta = null;    // themes, fonts, icons, counts, stats from the server
 let _step = "setup";
 let _siteDirty = false;
+let _pairings = null;      // curated font pairings, fetched once per theme
 let _openGroup = "hero";
 let _frameReady = false;
 let _liveTimer = null;
@@ -2145,29 +2633,86 @@ const stepIndex = () => STEPS.findIndex((s) => s.id === _step);
 async function openSite(step) {
   moduleShell("Website Builder", `<div class="ap-empty">Loading your site…</div>`);
   try {
-    const d = await api("/api/site/state");
+    let d = await api("/api/site/state");
+    // The brand, the products, the photos and the copy already exist in Product
+    // Management. Opening on five steps of blank fields asks the seller to type
+    // things the app already knows — so fill them once, from what is there, and
+    // open on a site they edit rather than a form they complete.
+    if (!d.site.seeded) {
+      try { d = await api("/api/site/seed", { method: "POST" }); }
+      catch (e) { /* an unseedable site is still a usable one */ }
+    }
     _siteMeta = d;
     _site = JSON.parse(JSON.stringify(d.site));
     if (!_site.handle) _site.handle = d.suggested_handle;
+    await loadPairings();
     _siteDirty = false; _frameReady = false;
     _step = step || (_site.handle && _site.brand ? "editor" : "setup");
     renderSite();
+    if (d.seeded_now) {
+      toast("Started your site from your catalogue — change anything you like.", 6000);
+    }
   } catch (e) { moduleShell("Website Builder", `<div class="card">${esc(e.message)}</div>`); }
+}
+
+function themeLabel() {
+  const t = (_siteMeta && _siteMeta.themes || []).find((x) => x.id === _site.theme);
+  return (t && t.label) ? t.label.toLowerCase() : "this theme";
+}
+
+async function loadPairings() {
+  try {
+    const d = await api(`/api/site/pairings?theme=${encodeURIComponent(_site.theme || "")}`);
+    _pairings = d.pairings || [];
+  } catch (e) { _pairings = []; }
 }
 
 /** SVG from the shared icon set (same drawings the storefront uses). */
 function sic(name, cls) {
-  const path = (_siteMeta && _siteMeta.icons && _siteMeta.icons[name]) || "";
+  const path = ICONS[name]
+    || (_siteMeta && _siteMeta.icons && _siteMeta.icons[name]) || "";
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
     stroke-linecap="round" stroke-linejoin="round"${cls ? ` class="${cls}"` : ""}>${path}</svg>`;
 }
 
 function siteMark() {
+  const was = _siteDirty;
   _siteDirty = true;
   const b = $("siteSave");
   if (b) { b.disabled = false; b.textContent = "Save"; }
-  const d = $("siteDirty"); if (d) d.hidden = false;
+  const d = $("siteDirty");
+  if (d && !was) {
+    d.outerHTML = saveState(_site.published && _site.handle);
+  }
   pushLive();
+}
+
+/* Where this site stands, always on screen.
+
+   Silent autosave is right; invisible autosave is not. Three states, and the
+   seller should never have to guess which one they are looking at:
+     Unsaved   — edits in the browser that the server has not seen
+     Draft     — saved, but no shopper can reach it
+     Published — what the world sees right now, and whether the draft is ahead
+   The third case is the one that used to be impossible to tell: a saved
+   change on a live site is NOT live until Publish is pressed again. */
+function saveState(live) {
+  if (_siteDirty) {
+    return `<span class="save-state unsaved" id="siteDirty" title="Not saved to the server yet">
+      <i></i>Unsaved changes</span>`;
+  }
+  if (!live) {
+    return `<span class="save-state draft" id="siteDirty" title="Saved, but nobody can reach it yet">
+      <i></i>Draft — saved</span>`;
+  }
+  const ahead = _siteMeta && _siteMeta.site &&
+    _siteMeta.site.updated_at && _site.published_at &&
+    _siteMeta.site.updated_at > _site.published_at;
+  return ahead
+    ? `<span class="save-state ahead" id="siteDirty" title="Saved changes are not live until you publish">
+        <i></i>Saved — not live yet</span>`
+    : `<span class="save-state live" id="siteDirty" title="This is what shoppers see">
+        <i></i>Published</span>`;
 }
 
 function renderSite() {
@@ -2194,7 +2739,7 @@ function renderSite() {
         </div>
       </div>
       <div class="site-bar-r">
-        <span class="muted tiny" id="siteDirty" ${_siteDirty ? "" : "hidden"}>Unsaved changes</span>
+        ${saveState(live)}
         <button class="btn ghost sm" id="siteSave" ${_siteDirty ? "" : "disabled"}>${_siteDirty ? "Save" : "Saved"}</button>
         <button class="btn ${live ? "ghost" : "primary"} sm" id="sitePub">${live ? "Unpublish" : "Publish"}</button>
       </div>
@@ -2462,8 +3007,29 @@ function gType() {
   const opts = (sel) => _siteMeta.fonts.map((f) =>
     `<option value="${f.id}" ${sel === f.id ? "selected" : ""}>${esc(f.label)} · ${f.kind}</option>`).join("");
   const cur = (id, fallback) => fontStack(id || fallback);
+  const chosen = _site.style.pairing || "";
+  const hand = !chosen && (_site.style.heading_font || _site.style.body_font || _site.style.accent_font);
+  // Three free-choice dropdowns across thirty-five families is forty-two
+  // thousand combinations, most of them bad, offered to a seller who never
+  // asked to become a typographer. Pairings first; the dropdowns stay, one
+  // click away, for the seller who does want them.
   return `
-  <p class="muted tiny" style="margin:0 0 12px;">Three roles. <b>Display</b> is every headline,
+  <p class="muted tiny" style="margin:0 0 12px;">Pick a pairing — a display face, the body face
+  that sits under it, and the small face for buttons and prices. All three at once, chosen to
+  work together.</p>
+  <div class="pairs" id="pairGrid">${(_pairings || []).map((pr) => `
+    <button type="button" class="pair${chosen === pr.id ? " on" : ""}" data-pair="${esc(pr.id)}">
+      <span class="pair-demo" style="font-family:${esc(pr.heading_stack)}">${esc(_site.brand || "Aa")}</span>
+      <span class="pair-body" style="font-family:${esc(pr.body_stack)}">The quick brown fox</span>
+      <span class="pair-lbl" style="font-family:${esc(pr.accent_stack)}">Shop the collection</span>
+      <span class="pair-meta"><b>${esc(pr.name)}</b>${pr.recommended
+        ? `<i class="pair-rec">suits ${esc(themeLabel())}</i>` : ""}</span>
+      <span class="pair-note">${esc(pr.note)}</span>
+    </button>`).join("") || `<div class="ap-empty">Loading pairings…</div>`}</div>
+  <button type="button" class="btn ghost sm" id="pairOwn" style="margin:12px 0 4px;">
+    ${hand ? "Hide the individual faces" : "Choose each face myself"}</button>
+  <div id="typeManual" ${hand ? "" : "hidden"}>
+  <p class="muted tiny" style="margin:10px 0 12px;">Three roles. <b>Display</b> is every headline,
   <b>body</b> is the reading text, and <b>labels</b> is the small uppercase type on eyebrows,
   buttons and prices.</p>
   <div class="sup-form-grid">
@@ -2475,6 +3041,7 @@ function gType() {
 
     <label>Labels &amp; buttons<select data-bind="style.accent_font"><option value="">Same as body</option>${opts(_site.style.accent_font)}</select></label>
     <div class="type-prev lbl" style="font-family:${esc(cur(_site.style.accent_font, _site.style.body_font || t.fonts.body))}">Shop the collection</div>
+  </div>
   </div>
   <div class="sup-sub">Fine tuning</div>
   <div class="sup-form-grid">
@@ -2636,7 +3203,7 @@ function renderRepeaters() {
         <button class="icon-pick" data-iconpick="${i}" title="Change icon">${sic(h.icon || "check")}</button>
         <input value="${esc(h.title)}" data-hl="${i}" data-k="title" placeholder="Fast dispatch" />
         <input value="${esc(h.text)}" data-hl="${i}" data-k="text" placeholder="Orders leave within 24 hours." />
-        <button class="btn ghost tiny" data-hlrm="${i}">✕</button>
+        <button class="btn ghost tiny" data-hlrm="${i}">${sic("close")}</button>
       </div>`).join("") +
       `<button class="btn ghost sm" id="hlAdd">＋ Add a promise</button>`;
     hl.querySelectorAll("[data-hl]").forEach((n) => n.oninput = () => { _site.highlights[+n.dataset.hl][n.dataset.k] = n.value; siteMark(); });
@@ -2653,7 +3220,7 @@ function renderRepeaters() {
       <div class="rep-row">
         <input class="rep-ico" value="${esc(x.value)}" data-st="${i}" data-k="value" placeholder="2,400+" />
         <input value="${esc(x.label)}" data-st="${i}" data-k="label" placeholder="bottles shipped" />
-        <button class="btn ghost tiny" data-strm="${i}">✕</button>
+        <button class="btn ghost tiny" data-strm="${i}">${sic("close")}</button>
       </div>`).join("") + `<button class="btn ghost sm" id="stAdd">＋ Add a figure</button>`;
     st.querySelectorAll("[data-st]").forEach((n) => n.oninput = () => {
       _site.stats[+n.dataset.st][n.dataset.k] = n.value; siteMark();
@@ -2672,7 +3239,7 @@ function renderRepeaters() {
     gl.innerHTML = (_site.gallery || []).map((g, i) => `
       <div class="gal-item ${isVid(g.url) ? "is-vid" : ""}" style="${isVid(g.url) ? "" : `background-image:url('${esc(g.url)}')`}">
         ${isVid(g.url) ? `<video src="${esc(g.url)}" muted loop autoplay playsinline></video>` : ""}
-        <button class="gal-x" data-glrm="${i}" title="Remove">✕</button>
+        <button class="gal-x" data-glrm="${i}" title="Remove">${sic("close")}</button>
         <input class="gal-cap" value="${esc(g.caption || "")}" data-glcap="${i}" placeholder="Caption" />
       </div>`).join("") +
       `<button class="gal-add" id="glAdd">＋<span>Add photos</span></button>
@@ -2698,7 +3265,7 @@ function renderRepeaters() {
         <select data-ts="${i}" data-k="rating" class="rep-ico">${[5, 4, 3, 2, 1].map((r) => `<option value="${r}" ${t.rating === r ? "selected" : ""}>${"★".repeat(r)}</option>`).join("")}</select>
         <input value="${esc(t.name)}" data-ts="${i}" data-k="name" placeholder="Customer name" />
         <input value="${esc(t.text)}" data-ts="${i}" data-k="text" placeholder="What they said" />
-        <button class="btn ghost tiny" data-tsrm="${i}">✕</button>
+        <button class="btn ghost tiny" data-tsrm="${i}">${sic("close")}</button>
       </div>`).join("") : `<p class="muted tiny">No reviews added yet.</p>`) +
       `<button class="btn ghost sm" id="tsAdd">＋ Add a review</button>`;
     ts.querySelectorAll("[data-ts]").forEach((n) => n.oninput = n.onchange = () => {
@@ -2716,7 +3283,7 @@ function openIconPicker(index) {
   const wrap = document.createElement("div");
   wrap.className = "modal-back";
   wrap.innerHTML = `<div class="modal">
-      <div class="modal-head"><b>Pick an icon</b><button class="btn ghost tiny" data-ipclose>✕</button></div>
+      <div class="modal-head"><b>Pick an icon</b><button class="btn ghost tiny" data-ipclose>${sic("close")}</button></div>
       <div class="icon-grid">${names.map((n) => `<button data-icon="${n}" title="${n}">${sic(n)}</button>`).join("")}</div>
     </div>`;
   document.body.appendChild(wrap);
@@ -2877,9 +3444,15 @@ function wireStep() {
     _site.style.accent = ""; _site.style.accent_dark = "";
     _site.style.heading_font = ""; _site.style.body_font = "";
     _site.style.radius = null; _site.style.card_style = "";
-    siteMark(); renderSite();
+    siteMark();
+    // the recommended pairings depend on the theme, so re-rank them
+    loadPairings().then(() => { if (_step === "editor") renderStep(); });
+    renderSite();
     toast(`Theme set to ${c.querySelector("b").textContent.trim()}`);
   });
+
+  document.querySelectorAll('[data-bind^="style.heading_font"], [data-bind^="style.body_font"], [data-bind^="style.accent_font"]')
+    .forEach((sel) => sel.addEventListener("change", () => { _site.style.pairing = ""; }));
 
   document.querySelectorAll("[data-reset]").forEach((b) => b.onclick = () => {
     bindPath(b.dataset.reset, ""); renderStep(); openGroup("__colour");
@@ -2887,6 +3460,23 @@ function wireStep() {
 
   // editor step
   document.querySelectorAll("[data-ghead]").forEach((b) => b.onclick = () => openGroup(b.dataset.ghead));
+  document.querySelectorAll("[data-pair]").forEach((b) => b.onclick = () => {
+    const pr = (_pairings || []).find((x) => x.id === b.dataset.pair);
+    if (!pr) return;
+    _site.style.pairing = pr.id;
+    _site.style.heading_font = pr.heading;
+    _site.style.body_font = pr.body;
+    _site.style.accent_font = pr.accent;
+    siteMark(); renderStep(); openGroup("__type");
+    toast(`Type set to ${pr.name}`);
+  });
+  const po = $("pairOwn");
+  if (po) po.onclick = () => {
+    const box = $("typeManual");
+    if (!box) return;
+    box.hidden = !box.hidden;
+    po.textContent = box.hidden ? "Choose each face myself" : "Hide the individual faces";
+  };
   const rl = $("edReload"); if (rl) rl.onclick = () => { _frameReady = false; frame().src = frame().src; };
   document.querySelectorAll("[data-dev]").forEach((b) => b.onclick = () => {
     document.querySelectorAll("[data-dev]").forEach((x) => x.classList.remove("on"));
@@ -2921,7 +3511,11 @@ async function saveSite(opts) {
       const keep = _step;
       renderSite();
       _step = keep;
-      toast("Saved");
+      toast(_site.published ? "Saved — press Publish to make it live" : "Saved as a draft");
+    } else {
+      const badge = $("siteDirty");
+      if (badge) badge.outerHTML = saveState(_site.published && _site.handle);
+      const b2 = $("siteSave"); if (b2) { b2.disabled = true; b2.textContent = "Saved"; }
     }
   } catch (e) {
     toast(e.message, 5000);
@@ -3042,10 +3636,10 @@ function orderCard(o) {
           ${o.gst_percent ? `<div class="oi muted tiny"><span>GST ${o.gst_percent}%${o.gst_inclusive ? " incl." : ""}</span><span>₹${fmt(o.tax)}</span></div>` : ""}
         </div>
       </div>
-      ${o.note ? `<div class="ord-note">📝 ${esc(o.note)}</div>` : ""}
+      ${o.note ? `<div class="ord-note">${sic("edit")}${esc(o.note)}</div>` : ""}
       <div class="ord-card-f">
         <label class="muted tiny">Status <select data-ostat="${esc(o.id)}">${opts}</select></label>
-        ${o.phone ? `<a class="btn ghost tiny" href="https://wa.me/${esc(String(o.phone).replace(/\D/g, ""))}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ""}
+        ${o.phone ? `<a class="btn ghost tiny" href="https://wa.me/${esc(String(o.phone).replace(/\D/g, ""))}" target="_blank" rel="noopener">${sic("whatsapp")}WhatsApp</a>` : ""}
       </div>
     </div>`;
 }
@@ -3071,6 +3665,7 @@ async function loadCustomers() {
 
 // ---------- boot ----------
 (async function init() {
+  await loadIcons();
   if (state.token) {
     try { await api("/api/me"); showShell(); }
     catch { state.token = null; localStorage.removeItem("cx_token"); $("loginView").hidden = false; }

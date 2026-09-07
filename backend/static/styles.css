@@ -747,7 +747,7 @@ button:focus-visible, .nav-item:focus-visible, a:focus-visible {
   box-shadow: var(--shadow-sm);
 }
 
-/* ---------- Content Seller additions ---------- */
+/* ---------- One Tap Manager additions ---------- */
 .pt-row { display: flex; align-items: center; gap: 10px; margin: 6px 0 4px; flex-wrap: wrap; }
 .pt-select {
   padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border);

@@ -81,6 +81,7 @@ def _save_customers(seller: str, rows: list[dict]) -> None:
 def _public_customer(c: dict) -> dict:
     return {"id": c["id"], "name": c.get("name") or "", "email": c.get("email") or "",
             "phone": c.get("phone") or "", "address": c.get("address") or {},
+            "guest": bool(c.get("guest")) and not c.get("password"),
             "created_at": c.get("created_at")}
 
 
@@ -91,14 +92,81 @@ def register(seller: str, email: str, password: str, name: str = "", phone: str 
     if len(password or "") < 6:
         raise StoreError("Use a password of at least 6 characters.")
     rows = _customers(seller)
-    if any(_norm_email(c.get("email")) == email for c in rows):
+    existing = next((c for c in rows if _norm_email(c.get("email")) == email), None)
+    if existing and (existing.get("password") or ""):
         raise StoreError("An account with that email already exists here — log in instead.")
+    if existing:
+        # they ordered as a guest first; claiming the account keeps their orders
+        existing["password"] = auth.hash_password(password)
+        existing["password_set"] = True
+        existing["guest"] = False
+        if name and not existing.get("name"):
+            existing["name"] = str(name).strip()[:80]
+        if phone and not existing.get("phone"):
+            existing["phone"] = re.sub(r"[^0-9+]", "", str(phone))[:16]
+        _save_customers(seller, rows)
+        return existing
     cust = {
         "id": secrets.token_hex(8),
         "email": email,
         "password": auth.hash_password(password),
+        "password_set": True,
+        "guest": False,
         "name": str(name or "").strip()[:80],
         "phone": re.sub(r"[^0-9+]", "", str(phone or ""))[:16],
+        "address": {},
+        "created_at": _now(),
+    }
+    rows.append(cust)
+    _save_customers(seller, rows)
+    return cust
+
+
+def guest_customer(seller: str, name: str = "", phone: str = "",
+                   email: str = "") -> dict:
+    """Take the order first; make the account quietly afterwards.
+
+    Forcing a first-time cash-on-delivery buyer to invent a password before
+    they can pay is the single most expensive rule a small store can have. So
+    a guest checkout creates — or reuses — a real customer record keyed on
+    their phone number (the thing they must give us anyway for delivery), with
+    no password set. They appear in the seller's RFM and Win-Back lists exactly
+    like anyone else, and they can claim the account later by setting a
+    password with the reset flow, which is why `password_set` is tracked.
+    """
+    seller = _norm_email(seller)
+    phone_digits = re.sub(r"[^0-9+]", "", str(phone or ""))
+    email = _norm_email(email)
+    if len(re.sub(r"\D", "", phone_digits)) < 10:
+        raise StoreError("Enter a valid 10-digit phone number.")
+
+    rows = _customers(seller)
+    match = None
+    if email:
+        match = next((c for c in rows if _norm_email(c.get("email")) == email), None)
+    if not match:
+        match = next((c for c in rows
+                      if re.sub(r"\D", "", str(c.get("phone") or "")) ==
+                         re.sub(r"\D", "", phone_digits)), None)
+    if match:
+        # a returning guest — keep their history, refresh what they just told us
+        patch = {}
+        if name and not match.get("name"):
+            patch["name"] = str(name).strip()[:80]
+        if email and not match.get("email"):
+            patch["email"] = email
+        if patch:
+            match = update_customer(seller, match["id"], patch)
+        return match
+
+    cust = {
+        "id": secrets.token_hex(8),
+        "email": email,
+        "password": "",
+        "password_set": False,
+        "guest": True,
+        "name": str(name or "").strip()[:80],
+        "phone": phone_digits[:16],
         "address": {},
         "created_at": _now(),
     }
@@ -111,6 +179,9 @@ def login(seller: str, email: str, password: str) -> dict:
     seller, email = _norm_email(seller), _norm_email(email)
     rows = _customers(seller)
     cust = next((c for c in rows if _norm_email(c.get("email")) == email), None)
+    if cust and not (cust.get("password") or ""):
+        raise StoreError("You have ordered here as a guest but never set a password. "
+                         "Use “Forgot password” and we will email you a link to set one.")
     if not cust or not auth.verify_password(password or "", cust.get("password") or ""):
         raise StoreError("Wrong email or password.")
     return cust
@@ -194,6 +265,7 @@ def price_cart(seller: str, lines: list[dict]) -> dict:
     items, issues = [], []
     for raw in (lines or [])[:60]:
         pid = str((raw or {}).get("product_id") or "").strip()
+        vid = str((raw or {}).get("variant_id") or "").strip()
         try:
             qty = int(float((raw or {}).get("qty") or 0))
         except (TypeError, ValueError):
@@ -204,18 +276,48 @@ def price_cart(seller: str, lines: list[dict]) -> dict:
         if not p:
             issues.append({"product_id": pid, "reason": "unavailable"})
             continue
-        avail = products.available_units(p)
+
+        # A product with a variant matrix can only be bought one cell at a time
+        # — a cart line naming no variant is a bug, not a default.
+        variant = None
+        if p.get("variants"):
+            variant = products.get_variant(p, vid)
+            if not variant:
+                issues.append({"product_id": pid, "name": p["name"],
+                               "reason": "choose_variant"})
+                continue
+            vid = variant["id"]
+        else:
+            vid = ""
+
+        label = (variant or {}).get("label") or ""
+        display = f"{p['name']} — {label}" if label else p["name"]
+
+        avail = products.available_units(p, vid or None)
         if avail is not None and avail <= 0:
-            issues.append({"product_id": pid, "name": p["name"], "reason": "out_of_stock"})
+            issues.append({"product_id": pid, "variant_id": vid, "name": display,
+                           "reason": "out_of_stock"})
             continue
         if avail is not None and qty > avail:
-            issues.append({"product_id": pid, "name": p["name"], "reason": "reduced", "available": avail})
+            issues.append({"product_id": pid, "variant_id": vid, "name": display,
+                           "reason": "reduced", "available": avail})
             qty = avail
-        unit = _money(p.get("price") or 0)
+        unit = _money(products.variant_price(p, variant))
+        line_mrp = products.variant_mrp(p, variant)
         items.append({
-            "product_id": pid, "name": p["name"], "category": p.get("category") or "",
-            "image_url": p.get("image_url") or "", "unit_price": unit,
-            "mrp": _money(p.get("mrp")) if p.get("mrp") else None,
+            "product_id": pid,
+            "variant_id": vid,
+            "variant_label": label,
+            "sku": (variant or {}).get("sku") or p.get("sku") or "",
+            # `name` stays the canonical product name so every downstream
+            # roll-up (sales mirror, Supply recipes, analytics) keeps matching;
+            # `display_name` is what a human reads.
+            "name": p["name"],
+            "display_name": display,
+            "category": p.get("category") or "",
+            "image_url": (variant or {}).get("image_url") or p.get("image_url") or "",
+            "unit_price": unit,
+            "mrp": _money(line_mrp) if line_mrp else None,
             "qty": qty, "line_total": _money(unit * qty),
             "unit_label": p.get("unit_label") or "",
         })
@@ -337,7 +439,8 @@ def _consume_stock(seller: str, items: list[dict], sign: int = -1) -> None:
     from backend.core import supply
     for it in items:
         try:
-            products.adjust_stock(seller, it["product_id"], sign * int(it["qty"]))
+            products.adjust_stock(seller, it["product_id"], sign * int(it["qty"]),
+                                  variant_id=it.get("variant_id") or None)
         except Exception:  # noqa: BLE001
             pass
     try:

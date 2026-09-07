@@ -571,6 +571,43 @@ html:not(.m-hscroll) .rail-nav { display: none; }
 .tabs button { border: 0; background: none; padding: 0 0 13px; cursor: pointer; font-family: var(--fh); font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 650; color: var(--muted); border-bottom: 1px solid transparent; margin-bottom: -1px; }
 .tabs button.on { color: var(--ink); border-bottom-color: var(--ink); }
 
+/* ---------- shopper sign-in ----------------------------------------------
+   The auth modal is the one place on the store where the seller's display
+   face works against them: at 12px uppercase a face like Anton, Bebas,
+   Italiana or Bodoni turns tabs and labels into decoration, and a body face
+   like Cormorant renders a password field as thin grey hairlines. So the
+   login borrows the brand where brand belongs (the greeting) and hands every
+   working part of the form to --fa, the small UI face the seller already
+   picked. Nothing here is hard-coded — it is the same three roles, assigned
+   to the right jobs.
+   ------------------------------------------------------------------------ */
+.modal.auth h3 {
+  font-family: var(--fh);
+  font-size: clamp(24px, 2.6vw, 31px);
+  line-height: 1.1;
+  /* a display face set wide and shouty reads as a banner, not a welcome */
+  letter-spacing: clamp(-0.01em, var(--track), 0.04em);
+  text-transform: none;
+  font-weight: min(var(--hw), 700);
+}
+.modal.auth > p { font-family: var(--fb); font-size: 13px; line-height: 1.55; }
+.modal.auth .tabs { gap: 24px; margin: 24px 0; }
+.modal.auth .tabs button {
+  font-family: var(--fa);
+  font-size: 12px; font-weight: 600; letter-spacing: .12em;
+}
+.modal.auth .field { margin-bottom: 18px; }
+.modal.auth .field > span { font-family: var(--fa); font-size: 11px; letter-spacing: .1em; }
+.modal.auth .field input {
+  font-family: var(--fa);
+  font-size: 15.5px; font-weight: 450; letter-spacing: .005em; padding: 12px 2px;
+}
+/* dots need room to be counted; an email needs none of the body face's flourish */
+.modal.auth .field input[type="password"] { letter-spacing: .16em; font-size: 16px; }
+.modal.auth .field input[type="password"]::placeholder { letter-spacing: .01em; font-size: 15px; }
+.modal.auth .field input[type="email"] { font-variant-ligatures: none; }
+.modal.auth .err { font-family: var(--fa); font-size: 12.5px; letter-spacing: .01em; }
+
 /* =========================================================================
    Checkout / orders
    ========================================================================= */
@@ -899,3 +936,75 @@ html.editing .announce:hover > .edit-tag { transform: translateY(-50%); }
   .marquee-t { gap: 22px; font-size: 11px; }
   .marquee-t span { gap: 22px; }
 }
+
+/* =========================================================================
+   Variants, trust and the reset flow
+   ========================================================================= */
+
+/* ---------- option picker ----------
+   A shirt is twelve things to count, and the shopper has to name one before
+   they can buy. Values that would leave nothing in stock are struck through
+   rather than hidden: knowing your size is gone is information, and a picker
+   whose options move around as you touch them is a guessing game. */
+.opts { display: grid; gap: 20px; margin: 26px 0 4px; }
+.opt-ax { display: grid; gap: 10px; }
+.opt-h {
+  display: flex; align-items: baseline; gap: 8px;
+  font-family: var(--fa); font-size: 11.5px; font-weight: 650;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+}
+.opt-h b { font-family: var(--fb); font-size: 13.5px; font-weight: 600;
+           letter-spacing: 0; text-transform: none; color: var(--ink); }
+.opt-h i { font-style: normal; font-size: 11.5px; }
+.opt-vals { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt-v {
+  min-width: 48px; padding: 10px 15px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--ink);
+  border-radius: calc(var(--radius) * .6);
+  font-family: var(--fa); font-size: 13px; font-weight: 550; letter-spacing: .02em;
+  transition: border-color .2s var(--ease), background .2s var(--ease), color .2s var(--ease);
+}
+.opt-v:hover { border-color: var(--ink); }
+.opt-v.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.opt-v.gone {
+  color: var(--muted); border-color: var(--line-soft);
+  background-image: linear-gradient(to top left,
+    transparent calc(50% - .5px), currentColor calc(50% - .5px),
+    currentColor calc(50% + .5px), transparent calc(50% + .5px));
+  opacity: .55;
+}
+.opt-v.gone:hover { border-color: var(--line-soft); }
+.opt-v.gone.on { background: var(--muted); border-color: var(--muted); color: var(--bg); }
+
+/* the variant under a cart line, and the axis summary on a card */
+.ci-var {
+  font-family: var(--fa); font-size: 11px; font-weight: 650;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+  margin: 2px 0 4px;
+}
+.card-opts {
+  font-family: var(--fa); font-size: 10.5px; letter-spacing: .06em;
+  color: var(--muted); margin-top: 7px;
+}
+
+/* ---------- checkout trust block ----------
+   Someone handing money to a brand they met a minute ago needs to see who
+   they are paying. Quiet by design: this is reassurance, not a sales block. */
+.trust {
+  margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line);
+  display: grid; gap: 14px;
+}
+.trust-r { display: grid; grid-template-columns: 26px 1fr; gap: 12px; align-items: start; }
+.trust-i { color: var(--accent); display: grid; place-items: center; padding-top: 1px; }
+.trust-i svg { width: 17px; height: 17px; }
+.trust-r b { display: block; font-size: 13.5px; font-weight: 600; line-height: 1.35; }
+.trust-r span { display: block; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.trust-legal {
+  margin: 4px 0 0; font-family: var(--fa); font-size: 11px; line-height: 1.6;
+  color: var(--muted); letter-spacing: .02em;
+}
+.trust-legal a { margin-right: 14px; }
+
+/* a success message reads differently from an error and should look it */
+.ok { color: #1f7a4d; font-size: 13px; margin-top: 10px; line-height: 1.5; }
+[data-mode="dark"] .ok { color: #77d3a4; }
