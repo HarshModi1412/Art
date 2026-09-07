@@ -470,7 +470,8 @@ def _consume_stock(seller: str, items: list[dict], sign: int = -1) -> None:
                 continue
 
 
-def set_status(seller: str, order_id: str, status: str, by: str = "seller") -> dict:
+def set_status(seller: str, order_id: str, status: str, by: str = "seller",
+               reason: str = "") -> dict:
     seller = _norm_email(seller)
     if status not in STATUSES:
         raise StoreError("Unknown status.")
@@ -483,7 +484,17 @@ def set_status(seller: str, order_id: str, status: str, by: str = "seller") -> d
         return order
     order["status"] = status
     order["updated_at"] = _now()
-    order.setdefault("history", []).append({"at": _now(), "status": status, "by": by})
+    entry = {"at": _now(), "status": status, "by": by}
+    if status == "cancelled":
+        # Captured at the moment of cancelling, because asking later never
+        # happens and a reason breakdown with no reasons is worthless. The
+        # stage is derivable from the history, so only the reason is stored.
+        order["cancel_reason"] = str(reason or "").strip()[:40]
+        order["cancelled_by"] = by
+        order["cancelled_at"] = _now()
+        if order["cancel_reason"]:
+            entry["reason"] = order["cancel_reason"]
+    order.setdefault("history", []).append(entry)
     if status == "delivered" and order.get("payment") == "cod":
         order["payment_status"] = "paid"
     _save_orders(seller, rows)

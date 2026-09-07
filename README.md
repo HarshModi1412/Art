@@ -255,6 +255,43 @@ are not — rather than letting a seller find out from their own storefront.
 Run `supabase/variants.sql` once: it adds the `video_url`, `options` and
 `variants` columns plus a `media` index table.
 
+## Cancellations
+
+`backend/core/cancellations.py`, computed from the seller's own storefront
+Orders (`GET /api/cancellations`), surfaced as a KPI beside Revenue on Sales
+Analytics with a breakdown behind it.
+
+**Cancelled orders are excluded from the sales dataset and from every insight
+built on it** — `storefront.SALES_STATUSES` has always dropped them. This page
+is the only place they are counted, so its numbers deliberately do not tie to
+Sales Analytics.
+
+The design follows what actually costs money in Indian e-commerce rather than
+just counting rows:
+
+* **Stage, not just count.** An order killed before packing costs the sale; the
+  same order cancelled after dispatch costs freight out, freight back and a
+  week of blocked stock. Stage is derived from the order's own status history,
+  so the seller never has to record it.
+* **Reason captured at the moment of cancelling.** Asking later never works. A
+  cancellation with no reason is counted as "Not recorded" and shown as its own
+  bar, and `reason_coverage` reports how much of the picture exists — a reason
+  Pareto built on half the data is a confident lie.
+* **Whose side it was on** (seller / buyer / courier), because only seller-fault
+  is directly fixable.
+* **COD vs prepaid**, the most informative cut in India: Shipway's FY25 data
+  (Unicommerce subsidiary, cities with ≥5,000 non-prepaid orders) puts COD
+  return-to-origin at **26%** against **under 2%** for prepaid.
+* **`MIN_DENOMINATOR = 20`.** Below that it reports counts and rupees only. At
+  50–500 orders a month, "this product has a 40% cancellation rate" usually
+  means two out of five.
+* **Rupees beside every percentage**, and weekly buckets rather than daily.
+
+Not yet built, and the natural next steps: RTO as a stage of its own (an order
+that shipped and came back is not the same as one cancelled at the door),
+marketplace cancellations via the column mapper, and a repeat-offender list
+keyed on phone number.
+
 ## Password reset
 
 `backend/core/password_reset.py`, for sellers (`/api/forgot`, `/api/reset`) and

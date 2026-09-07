@@ -43,9 +43,14 @@ async function api(path, opts = {}) {
       const err = new Error(data.detail.message || res.statusText);
       err.code = data.detail.code;
       err.product = data.detail.product;
+      // Callers need to tell "you are logged out" (401) apart from "the server
+      // hiccuped" (500, timeout, cold start) — see the boot handler below.
+      err.status = res.status;
       throw err;
     }
-    throw new Error(data.detail || res.statusText);
+    const err = new Error(data.detail || res.statusText);
+    err.status = res.status;
+    throw err;
   }
   return data;
 }
@@ -1733,7 +1738,18 @@ document.querySelectorAll(".pt-select").forEach((sel) => sel.onchange = async ()
       state.productType = me.product_type || null;
       refreshUserUI(me.usage, me.plan);
       syncProductTypeSelects();
-    } catch { state.token = null; localStorage.removeItem("cx_token"); refreshUserUI(null); }
+    } catch (e) {
+      // Same rule as Smart mode: only a real 401 logs you out. A 500, a
+      // timeout or a cold start used to delete the token and send the seller
+      // back to the login screen — which is what made stepping onto the
+      // landing page and back feel like being signed out.
+      if (e && (e.status === 401 || e.status === 403)) {
+        state.token = null;
+        localStorage.removeItem("cx_token");
+        localStorage.removeItem("cx_email");
+        refreshUserUI(null);
+      }
+    }
   } else refreshUserUI(null);
   syncLockedPreviews();
   if (new URLSearchParams(location.search).get("upgrade") === "1" ||

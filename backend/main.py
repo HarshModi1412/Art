@@ -32,6 +32,7 @@ from backend.core import messaging, password_reset, today as today_mod
 from backend.core import winback_proof
 from backend.core import media
 from backend.core import cache
+from backend.core import cancellations
 
 # ---------------------------------------------------------
 # numpy/pandas JSON safety net
@@ -286,6 +287,18 @@ def _paywall(product_id: str, message: str = "") -> HTTPException:
     if message:
         detail["message"] = message
     return HTTPException(status_code=402, detail=detail)
+
+
+@app.post("/api/cache/clear")
+def cache_clear(authorization: str | None = Header(default=None)):
+    """What the Refresh button on every page calls first.
+
+    Without this, Refresh would re-read the same cached computations and the
+    seller would be told their data is "up to date" when nothing had been
+    recomputed. Scoped to the caller's own account.
+    """
+    email = require_user(authorization)
+    return {"cleared": cache.clear(email)}
 
 
 @app.get("/api/icons")
@@ -2594,6 +2607,7 @@ class ChannelBody(BaseModel):
 class OrderStatusBody(BaseModel):
     order_id: str
     status: str
+    reason: str | None = ""
 
 
 class ListedBody(BaseModel):
@@ -2813,7 +2827,7 @@ def store_order_status(body: OrderStatusBody, authorization: str | None = Header
     email = require_user(authorization)
     try:
         cache.clear(email)
-        storefront.set_status(email, body.order_id, body.status)
+        storefront.set_status(email, body.order_id, body.status, reason=body.reason or "")
     except storefront.StoreError as e:
         raise HTTPException(400, str(e))
     return store_orders("", authorization)
@@ -2825,6 +2839,23 @@ def store_orders_export(authorization: str | None = Header(default=None)):
     csv = storefront.orders_csv(email)
     return Response(content=csv, media_type="text/csv",
                     headers={"Content-Disposition": "attachment; filename=site_orders.csv"})
+
+
+@app.get("/api/cancellations")
+def cancellation_analysis(authorization: str | None = Header(default=None)):
+    """Cancellations, from the seller's own storefront orders.
+
+    Cancelled orders are already excluded from the sales dataset and from every
+    insight built on it — this is the one place they are counted, which is why
+    the numbers here will not tie to Sales Analytics and should not.
+    """
+    email = require_user(authorization)
+    res = cache.memo(
+        "cancellations", email,
+        lambda: cancellations.analyse(storefront.get_orders(email, status="all")),
+        ttl=120)
+    return {**res, "headline": cancellations.headline(res),
+            "reason_options": cancellations.REASONS}
 
 
 @app.get("/api/store/customers")

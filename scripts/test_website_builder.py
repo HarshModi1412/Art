@@ -584,5 +584,91 @@ c.post("/api/demo", headers=H)
 must(_nrows(_sm.load_sales(_e)) > 0,
      f"a fresh upload is visible at once ({_nrows(_sm.load_sales(_e))} rows)")
 
+
+print("\n== 26. cancellations, and the session that must survive a hiccup ==")
+# earlier sections have eaten pid1's stock — use a fresh product
+_r = c.post("/api/products/item", headers=H, json={
+    "name": "Cancel Test Item", "price": 500, "stock": 60, "listed": True, "track_stock": True})
+_cpid = [p for p in _r.json()["products"] if p["name"] == "Cancel Test Item"][0]["id"]
+_co = []
+for _i in range(6):
+    _r = c.post(f"/api/shop/{HANDLE}/order", json={
+        "lines": [{"product_id": _cpid, "qty": 1}],
+        "address": {"name": f"C{_i}", "phone": f"9444444{_i:03d}", "line1": "4 Fourth St",
+                    "city": "Bengaluru", "state": "KA", "pincode": "560004"},
+        "payment": "cod" if _i % 2 == 0 else "prepaid"})
+    if _r.status_code == 200:
+        _co.append(_r.json()["order"]["id"])
+must(len(_co) >= 3, f"placed test orders ({len(_co)})")
+
+# cancel at three different stages, two with a reason
+c.post("/api/store/orders/status", headers=H, json={"order_id": _co[0], "status": "cancelled", "reason": "out_of_stock"})
+c.post("/api/store/orders/status", headers=H, json={"order_id": _co[1], "status": "confirmed"})
+c.post("/api/store/orders/status", headers=H, json={"order_id": _co[1], "status": "packed"})
+c.post("/api/store/orders/status", headers=H, json={"order_id": _co[1], "status": "shipped"})
+c.post("/api/store/orders/status", headers=H, json={"order_id": _co[1], "status": "cancelled", "reason": "cod_refused"})
+c.post("/api/store/orders/status", headers=H, json={"order_id": _co[2], "status": "cancelled"})
+
+cx = c.get("/api/cancellations", headers=H).json()
+must(cx["available"] and cx["cancelled"] >= 3, f"cancellations counted ({cx['cancelled']})")
+must(cx["cancelled_value"] > 0, "and valued in rupees")
+must(cx["gross_value"] - cx["cancelled_value"] == cx["net_value"], "gross - cancelled = net")
+must(cx["headline"], "there is a one-line headline")
+_stages = {s["key"] for s in cx["stages"]}
+must("after_dispatch" in _stages and "before_packing" in _stages,
+     f"stage is derived from the order's own history (got {sorted(_stages)})")
+must(any(r["key"] == "not_recorded" for r in cx["reasons"]),
+     "a cancellation with no reason is shown, not dropped")
+must(cx["reason_coverage"] is not None and cx["reason_coverage"] < 100,
+     "reason coverage is reported honestly")
+must(any(r["fault"] == "seller" for r in cx["reasons"]), "reasons carry whose side it was")
+must(len(cx["by_payment"]) >= 1, "split by COD vs prepaid")
+must(cx["by_product"], "and by product")
+must(len(cx["reason_options"]) > 5, "the reason picker has options to offer")
+
+# the guardrail: no percentages on a handful of orders
+_small = __import__("backend.core.cancellations", fromlist=["x"])
+_tiny = _small.analyse([{"status": "cancelled", "total": 100, "history": [], "items": []},
+                        {"status": "new", "total": 100, "history": [], "items": []}])
+must(_tiny["rate"] is None, "no percentage is quoted on 2 orders")
+must(_tiny["cancelled_value"] == 100, "but the rupees are still counted")
+_big = _small.analyse([{"status": "cancelled" if i < 5 else "new", "total": 100,
+                        "history": [{"status": "new"}], "items": []} for i in range(40)])
+must(_big["rate"] == 12.5, f"and a rate appears once there is enough data (got {_big['rate']})")
+
+# cancelled orders stay out of the sales figures. The dataset also holds the
+# uploaded sample data, so measure the delta rather than the absolute.
+_before = c.get("/api/smart/state", headers=H).json()["data"]["sales"]["rows"]
+c.post("/api/store/orders/status", headers=H, json={"order_id": _co[3], "status": "cancelled", "reason": "duplicate"})
+_after = c.get("/api/smart/state", headers=H).json()["data"]["sales"]["rows"]
+must(_after == _before - 1,
+     f"cancelling an order removes exactly its row from sales ({_before} -> {_after})")
+c.post("/api/store/orders/status", headers=H, json={"order_id": _co[3], "status": "new"})
+must(c.get("/api/smart/state", headers=H).json()["data"]["sales"]["rows"] == _before,
+     "un-cancelling puts it back")
+
+# a transient server error must not look like a logged-out session
+_js = _pl.Path("Smart CafeX/smart.js").read_text(encoding="utf-8")
+must("err.status = res.status" in _js, "api() reports the HTTP status to callers")
+must("e.status === 401" in _js, "the boot handler only signs you out on a 401")
+_boot = _js[_js.index("async function init()"):]
+must("catch { state.token = null" not in _boot, "no bare catch wipes the token any more")
+_app = _pl.Path("backend/static/app.js").read_text(encoding="utf-8")
+must("e.status === 401" in _app, "the classic app follows the same rule")
+
+# refresh without reloading
+must("/api/cache/clear" in _js, "Refresh clears this account's cache first")
+must('id="refreshPage"' in _js, "every page carries a Refresh button")
+r = c.post("/api/cache/clear", headers=H)
+must(r.status_code == 200 and "cleared" in r.json(), "the cache-clear endpoint answers")
+must(c.post("/api/cache/clear").status_code == 401, "and needs a login")
+
+# icons cannot stretch to fill their container again
+_scss = _pl.Path("Smart CafeX/storefront/store.css").read_text(encoding="utf-8")
+must("svg { width: 1em; height: 1em;" in _scss, "storefront icons have a default size")
+must(".crumbs svg" in _scss, "breadcrumb arrows are sized explicitly")
+must("svg { width: 1em; height: 1em;" in _pl.Path("Smart CafeX/smart.css").read_text(encoding="utf-8"),
+     "app icons have a default size too")
+
 print("\nALL CHECKS PASSED \u2713")
 shutil.rmtree(TMP, ignore_errors=True)

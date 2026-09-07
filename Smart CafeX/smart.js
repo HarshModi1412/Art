@@ -122,7 +122,13 @@ async function api(path, opts = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const d = data.detail;
-    throw new Error((d && typeof d === "object" ? d.message : d) || res.statusText);
+    const err = new Error((d && typeof d === "object" ? d.message : d) || res.statusText);
+    // Callers need to tell "you are logged out" (401) apart from "the server
+    // hiccuped" (500, timeout, cold start). Without this every blip looked
+    // like an expired session and threw the seller back to the login screen.
+    err.status = res.status;
+    err.detail = d;
+    throw err;
   }
   return data;
 }
@@ -264,6 +270,7 @@ const MODULES = [
 
 async function goHome() {
   _afterUpload = null;
+  _currentModule = null;
   setCrumb(""); showRail(true);
   setView(`<div class="ap-empty">Loading your workspace…</div>`);
   try {
@@ -482,7 +489,14 @@ function renderHome(s) {
       </div>`).join("") : `<div class="ap-empty">No tasks yet. Approving an insight adds one automatically.</div>`;
 
   setView(`
-    <div class="page-head"><h2>Welcome back</h2><span class="muted">${esc(state.email)}</span></div>
+    <div class="page-head">
+      <h2>Welcome back</h2>
+      <div class="page-actions">
+        <span class="muted">${esc(state.email)}</span>
+        <button class="btn ghost sm" id="refreshPage" title="Pull the latest numbers without reloading the page">
+          ${sic("refresh")}Refresh</button>
+      </div>
+    </div>
 
     <section class="today" id="todayBox">
       <div class="today-h">
@@ -531,6 +545,8 @@ function renderHome(s) {
   });
   // three independent reads; firing them together rather than in sequence is
   // the difference between one round-trip and three on a slow connection
+  const rp = $("refreshPage");
+  if (rp) rp.onclick = refreshCurrent;
   renderChannels();
   renderToday();
   document.querySelectorAll("[data-up]").forEach((el) => el.onclick = () => startUpload(el.dataset.up));
@@ -869,13 +885,47 @@ if ($("addSave")) $("addSave").onclick = async () => {
 };
 
 // ---------- module shell ----------
+/* Which module is on screen, so Refresh knows what to re-open. Reloading the
+   browser was the only way to pull fresh numbers, and a reload used to cost a
+   login — so "refresh my data" and "sign in again" had become the same action. */
+let _currentModule = null;
+
 function moduleShell(name, bodyHtml) {
   setCrumb(name); showRail(false);
-  setView(`<div class="page-head"><h2>${esc(name)}</h2><button class="btn ghost sm" id="backHome">← All apps</button></div>${bodyHtml}`);
+  setView(`
+    <div class="page-head">
+      <h2>${esc(name)}</h2>
+      <div class="page-actions">
+        <button class="btn ghost sm" id="refreshPage" title="Pull the latest numbers without reloading the page">
+          ${sic("refresh")}Refresh</button>
+        <button class="btn ghost sm" id="backHome">${sic("grid")}All apps</button>
+      </div>
+    </div>${bodyHtml}`);
   $("backHome").onclick = goHome;
+  $("refreshPage").onclick = refreshCurrent;
+}
+
+/* Re-run whatever is on screen against fresh server data. Clears this account's
+   cached computations first so Refresh means refresh, not "show me the cache
+   again". */
+async function refreshCurrent() {
+  const btn = $("refreshPage");
+  if (btn) { btn.disabled = true; btn.innerHTML = sic("refresh") + "Refreshing…"; }
+  try {
+    await api("/api/cache/clear", { method: "POST" });
+  } catch (e) { /* the reopen below still fetches fresh */ }
+  try {
+    if (_currentModule) await openModule(_currentModule);
+    else await goHome();
+    toast("Up to date.");
+  } catch (e) {
+    toast(e.message || "Could not refresh just now.");
+    if (btn) { btn.disabled = false; btn.innerHTML = sic("refresh") + "Refresh"; }
+  }
 }
 
 async function openModule(id) {
+  _currentModule = id;
   if (id === "sales") return openSales();
   if (id === "subcategory") return openSubcategory();
   if (id === "products") return openProducts();
@@ -1841,7 +1891,13 @@ async function openSales() {
   moduleShell("Sales Analytics", `<div class="ap-empty">Loading analytics…</div>`);
   try {
     await api("/api/smart/state");
-    const d = await api("/api/analytics?lang=en");
+    // Cancellations come from your own website's orders, and they are already
+    // out of the revenue figure beside them — fetched together so the page
+    // paints once.
+    const [d, cx] = await Promise.all([
+      api("/api/analytics?lang=en"),
+      api("/api/cancellations").catch(() => null),
+    ]);
     const k = d.kpis;
     let html = `
       <div class="kpis">
@@ -1849,7 +1905,9 @@ async function openSales() {
         <div class="kpi"><div class="label">Orders</div><div class="value">${fmt(k.orders)}</div></div>
         <div class="kpi"><div class="label">Customers</div><div class="value">${fmt(k.customers)}</div></div>
         <div class="kpi"><div class="label">Avg Order Value</div><div class="value">₹${fmt(k.avg_order_value)}</div></div>
+        ${cancelKpi(cx)}
       </div>
+      ${cancelPanel(cx)}
       ${renderActions(d.insights)}
       <div class="chart-card"><h4>Monthly revenue</h4><div class="plot" id="cMonthly"></div></div>
       ${d.forecast ? `<div class="chart-card"><h4>Next 30 days — ≈ ₹${fmt(d.forecast.next_30_total)} (${d.forecast.vs_last_30_pct >= 0 ? "+" : ""}${d.forecast.vs_last_30_pct}% vs last 30)</h4><div class="plot" id="cFcst"></div></div>` : ""}
@@ -1859,6 +1917,7 @@ async function openSales() {
       </div>
       ${d.top_products ? `<div class="chart-card"><h4>Top products</h4><div class="plot" id="cTop"></div></div>` : ""}`;
     moduleShell("Sales Analytics", html);
+    bindCancelPanel(cx);
     const primary = cssVar("--primary", "#6d28d9");
     plot($("cMonthly"), [{ x: d.monthly_trend.x, y: d.monthly_trend.y, type: "scatter", mode: "lines+markers", line: { color: primary, width: 2.5, shape: "spline" }, fill: "tozeroy", fillcolor: "rgba(109,40,217,.10)" }], { yaxis: { tickprefix: "₹" } }, "Monthly revenue");
     if (d.forecast) {
@@ -1874,6 +1933,109 @@ async function openSales() {
   } catch (e) {
     moduleShell("Sales Analytics", `<div class="card">${esc(e.message)}</div>`);
   }
+}
+
+/* ---------------------------------------------------------- cancellations --
+   The number the seller asked for: how many orders were cancelled and what
+   they were worth. It sits beside Revenue on purpose — the revenue figure has
+   these already taken out, and showing the two apart is how sellers end up
+   believing their sales dropped. */
+function cancelKpi(cx) {
+  if (!cx || !cx.available) return "";
+  const rate = cx.rate != null ? ` · ${cx.rate}%` : "";
+  return `
+    <div class="kpi kpi-warn" id="cancelKpi" title="Click for the breakdown">
+      <div class="label">Cancelled${rate}</div>
+      <div class="value">₹${fmt(cx.cancelled_value)}</div>
+      <div class="kpi-sub">${fmt(cx.cancelled)} order${cx.cancelled === 1 ? "" : "s"}
+        of ${fmt(cx.orders)}</div>
+    </div>`;
+}
+
+function cancelPanel(cx) {
+  if (!cx || !cx.available || !cx.cancelled) return "";
+  const bar = (rows, total) => rows.map((r) => `
+    <div class="cx-row">
+      <span class="cx-lbl">${esc(r.label)}</span>
+      <span class="cx-bar"><i style="width:${total ? (r.orders / total * 100) : 0}%"></i></span>
+      <span class="cx-n">${fmt(r.orders)}</span>
+      <span class="cx-v">₹${fmt(r.value)}</span>
+    </div>`).join("");
+
+  const coverage = cx.reason_coverage;
+  const gap = coverage != null && coverage < 100;
+
+  return `
+    <div class="card cx-card" id="cancelPanel">
+      <div class="cx-head">
+        <div>
+          <h4 style="margin:0 0 4px;">Cancellations</h4>
+          <p class="muted tiny" style="margin:0;">${esc(cx.headline)}</p>
+        </div>
+        <button class="btn ghost tiny" id="cxToggle">Show breakdown</button>
+      </div>
+
+      <div id="cxBody" hidden>
+        <p class="muted tiny cx-note">${esc(cx.note)}</p>
+        ${!cx.enough_data ? `<p class="muted tiny cx-note">
+          Only ${fmt(cx.orders)} orders so far — too few for percentages to mean
+          anything, so this shows counts and rupees. Rates appear from
+          ${cx.min_denominator} orders.</p>` : ""}
+
+        <div class="cx-sub">How far they had got</div>
+        <p class="muted tiny cx-note">Cancelling before packing costs you the sale.
+          Cancelling after dispatch costs freight both ways and a week of stock.</p>
+        ${bar(cx.stages, cx.cancelled)}
+
+        <div class="cx-sub">Why</div>
+        ${gap ? `<p class="muted tiny cx-note">Only ${coverage}% of these have a
+          reason recorded. Pick one when you cancel an order and this becomes
+          the most useful chart on the page.</p>` : ""}
+        ${bar(cx.reasons, cx.cancelled)}
+
+        ${(cx.by_payment || []).length > 1 ? `
+          <div class="cx-sub">Cash on delivery vs paid online</div>
+          <p class="muted tiny cx-note">Across India, cash-on-delivery orders fail
+            far more often than prepaid ones — Shipway's FY25 data puts COD
+            return-to-origin at 26% against under 2% for prepaid. Your own split
+            is below.</p>
+          <div class="cx-pay">
+            ${cx.by_payment.map((p) => `
+              <div class="cx-pay-cell">
+                <b>${esc(p.label)}</b>
+                <span>${fmt(p.cancelled)} of ${fmt(p.orders)} cancelled${p.rate != null ? ` · ${p.rate}%` : ""}</span>
+                <i>₹${fmt(p.value)}</i>
+              </div>`).join("")}
+          </div>` : ""}
+
+        ${(cx.by_product || []).length ? `
+          <div class="cx-sub">Which products</div>
+          ${bar(cx.by_product, cx.cancelled)}` : ""}
+
+        ${(cx.trend.x || []).length > 1
+          ? `<div class="cx-sub">Week by week</div><div class="plot" id="cxTrend"></div>`
+          : ""}
+      </div>
+    </div>`;
+}
+
+function bindCancelPanel(cx) {
+  const k = $("cancelKpi"), t = $("cxToggle"), body = $("cxBody");
+  if (!t || !body) return;
+  const open = () => {
+    body.hidden = !body.hidden;
+    t.textContent = body.hidden ? "Show breakdown" : "Hide breakdown";
+    if (!body.hidden && cx && (cx.trend.x || []).length > 1 && $("cxTrend")) {
+      plot($("cxTrend"), [
+        { x: cx.trend.x, y: cx.trend.orders, type: "bar", name: "Orders",
+          marker: { color: cssVar("--primary", "#5c6790") } },
+        { x: cx.trend.x, y: cx.trend.cancelled, type: "bar", name: "Cancelled",
+          marker: { color: cssVar("--amber", "#96702f") } },
+      ], { barmode: "overlay" }, "Cancellations by week");
+    }
+  };
+  t.onclick = open;
+  if (k) k.onclick = open;
 }
 
 // ---------- MODULE: Sub-Category Analysis ----------
@@ -3626,13 +3788,56 @@ function renderOrders() {
   const ex = $("ordExport");
   if (ex) ex.onclick = () => download("/api/store/orders/export", "site_orders.csv");
   document.querySelectorAll("[data-ostat]").forEach((sel) => sel.onchange = async () => {
-    try {
-      _ordersData = await api("/api/store/orders/status", { method: "POST", json: { order_id: sel.dataset.ostat, status: sel.value } });
-      toast("Order updated — sales figures refreshed");
-      renderOrders();
-    } catch (e) { toast(e.message); }
+    const id = sel.dataset.ostat;
+    // Cancelling is the one status change worth a question. Asked here, in the
+    // half-second where the seller still knows the answer — ask later and
+    // nobody ever fills it in, which is how a "why" chart ends up empty.
+    if (sel.value === "cancelled") { askCancelReason(id, sel); return; }
+    await setOrderStatus(id, sel.value);
   });
   if (_ordersTab === "customers") loadCustomers();
+}
+
+async function setOrderStatus(id, status, reason) {
+  try {
+    _ordersData = await api("/api/store/orders/status", { method: "POST",
+      json: { order_id: id, status, reason: reason || "" } });
+    toast(status === "cancelled"
+      ? "Cancelled — it is out of your sales figures and counted in Cancellations."
+      : "Order updated — sales figures refreshed");
+    renderOrders();
+  } catch (e) { toast(e.message); }
+}
+
+let _cancelReasons = null;
+
+async function askCancelReason(id, sel) {
+  if (!_cancelReasons) {
+    try { _cancelReasons = (await api("/api/cancellations")).reason_options || []; }
+    catch (e) { _cancelReasons = []; }
+  }
+  const opts = _cancelReasons.map((r) =>
+    `<option value="${esc(r.id)}">${esc(r.label)}</option>`).join("");
+  openModal("Why is this cancelled?", `
+    <p class="muted" style="margin-top:0;">One tap. It is the difference between
+    knowing you lost twelve orders and knowing <b>why</b> you lost them — and it
+    is the only field Cancellation Analysis cannot work without.</p>
+    <label class="fld"><span>Reason</span>
+      <select id="cxReason">${opts}<option value="">Rather not say</option></select></label>
+    <p class="muted tiny">The stage — before packing, packed, or already shipped —
+    is worked out from the order's own history, so you do not have to tell us that.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cxAbort">Don't cancel</button>
+      <button class="btn primary" id="cxGo">Cancel this order</button>
+    </div>`);
+  const restore = () => { if (sel) sel.value = (_ordersData.orders || [])
+    .find((o) => o.id === id)?.status || "new"; };
+  $("cxAbort").onclick = () => { closeModal(); restore(); };
+  $("cxGo").onclick = async () => {
+    const reason = $("cxReason").value;
+    closeModal();
+    await setOrderStatus(id, "cancelled", reason);
+  };
 }
 
 function orderCard(o) {
@@ -3700,8 +3905,37 @@ async function loadCustomers() {
 // ---------- boot ----------
 (async function init() {
   await loadIcons();
-  if (state.token) {
-    try { await api("/api/me"); loadMediaStatus(); showShell(); }
-    catch { state.token = null; localStorage.removeItem("cx_token"); $("loginView").hidden = false; }
-  } else { $("loginView").hidden = false; }
+  if (!state.token) { $("loginView").hidden = false; return; }
+
+  // Only a 401 means the session is actually gone. A 500, a timeout or a cold
+  // start is the server having a bad moment — throwing the seller back to the
+  // login screen for that, and deleting their token on the way out, is why
+  // stepping onto the landing page and back felt like being signed out.
+  const signedOut = (e) => e && (e.status === 401 || e.status === 403);
+  const forget = () => {
+    state.token = null;
+    localStorage.removeItem("cx_token");
+    localStorage.removeItem("cx_email");
+    $("loginView").hidden = false;
+  };
+  try {
+    await api("/api/me");
+    loadMediaStatus();
+    showShell();
+  } catch (e) {
+    if (signedOut(e)) return forget();
+    try {                                   // one retry for a cold start
+      await new Promise((r) => setTimeout(r, 1200));
+      await api("/api/me");
+      loadMediaStatus();
+      showShell();
+    } catch (e2) {
+      if (signedOut(e2)) return forget();
+      // Still signed in — let them in and say what happened, rather than
+      // pretending their session expired.
+      showShell();
+      toast("Could not reach the server just now. You are still signed in — "
+            + "press Refresh on any page to try again.", 6000);
+    }
+  }
 })();
