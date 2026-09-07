@@ -596,10 +596,17 @@ for _i in range(6):
         "lines": [{"product_id": _cpid, "qty": 1}],
         "address": {"name": f"C{_i}", "phone": f"9444444{_i:03d}", "line1": "4 Fourth St",
                     "city": "Bengaluru", "state": "KA", "pincode": "560004"},
-        "payment": "cod" if _i % 2 == 0 else "prepaid"})
+        "payment": "cod"})
     if _r.status_code == 200:
         _co.append(_r.json()["order"]["id"])
-must(len(_co) >= 3, f"placed test orders ({len(_co)})")
+must(len(_co) >= 5, f"placed test orders ({len(_co)})")
+# a store with no gateway connected cannot take an online payment
+_r = c.post(f"/api/shop/{HANDLE}/order", json={
+    "lines": [{"product_id": _cpid, "qty": 1}], "payment": "prepaid",
+    "address": {"name": "Prepaid", "phone": "9444499999", "line1": "4 Fourth St",
+                "city": "Bengaluru", "state": "KA", "pincode": "560004"}})
+must(_r.status_code == 400 and "online" in _r.text.lower(),
+     "a store with no payment gateway refuses prepaid orders")
 
 # cancel at three different stages, two with a reason
 c.post("/api/store/orders/status", headers=H, json={"order_id": _co[0], "status": "cancelled", "reason": "out_of_stock"})
@@ -669,6 +676,165 @@ must("svg { width: 1em; height: 1em;" in _scss, "storefront icons have a default
 must(".crumbs svg" in _scss, "breadcrumb arrows are sized explicitly")
 must("svg { width: 1em; height: 1em;" in _pl.Path("Smart CafeX/smart.css").read_text(encoding="utf-8"),
      "app icons have a default size too")
+
+
+print("\n== 27. payments, sections, suppliers, campaigns and Studio ==")
+
+# ---- the seller's own gateway ----
+g = c.get("/api/site/gateway", headers=H).json()
+must(g["connected"] is False, "no gateway to begin with")
+r = c.post("/api/site/gateway", headers=H, json={"key_id": "nope", "key_secret": "x"})
+must(r.status_code == 400, "a key that isn't a Razorpay key is refused")
+r = c.post("/api/site/gateway", headers=H, json={"key_id": "rzp_test_ABC1234567", "key_secret": "s3cr3t"})
+must(r.status_code == 200 and r.json()["connected"], f"keys saved ({r.status_code})", r.text[:200])
+g = c.get("/api/site/gateway", headers=H).json()
+must(g["mode"] == "test" and g["key_id_last4"] == "4567", "mode and last four reported")
+must("s3cr3t" not in c.get("/api/site/gateway", headers=H).text, "the secret never comes back")
+
+# ---- partial COD ----
+from backend.core import store_payments as _sp
+_c = {"cod_advance": 100.0}
+must(_sp.split_due(_c, 1548, "cod") == {"online": 100.0, "on_delivery": 1448.0, "kind": "cod_advance"},
+     "COD with an advance splits correctly")
+must(_sp.split_due(_c, 1548, "prepaid")["online"] == 1548.0, "prepaid takes it all online")
+must(_sp.split_due({"cod_advance": 0}, 900, "cod")["online"] == 0, "no advance = plain COD")
+must(_sp.split_due({"cod_advance": 5000}, 300, "cod")["online"] == 300.0,
+     "an advance larger than the order is capped at the order")
+must("₹100" in _sp.describe(_c), "the shopper is told the rupee amount, not 'a small amount'")
+
+_site = c.get("/api/site/state", headers=H).json()["site"]
+_site["commerce"]["cod_advance"] = 150
+_site["commerce"]["online_enabled"] = True
+c.post("/api/site/save", headers=H, json={"site": _site})
+_pc = c.post(f"/api/shop/{HANDLE}/cart", json={"lines": [{"product_id": _cpid, "qty": 1}]}).json()
+must(_pc["cod_advance"] == 150.0, "the storefront is told the advance")
+must(_pc["due"]["cod"]["online"] == 150.0, "and what is due online for a COD order")
+must(_pc["online_enabled"] is True, "online payment is offered once a gateway is connected")
+r = c.post(f"/api/shop/{HANDLE}/order", json={
+    "lines": [{"product_id": _cpid, "qty": 1}], "payment": "cod",
+    "address": {"name": "Adv", "phone": "9444488888", "line1": "4 St", "city": "Bengaluru",
+                "state": "KA", "pincode": "560004"}})
+must(r.status_code == 400, "an unpaid advance cannot become an order")
+c.post("/api/site/gateway/disconnect", headers=H)
+must(c.get("/api/site/gateway", headers=H).json()["connected"] is False, "gateway disconnects")
+_site["commerce"]["cod_advance"] = 0
+_site["commerce"]["online_enabled"] = False
+c.post("/api/site/save", headers=H, json={"site": _site})
+
+# ---- product sections: no more duplication ----
+r = c.post("/api/products/item", headers=H, json={
+    "name": "Featured Piece", "price": 700, "listed": True, "featured": True, "stock": 5})
+_fp = [p for p in r.json()["products"] if p["name"] == "Featured Piece"][0]
+must(_fp["featured"] is True, "a product can be marked for the Featured rail")
+must(_fp["spotlight"] is False, "and Spotlight is separate")
+_pub = c.get(f"/api/shop/{HANDLE}/site").json()
+_sf = [p for p in _pub["products"] if p["id"] == _fp["id"]][0]
+must(_sf["featured"] is True, "the storefront receives the placement flags")
+must(all("featured" in p and "spotlight" in p for p in _pub["products"]),
+     "every product carries them, so the site never has to guess")
+_js = _pl.Path("Smart CafeX/storefront/store.js").read_text(encoding="utf-8")
+must("p.featured" in _js and "featuredIds" in _js,
+     "the storefront picks featured products instead of slicing the same list")
+must("!featuredIds.has(p.id)" in _js,
+     "and the spotlight avoids what the featured rail already shows")
+
+# ---- suppliers, split out of inventory ----
+from backend.core import supply as _sup
+for _n, _s2 in [("Fabric roll", "Sharma Textiles"), ("Buttons", "Sharma Textiles"),
+                ("Boxes", "PackWell")]:
+    _sup.upsert_item(SELLER, {"name": _n, "current_stock": 10, "unit_cost": 20,
+                              "supplier_name": _s2, "supplier_phone": "9876500000"})
+_sups = c.get("/api/supply/suppliers", headers=H).json()["suppliers"]
+must(len(_sups) == 2, f"suppliers derived from the items they stock (got {len(_sups)})")
+_sh = next(x for x in _sups if x["name"] == "Sharma Textiles")
+must(_sh["item_count"] == 2, "with the items they supply")
+must(_sh["name"] == "Sharma Textiles", "and their name's capitalisation intact")
+r = c.post("/api/supply/supplier", headers=H, json={
+    "name": "Sharma Textiles", "patch": {"name": "Sharma Textiles Pvt Ltd", "phone": "9000011111"}})
+_sups = r.json()["suppliers"]
+must(any(x["name"] == "Sharma Textiles Pvt Ltd" and x["item_count"] == 2 for x in _sups),
+     "editing a supplier updates every item at once")
+r = c.post("/api/supply/supplier/detach", headers=H, json={"name": "Sharma Textiles Pvt Ltd"})
+must(len(r.json()["detached_item_ids"]) == 2, "detach reports the ids so it can be undone")
+_names = {i["name"] for i in _sup.get_inventory(SELLER)}
+must("Fabric roll" in _names and "Buttons" in _names,
+     "removing a supplier never removes your stock")
+c.post("/api/supply/supplier/attach", headers=H, json={
+    "name": "Sharma Textiles Pvt Ltd",
+    "patch": {"item_ids": r.json()["detached_item_ids"], "name": "Sharma Textiles Pvt Ltd"}})
+must(any(x["item_count"] == 2 for x in c.get("/api/supply/suppliers", headers=H).json()["suppliers"]),
+     "and the undo puts them back")
+
+# ---- win-back actually sends ----
+_rows = [{"customer_id": "w1", "customer_name": "Riya", "email": "riya@x.test",
+          "phone": "9876543210", "favorite_item": "Amber Musk", "recency_days": 61,
+          "coupon": "15%", "monetary": 4200},
+         {"customer_id": "w2", "customer_name": "Arjun", "phone": "9812345678",
+          "favorite_item": "Silk Scarf", "recency_days": 70, "monetary": 3100},
+         {"customer_id": "w3", "customer_name": "NoContact", "monetary": 500}]
+r = c.post("/api/rfm/winback/preview", headers=H, json={"rows": _rows})
+must(r.status_code == 200 and r.json()["preview"], "a campaign can be previewed before sending")
+must("Riya" in r.json()["preview"][0]["message"], "merge fields are filled per customer")
+r = c.post("/api/rfm/winback/send", headers=H, json={"rows": _rows})
+_res = r.json()
+must(r.status_code == 200, f"campaign sends ({r.status_code})", r.text[:200])
+must(_res["recipients"] == 3, "every recipient is accounted for")
+must(_res["skipped"] == 1, "a customer with no email and no phone is reported, not dropped")
+must(_res["wa_links"] == 2 or _res["whatsapp_sent"] == 2,
+     "WhatsApp goes out, or comes back as tap-to-send links")
+must(all(x["wa_link"].startswith("https://wa.me/91") for x in _res["results"] if x["wa_link"]),
+     "links carry the country code")
+must(_res["campaign_id"], "the send is recorded for measurement automatically")
+must(c.get("/api/rfm/winback/sends", headers=H).json()["sends"], "and appears in the send log")
+_proof = c.get("/api/rfm/winback/proof", headers=H).json()
+must(_proof["totals"]["contacted"] >= 2, "the proof loop picked it up without being told")
+
+# ---- Product Studio ----
+r = c.post("/api/studio/brand", headers=H, json={"patch": {
+    "name": "Aureva", "about": "Small-batch perfumes, rested six months before bottling.",
+    "audience": "People who wear one scent, not ten.", "look": "luxe", "voice": "luxury",
+    "palette": "amber, deep brown, brass", "avoid": "cheap, discount"}})
+must(r.status_code == 200 and r.json()["brand"]["look"] == "luxe", "the brand profile saves")
+r = c.post("/api/studio/brand", headers=H, json={"patch": {"look": "nonsense"}})
+must(r.json()["brand"]["look"] == "clean", "an unknown look falls back rather than breaking")
+st = c.get("/api/studio/state", headers=H).json()
+must(st["brand_ready"], "the brand counts as ready once it says what it is")
+must(st["products"] and st["looks"] and st["voices"], "products and the option lists come through")
+must(st["products"] == sorted(st["products"], key=lambda p: -p["completeness"]["score"]),
+     "products are ordered by how ready they are to post about")
+
+r = c.post("/api/studio/product", headers=H, json={"product_id": _fp["id"], "patch": {
+    "story": "Rested six months before it met a bottle.",
+    "materials": "Oud, amber, a little smoke",
+    "different": "No alcohol burn — it opens soft.",
+    "for_who": "Someone who wears one scent"}})
+must(r.status_code == 200, f"product material saves ({r.status_code})", r.text[:200])
+_comp = r.json()["completeness"]
+must(_comp["score"] > 0 and _comp["next"], "completeness is scored and names what to do next")
+must(_comp["next"]["why"], "and says why that piece matters")
+_ang = r.json()["angles"]
+must(len(_ang) > 3, f"post angles come from the material actually supplied ({len(_ang)})")
+must(any(a["id"] == "story" for a in _ang), "the story unlocks a story angle")
+
+from backend.core import studio as _st
+# the fallback test just reset `look` — put the real brand back first
+c.post("/api/studio/brand", headers=H, json={"patch": {"look": "luxe", "voice": "luxury"}})
+_brief = _st.build_brief(_st.get_brand(SELLER),
+                         {"name": "Midnight Oud", "category": "Fragrance", "price": 4999},
+                         _st.get_material(SELLER, _fp["id"]))
+_ip = _st.image_prompt(_brief)
+must("amber, deep brown, brass" in _ip, "the image prompt carries the brand's palette")
+must("moody low-key" in _ip, "and the brand's look, not a generic template")
+must("No alcohol burn" in _ip, "and the product's real detail")
+must("cheap, discount" in _ip, "and what the brand refuses to say")
+_cp = _st.caption_prompt(_brief)
+must("understated" in _cp, "the caption prompt carries the brand's voice")
+
+r = c.post("/api/studio/post", headers=H, json={"product_id": _fp["id"], "angle": "the story"})
+_post = r.json()
+must(r.status_code == 200 and _post["caption"], f"a post draft is produced ({r.status_code})")
+must(_post["image_is_generated"] is False, "using your own photo is never labelled generated")
+must("hashtags" in _post, "with hashtags")
 
 print("\nALL CHECKS PASSED \u2713")
 shutil.rmtree(TMP, ignore_errors=True)

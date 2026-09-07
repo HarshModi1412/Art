@@ -546,7 +546,14 @@ function railSection(id, idx, eyebrow, title, cardsHtml, count, editKey, editLab
 /* ------------------------------------------------------------------ views */
 function viewHome() {
   const s = S.site, sec = s.sections || {}, hero = s.hero || {};
-  const featured = S.products.slice(0, 10);
+  // Sections used to be the same products over and over — Featured, Spotlight
+  // and the grid all sliced the top of one list, so a ten-product catalogue
+  // looked like it was repeating itself down the page. Now the seller picks.
+  // If they have picked none, fall back to automatic so a new store still
+  // looks full rather than empty.
+  const picked = S.products.filter((p) => p.featured);
+  const featured = (picked.length ? picked : S.products).slice(0, 10);
+  const featuredIds = new Set(featured.map((p) => p.id));
   const heroImg = hero.image_url || "";
   const heroVid = hero.video_url || "";
   const full = S.style.layout.hero === "full";
@@ -608,7 +615,11 @@ function viewHome() {
     featured.map(productCard).join(""), featured.length, "featured", "Featured rail") : "";
 
   // ---- spotlight: one product, sticky media, copy scrolling past it ----
-  const hero_p = S.products[0];
+  // The spotlight is the seller's pick; failing that, something NOT already
+  // in the Featured rail, so the two blocks never show the same thing.
+  const hero_p = S.products.find((p) => p.spotlight)
+    || S.products.find((p) => !featuredIds.has(p.id))
+    || S.products[0];
   const spot = sec.spotlight && hero_p ? (() => {
     const img = hero_p.image_url || (hero_p.images || [])[0] || "";
     const off = hero_p.mrp && hero_p.price && hero_p.mrp > hero_p.price
@@ -674,7 +685,15 @@ function viewHome() {
     <section class="sec"${ed("products", "Product grid")}><div class="wrap">
       ${secHead(idx(), C.all_eyebrow || "Catalogue", C.all_title || "All products",
         `<button class="b g sm" data-go="shop">View all${ic("arrow-right")}</button>`)}
-      <div class="grid">${S.products.slice(0, 8).map(productCard).join("")}</div>
+      <div class="grid">${(() => {
+        const shown = new Set(featuredIds);
+        if (hero_p) shown.add(hero_p.id);
+        const rest = S.products.filter((p) => !shown.has(p.id));
+        // Show what the page has not shown yet first, then top up if the
+        // catalogue is small — a short catalogue should still fill the grid.
+        return rest.concat(S.products.filter((p) => shown.has(p.id)))
+          .slice(0, 8).map(productCard).join("");
+      })()}</div>
     </div></section>`;
 
   const story = sec.story && (s.story || {}).body ? `
@@ -992,10 +1011,7 @@ function viewCheckout() {
 
         <div class="co-box">
           <h3>Payment</h3>
-          ${c.cod_enabled ? `<label class="pay-opt on" data-pay="cod"><input type="radio" name="pay" value="cod" checked />
-            <div><b>Cash on delivery</b><div class="tiny muted">Pay the courier when your order arrives.</div></div></label>` : ""}
-          <label class="pay-opt ${c.cod_enabled ? "" : "on"}" data-pay="prepaid"><input type="radio" name="pay" value="prepaid" ${c.cod_enabled ? "" : "checked"} />
-            <div><b>Pay online</b><div class="tiny muted">We'll send a payment link to confirm this order.</div></div></label>
+          ${paymentOptions(priced)}
           <label class="field" style="margin-top:18px"><span>Order note <span class="muted">(optional)</span></span><textarea id="coNote" rows="2" placeholder="Anything we should know?"></textarea></label>
         </div>
       </div>
@@ -1012,7 +1028,7 @@ function viewCheckout() {
           ${priced.gst_percent ? `<div><span>GST (${priced.gst_percent}%)${priced.gst_inclusive ? " incl." : ""}</span><span>${money(priced.tax)}</span></div>` : ""}
           <div class="tot"><span>Total</span><span>${money(priced.total)}</span></div>
         </div>
-        <button class="b p blk" id="placeBtn">Place order${ic("arrow-right")}</button>
+        <button class="b p blk" id="placeBtn">${payButtonLabel(priced)}${ic("arrow-right")}</button>
         <div class="err" id="coErr" hidden></div>
         ${c.order_note ? `<p class="tiny muted" style="margin:16px 0 0">${esc(c.order_note)}</p>` : ""}
         ${trustBlock()}
@@ -1023,6 +1039,45 @@ function viewCheckout() {
 /* Who you are actually paying. A shopper handing money to a brand they have
    never heard of needs this more than they would on a marketplace, not less —
    and every line here is something the seller filled in, never invented. */
+/* What this store can actually take, and what each choice costs the shopper
+   right now. The advance is stated in rupees on the option itself — "pay a
+   small amount to confirm" tells a shopper nothing and gets abandoned. */
+function paymentOptions(priced) {
+  const advance = priced.cod_advance || 0;
+  const online = priced.online_enabled;
+  const cod = priced.cod_enabled;
+  const first = cod ? "cod" : "prepaid";
+  const opt = (kind, title, sub) => `
+    <label class="pay-opt ${first === kind ? "on" : ""}" data-pay="${kind}">
+      <input type="radio" name="pay" value="${kind}" ${first === kind ? "checked" : ""} />
+      <div><b>${title}</b><div class="tiny muted">${sub}</div></div></label>`;
+
+  const parts = [];
+  if (cod) {
+    parts.push(opt("cod",
+      advance > 0 ? `Cash on delivery — ${money(advance)} now` : "Cash on delivery",
+      advance > 0
+        ? `${money(advance)} online to confirm, ${money(priced.total - advance)} in cash when it arrives.`
+        : "Pay the courier in cash when your order arrives."));
+  }
+  if (online) {
+    parts.push(opt("prepaid", "Pay online now",
+      `${money(priced.total)} by UPI, card, netbanking or wallet. Secured by Razorpay.`));
+  }
+  if (!parts.length) {
+    return `<p class="muted tiny">This store is not accepting payments right now.</p>`;
+  }
+  return parts.join("");
+}
+
+/* The label on the button, so nobody is surprised by what happens next. */
+function payButtonLabel(priced) {
+  const pay = (document.querySelector('input[name="pay"]:checked') || {}).value || "cod";
+  const due = (priced.due || {})[pay === "prepaid" ? "prepaid" : "cod"] || {};
+  const onlineNow = due.online || 0;
+  return onlineNow > 0 ? `Pay ${money(onlineNow)} & place order` : "Place order";
+}
+
 function trustBlock() {
   const t = S.site.trust || {};
   if (t.show === false) return "";
@@ -1059,6 +1114,9 @@ function viewDone(order) {
       <div class="i" style="color:var(--accent);opacity:1">${ic("check")}</div>
       <h1 style="font-size:clamp(26px,4vw,48px);margin-bottom:14px">Order placed</h1>
       <p>Thank you, ${esc(order.customer_name || "friend")}. Order <b>${esc(order.order_no)}</b> is confirmed for ${money(order.total)}.</p>
+      ${order.paid_online > 0 ? `<p class="muted">${money(order.paid_online)} paid online${
+        order.due_on_delivery > 0
+          ? ` · <b>${money(order.due_on_delivery)} to pay in cash on delivery</b>` : " · nothing left to pay"}.</p>` : ""}
       <div class="ord" style="text-align:left;max-width:520px;margin:30px auto 0">
         <div class="ord-h"><b>${esc(order.order_no)}</b><span class="pill new">new</span></div>
         <div class="tiny muted">${(order.items || []).map((i) => `${esc(i.display_name || i.name)} × ${i.qty}`).join(" · ")}</div>
@@ -1316,15 +1374,78 @@ async function startCheckout() {
   } catch (e) { toast(e.message, "close"); }
 }
 
+/* Razorpay's widget, loaded only when a store actually takes online payments. */
+function loadRazorpay() {
+  if (window.Razorpay) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = () => resolve(true);
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+}
+
+/* Open the seller's own Razorpay checkout and resolve with what the server
+   needs to verify. Resolves null if the shopper closes it — that is a normal
+   outcome, not an error, and must not place an order. */
+async function collectPayment(pay) {
+  const ok = await loadRazorpay();
+  if (!ok) throw new Error("Could not reach the payment window. Check your connection and try again.");
+  const o = await api("/pay", { method: "POST", json: { lines: cartLines(), payment: pay } });
+  return new Promise((resolve, reject) => {
+    const rz = new window.Razorpay({
+      key: o.key_id,
+      order_id: o.order_id,
+      amount: o.amount,
+      currency: o.currency,
+      name: o.brand,
+      description: o.due.kind === "cod_advance"
+        ? `Advance to confirm your order (${money(o.due.on_delivery)} on delivery)`
+        : "Order payment",
+      prefill: {
+        name: (el("coName") || {}).value || "",
+        contact: (el("coPhone") || {}).value || "",
+        email: (el("coEmail") || {}).value || (S.customer || {}).email || "",
+      },
+      theme: { color: getComputedStyle(document.documentElement)
+        .getPropertyValue("--accent").trim() || "#111" },
+      handler: (res) => resolve(res),
+      modal: { ondismiss: () => resolve(null) },
+    });
+    rz.on("payment.failed", (e) =>
+      reject(new Error((e.error && e.error.description) || "That payment did not go through.")));
+    rz.open();
+  });
+}
+
 async function placeOrder() {
   const err = el("coErr"); err.hidden = true;
   const btn = el("placeBtn"); btn.disabled = true; btn.textContent = "Placing order…";
   const pay = (document.querySelector('input[name="pay"]:checked') || {}).value || "cod";
+  let paid = {};
   try {
+    const due = ((S.priced || {}).due || {})[pay === "prepaid" ? "prepaid" : "cod"] || {};
+    if ((due.online || 0) > 0) {
+      btn.textContent = "Opening payment…";
+      const res = await collectPayment(pay);
+      if (!res) {                       // shopper closed the window
+        btn.disabled = false;
+        btn.innerHTML = payButtonLabel(S.priced) + ic("arrow-right");
+        return;
+      }
+      paid = {
+        razorpay_order_id: res.razorpay_order_id,
+        razorpay_payment_id: res.razorpay_payment_id,
+        razorpay_signature: res.razorpay_signature,
+      };
+      btn.textContent = "Placing order…";
+    }
     const r = await api("/order", {
       method: "POST",
       json: {
         lines: cartLines(), payment: pay, note: el("coNote").value,
+        ...paid,
         guest: !S.customer,
         name: el("coName").value,
         phone: el("coPhone").value,
@@ -1348,7 +1469,8 @@ async function placeOrder() {
     history.pushState({ name: "done" }, "", location.pathname + location.search + "#done");
   } catch (e) {
     err.textContent = e.message; err.hidden = false;
-    btn.disabled = false; btn.innerHTML = "Place order" + ic("arrow-right");
+    btn.disabled = false;
+    btn.innerHTML = payButtonLabel(S.priced || {}) + ic("arrow-right");
   }
 }
 
@@ -1426,6 +1548,8 @@ function bindView() {
   document.querySelectorAll(".pay-opt").forEach((n) => n.onclick = () => {
     document.querySelectorAll(".pay-opt").forEach((x) => x.classList.remove("on"));
     n.classList.add("on");
+    const b = el("placeBtn");
+    if (b && S.priced) b.innerHTML = payButtonLabel(S.priced) + ic("arrow-right");
   });
   const nf = el("newsForm");
   if (nf) nf.onsubmit = (e) => { e.preventDefault(); nf.reset(); toast("Thanks — we'll be in touch.", "mail"); };

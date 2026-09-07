@@ -1163,3 +1163,170 @@ svg { width: 1em; height: 1em; flex: none; vertical-align: -0.125em; }
   .cx-row { grid-template-columns: 1fr 40px 76px; }
   .cx-bar { display: none; }
 }
+
+/* ==========================================================
+   Forms that don't read as a wall
+   The product form was 25 fields in one scroll and the inventory form was 11
+   numeric boxes, most of them optional jargon. Four short panels, the required
+   fields first, and a footer that stays put.
+   ========================================================== */
+.pf { padding: 0; overflow: hidden; }
+.pf-head { padding: 18px 20px 12px; }
+.pf-head h4 { margin: 0 0 3px; font-size: 16px; }
+.pf-head p { margin: 0; }
+
+.pf-tabs {
+  display: flex; gap: 2px; padding: 0 20px; overflow-x: auto;
+  border-bottom: 1px solid var(--border); background: var(--surface-3);
+}
+.pf-tab {
+  border: 0; background: none; cursor: pointer; white-space: nowrap;
+  padding: 11px 14px; font: inherit; font-size: 13px; font-weight: 550;
+  color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+.pf-tab:hover { color: var(--text); }
+.pf-tab.on { color: var(--primary); border-bottom-color: var(--primary); }
+.pf-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+.pf-panel { display: none; padding: 20px; }
+.pf-panel.on { display: block; }
+.pf-panel .sup-sub:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+
+/* required is a promise the form should keep visible */
+.req {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--primary); background: var(--primary-soft);
+  border-radius: 3px; padding: 1px 5px; margin-left: 6px; vertical-align: 1px;
+}
+
+.pf-foot {
+  padding: 14px 20px; border-top: 1px solid var(--border); background: var(--surface-3);
+  position: sticky; bottom: 0; z-index: 2;
+}
+.pf-foot-b { display: flex; justify-content: flex-end; gap: 10px; }
+.pf-foot .err { margin: 0 0 10px; }
+
+/* where a product shows up on the site */
+.place-note { font-size: 12.5px; color: var(--muted); margin: 16px 0 10px; line-height: 1.55; }
+.place-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.place {
+  display: grid; grid-template-columns: 18px 1fr; gap: 11px; align-items: start; cursor: pointer;
+  padding: 14px 15px; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  transition: border-color .15s, background .15s;
+}
+.place:hover { border-color: var(--primary-line); }
+.place.on { border-color: var(--primary); background: var(--primary-soft); }
+.place input { margin-top: 2px; }
+.place-b b { display: block; font-size: 13.5px; }
+.place-b span { display: block; font-size: 12px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
+
+/* the seller's own payment gateway */
+.gw {
+  display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: start;
+  padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  margin-bottom: 14px;
+}
+.gw-on { grid-template-columns: 22px 1fr auto; border-color: var(--green); background: var(--green-soft); }
+.gw-i { color: var(--green); }
+.gw-b b { display: block; font-size: 13.5px; }
+.gw-b span { display: block; font-size: 12.2px; color: var(--muted); line-height: 1.5; margin-top: 3px; }
+.gw-b .gw-warn { color: var(--amber); font-weight: 550; }
+.gw-b code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+@media (max-width: 620px) {
+  .gw, .gw-on { grid-template-columns: 1fr; }
+  .pf-panel { padding: 16px; }
+}
+
+/* ==========================================================
+   Product Studio
+   ========================================================== */
+.st-brand { margin-top: 4px; }
+.st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.st-card {
+  display: grid; grid-template-columns: 62px 1fr; gap: 12px; text-align: left; cursor: pointer;
+  padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); color: inherit; font: inherit; transition: border-color .15s, box-shadow .15s;
+}
+.st-card:hover { border-color: var(--primary-line); box-shadow: var(--shadow); }
+.st-thumb {
+  width: 62px; height: 62px; border-radius: var(--radius); background: var(--surface-2) center/cover;
+  display: grid; place-items: center; color: var(--muted); flex: none;
+}
+.st-thumb svg { width: 20px; height: 20px; }
+.st-body { min-width: 0; display: grid; gap: 3px; align-content: start; }
+.st-body b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-meta { font-size: 11.5px; color: var(--muted); }
+.st-meter { display: block; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin: 3px 0 1px; }
+.st-meter i { display: block; height: 100%; border-radius: 3px; background: var(--muted); }
+.st-meter.band-hi i { background: var(--green); }
+.st-meter.band-mid i { background: var(--amber); }
+.st-meter.band-lo i { background: var(--red); }
+.st-next { font-size: 11px; color: var(--muted); }
+
+.st-checks { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
+.st-check {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
+  padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted);
+}
+.st-check svg { width: 12px; height: 12px; }
+.st-check.on { color: var(--green); border-color: var(--green-soft); background: var(--green-soft); }
+
+.st-make { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.st-post {
+  display: grid; grid-template-columns: 260px 1fr; gap: 18px; margin-top: 16px;
+  padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface-3);
+}
+.st-post-img {
+  position: relative; aspect-ratio: 1; border-radius: var(--radius);
+  background: var(--surface-2) center/cover; display: grid; place-items: center;
+}
+.st-gen {
+  position: absolute; left: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; font-weight: 650; letter-spacing: .04em;
+  padding: 4px 9px; border-radius: 99px;
+  background: rgba(9,12,20,.72); color: #fff;
+}
+.st-gen svg { width: 12px; height: 12px; }
+.st-post-b textarea {
+  width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; line-height: 1.6;
+  resize: vertical;
+}
+.st-post-a { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+@media (max-width: 720px) { .st-post { grid-template-columns: 1fr; } }
+
+/* ==========================================================
+   Suppliers
+   ========================================================== */
+.sup-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.sup-card { padding: 14px 15px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.sup-card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sup-card-h b { font-size: 14px; }
+.sup-card-c { display: grid; gap: 4px; margin: 8px 0; }
+.sup-card-c a { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--primary); text-decoration: none; }
+.sup-card-c a:hover { text-decoration: underline; }
+.sup-card-f { display: flex; gap: 12px; font-size: 12px; color: var(--muted); padding-top: 8px; border-top: 1px dashed var(--border); }
+.sup-card-i { font-size: 11.5px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+
+/* ==========================================================
+   Win-back send
+   ========================================================== */
+.wb-ch { display: grid; gap: 8px; margin-bottom: 14px; }
+.wb-c { display: grid; grid-template-columns: 18px 1fr; gap: 10px; align-items: start; cursor: pointer;
+  padding: 11px 13px; border: 1px solid var(--border); border-radius: var(--radius); }
+.wb-c b { display: block; font-size: 13.5px; }
+.wb-c i { display: block; font-style: normal; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.wb-prev {
+  padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2);
+  font-size: 13px; line-height: 1.6; color: var(--text-2); white-space: pre-wrap;
+}
+.wb-links { display: grid; gap: 6px; max-height: 300px; overflow-y: auto; margin: 10px 0; }
+.wb-link {
+  display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; align-items: center;
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+  text-decoration: none; color: inherit; font-size: 13px;
+}
+.wb-link:hover { border-color: var(--green); background: var(--green-soft); }
+.wb-link span { font-size: 11.5px; color: var(--muted); }

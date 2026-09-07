@@ -26,7 +26,7 @@ import secrets
 
 import pandas as pd
 
-from backend.core import auth, products, sitebuilder, smart, user_store
+from backend.core import auth, products, sitebuilder, smart, store_payments, user_store
 
 CUSTOMERS_KEY = "store_customers"
 SESSIONS_KEY = "store_sessions"
@@ -348,6 +348,13 @@ def price_cart(seller: str, lines: list[dict]) -> dict:
         "min_order": _money(c.get("min_order")),
         "free_shipping_above": _money(c.get("free_shipping_above")),
         "cod_enabled": bool(c.get("cod_enabled", True)),
+        "online_enabled": bool(c.get("online_enabled")) and store_payments.connected(seller),
+        "cod_advance": _money(c.get("cod_advance")),
+        "cod_note": store_payments.describe(c),
+        "due": {
+            "prepaid": store_payments.split_due(c, total, "prepaid"),
+            "cod": store_payments.split_due(c, total, "cod"),
+        },
     }
 
 
@@ -369,7 +376,8 @@ def _next_order_no(seller: str) -> str:
 
 
 def place_order(seller: str, customer: dict, lines: list[dict],
-                address: dict, payment: str = "cod", note: str = "") -> dict:
+                address: dict, payment: str = "cod", note: str = "",
+                payment_ok: bool = False, payment_ref: str = "") -> dict:
     seller = _norm_email(seller)
     site = sitebuilder.get_site(seller)
     if not site.get("published"):
@@ -391,6 +399,14 @@ def place_order(seller: str, customer: dict, lines: list[dict],
     pay = "cod" if payment not in ("cod", "prepaid") else payment
     if pay == "cod" and not priced["cod_enabled"]:
         raise StoreError("Cash on delivery is not available for this store.")
+    if pay == "prepaid" and not priced["online_enabled"]:
+        raise StoreError("This store is not set up to take online payments yet.")
+
+    # What the shopper owed online, recomputed here from the server's own
+    # prices — never from anything the browser sent.
+    due = store_payments.split_due(site["commerce"], priced["total"], pay)
+    if due["online"] > 0 and not payment_ok:
+        raise StoreError("That payment did not go through, so the order was not placed.")
 
     order = {
         "id": secrets.token_hex(8),
@@ -399,7 +415,11 @@ def place_order(seller: str, customer: dict, lines: list[dict],
         "updated_at": _now(),
         "status": "new",
         "payment": pay,
-        "payment_status": "pending",
+        "payment_status": ("paid" if due["on_delivery"] <= 0 and due["online"] > 0
+                           else "part_paid" if due["online"] > 0 else "pending"),
+        "paid_online": due["online"],
+        "due_on_delivery": due["on_delivery"],
+        "payment_ref": str(payment_ref or "")[:64],
         "customer_id": customer.get("id") or "",
         "customer_name": str((address or {}).get("name") or customer.get("name") or "").strip()[:80],
         "customer_email": _norm_email(customer.get("email")),

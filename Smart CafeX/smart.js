@@ -256,7 +256,9 @@ function redrawCharts() {
 const MODULES = [
   { id: "sales",      name: "Sales Analytics",        sub: "KPIs, revenue trends and a 30-day forecast from your order data.",             ico: "chart", cls: "tile-sales",     needs: "sales",  tag: "SALES" },
   { id: "subcategory",name: "Sub-Category Analysis",  sub: "Which categories & sub-categories drive revenue — trends and drill-downs.",   ico: "layers", cls: "tile-sub",       needs: "sales",  tag: "SALES" },
-  { id: "supply",     name: "Supply Management",      sub: "Track inventory & suppliers, link products to materials, log waste, and get per-item EOQ/MOQ restock suggestions with PDF purchase orders.", ico: "package", cls: "tile-supply",   needs: null,     tag: "SUPPLY" },
+  { id: "inventory",  name: "Inventory Management",   sub: "What you hold, what each sold product uses up, and what gets wasted. Stock falls automatically as orders come in.", ico: "package", cls: "tile-supply",   needs: null,     tag: "STOCK" },
+  { id: "supply",     name: "Suppliers & Purchase Orders", sub: "Who you buy from, when to reorder, and a purchase order PDF you can send them.", ico: "truck", cls: "tile-supply",   needs: null,     tag: "SUPPLY" },
+  { id: "studio",     name: "Product Studio",         sub: "Your photos, clips and the words behind each product — turned into Instagram posts that look like your brand, not a template.", ico: "spark", cls: "tile-content",  needs: null,     tag: "STUDIO" },
   { id: "products",   name: "Product Management",     sub: "Your catalogue of products, each linked to the names it carries on Amazon, Shopify and other platforms — sales roll up to the product everywhere.", ico: "tag", cls: "tile-supply",   needs: null,     tag: "CATALOG" },
   { id: "site",       name: "Website Builder",        sub: "Build your own selling website — pick a theme for your genre, set fonts, colours and images, then publish. Your listed products become its shop.", ico: "globe", cls: "tile-site",     needs: null,     tag: "SITE" },
   { id: "orders",     name: "Orders",                 sub: "Every order placed on your website — status, customer, address and export. Delivered orders feed straight into your sales analytics.", ico: "bag", cls: "tile-orders",   needs: null,     tag: "ORDERS" },
@@ -927,6 +929,8 @@ async function refreshCurrent() {
 async function openModule(id) {
   _currentModule = id;
   if (id === "sales") return openSales();
+  if (id === "inventory") return openInventory();
+  if (id === "studio") return openStudio();
   if (id === "subcategory") return openSubcategory();
   if (id === "products") return openProducts();
   if (id === "site") return openSite();
@@ -1184,65 +1188,124 @@ function openProductForm(id, prefillName) {
   _pfGallery = (it && it.images ? it.images.slice() : []);
   const listed = it ? it.listed !== false : true;
 
+  // Four short steps instead of one twenty-five-field wall. A seller adding
+  // their first product should be able to finish the first panel and stop —
+  // name, price, photo — and come back for sizes and site placement later.
   p.innerHTML = `
-    <div class="card sup-form form-v">
-      <h4 style="margin:0 0 4px;">${id ? "Edit product" : "Add product"}</h4>
-      <p class="muted tiny" style="margin:0 0 14px;">Everything below the divider is what shoppers see on your own website.</p>
-
-      <div class="sup-form-grid">
-        <label>Product name<input id="pfName" value="${it ? esc(it.name) : esc(prefillName || "")}" placeholder="e.g. Midnight Oud 50ml" /></label>
-        <label>Category <span class="muted tiny">(groups it on your site)</span><input id="pfCat" value="${esc(v("category"))}" placeholder="Fragrance" /></label>
-        <label>Your SKU <span class="muted tiny">(internal, never shown)</span><input id="pfSku" value="${esc(v("sku"))}" /></label>
-        <label>Selling price ₹<input id="pfPrice" type="number" min="0" step="any" value="${num("price")}" placeholder="1499" /></label>
-        <label>MRP / strike-through price ₹ <span class="muted tiny">(optional — shows a discount badge)</span><input id="pfMrp" type="number" min="0" step="any" value="${num("mrp")}" placeholder="1999" /></label>
-        <label>Unit cost ₹ <span class="muted tiny">(COGS, never shown)</span><input id="pfCost" type="number" min="0" step="any" value="${num("unit_cost")}" /></label>
-        <label>Status<select id="pfStatus">
-          <option value="active" ${v("status", "active") === "active" ? "selected" : ""}>Active</option>
-          <option value="archived" ${v("status") === "archived" ? "selected" : ""}>Archived</option>
-        </select></label>
+    <div class="card sup-form form-v pf">
+      <div class="pf-head">
+        <h4>${id ? "Edit product" : "Add product"}</h4>
+        <p class="muted tiny">${id ? esc(it.name) : "Only the name and price are required — everything else can wait."}</p>
       </div>
 
-      <div class="sup-sub">On my website</div>
-      ${mediaWarning()}
-
-      <label class="site-toggle big" title="Show this product on your website">
-        <input type="checkbox" id="pfListed" ${listed ? "checked" : ""} />
-        <span class="tsw"></span>
-        <span class="tlbl">List this product on my website<span class="muted tiny"> — on by default</span></span>
-      </label>
-
-      ${v("image_url") ? "" : `<div class="nudge">${sic("image")}<div><b>Add a photo</b>
-        A product without one is the single biggest reason a storefront looks unfinished.</div></div>`}
-      <div class="sup-form-grid">
-        ${imageField("pfImg", v("image_url"), "Main photo", "square images look best")}
-        ${imageField("pfVid", v("video_url"), "Product clip", "plays when a shopper hovers the card", true)}
-        <label>Description<textarea id="pfDesc" rows="4" placeholder="What it is, what it's made of, why someone should buy it.">${esc(v("description"))}</textarea></label>
-        <label>Key points <span class="muted tiny">(one per line — shown as ticks on the product page)</span>
-          <textarea id="pfHl" rows="3" placeholder="100% cotton&#10;Ships in 24 hours&#10;Free returns">${esc((v("highlights", []) || []).join("\n"))}</textarea></label>
-        <label>Sold by <span class="muted tiny">(piece / kg / box — optional)</span><input id="pfUnit" value="${esc(v("unit_label"))}" placeholder="piece" /></label>
+      <div class="pf-tabs" role="tablist">
+        <button type="button" class="pf-tab on" data-pf="basics">Basics</button>
+        <button type="button" class="pf-tab" data-pf="media">Photos &amp; copy</button>
+        <button type="button" class="pf-tab" data-pf="stock">Sizes &amp; stock</button>
+        <button type="button" class="pf-tab" data-pf="site">On my site</button>
       </div>
 
-      <div class="sup-sub">Sizes &amp; colours</div>
-      <p class="muted tiny" style="margin:-6px 0 10px;">A shirt in three sizes and two colours is
-      six things to count, not one. Name the options and each combination becomes a real record
-      with its own stock, its own SKU and — if you want — its own price.</p>
-      <div id="pfVarBox"></div>
-
-      <div class="sup-sub">Stock</div>
-      <div class="sup-form-grid">
-        <label class="inline-check"><input type="checkbox" id="pfTrack" ${v("track_stock", true) === false ? "" : "checked"} /> Track stock for this product <span class="muted tiny">— sells out at zero, and site orders deduct from it</span></label>
-        <label id="pfStockRow">Units available<input id="pfStock" type="number" min="0" step="1" value="${it && it.stock != null ? it.stock : 0}" /></label>
+      <div class="pf-panel on" data-pf="basics">
+        <div class="sup-form-grid">
+          <label>Product name <span class="req">required</span>
+            <input id="pfName" value="${it ? esc(it.name) : esc(prefillName || "")}" placeholder="e.g. Midnight Oud 50ml" /></label>
+          <label>Selling price ₹ <span class="req">required</span>
+            <input id="pfPrice" type="number" min="0" step="any" value="${num("price")}" placeholder="1499" /></label>
+          <label>Category <span class="muted tiny">groups it on your site</span>
+            <input id="pfCat" value="${esc(v("category"))}" placeholder="Fragrance" list="pfCatList" />
+            <datalist id="pfCatList">${[...new Set((_productsData.products || [])
+              .map((x) => x.category).filter(Boolean))].map((c2) => `<option value="${esc(c2)}">`).join("")}</datalist></label>
+          <label>MRP ₹ <span class="muted tiny">optional — shows a struck-through price and a discount badge</span>
+            <input id="pfMrp" type="number" min="0" step="any" value="${num("mrp")}" placeholder="1999" /></label>
+          <label>What it costs you ₹ <span class="muted tiny">never shown to shoppers — used for your margins</span>
+            <input id="pfCost" type="number" min="0" step="any" value="${num("unit_cost")}" /></label>
+          <label>Your SKU <span class="muted tiny">internal code, optional</span>
+            <input id="pfSku" value="${esc(v("sku"))}" /></label>
+          <label>Status<select id="pfStatus">
+            <option value="active" ${v("status", "active") === "active" ? "selected" : ""}>Active — on sale</option>
+            <option value="archived" ${v("status") === "archived" ? "selected" : ""}>Archived — hidden everywhere</option>
+          </select></label>
+        </div>
       </div>
 
-      <div class="sup-sub">Extra photos</div>
-      <div class="gal-wrap" id="pfGal"></div>
-
-      <div class="modal-actions">
-        <button class="btn ghost" id="pfCancel">Cancel</button>
-        <button class="btn primary" id="pfSave">${id ? "Save changes" : "Add product"}</button>
+      <div class="pf-panel" data-pf="media">
+        ${mediaWarning()}
+        ${v("image_url") ? "" : `<div class="nudge">${sic("image")}<div><b>Add a photo</b>
+          A product without one is the single biggest reason a storefront looks unfinished.</div></div>`}
+        <div class="sup-form-grid">
+          ${imageField("pfImg", v("image_url"), "Main photo", "square images look best")}
+          ${imageField("pfVid", v("video_url"), "Product clip", "plays when a shopper hovers the card", true)}
+          <label>Description<textarea id="pfDesc" rows="4" placeholder="What it is, what it's made of, why someone should buy it.">${esc(v("description"))}</textarea></label>
+          <label>Key points <span class="muted tiny">one per line — shown as ticks on the product page</span>
+            <textarea id="pfHl" rows="3" placeholder="100% cotton&#10;Ships in 24 hours&#10;Free returns">${esc((v("highlights", []) || []).join("\n"))}</textarea></label>
+          <label>Sold by <span class="muted tiny">piece / kg / box — optional</span>
+            <input id="pfUnit" value="${esc(v("unit_label"))}" placeholder="piece" /></label>
+        </div>
+        <div class="sup-sub">More photos</div>
+        <div class="gal-wrap" id="pfGal"></div>
       </div>
-      <div class="err" id="pfErr" hidden></div>
+
+      <div class="pf-panel" data-pf="stock">
+        <div class="sup-sub">Sizes &amp; colours</div>
+        <p class="muted tiny" style="margin:-6px 0 10px;">A shirt in three sizes and two colours is
+        six things to count, not one. Name the options and each combination becomes a real record
+        with its own stock, its own code and — if you want — its own price.</p>
+        <div id="pfVarBox"></div>
+
+        <div class="sup-sub">Stock</div>
+        <div class="sup-form-grid">
+          <label class="inline-check"><input type="checkbox" id="pfTrack" ${v("track_stock", true) === false ? "" : "checked"} />
+            Track stock for this product <span class="muted tiny">— sells out at zero, and site orders deduct from it</span></label>
+          <label id="pfStockRow">Units available<input id="pfStock" type="number" min="0" step="1" value="${it && it.stock != null ? it.stock : 0}" /></label>
+        </div>
+      </div>
+
+      <div class="pf-panel" data-pf="site">
+        <label class="site-toggle big" title="Show this product on your website">
+          <input type="checkbox" id="pfListed" ${listed ? "checked" : ""} />
+          <span class="tsw"></span>
+          <span class="tlbl">List this product on my website<span class="muted tiny"> — on by default</span></span>
+        </label>
+
+        <div class="place-note">Every listed product appears in <b>Shop</b>. These two decide whether
+          it <em>also</em> gets a place higher up the home page — leave both off and the site picks
+          for you.</div>
+        <div class="place-grid">
+          <label class="place">
+            <input type="checkbox" id="pfFeatured" ${v("featured") ? "checked" : ""} />
+            <span class="place-b"><b>Featured rail</b>
+              <span>The horizontal row near the top. Pick your best sellers.</span></span>
+          </label>
+          <label class="place">
+            <input type="checkbox" id="pfSpotlight" ${v("spotlight") ? "checked" : ""} />
+            <span class="place-b"><b>Spotlight</b>
+              <span>The big single-product block with its photo held still. One product only.</span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="pf-foot">
+        <div class="err" id="pfErr" hidden></div>
+        <div class="pf-foot-b">
+          <button class="btn ghost" id="pfCancel">Cancel</button>
+          <button class="btn primary" id="pfSave">${id ? "Save changes" : "Add product"}</button>
+        </div>
+      </div>
     </div>`;
+
+  // tabs
+  p.querySelectorAll("[data-pf]").forEach((n) => {
+    if (n.tagName !== "BUTTON") return;
+    n.onclick = () => {
+      p.querySelectorAll(".pf-tab").forEach((x) => x.classList.toggle("on", x === n));
+      p.querySelectorAll(".pf-panel").forEach((x) =>
+        x.classList.toggle("on", x.dataset.pf === n.dataset.pf));
+    };
+  });
+  p.querySelectorAll(".place input").forEach((cb) => {
+    const paint = () => cb.closest(".place").classList.toggle("on", cb.checked);
+    cb.onchange = paint; paint();
+  });
 
   p.scrollIntoView({ behavior: "smooth", block: "nearest" });
   wireImageFields(p);
@@ -1274,6 +1337,8 @@ function openProductForm(id, prefillName) {
       stock: parseInt($("pfStock").value || "0", 10) || 0,
       options: _pfAxes,
       variants: readVariantInputs(),
+      featured: $("pfFeatured").checked,
+      spotlight: $("pfSpotlight").checked,
     };
     if (!payload.name) { const e = $("pfErr"); e.textContent = "Product name is required."; e.hidden = false; return; }
     try { renderProducts(await api("/api/products/item", { method: "POST", json: payload })); toast("Saved"); }
@@ -1483,18 +1548,290 @@ async function aliasDelete(id) {
   });
 }
 
-// ---------- MODULE: Supply Management ----------
+// ---------- MODULE: Product Studio ----------
+/* The Content Creator makes a post from a topic and a product *type*, which
+   produces a stock-looking picture of "a perfume" rather than of THEIR perfume.
+   Studio starts from what the seller actually has — their photographs, their
+   words — plus a brand profile filled in once, so twenty posts feel like one
+   brand instead of twenty templates. */
+let _studio = null;
+let _studioProduct = null;
+
+async function openStudio() {
+  moduleShell("Product Studio", `<div class="ap-empty">Opening your studio…</div>`);
+  try { _studio = await api("/api/studio/state"); }
+  catch (e) { return moduleShell("Product Studio", `<div class="card">${esc(e.message)}</div>`); }
+  renderStudio();
+}
+
+function renderStudio() {
+  const d = _studio;
+  const b = d.brand;
+  const ready = d.brand_ready;
+
+  const cards = (d.products || []).map((p) => {
+    const c = p.completeness;
+    const band = c.score >= 80 ? "hi" : c.score >= 40 ? "mid" : "lo";
+    return `
+      <button class="st-card" data-stp="${esc(p.id)}">
+        <span class="st-thumb" style="${p.image_url ? `background-image:url('${esc(p.image_url)}')` : ""}">
+          ${p.image_url ? "" : sic("image")}</span>
+        <span class="st-body">
+          <b>${esc(p.name)}</b>
+          <span class="st-meta">${p.category ? esc(p.category) + " · " : ""}${c.done} of ${c.total} ready</span>
+          <span class="st-meter band-${band}"><i style="width:${c.score}%"></i></span>
+          <span class="st-next">${c.next ? "Next: " + esc(c.next.label) : "Everything's here"}</span>
+        </span>
+      </button>`;
+  }).join("");
+
+  moduleShell("Product Studio", `
+    ${!ready ? `<div class="nudge">${sic("spark")}<div><b>Start with your brand</b>
+      Two or three lines about what you make and who buys it. Everything Studio
+      writes and every image it generates is built against this — it is the
+      difference between posts that look like yours and posts that look like
+      anyone's.</div></div>` : ""}
+
+    <div class="card st-brand">
+      <div class="pf-head" style="padding:0 0 12px;">
+        <h4>Your brand</h4>
+        <p class="muted tiny">Filled in once. Used by every post.</p>
+      </div>
+      <div class="sup-form-grid">
+        <label>Brand name <span class="req">required</span>
+          <input id="sbName" value="${esc(b.name)}" placeholder="Aureva" /></label>
+        <label>What you make, and why <span class="req">required</span>
+          <textarea id="sbAbout" rows="3" placeholder="Small-batch perfumes, rested six months before bottling. Made in Bengaluru.">${esc(b.about)}</textarea></label>
+        <label>Who buys it <span class="muted tiny">the person you picture</span>
+          <textarea id="sbAud" rows="2" placeholder="People who wear one scent, not ten.">${esc(b.audience)}</textarea></label>
+        <label>The look<select id="sbLook">${(d.looks || []).map((l) =>
+          `<option value="${esc(l.id)}" ${b.look === l.id ? "selected" : ""}>${esc(l.label)}</option>`).join("")}</select></label>
+        <label>How you sound<select id="sbVoice">${(d.voices || []).map((v) =>
+          `<option value="${esc(v.id)}" ${b.voice === v.id ? "selected" : ""}>${esc(v.label)}</option>`).join("")}</select></label>
+        <label>Your colours <span class="muted tiny">in words — generated images follow these</span>
+          <input id="sbPal" value="${esc(b.palette)}" placeholder="amber, deep brown, brass" /></label>
+        <label>Never say <span class="muted tiny">words or looks to stay away from</span>
+          <input id="sbAvoid" value="${esc(b.avoid)}" placeholder="cheap, discount, sale" /></label>
+        <label>Hashtags you always use<input id="sbTags" value="${esc(b.hashtags)}" placeholder="#madeinindia #smallbatch" /></label>
+      </div>
+      <button class="btn primary sm" id="sbSave">Save brand</button>
+    </div>
+
+    ${!d.ai_ready ? `<p class="muted tiny" style="margin:12px 0 0;">No AI key is set on this
+      server, so captions come from a template and image generation is off. Your own
+      photos still work everywhere.</p>` : ""}
+
+    <div class="section-title" style="margin-top:20px;">Your products
+      <span class="muted tiny" style="font-weight:500;">— the fuller the material, the better the posts. Ordered by what's ready.</span></div>
+    ${cards ? `<div class="st-grid">${cards}</div>`
+            : `<div class="ap-empty">No products yet. Add them in Product Management first.</div>`}
+    <div id="stPanel"></div>
+  `);
+
+  $("sbSave").onclick = async () => {
+    try {
+      const r = await api("/api/studio/brand", { method: "POST", json: { patch: {
+        name: $("sbName").value.trim(), about: $("sbAbout").value.trim(),
+        audience: $("sbAud").value.trim(), look: $("sbLook").value,
+        voice: $("sbVoice").value, palette: $("sbPal").value.trim(),
+        avoid: $("sbAvoid").value.trim(), hashtags: $("sbTags").value.trim(),
+      }}});
+      _studio.brand = r.brand; _studio.brand_ready = !!(r.brand.name && r.brand.about);
+      toast("Brand saved — every post from here on follows it.");
+      renderStudio();
+    } catch (e) { toast(e.message); }
+  };
+  document.querySelectorAll("[data-stp]").forEach((n) =>
+    n.onclick = () => openStudioProduct(n.dataset.stp));
+}
+
+async function openStudioProduct(pid) {
+  const panel = $("stPanel");
+  panel.innerHTML = `<div class="ap-empty">Loading…</div>`;
+  try { _studioProduct = await api(`/api/studio/product?product_id=${encodeURIComponent(pid)}`); }
+  catch (e) { panel.innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
+  renderStudioProduct();
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderStudioProduct() {
+  const { product: p, material: m, completeness: c, angles: ang } = _studioProduct;
+  const shots = (m.shots || []);
+  const clips = (m.clips || []);
+
+  $("stPanel").innerHTML = `
+    <div class="card pf" style="margin-top:16px;">
+      <div class="pf-head">
+        <h4>${esc(p.name)}</h4>
+        <p class="muted tiny">${c.next
+          ? `${esc(c.next.want)} — ${esc(c.next.why)}`
+          : "Everything's here. Make a post."}</p>
+      </div>
+      <div class="pf-tabs">
+        <button type="button" class="pf-tab on" data-st="material">Material</button>
+        <button type="button" class="pf-tab" data-st="make">Make a post</button>
+      </div>
+
+      <div class="pf-panel on" data-st="material">
+        <div class="st-checks">${(c.checks || []).map((k) =>
+          `<span class="st-check ${k.ok ? "on" : ""}">${k.ok ? sic("check") : sic("plus")}${esc(k.label)}</span>`).join("")}</div>
+
+        <div class="sup-sub">Photos</div>
+        <p class="muted tiny" style="margin:-6px 0 10px;">Three or more, from different angles.
+          One photo makes one post; three makes a week of them.</p>
+        <div class="gal-wrap" id="stShots"></div>
+
+        <div class="sup-sub">Clips</div>
+        <p class="muted tiny" style="margin:-6px 0 10px;">Even five seconds. Reels reach people
+          your photos won't.</p>
+        <div class="gal-wrap" id="stClips"></div>
+
+        <div class="sup-sub">In your words</div>
+        <div class="sup-form-grid">
+          <label>The story behind it <span class="muted tiny">this is what captions are actually made of</span>
+            <textarea id="stStory" rows="3" placeholder="Rested six months before it ever met a bottle.">${esc(m.story)}</textarea></label>
+          <label>What it's made of<textarea id="stMat" rows="2" placeholder="Oud, amber, a little smoke">${esc(m.materials)}</textarea></label>
+          <label>What makes it different <span class="muted tiny">the line that makes someone stop scrolling</span>
+            <textarea id="stDiff" rows="2" placeholder="No alcohol burn — it opens soft.">${esc(m.different)}</textarea></label>
+          <label>Who it's for<input id="stWho" value="${esc(m.for_who)}" placeholder="Someone who wears one scent, not ten" /></label>
+          <label>Where you'd wear or use it<input id="stOcc" value="${esc(m.occasions)}" placeholder="Evenings, weddings, gifting" /></label>
+        </div>
+        <button class="btn primary sm" id="stSave">Save material</button>
+      </div>
+
+      <div class="pf-panel" data-st="make">
+        <div class="sup-form-grid">
+          <label>What should this post be about?<select id="stAngle">
+            ${(ang || []).map((a) => `<option value="${esc(a.label)}">${esc(a.label)} — ${esc(a.why)}</option>`).join("")}
+          </select></label>
+        </div>
+        <div class="st-make">
+          <button class="btn primary sm" id="stMakeOwn">${sic("image")}Use my photo + write the caption</button>
+          <button class="btn ghost sm" id="stMakeAi" ${_studio.ai_ready ? "" : "disabled"}>
+            ${sic("spark")}Generate an image too</button>
+        </div>
+        <p class="muted tiny" style="margin:10px 0 0;">${_studio.ai_ready
+          ? "A generated image is built from your brand's look and colours — and is always labelled as generated, so you know which of your pictures is a real photograph."
+          : "Image generation needs an AI key on the server. Your own photos work regardless."}</p>
+        <div id="stOut"></div>
+      </div>
+    </div>`;
+
+  $("stPanel").querySelectorAll(".pf-tab").forEach((n) => n.onclick = () => {
+    $("stPanel").querySelectorAll(".pf-tab").forEach((x) => x.classList.toggle("on", x === n));
+    $("stPanel").querySelectorAll(".pf-panel").forEach((x) =>
+      x.classList.toggle("on", x.dataset.st === n.dataset.st));
+  });
+
+  const paintMedia = () => {
+    $("stShots").innerHTML = shots.map((u, i) => `
+      <div class="gal-item" style="background-image:url('${esc(u)}')">
+        <button class="gal-x" data-shotrm="${i}" title="Remove">${sic("close")}</button>
+      </div>`).join("") + `<button class="gal-add" id="stShotAdd">＋<span>Add photos</span></button>`;
+    $("stClips").innerHTML = clips.map((u, i) => `
+      <div class="gal-item is-vid"><video src="${esc(u)}" muted loop autoplay playsinline></video>
+        <button class="gal-x" data-cliprm="${i}" title="Remove">${sic("close")}</button>
+      </div>`).join("") + `<button class="gal-add" id="stClipAdd">＋<span>Add a clip</span></button>`;
+    $("stShotAdd").onclick = () => pickImage((u) => { shots.push(u); paintMedia(); }, true, "image/*");
+    $("stClipAdd").onclick = () => pickImage((u) => { clips.push(u); paintMedia(); }, false,
+      "video/mp4,video/webm,video/quicktime");
+    $("stPanel").querySelectorAll("[data-shotrm]").forEach((x) =>
+      x.onclick = () => { shots.splice(+x.dataset.shotrm, 1); paintMedia(); });
+    $("stPanel").querySelectorAll("[data-cliprm]").forEach((x) =>
+      x.onclick = () => { clips.splice(+x.dataset.cliprm, 1); paintMedia(); });
+  };
+  paintMedia();
+
+  $("stSave").onclick = async () => {
+    try {
+      _studioProduct = { ..._studioProduct, ...(await api("/api/studio/product", {
+        method: "POST", json: { product_id: p.id, patch: {
+          story: $("stStory").value, materials: $("stMat").value,
+          different: $("stDiff").value, for_who: $("stWho").value,
+          occasions: $("stOcc").value, shots, clips,
+        }}})) };
+      toast("Saved.");
+      _studio = await api("/api/studio/state");
+      renderStudioProduct();
+    } catch (e) { toast(e.message); }
+  };
+
+  const make = async (withImage) => {
+    const out = $("stOut");
+    out.innerHTML = `<div class="ap-empty">${withImage
+      ? "Writing the caption and generating an image — this takes a few seconds…"
+      : "Writing the caption…"}</div>`;
+    try {
+      const post = await api("/api/studio/post", { method: "POST", json: {
+        product_id: p.id, angle: $("stAngle").value, generate_image: withImage } });
+      renderStudioPost(post);
+    } catch (e) { out.innerHTML = `<div class="card">${esc(e.message)}</div>`; }
+  };
+  $("stMakeOwn").onclick = () => make(false);
+  const ai = $("stMakeAi"); if (ai && !ai.disabled) ai.onclick = () => make(true);
+}
+
+function renderStudioPost(post) {
+  const tags = (post.hashtags || []).map((h) => "#" + h).join(" ");
+  const full = post.caption + (tags ? "\n\n" + tags : "");
+  $("stOut").innerHTML = `
+    <div class="st-post">
+      <div class="st-post-img" style="${post.image_url ? `background-image:url('${esc(post.image_url)}')` : ""}">
+        ${post.image_url ? "" : `<span class="muted tiny">No photo yet</span>`}
+        ${post.image_is_generated ? `<span class="st-gen">${sic("spark")}Generated</span>` : ""}
+      </div>
+      <div class="st-post-b">
+        ${post.image_error ? `<div class="media-warn">${sic("shield")}<div><b>Image not generated</b>
+          <span>${esc(post.image_error)}</span></div></div>` : ""}
+        ${post.note ? `<p class="muted tiny" style="margin:0 0 8px;">${esc(post.note)}</p>` : ""}
+        <textarea id="stCaption" rows="7">${esc(full)}</textarea>
+        ${post.first_comment ? `<p class="muted tiny" style="margin:8px 0 0;">
+          First comment: ${esc(post.first_comment)}</p>` : ""}
+        <div class="st-post-a">
+          <button class="btn primary sm" id="stCopy">${sic("check")}Copy caption</button>
+          ${post.image_url ? `<button class="btn ghost sm" id="stDl">${sic("image")}Download image</button>` : ""}
+          <button class="btn ghost sm" id="stAgain">${sic("refresh")}Write another</button>
+        </div>
+        ${post.image_is_generated ? `<p class="muted tiny" style="margin:10px 0 0;">
+          This image was generated, not photographed. Say so if your followers would
+          want to know.</p>` : ""}
+      </div>
+    </div>`;
+  $("stCopy").onclick = async () => {
+    try { await navigator.clipboard.writeText($("stCaption").value); toast("Caption copied."); }
+    catch (e) { $("stCaption").select(); document.execCommand("copy"); toast("Caption copied."); }
+  };
+  const dl = $("stDl");
+  if (dl) dl.onclick = () => download(post.image_url, `${post.product_name || "post"}.png`);
+  $("stAgain").onclick = () => $("stMakeOwn").click();
+}
+
+// ---------- MODULES: Inventory Management / Suppliers ----------
+/* One loader, two screens. Inventory owns what you hold, what each sold product
+   uses up, and what gets wasted. Suppliers owns who you buy from, when to
+   reorder and the purchase order. They used to be one module, which meant
+   changing a supplier's phone number required opening every item they stock. */
+let _supplyView = "inventory";
+
+async function openInventory() { _supplyView = "inventory"; return openSupply(); }
+
+
 let _supplyData = null;
 let _afterUpload = null;   // set to a fn to run after the next Sales upload+map, instead of goHome
 const _rupee = (v) => (v == null || v === "" ? "—" : "₹" + fmt(v));
 const _eff = (v, auto) => (auto ? fmt(v) + "<span class=\"auto-tag\">auto</span>" : fmt(v));
 
 async function openSupply() {
-  moduleShell("Supply Management", `<div class="ap-empty">Loading inventory…</div>`);
+  if (_currentModule === "supply") _supplyView = "suppliers";
+  moduleShell(_supplyView === "inventory"
+    ? "Inventory Management" : "Suppliers & Purchase Orders",
+    `<div class="ap-empty">Loading…</div>`);
   try {
     const d = await api("/api/supply/state");
     renderSupply(d);
-  } catch (e) { moduleShell("Supply Management", `<div class="card">${esc(e.message)}</div>`); }
+  } catch (e) { moduleShell(_supplyView === "inventory"
+      ? "Inventory Management" : "Suppliers & Purchase Orders",
+      `<div class="card">${esc(e.message)}</div>`); }
 }
 
 function _supBadge(it) {
@@ -1593,22 +1930,34 @@ function renderSupply(d) {
         <td>${esc(w.reason || "")}</td>
       </tr>`).join("") : "";
 
-  const body = `
-    <p class="muted">${esc(salesNote)}</p>
+  const inv = _supplyView === "inventory";
+  const body = inv ? `
+    <p class="muted">What you hold, what each sold product uses up, and what gets
+      wasted. Stock falls automatically as orders come in.</p>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;">
-      <button class="btn primary sm" id="supAdd">＋ Add item</button>
-      <button class="btn ghost sm" id="supLoadSales" title="Upload &amp; map the past sales history used ONLY for these supply-chain calculations (separate from your main Sales Data)">${sic("receipt")}Upload previous sales</button>
-      <button class="btn ghost sm" id="supImport">⤵ Pull products from sales</button>
-      <button class="btn ghost sm" id="supLinks">🔗 Product links</button>
-      <button class="btn ghost sm" id="supWaste">🗑️ Record waste</button>
+      <button class="btn primary sm" id="supAdd">${sic("plus")}Add item</button>
+      <button class="btn ghost sm" id="supImport">${sic("arrow-right")}Pull items from my sales</button>
+      <button class="btn ghost sm" id="supLinks">${sic("layers")}What each product uses</button>
+      <button class="btn ghost sm" id="supWaste">${sic("close")}Record waste</button>
     </div>
 
     <div id="supForm" hidden></div>
     <div id="supPanel" hidden></div>
 
+    <div class="section-title" style="margin-top:18px;">What you hold</div>` : `
+    <p class="muted">${esc(salesNote)}</p>
+    <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;">
+      <button class="btn ghost sm" id="supLoadSales" title="Upload &amp; map the past sales history used ONLY for these supply-chain calculations (separate from your main Sales Data)">${sic("receipt")}Upload previous sales</button>
+      <button class="btn ghost sm" id="supAdd">${sic("plus")}Add item</button>
+    </div>
+
+    <div id="supForm" hidden></div>
+    <div id="supPanel" hidden></div>
+    <div id="supSuppliers"></div>
+
     ${sugSection}
 
-    <div class="section-title" style="margin-top:18px;">Inventory</div>
+    <div class="section-title" style="margin-top:18px;">Every item, and when to reorder</div>
     <div class="table-scroll">
       <table class="sup-table">
         <thead><tr>
@@ -1620,15 +1969,15 @@ function renderSupply(d) {
       </table>
     </div>
 
-    <div class="section-title" style="margin-top:20px;">Purchase orders</div>
+    ${inv ? "" : `<div class="section-title" style="margin-top:20px;">Purchase orders</div>
     <div class="table-scroll">
       <table class="sup-table">
         <thead><tr><th>PO #</th><th>Created</th><th class="num">Items</th><th class="num">Qty</th><th class="num">Amount</th><th></th></tr></thead>
         <tbody>${poRows}</tbody>
       </table>
-    </div>
+    </div>`}
 
-    ${wasteRows ? `
+    ${inv && wasteRows ? `
     <div class="section-title" style="margin-top:20px;">Recent waste</div>
     <div class="table-scroll">
       <table class="sup-table">
@@ -1637,12 +1986,15 @@ function renderSupply(d) {
       </table>
     </div>` : ""}`;
 
-  moduleShell("Supply Management", body);
-  $("supAdd").onclick = () => openSupplyForm(null);
-  $("supImport").onclick = supplyImport;
-  $("supLoadSales").onclick = () => { _afterUpload = () => openSupply(); startUpload("supply_sales", "append"); };
-  $("supLinks").onclick = openLinksPanel;
-  $("supWaste").onclick = () => openWastePanel(null);
+  moduleShell(_supplyView === "inventory"
+    ? "Inventory Management" : "Suppliers & Purchase Orders", body);
+  const on = (id, fn) => { const n = $(id); if (n) n.onclick = fn; };
+  on("supAdd", () => openSupplyForm(null));
+  on("supImport", supplyImport);
+  on("supLoadSales", () => { _afterUpload = () => openSupply(); startUpload("supply_sales", "append"); });
+  on("supLinks", openLinksPanel);
+  on("supWaste", () => openWastePanel(null));
+  if (!inv) renderSuppliers();
   if ($("supGenPo")) $("supGenPo").onclick = supplyGeneratePo;
   document.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => openSupplyForm(b.dataset.edit));
   document.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => supplyDelete(b.dataset.del));
@@ -1651,6 +2003,81 @@ function renderSupply(d) {
   document.querySelectorAll("[data-openpo]").forEach((b) => b.onclick = () => supplyOpenPo([b.dataset.openpo]));
   document.querySelectorAll("[data-popdf]").forEach((b) => b.onclick = () => download(`/api/supply/po/${encodeURIComponent(b.dataset.popdf)}/pdf`, `${b.dataset.popdf}.pdf`));
   document.querySelectorAll("[data-poxls]").forEach((b) => b.onclick = () => download(`/api/supply/po/${encodeURIComponent(b.dataset.poxls)}/download`, `${b.dataset.poxls}.xlsx`));
+}
+
+/* Suppliers, derived from the items they stock — so a phone number is edited
+   once instead of on every item. */
+async function renderSuppliers() {
+  const box = $("supSuppliers");
+  if (!box) return;
+  let rows = [];
+  try { rows = (await api("/api/supply/suppliers")).suppliers || []; }
+  catch (e) { box.innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
+
+  box.innerHTML = `
+    <div class="section-title" style="margin-top:6px;">Who you buy from</div>
+    ${rows.length ? `<div class="sup-grid">${rows.map((x) => `
+      <div class="sup-card">
+        <div class="sup-card-h">
+          <b>${esc(x.name)}</b>
+          <button class="btn ghost tiny" data-supedit="${esc(x.name)}">Edit</button>
+        </div>
+        <div class="sup-card-c">
+          ${x.phone ? `<a href="https://wa.me/${esc(String(x.phone).replace(/\D/g, ""))}"
+             target="_blank" rel="noopener">${sic("whatsapp")}${esc(x.phone)}</a>` : ""}
+          ${x.email ? `<a href="mailto:${esc(x.email)}">${sic("mail")}${esc(x.email)}</a>` : ""}
+          ${!x.phone && !x.email ? `<span class="muted tiny">No contact details yet</span>` : ""}
+        </div>
+        <div class="sup-card-f">
+          <span>${fmt(x.item_count)} item${x.item_count === 1 ? "" : "s"}</span>
+          <span>₹${fmt(x.stock_value)} in stock</span>
+        </div>
+        <div class="sup-card-i">${x.items.slice(0, 4).map((i) => esc(i.name)).join(" · ")}${
+          x.items.length > 4 ? ` +${x.items.length - 4} more` : ""}</div>
+      </div>`).join("")}</div>`
+      : `<div class="ap-empty">No suppliers yet. Add one against any inventory item
+           and they will appear here.</div>`}`;
+
+  box.querySelectorAll("[data-supedit]").forEach((b) =>
+    b.onclick = () => editSupplier(rows.find((r) => r.name === b.dataset.supedit)));
+}
+
+function editSupplier(sup) {
+  if (!sup) return;
+  openModal(`Edit ${sup.name}`, `
+    <p class="muted" style="margin-top:0;">Changes apply to all
+      ${fmt(sup.item_count)} item${sup.item_count === 1 ? "" : "s"} you buy from them.</p>
+    <label class="fld"><span>Name</span><input id="seName" value="${esc(sup.name)}" /></label>
+    <label class="fld"><span>Phone</span><input id="sePhone" value="${esc(sup.phone)}" placeholder="+91 …" /></label>
+    <label class="fld"><span>Email</span><input id="seEmail" value="${esc(sup.email)}" /></label>
+    <div class="modal-actions">
+      <button class="btn ghost" id="seDetach">Remove from all items</button>
+      <button class="btn primary" id="seSave">Save</button>
+    </div>`);
+  $("seSave").onclick = async () => {
+    try {
+      await api("/api/supply/supplier", { method: "POST", json: { name: sup.name, patch: {
+        name: $("seName").value.trim(), phone: $("sePhone").value.trim(),
+        email: $("seEmail").value.trim() } } });
+      closeModal(); renderSuppliers(); toast("Supplier updated everywhere.");
+    } catch (e) { toast(e.message); }
+  };
+  $("seDetach").onclick = async () => {
+    closeModal();
+    try {
+      const r = await api("/api/supply/supplier/detach", { method: "POST", json: { name: sup.name } });
+      renderSuppliers();
+      // Undo works from the item ids, not the name — once the last item is
+      // cleared there is no supplier left to look up.
+      toastUndo(`${sup.name} removed from every item. Your stock is untouched.`, async () => {
+        await api("/api/supply/supplier/attach", { method: "POST", json: {
+          name: sup.name,
+          patch: { item_ids: r.detached_item_ids || [], name: sup.name,
+                   phone: sup.phone, email: sup.email } } });
+        renderSuppliers();
+      });
+    } catch (e) { toast(e.message); }
+  };
 }
 
 function _supAfter(d) {
@@ -1670,35 +2097,90 @@ function openSupplyForm(id) {
   const f = $("supForm");
   f.hidden = false;
   const v = (x, dflt = "") => (it && it[x] != null ? it[x] : dflt);
+  // Eleven numeric fields in one grid, most of them optional and most of them
+  // jargon, is why this form was unusable. Three panels: what you must know,
+  // who you buy it from, and the ordering maths you can safely ignore until
+  // the app has enough sales history to fill it in for you.
   f.innerHTML = `
-    <div class="card sup-form">
-      <h4 style="margin:0 0 4px;">${id ? "Edit item" : "Add item"}</h4>
-      <p class="muted tiny" style="margin:0 0 10px;">Leave lead time, safety stock and the EOQ costs blank &mdash; we suggest them from your sales once there is enough history, then you can apply and edit them.</p>
-      <div class="sup-form-grid">
-        <label>Item name<input id="sfName" value="${esc(v("name"))}" placeholder="e.g. Paper cup 250ml" /></label>
-        <label>Category <span class="muted tiny">(optional)</span><input id="sfCat" value="${esc(v("category"))}" placeholder="Packaging" /></label>
-        <label>Unit label<input id="sfUnit" value="${esc(v("unit_label", "unit"))}" placeholder="pcs / kg / box" /></label>
-        <label>Current stock<input id="sfStock" type="number" min="0" step="any" value="${v("current_stock", 0)}" /></label>
-        <label>Lead time (days) <span class="muted tiny">(blank = auto)</span><input id="sfLead" type="number" min="0" step="any" placeholder="auto (7)" value="${it && it.lead_time_days > 0 ? it.lead_time_days : ''}" /></label>
-        <label>Safety stock <span class="muted tiny">(blank = auto from sales)</span><input id="sfSafe" type="number" min="0" step="any" placeholder="auto" value="${it && it.safety_stock > 0 ? it.safety_stock : ''}" /></label>
-        <label>MOQ <span class="muted tiny">(min order qty)</span><input id="sfMoq" type="number" min="0" step="any" value="${v("moq", 0)}" /></label>
-        <label>Ordering cost ₹ <span class="muted tiny">(per order · blank = auto)</span><input id="sfOrder" type="number" min="0" step="any" value="${it && it.ordering_cost != null ? it.ordering_cost : ""}" /></label>
-        <label>Holding cost ₹ <span class="muted tiny">(/unit/yr · blank = auto)</span><input id="sfHold" type="number" min="0" step="any" value="${it && it.holding_cost != null ? it.holding_cost : ""}" /></label>
-        <label>Unit cost ₹<input id="sfCost" type="number" min="0" step="any" value="${it && it.unit_cost != null ? it.unit_cost : ""}" /></label>
-        <label>Reorder qty <span class="muted tiny">(blank = EOQ auto)</span><input id="sfQty" type="number" min="0" step="any" value="${it && it.reorder_qty != null ? it.reorder_qty : ""}" /></label>
+    <div class="card sup-form pf">
+      <div class="pf-head">
+        <h4>${id ? "Edit item" : "Add item"}</h4>
+        <p class="muted tiny">${id ? esc(it.name)
+          : "Name and current stock is enough to start. Everything else can wait."}</p>
       </div>
-      <div class="sup-sub">Supplier</div>
-      <div class="sup-form-grid">
-        <label>Supplier name<input id="sfSupN" value="${esc(v("supplier_name"))}" /></label>
-        <label>Contact number<input id="sfSupP" value="${esc(v("supplier_phone"))}" placeholder="+91 …" /></label>
-        <label>Email<input id="sfSupE" type="email" value="${esc(v("supplier_email"))}" placeholder="sales@supplier.com" /></label>
+
+      <div class="pf-tabs" role="tablist">
+        <button type="button" class="pf-tab on" data-sf="basics">The item</button>
+        <button type="button" class="pf-tab" data-sf="supplier">Supplier</button>
+        <button type="button" class="pf-tab" data-sf="reorder">Reordering</button>
       </div>
-      <div class="modal-actions">
-        <button class="btn ghost" id="sfCancel">Cancel</button>
-        <button class="btn primary" id="sfSave">${id ? "Save changes" : "Add item"}</button>
+
+      <div class="pf-panel on" data-sf="basics">
+        <div class="sup-form-grid">
+          <label>Item name <span class="req">required</span>
+            <input id="sfName" value="${esc(v("name"))}" placeholder="e.g. Cotton fabric, 2m roll" /></label>
+          <label>How much do you have now?
+            <input id="sfStock" type="number" min="0" step="any" value="${v("current_stock", 0)}" /></label>
+          <label>Measured in <span class="muted tiny">pieces, kg, metres, boxes…</span>
+            <input id="sfUnit" value="${esc(v("unit_label", "unit"))}" placeholder="pcs" /></label>
+          <label>Category <span class="muted tiny">optional</span>
+            <input id="sfCat" value="${esc(v("category"))}" placeholder="Fabric" /></label>
+          <label>What one costs you ₹ <span class="muted tiny">used for order values and the holding-cost estimate</span>
+            <input id="sfCost" type="number" min="0" step="any" value="${it && it.unit_cost != null ? it.unit_cost : ""}" /></label>
+        </div>
       </div>
-      <div class="err" id="sfErr" hidden></div>
+
+      <div class="pf-panel" data-sf="supplier">
+        <p class="muted tiny" style="margin:0 0 12px;">Who you buy this from. Their name and number go
+          on the purchase order PDF, so you can send it straight to them.</p>
+        <div class="sup-form-grid">
+          <label>Supplier name<input id="sfSupN" value="${esc(v("supplier_name"))}" placeholder="Sharma Textiles" /></label>
+          <label>Phone<input id="sfSupP" value="${esc(v("supplier_phone"))}" placeholder="+91 …" inputmode="tel" /></label>
+          <label>Email<input id="sfSupE" type="email" value="${esc(v("supplier_email"))}" placeholder="sales@supplier.com" /></label>
+          <label>Minimum they will sell <span class="muted tiny">MOQ — leave 0 if there is none</span>
+            <input id="sfMoq" type="number" min="0" step="any" value="${v("moq", 0)}" /></label>
+          <label>How many days they take <span class="muted tiny">blank = we assume 7</span>
+            <input id="sfLead" type="number" min="0" step="any" placeholder="auto (7)"
+                   value="${it && it.lead_time_days > 0 ? it.lead_time_days : ''}" /></label>
+        </div>
+      </div>
+
+      <div class="pf-panel" data-sf="reorder">
+        <div class="nudge">${sic("spark")}<div><b>You can leave all of this blank.</b>
+          Once there is enough sales history the app works these out from what you actually
+          sell, shows them marked “auto”, and offers to write them in. Fill them only if you
+          already know your own numbers.</div></div>
+        <div class="sup-form-grid">
+          <label>Buffer stock to keep <span class="muted tiny">safety stock — blank = auto from your sales variability</span>
+            <input id="sfSafe" type="number" min="0" step="any" placeholder="auto"
+                   value="${it && it.safety_stock > 0 ? it.safety_stock : ''}" /></label>
+          <label>Cost of placing one order ₹ <span class="muted tiny">blank = auto (₹200)</span>
+            <input id="sfOrder" type="number" min="0" step="any" placeholder="auto"
+                   value="${it && it.ordering_cost != null ? it.ordering_cost : ""}" /></label>
+          <label>Cost of holding one unit for a year ₹ <span class="muted tiny">blank = auto (20% of unit cost)</span>
+            <input id="sfHold" type="number" min="0" step="any" placeholder="auto"
+                   value="${it && it.holding_cost != null ? it.holding_cost : ""}" /></label>
+          <label>Always order this many <span class="muted tiny">blank = we work out the most economical quantity</span>
+            <input id="sfQty" type="number" min="0" step="any" placeholder="auto (EOQ)"
+                   value="${it && it.reorder_qty != null ? it.reorder_qty : ""}" /></label>
+        </div>
+      </div>
+
+      <div class="pf-foot">
+        <div class="err" id="sfErr" hidden></div>
+        <div class="pf-foot-b">
+          <button class="btn ghost" id="sfCancel">Cancel</button>
+          <button class="btn primary" id="sfSave">${id ? "Save changes" : "Add item"}</button>
+        </div>
+      </div>
     </div>`;
+
+  f.querySelectorAll(".pf-tab").forEach((n) => n.onclick = () => {
+    f.querySelectorAll(".pf-tab").forEach((x) => x.classList.toggle("on", x === n));
+    f.querySelectorAll(".pf-panel").forEach((x) =>
+      x.classList.toggle("on", x.dataset.sf === n.dataset.sf));
+  });
+
   f.scrollIntoView({ behavior: "smooth", block: "nearest" });
   $("sfCancel").onclick = () => { f.hidden = true; f.innerHTML = ""; };
   const numOrNull = (id) => ($(id).value === "" ? null : parseFloat($(id).value));
@@ -2307,13 +2789,92 @@ $("wbExport").onclick = async () => {
     if (state.lastState) { state.lastState.insights = r.insights; if (r.history) state.lastState.history = r.history; if (r.tasks) state.lastState.tasks = r.tasks; }
     renderApprovals(r.insights); if (r.tasks) refreshTaskList(r.tasks);
     $("wbModal").hidden = true;
-    // Closing the loop: the app has just handed over a list it will never hear
-    // about again unless we ask. One tick, and every later refresh of the sales
-    // data can answer "did it work" — which is the only number that makes the
-    // subscription obviously worth keeping.
-    askWinbackSent(_wbRows.slice());
+    // The app used to hand over an Excel file and stop, leaving the seller to
+    // open WhatsApp and type. Now it can send.
+    openWinbackSend(_wbRows.slice());
   } catch (e) { toast(e.message, 6000); }
 };
+
+/* Send the campaign — email for real, WhatsApp through a provider when one is
+   connected and as tap-to-send links until then. Recording it for measurement
+   happens automatically, so "did you send it" stops being a question. */
+async function openWinbackSend(rows) {
+  let pv;
+  try { pv = await api("/api/rfm/winback/preview", { method: "POST", json: { rows } }); }
+  catch (e) { return askWinbackSent(rows); }
+
+  const withEmail = rows.filter((r) => (r.email || r.customer_email || "").trim()).length;
+  const withPhone = rows.filter((r) => (r.phone || r.customer_phone || "").trim()).length;
+
+  openModal(`Send to ${rows.length} customer${rows.length === 1 ? "" : "s"}`, `
+    <p class="muted" style="margin-top:0;">These are the customers who have gone
+      quiet. One message is the cheapest revenue you will find this week — and we
+      measure what comes back.</p>
+
+    <div class="wb-ch">
+      <label class="wb-c"><input type="checkbox" id="wbEmail" checked ${withEmail ? "" : "disabled"} />
+        <span><b>Email</b><i>${withEmail} of ${rows.length} have an address${
+          pv.email_ready ? "" : " · needs SMTP set up on the server"}</i></span></label>
+      <label class="wb-c"><input type="checkbox" id="wbWa" checked ${withPhone ? "" : "disabled"} />
+        <span><b>WhatsApp</b><i>${withPhone} of ${rows.length} have a number${
+          pv.whatsapp_live ? "" : " · no provider connected, so you'll get tap-to-send links"}</i></span></label>
+    </div>
+
+    <label class="fld"><span>The message</span>
+      <textarea id="wbTpl" rows="5">${esc(pv.template)}</textarea></label>
+    <p class="muted tiny">{name} {brand} {item} {days} {coupon} are filled in per
+      customer. Here is the first one:</p>
+    <div class="wb-prev" id="wbPrev">${esc((pv.preview[0] || {}).message || "")}</div>
+
+    <div class="modal-actions">
+      <button class="btn ghost" id="wbLater">Not now</button>
+      <button class="btn primary" id="wbGo">Send</button>
+    </div>`);
+
+  const repaint = () => {
+    const t = $("wbTpl").value;
+    api("/api/rfm/winback/preview", { method: "POST", json: { rows, template: t } })
+      .then((r) => { const n = $("wbPrev"); if (n) n.textContent = (r.preview[0] || {}).message || ""; })
+      .catch(() => {});
+  };
+  let tmr; $("wbTpl").addEventListener("input", () => { clearTimeout(tmr); tmr = setTimeout(repaint, 400); });
+
+  $("wbLater").onclick = () => { closeModal(); toast("Exported & approved — moved to History."); };
+  $("wbGo").onclick = async () => {
+    const ch = [];
+    if ($("wbEmail").checked && !$("wbEmail").disabled) ch.push("email");
+    if ($("wbWa").checked && !$("wbWa").disabled) ch.push("whatsapp");
+    if (!ch.length) { toast("Pick at least one channel."); return; }
+    const b = $("wbGo"); b.disabled = true; b.textContent = "Sending…";
+    try {
+      const r = await api("/api/rfm/winback/send", { method: "POST",
+        json: { rows, template: $("wbTpl").value, channels: ch } });
+      closeModal();
+      showWinbackResult(r);
+      renderProof();
+    } catch (e) { toast(e.message); b.disabled = false; b.textContent = "Send"; }
+  };
+}
+
+function showWinbackResult(r) {
+  const links = (r.results || []).filter((x) => x.wa_link);
+  openModal("Campaign sent", `
+    <p style="margin-top:0;"><b>${esc(r.summary)}</b></p>
+    ${links.length ? `
+      <p class="muted tiny">No WhatsApp provider is connected yet, so these open
+        WhatsApp with the message already written — tap each one and press send.
+        Connect a provider and they will go on their own.</p>
+      <div class="wb-links">${links.map((x) => `
+        <a class="wb-link" href="${esc(x.wa_link)}" target="_blank" rel="noopener">
+          ${sic("whatsapp")}<b>${esc(x.customer_name || x.phone)}</b>
+          <span>${esc(x.phone)}</span></a>`).join("")}</div>` : ""}
+    ${r.skipped ? `<p class="muted tiny">${r.skipped} customer${r.skipped === 1 ? " has" : "s have"}
+      neither an email nor a phone number on file, so they could not be contacted.</p>` : ""}
+    <p class="muted tiny">Recorded for measurement — Sales Analytics will show what
+      comes back over the next 30 days.</p>
+    <div class="modal-actions"><button class="btn primary" id="wbDone">Done</button></div>`, { wide: true });
+  $("wbDone").onclick = closeModal;
+}
 
 function askWinbackSent(rows) {
   openModal("Did you send it?", `
@@ -2978,7 +3539,7 @@ function renderStep() {
   if (_step === "setup") b.innerHTML = stepSetup() + stepNav();
   else if (_step === "theme") b.innerHTML = stepTheme() + stepNav();
   else if (_step === "editor") b.innerHTML = stepEditor() + stepNav();
-  else if (_step === "checkout") b.innerHTML = stepCheckout() + stepNav();
+  else if (_step === "checkout") { b.innerHTML = stepCheckout() + stepNav(); setTimeout(renderGateway, 0); }
   else b.innerHTML = stepPublish() + stepNav();
   wireStep();
   document.querySelectorAll("#siteBody [data-step]").forEach((n) => n.onclick = () => goStep(n.dataset.step));
@@ -3551,12 +4112,83 @@ function stepCheckout() {
       ${field("GST %", "commerce.gst_percent", { type: "number", num: true, hint: "(0 = don't show tax)", ph: "18" })}
       ${field("My prices already include GST", "commerce.gst_inclusive", { type: "check", hint: "— when off, GST is added on top at checkout" })}
     </div>
-    <div class="sup-sub">Payment</div>
+    <div class="sup-sub">Take payment online</div>
+    <div id="gatewayBox"><div class="ap-empty">Checking your payment settings…</div></div>
+
+    <div class="sup-sub">Cash on delivery</div>
+    <p class="muted tiny" style="margin:-6px 0 10px;">Across India, cash-on-delivery orders come back
+      undelivered about <b>26%</b> of the time against under 2% for prepaid
+      (Shipway, FY25). A small advance paid online turns an idle order into a
+      committed one — it is the cheapest thing you can do about it.</p>
     <div class="sup-form-grid">
       ${field("Offer cash on delivery", "commerce.cod_enabled", { type: "check" })}
+      ${field("Advance to pay online ₹", "commerce.cod_advance", { type: "number", num: true,
+        hint: "(0 = full cash on delivery, no advance)", ph: "100" })}
       ${field("Note shown at checkout", "commerce.order_note", { type: "textarea", rows: 2, ph: "We'll call to confirm your order before dispatch." })}
     </div>
   </div>`;
+}
+
+/* The seller's own Razorpay. Their keys, their bank account — the money never
+   passes through us, which is what keeps this out of payment-aggregator
+   territory. The secret is write-only: it goes up, and only ever comes back as
+   its last four characters. */
+let _gateway = null;
+
+async function renderGateway() {
+  const box = $("gatewayBox");
+  if (!box) return;
+  try { _gateway = await api("/api/site/gateway"); }
+  catch (e) { box.innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
+
+  if (_gateway.connected) {
+    box.innerHTML = `
+      <div class="gw gw-on">
+        <div class="gw-i">${sic("check")}</div>
+        <div class="gw-b">
+          <b>Razorpay connected · ${esc(_gateway.mode)} keys</b>
+          <span>Key ending ${esc(_gateway.key_id_last4)}. ${esc(_gateway.detail)}</span>
+          ${_gateway.mode === "test" ? `<span class="gw-warn">These are test keys —
+            real cards will not be charged. Swap in your live keys before you sell.</span>` : ""}
+          ${!_gateway.sdk_installed ? `<span class="gw-warn">The server is missing the
+            razorpay package — run <code>pip install razorpay</code> and restart.</span>` : ""}
+        </div>
+        <button class="btn ghost sm" id="gwOff">Disconnect</button>
+      </div>
+      ${field("Show 'Pay online' at checkout", "commerce.online_enabled", { type: "check" })}`;
+    $("gwOff").onclick = async () => {
+      try { _gateway = await api("/api/site/gateway/disconnect", { method: "POST" }); renderGateway(); toast("Disconnected."); }
+      catch (e) { toast(e.message); }
+    };
+    wireBinds($("gatewayBox"));
+    return;
+  }
+
+  box.innerHTML = `
+    <div class="gw">
+      <div class="gw-b">
+        <b>Connect your own Razorpay</b>
+        <span>Shoppers pay straight into your bank account — we never hold your
+          money. You need a Razorpay account; keys are in Dashboard →
+          Settings → API Keys.</span>
+      </div>
+    </div>
+    <div class="sup-form-grid">
+      <label>Key ID<input id="gwId" placeholder="rzp_test_… or rzp_live_…" autocomplete="off" /></label>
+      <label>Key Secret <span class="muted tiny">(stored encrypted, never shown again)</span>
+        <input id="gwSecret" type="password" placeholder="Paste the secret" autocomplete="off" /></label>
+    </div>
+    <button class="btn primary sm" id="gwSave">Connect Razorpay</button>
+    <div class="err" id="gwErr" hidden></div>`;
+  $("gwSave").onclick = async () => {
+    const e2 = $("gwErr"); e2.hidden = true;
+    try {
+      _gateway = await api("/api/site/gateway", { method: "POST",
+        json: { key_id: $("gwId").value.trim(), key_secret: $("gwSecret").value.trim() } });
+      renderGateway();
+      toast("Razorpay connected — turn on “Pay online” to show it at checkout.");
+    } catch (err) { e2.textContent = err.message; e2.hidden = false; }
+  };
 }
 
 /* ============================= STEP 5: PUBLISH =========================== */

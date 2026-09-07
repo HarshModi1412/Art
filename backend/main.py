@@ -33,6 +33,9 @@ from backend.core import winback_proof
 from backend.core import media
 from backend.core import cache
 from backend.core import cancellations
+from backend.core import store_payments
+from backend.core import campaigns
+from backend.core import studio
 
 # ---------------------------------------------------------
 # numpy/pandas JSON safety net
@@ -169,6 +172,43 @@ class WinbackUnsentBody(BaseModel):
     campaign_id: str
 
 
+class StoreGatewayBody(BaseModel):
+    key_id: str
+    key_secret: str
+
+
+class ShopPayBody(BaseModel):
+    lines: list[dict] = []
+    payment: str = "cod"
+
+
+class SupplierBody(BaseModel):
+    name: str
+    patch: dict = {}
+
+
+class CampaignBody(BaseModel):
+    rows: list[dict] = []
+    template: str | None = ""
+    subject: str | None = ""
+    channels: list[str] = ["email", "whatsapp"]
+
+
+class BrandBody(BaseModel):
+    patch: dict = {}
+
+
+class MaterialBody(BaseModel):
+    product_id: str
+    patch: dict = {}
+
+
+class StudioPostBody(BaseModel):
+    product_id: str
+    angle: str | None = ""
+    generate_image: bool = False
+
+
 class MappingBody(BaseModel):
     file_id: str
     mapping: dict
@@ -299,6 +339,81 @@ def cache_clear(authorization: str | None = Header(default=None)):
     """
     email = require_user(authorization)
     return {"cleared": cache.clear(email)}
+
+
+# ---------------------------------------------------------
+# Product Studio
+# ---------------------------------------------------------
+@app.get("/api/studio/state")
+def studio_state(authorization: str | None = Header(default=None)):
+    """The brand profile plus every product with how much material it has.
+
+    The completeness score is not decoration: it decides which product is worth
+    posting about next, and names the one missing piece that would help most.
+    """
+    email = require_user(authorization)
+    brand = studio.get_brand(email)
+    rows = []
+    for p in products.get_products(email):
+        mat = studio.get_material(email, p["id"])
+        rows.append({
+            "id": p["id"], "name": p["name"], "category": p.get("category") or "",
+            "price": p.get("price"), "image_url": p.get("image_url") or "",
+            "material": mat,
+            "completeness": studio.completeness(p, mat),
+        })
+    rows.sort(key=lambda r: r["completeness"]["score"], reverse=True)
+    return {
+        "brand": brand,
+        "brand_ready": studio.brand_ready(brand),
+        "looks": studio.LOOKS,
+        "voices": studio.VOICES,
+        "products": rows,
+        "ai_ready": studio.openai_ready(),
+        "media_durable": media.durable(),
+    }
+
+
+@app.post("/api/studio/brand")
+def studio_brand(body: BrandBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    cache.clear(email)
+    return {"brand": studio.save_brand(email, body.patch or {})}
+
+
+@app.get("/api/studio/product")
+def studio_product(product_id: str, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    p = next((x for x in products.get_products(email) if x["id"] == product_id), None)
+    if not p:
+        raise HTTPException(404, "That product no longer exists.")
+    mat = studio.get_material(email, product_id)
+    return {"product": p, "material": mat,
+            "completeness": studio.completeness(p, mat),
+            "angles": studio.angles(p, mat)}
+
+
+@app.post("/api/studio/product")
+def studio_product_save(body: MaterialBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    cache.clear(email)
+    mat = studio.save_material(email, body.product_id, body.patch or {})
+    p = next((x for x in products.get_products(email) if x["id"] == body.product_id), {})
+    return {"material": mat, "completeness": studio.completeness(p, mat),
+            "angles": studio.angles(p, mat)}
+
+
+@app.post("/api/studio/post")
+def studio_post(body: StudioPostBody, authorization: str | None = Header(default=None)):
+    """One ready-to-post draft, generated against the brand profile."""
+    email = require_user(authorization)
+    try:
+        return studio.make_post(email, body.product_id, body.angle or "",
+                                bool(body.generate_image))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
 
 
 @app.get("/api/icons")
@@ -1383,6 +1498,45 @@ def generate_winback(x_session_id: str | None = Header(default=None),
     return {"customers": results, "usage": _usage(email)}
 
 
+@app.post("/api/rfm/winback/send")
+def winback_send(body: CampaignBody,
+                 x_session_id: str | None = Header(default=None),
+                 authorization: str | None = Header(default=None)):
+    """Actually send the campaign — email now, WhatsApp through a provider when
+    one is connected and as tap-to-send links until then. Recording it for
+    measurement happens automatically, so the seller never has to remember."""
+    email = require_user(authorization)
+    rows = body.rows or []
+    if not rows:
+        cached = _winback_cache.get(x_session_id)
+        rows = (cached.rows if cached else []) or []
+    if not rows:
+        raise HTTPException(400, "Generate the campaign first, then send it.")
+    site = sitebuilder.get_site(email) or {}
+    brand = str(site.get("brand") or email.split("@")[0]).strip()
+    cache.clear(email)
+    return campaigns.send(email, rows, brand, body.template or "",
+                          tuple(body.channels or ("email", "whatsapp")),
+                          body.subject or "")
+
+
+@app.post("/api/rfm/winback/preview")
+def winback_preview(body: CampaignBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    site = sitebuilder.get_site(email) or {}
+    brand = str(site.get("brand") or email.split("@")[0]).strip()
+    return {"preview": campaigns.preview(body.rows or [], brand, body.template or ""),
+            "template": body.template or campaigns.default_template(),
+            "whatsapp_live": messaging.whatsapp_enabled(),
+            "email_ready": messaging.smtp_configured(),
+            "brand": brand}
+
+
+@app.get("/api/rfm/winback/sends")
+def winback_sends(authorization: str | None = Header(default=None)):
+    return {"sends": campaigns.history(require_user(authorization))}
+
+
 @app.get("/api/rfm/winback/proof")
 def winback_proof_summary(authorization: str | None = Header(default=None)):
     """What every campaign actually recovered — the renewal conversation."""
@@ -2381,6 +2535,40 @@ def _supply_payload(email: str) -> dict:
     }
 
 
+@app.get("/api/supply/suppliers")
+def supply_suppliers(authorization: str | None = Header(default=None)):
+    """Suppliers, derived from the inventory items they stock."""
+    return {"suppliers": supply.get_suppliers(require_user(authorization))}
+
+
+@app.post("/api/supply/supplier")
+def supply_supplier_save(body: SupplierBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    cache.clear(email)
+    try:
+        return {"suppliers": supply.upsert_supplier(email, body.name, body.patch or {})}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/supply/supplier/detach")
+def supply_supplier_detach(body: SupplierBody, authorization: str | None = Header(default=None)):
+    """Clears the supplier from every item and hands back the ids, so the undo
+    can put them back — once the last item is cleared there is no supplier left
+    to look up by name."""
+    email = require_user(authorization)
+    cache.clear(email)
+    return supply.detach_supplier(email, body.name)
+
+
+@app.post("/api/supply/supplier/attach")
+def supply_supplier_attach(body: SupplierBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    cache.clear(email)
+    ids = (body.patch or {}).get("item_ids") or []
+    return {"suppliers": supply.attach_supplier(email, ids, body.patch or {})}
+
+
 @app.get("/api/supply/state")
 def supply_state(authorization: str | None = Header(default=None)):
     email = require_user(authorization)
@@ -2522,6 +2710,9 @@ class ProductBody(BaseModel):
     # rebuilds the matrix from the axes and carries existing cells over.
     options: list[dict] = []
     variants: list[dict] = []
+    # which sections of the storefront this product appears in
+    featured: bool | None = False
+    spotlight: bool | None = False
 
 
 class ProductIdBody(BaseModel):
@@ -2642,6 +2833,27 @@ def _site_state(email: str) -> dict:
 @app.get("/api/site/state")
 def site_state(authorization: str | None = Header(default=None)):
     return _site_state(require_user(authorization))
+
+
+@app.get("/api/site/gateway")
+def site_gateway(authorization: str | None = Header(default=None)):
+    """Whether this seller has connected their own Razorpay. Never returns the
+    secret — only whether one is stored and its last four characters."""
+    return store_payments.status(require_user(authorization))
+
+
+@app.post("/api/site/gateway")
+def site_gateway_save(body: StoreGatewayBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    try:
+        return store_payments.save_keys(email, body.key_id, body.key_secret)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/site/gateway/disconnect")
+def site_gateway_disconnect(authorization: str | None = Header(default=None)):
+    return store_payments.disconnect(require_user(authorization))
 
 
 @app.get("/api/site/pairings")
@@ -2903,6 +3115,11 @@ class ShopOrderBody(BaseModel):
     name: str | None = ""
     phone: str | None = ""
     email: str | None = ""
+    # Razorpay hands these back after a successful payment; the server verifies
+    # the signature against the seller's own secret before any order is created.
+    razorpay_order_id: str | None = ""
+    razorpay_payment_id: str | None = ""
+    razorpay_signature: str | None = ""
 
 
 
@@ -2995,6 +3212,33 @@ def shop_cart(handle: str, body: ShopCartBody):
     return storefront.price_cart(seller, body.lines or [])
 
 
+@app.post("/api/shop/{handle}/pay")
+def shop_pay(handle: str, body: ShopPayBody):
+    """Open a payment on the seller's own Razorpay account.
+
+    Priced server-side from the same cart resolver checkout uses, so the amount
+    can never be set by the browser. Returns only what Razorpay's checkout
+    widget needs — the seller's public key id and the order id.
+    """
+    seller = _seller_for(handle)
+    site = sitebuilder.get_site(seller)
+    priced = storefront.price_cart(seller, body.lines or [])
+    if not priced["items"]:
+        raise HTTPException(400, "Your cart is empty.")
+    pay = "prepaid" if body.payment == "prepaid" else "cod"
+    due = store_payments.split_due(site["commerce"], priced["total"], pay)
+    if due["online"] <= 0:
+        raise HTTPException(400, "Nothing to pay online for this order.")
+    try:
+        out = store_payments.create_order(
+            seller, due["online"], handle,
+            note="advance" if due["kind"] == "cod_advance" else "full")
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(400, str(e))
+    return {**out, "due": due, "brand": site.get("brand") or handle,
+            "total": priced["total"]}
+
+
 @app.post("/api/shop/{handle}/order")
 def shop_order(handle: str, body: ShopOrderBody,
                x_store_token: str | None = Header(default=None)):
@@ -3018,9 +3262,21 @@ def shop_order(handle: str, body: ShopOrderBody,
             )
         except storefront.StoreError as e:
             raise HTTPException(400, str(e))
+    # Verify the payment here, server-side, against the seller's own secret —
+    # everything the browser sent is attacker-controlled until this passes.
+    paid = False
+    if body.razorpay_payment_id:
+        paid = store_payments.verify(seller, body.razorpay_order_id or "",
+                                     body.razorpay_payment_id or "",
+                                     body.razorpay_signature or "")
+        if not paid:
+            raise HTTPException(400, "We could not verify that payment. "
+                                     "Nothing has been charged twice — please try again.")
     try:
         order = storefront.place_order(seller, cust, body.lines or [], body.address or {},
-                                       body.payment or "cod", body.note or "")
+                                       body.payment or "cod", body.note or "",
+                                       payment_ok=paid,
+                                       payment_ref=body.razorpay_payment_id or "")
     except storefront.StoreError as e:
         raise HTTPException(400, str(e))
     # a guest gets a session too, so "your orders" works on the thank-you page

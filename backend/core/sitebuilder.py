@@ -599,6 +599,12 @@ def default_site(email: str) -> dict:
             "cod_enabled": True,
             "order_note": "We'll call to confirm your order before dispatch.",
             "min_order": 0.0,
+            # Online payment, into the seller's OWN Razorpay account.
+            "online_enabled": False,
+            # A flat advance a cash-on-delivery shopper pays online to confirm.
+            # 0 = plain COD. This is the cheapest lever a small Indian seller
+            # has against return-to-origin, which runs ~26% on COD.
+            "cod_advance": 0.0,
         },
         "policies": {"shipping": "", "returns": "", "privacy": ""},
         # What a pasted link shows in WhatsApp, and what a search engine reads.
@@ -780,6 +786,8 @@ def save_site(email: str, patch: dict) -> dict:
     c["gst_percent"] = max(0.0, min(28.0, round(_f(c.get("gst_percent"), 0), 2)))
     c["min_order"] = max(0.0, round(_f(c.get("min_order"), 0), 2))
     c["cod_enabled"] = _b(c.get("cod_enabled"), True)
+    c["online_enabled"] = _b(c.get("online_enabled"), False)
+    c["cod_advance"] = max(0.0, round(_f(c.get("cod_advance"), 0), 2))
     c["gst_inclusive"] = _b(c.get("gst_inclusive"), True)
     c["currency"] = "INR"
     c["order_note"] = str(c.get("order_note") or "").strip()[:200]

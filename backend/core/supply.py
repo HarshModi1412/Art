@@ -600,6 +600,114 @@ def _reason_text(item, avg_daily, rop, current, eoq_raw, basis, order_qty, moq,
 # ---------------------------------------------------------
 # compute
 # ---------------------------------------------------------
+# ---------------------------------------------------------------------------
+# suppliers
+# ---------------------------------------------------------------------------
+# Supplier details live on each inventory item, which is fine for storage and
+# terrible for working with: to change a phone number you had to open every
+# item that supplier stocks. These derive a supplier list from those fields and
+# write an edit back across all of them, so Suppliers can be its own screen
+# without a migration and without two places to keep in sync.
+def _disp(v) -> str:
+    """Trim without destroying case — _norm() lowercases, which is right for
+    matching and wrong for anything shown to a person."""
+    return str(v or "").strip()
+
+
+def get_suppliers(email: str) -> list[dict]:
+    email = _email(email)
+    by_name: dict[str, dict] = {}
+    for it in get_inventory(email):
+        name = _disp(it.get("supplier_name"))
+        if not name:
+            continue
+        key = name.lower()
+        sup = by_name.setdefault(key, {
+            "name": name,
+            "phone": _disp(it.get("supplier_phone")),
+            "email": _disp(it.get("supplier_email")),
+            "items": [], "item_count": 0, "stock_value": 0.0, "lead_time_days": None,
+        })
+        # first non-empty contact detail wins; a later blank never erases one
+        sup["phone"] = sup["phone"] or _disp(it.get("supplier_phone"))
+        sup["email"] = sup["email"] or _disp(it.get("supplier_email"))
+        lead = _opt_num(it.get("lead_time_days"))
+        if lead:
+            sup["lead_time_days"] = max(sup["lead_time_days"] or 0, lead)
+        sup["items"].append({"id": it.get("id"), "name": it.get("name"),
+                             "current_stock": _num(it.get("current_stock")),
+                             "unit_label": it.get("unit_label") or "unit",
+                             "moq": _num(it.get("moq")),
+                             "unit_cost": _opt_num(it.get("unit_cost"))})
+        sup["item_count"] += 1
+        sup["stock_value"] += _num(it.get("current_stock")) * (_num(it.get("unit_cost")) or 0)
+    out = list(by_name.values())
+    for sup in out:
+        sup["stock_value"] = round(sup["stock_value"], 2)
+    return sorted(out, key=lambda x: x["name"].lower())
+
+
+def upsert_supplier(email: str, name: str, patch: dict) -> list[dict]:
+    """Rename a supplier or change their contact details, across every item they
+    supply. `name` identifies the existing supplier; patch may carry a new one."""
+    email = _email(email)
+    name = _disp(name)
+    if not name:
+        raise ValueError("Which supplier?")
+    new_name = _disp(patch.get("name")) or name
+    phone = _disp(patch.get("phone"))
+    mail = _disp(patch.get("email"))
+    touched = 0
+    for it in get_inventory(email):
+        if _disp(it.get("supplier_name")).lower() != name.lower():
+            continue
+        updated = dict(it)
+        updated["supplier_name"] = new_name
+        updated["supplier_phone"] = phone
+        updated["supplier_email"] = mail
+        if patch.get("lead_time_days") not in (None, ""):
+            updated["lead_time_days"] = _num(patch.get("lead_time_days"))
+        upsert_item(email, updated)
+        touched += 1
+    if not touched:
+        raise ValueError(f"No inventory items are supplied by “{name}”.")
+    return get_suppliers(email)
+
+
+def detach_supplier(email: str, name: str) -> dict:
+    """Clear a supplier from every item. The items themselves are untouched —
+    removing a supplier must never delete your stock.
+
+    Returns the item ids that were cleared, so the caller can offer an undo:
+    once the last item is cleared the supplier no longer exists to look up by
+    name, so re-attaching has to work from ids.
+    """
+    email = _email(email)
+    name = _disp(name)
+    touched = []
+    for it in get_inventory(email):
+        if _disp(it.get("supplier_name")).lower() != name.lower():
+            continue
+        touched.append(it.get("id"))
+        upsert_item(email, {**it, "supplier_name": "", "supplier_phone": "",
+                            "supplier_email": ""})
+    return {"suppliers": get_suppliers(email), "detached_item_ids": touched}
+
+
+def attach_supplier(email: str, item_ids: list[str], supplier: dict) -> list[dict]:
+    """Put a supplier back on specific items — the undo for detach_supplier."""
+    email = _email(email)
+    wanted = {str(i) for i in (item_ids or []) if i}
+    for it in get_inventory(email):
+        if it.get("id") not in wanted:
+            continue
+        upsert_item(email, {**it,
+                            "supplier_name": _disp(supplier.get("name")),
+                            "supplier_phone": _disp(supplier.get("phone")),
+                            "supplier_email": _disp(supplier.get("email"))})
+    return get_suppliers(email)
+
+
 def compute_inventory(email: str) -> dict:
     email = _email(email)
     product_daily, piv, meta = _demand_stats(email)

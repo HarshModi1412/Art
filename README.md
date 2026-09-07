@@ -255,6 +255,94 @@ are not — rather than letting a seller find out from their own storefront.
 Run `supabase/variants.sql` once: it adds the `video_url`, `options` and
 `variants` columns plus a `media` index table.
 
+## Payments on seller storefronts
+
+`backend/core/store_payments.py`. **Each seller connects their own Razorpay
+account** — money moves from the shopper straight into the seller's bank. We
+never hold it, which keeps this out of payment-aggregator territory (collecting
+on someone else's behalf and settling later means RBI licensing, KYC and a
+settlement ledger).
+
+Credentials live in `secrets_store` (Fernet-encrypted, same vault as the
+marketplace connectors). The secret is write-only: the settings screen only ever
+learns that a key exists and its last four characters.
+
+**Partial COD.** A store can require a flat advance paid online, with the balance
+in cash on delivery — the seller sets the rupee amount in the Checkout step.
+This is the cheapest lever a small Indian seller has: Shipway's FY25 data puts
+return-to-origin at 26% on COD against under 2% prepaid. `split_due()` is the
+one place that decides what is owed now versus later, and it is recomputed
+server-side at order time from the app's own prices, never from anything the
+browser sent. An order with an unpaid advance is refused.
+
+The signature is verified against the seller's own secret before any order is
+created, so a forged callback cannot produce an order.
+
+Run `pip install razorpay` (already in requirements.txt).
+
+## Product Studio
+
+`backend/core/studio.py`. The Content Creator generates a post from a topic and
+a product *type*, which produces a stock-looking picture of "a perfume" rather
+than of *their* perfume. Studio starts from what the seller actually has.
+
+* **A brand profile, once per account** — what they make and why, who buys it,
+  the look, the voice, the palette, what to never say. This is what keeps twenty
+  generated posts feeling like one brand.
+* **Per-product material** — photos, clips, the story, the materials, what makes
+  it different, who it's for. `completeness()` scores it and names the single
+  missing piece worth adding next, with the reason ("one photo makes one post;
+  three makes a week of them") rather than an unexplained empty box.
+* **`build_brief()`** assembles brand + product into one brief, so the caption
+  and the image are generated against the same instructions. `image_prompt()`
+  carries the brand's look, palette and refusals; `caption_prompt()` carries its
+  voice.
+* **Post angles** are derived from the material actually supplied — writing a
+  story unlocks a story angle — so a seller can see why each was suggested.
+
+Generated images are always flagged `image_is_generated` and labelled in the UI.
+A seller should always know which of their pictures is a photograph of a real
+object. Without an OpenAI key, captions fall back to a written template and
+image generation is off — Studio is never a dead screen.
+
+## Win-back campaigns that actually send
+
+`backend/core/campaigns.py`. The app used to produce a list and an Excel file
+and stop. Now it sends: **email over SMTP today**, and WhatsApp through a
+provider the moment one is connected. Until then every recipient with a phone
+number comes back as a **click-to-chat link** (`wa.me/<number>?text=…`) that
+opens WhatsApp with the message already written — which genuinely works for a
+seller with forty at-risk customers, and means the feature is honest on day one.
+
+Sending records the campaign in `winback_proof` automatically, so "did you send
+it" stops being something the seller has to remember to tick. A customer with
+neither an email nor a phone is reported as skipped, not silently dropped.
+
+## Inventory and Suppliers, split
+
+They were one module, which meant changing a supplier's phone number required
+opening every item they stock.
+
+* **Inventory Management** — what you hold, what each sold product uses up
+  (the recipe links), and waste.
+* **Suppliers & Purchase Orders** — who you buy from, when to reorder, the PO PDF.
+
+`supply.get_suppliers()` derives the supplier list from the items they stock and
+`upsert_supplier()` writes an edit back across all of them, so there is one place
+to change a phone number and no migration was needed. `detach_supplier()` returns
+the item ids it cleared so the undo can put them back — once the last item is
+cleared there is no supplier left to look up by name. Removing a supplier never
+removes stock.
+
+## Storefront sections
+
+Featured, Spotlight and the product grid all used to slice the top of the same
+list, so a ten-product catalogue looked like it was repeating itself down the
+page. Products now carry `featured` and `spotlight` flags, set per product in
+Product Management. If the seller has picked none, the site falls back to
+automatic — and the spotlight avoids whatever the featured rail is already
+showing, so the two blocks can never show the same thing.
+
 ## Cancellations
 
 `backend/core/cancellations.py`, computed from the seller's own storefront

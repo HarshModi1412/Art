@@ -113,7 +113,7 @@ def _str_list(v, limit=8, maxlen=300) -> list[str]:
 # supabase/site.sql yet (see _upsert_row).
 STOREFRONT_FIELDS = ("description", "image_url", "images", "mrp", "stock",
                      "track_stock", "listed", "highlights", "unit_label", "video_url",
-                     "options", "variants")
+                     "options", "variants", "featured", "spotlight")
 
 # A product may carry up to two option axes (in practice Size and Colour). The
 # cross product of their values is the variant matrix, and each cell is a real
@@ -269,6 +269,13 @@ def _norm_product(raw: dict) -> dict:
         "unit_label": (raw.get("unit_label") or "").strip()[:40],
         # a short muted clip that plays when a shopper hovers the card
         "video_url": (raw.get("video_url") or "").strip()[:500],
+        # ---- where it appears on the site ----
+        # Every listed product shows in Shop. These say whether it ALSO gets a
+        # place in the Featured rail or the Spotlight block — without them the
+        # storefront put the same products in every section, which is what made
+        # a small catalogue look like it was repeating itself.
+        "featured": bool(raw.get("featured", False)),
+        "spotlight": bool(raw.get("spotlight", False)),
         # ---- variants ----
         "options": _axes,
         "variants": _vars,
@@ -713,6 +720,8 @@ def storefront_payload(email: str) -> list[dict]:
             "video_url": p.get("video_url") or "",
             "in_stock": in_stock(p),
             "available": available_units(p),
+            "featured": bool(p.get("featured")),
+            "spotlight": bool(p.get("spotlight")),
             "options": p.get("options") or [],
             "variants": [
                 {
