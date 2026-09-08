@@ -41,6 +41,7 @@ from backend.core import gst, invoices, invoice_pdf
 from backend.core import labels
 from backend.core import cancel_requests
 from backend.core import social
+from backend.core import personas
 
 # ---------------------------------------------------------
 # numpy/pandas JSON safety net
@@ -290,6 +291,29 @@ class SocialStateBody(BaseModel):
 
 class SocialCloneBody(BaseModel):
     post_id: str
+
+
+
+# --- Product Studio: design language + generation ------------------------
+class StudioRefBody(BaseModel):
+    url: str
+
+
+class StudioReadShotsBody(BaseModel):
+    product_id: str
+
+
+class StudioImageOnlyBody(BaseModel):
+    product_id: str
+    pillar: str | None = ""
+    format: str | None = ""
+    angle: str | None = ""
+    post_id: str | None = ""
+
+
+class SocialAttachBody(BaseModel):
+    post_id: str
+    url: str
 
 
 class MappingBody(BaseModel):
@@ -3889,3 +3913,95 @@ def ai_providers(authorization: str | None = Header(default=None)):
     st = aiprovider.status()
     st["storage_durable"] = media.durable()
     return st
+
+
+# =========================================================================
+# Product Studio — design language and image generation
+# =========================================================================
+@app.get("/api/studio/design-language")
+def studio_design_language(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    brand = studio.get_brand(email)
+    return {"refs": brand.get("refs") or [], "aesthetic": brand.get("aesthetic") or "",
+            "aesthetic_from": brand.get("aesthetic_from") or 0,
+            "vision_ready": aiprovider.vision_ready(),
+            "image_engine": studio.image_engine()}
+
+
+@app.post("/api/studio/design-language/add")
+def studio_ref_add(body: StudioRefBody,
+                   authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return studio.add_ref(email, body.url)
+
+
+@app.post("/api/studio/design-language/remove")
+def studio_ref_remove(body: StudioRefBody,
+                      authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return studio.remove_ref(email, body.url)
+
+
+@app.post("/api/studio/design-language/read")
+def studio_read_aesthetic(authorization: str | None = Header(default=None)):
+    """Look at the reference images and write what they have in common."""
+    email = require_user(authorization)
+    res = studio.read_aesthetic(email)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("reason", "Could not read the references."))
+    cache.clear(email)
+    return res
+
+
+@app.post("/api/studio/read-shots")
+def studio_read_shots(body: StudioReadShotsBody,
+                      authorization: str | None = Header(default=None)):
+    """Look at a product's own photographs and write what the thing is.
+
+    This is the step that makes generated imagery resemble the actual product
+    rather than a plausible invention of one."""
+    email = require_user(authorization)
+    res = studio.read_product_shots(email, body.product_id)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("reason", "Could not read the photos."))
+    return res
+
+
+@app.post("/api/studio/image")
+def studio_image_only(body: StudioImageOnlyBody,
+                      authorization: str | None = Header(default=None)):
+    """Generate a picture and nothing else — no caption rewritten over the top.
+
+    When `post_id` is given the image is attached to that planned post, so it
+    shows up in the Social Media Manager's week."""
+    email = require_user(authorization)
+    try:
+        img = studio.generate_image_only(email, body.product_id,
+                                         body.pillar or "", body.format or "",
+                                         body.angle or "")
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(400, str(e))
+    if body.post_id:
+        social.attach_image(email, body.post_id, img["url"], True, img.get("prompt", ""))
+    cache.clear(email)
+    return img
+
+
+@app.post("/api/social/attach-image")
+def social_attach(body: SocialAttachBody,
+                  authorization: str | None = Header(default=None)):
+    """Attach any image — generated, uploaded, or exported from elsewhere."""
+    email = require_user(authorization)
+    p = social.attach_image(email, body.post_id, body.url, False, "")
+    if p.get("error"):
+        raise HTTPException(404, p["error"])
+    return p
+
+
+@app.get("/api/managers")
+def manager_desks(authorization: str | None = Header(default=None)):
+    """Who is on the team and what each of them has waiting."""
+    email = require_user(authorization)
+    cards = smart.build_insights(email)
+    return {"managers": list(personas.MANAGERS.values()),
+            "desks": personas.desks(cards), "pending": len(cards)}

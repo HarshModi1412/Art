@@ -649,16 +649,32 @@ function renderApprovals(insights) {
       <button class="btn ghost sm" id="apNone">Dismiss all</button>
     </div>` : "";
 
-  list.innerHTML = bulk + insights.map((i) => `
-    <div class="ins-card" data-ins="${i.id}">
-      <div class="ins-title">${i.icon || "•"} <span>${esc(i.title)}</span></div>
-      <div class="ins-detail">${esc(i.detail)}</div>
+  /* Cards are grouped by desk, so the panel reads as five managers reporting
+     in rather than a shuffled queue. The manager's name is the first thing on
+     the card because it tells the seller which part of the business this is
+     about before they have read a word of the content. */
+  let lastMgr = null;
+  const cards = insights.map((i) => {
+    const head = i.manager_name && i.manager !== lastMgr
+      ? `<div class="mgr-head" style="--mgr:${esc(i.manager_colour || "#5c6790")}">
+           ${sic(i.manager_icon || "spark")}
+           <b>${esc(i.manager_name)}</b>
+           <span>${esc(i.manager_remit || "")}</span>
+         </div>` : "";
+    lastMgr = i.manager || lastMgr;
+    return head + `
+    <div class="ins-card mgr-card" data-ins="${i.id}" style="--mgr:${esc(i.manager_colour || "#5c6790")}">
+      <div class="ins-title"><span>${esc(i.headline || i.title)}</span></div>
+      <div class="ins-detail">${esc(i.body || i.detail)}</div>
       <div class="ins-actions">
-        <button class="btn approve" data-approve="${i.id}">✓ Approve</button>
-        <button class="btn reject" data-reject="${i.id}">Dismiss</button>
+        <button class="btn approve" data-approve="${i.id}">${esc(i.cta || "Approve")}</button>
+        <button class="btn reject" data-reject="${i.id}">Not now</button>
         <button class="btn ghost" data-details="${i.id}">Details</button>
       </div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
+
+  list.innerHTML = bulk + cards;
 
   list.querySelectorAll("[data-approve]").forEach((b) => b.onclick = () => decide(b.dataset.approve, "approve"));
   list.querySelectorAll("[data-reject]").forEach((b) => b.onclick = () => decide(b.dataset.reject, "disapprove"));
@@ -1650,6 +1666,26 @@ function renderStudio() {
       <button class="btn primary sm" id="sbSave">Save brand</button>
     </div>
 
+    <!-- Design language.
+
+         A seller can rarely write "soft north light, warm sand, generous
+         negative space" — but every one of them can point at five pictures
+         and say "like this". This bucket takes the pointing and turns it
+         into the words the image model needs. -->
+    <div class="card dl-card">
+      <div class="pf-head" style="padding:0 0 12px;">
+        <h4>Your design language</h4>
+        <p class="muted tiny">Pictures whose <em>look</em> you want — not your products.
+          Your packaging, your shop, shots you admire, a mood board. Four is plenty.</p>
+      </div>
+      <div class="dl-refs" id="dlRefs"></div>
+      <div class="dl-actions">
+        <button class="btn ghost sm" id="dlAdd">${sic("image")}Add references</button>
+        <button class="btn primary sm" id="dlRead">${sic("spark")}Read my aesthetic</button>
+      </div>
+      <div id="dlOut"></div>
+    </div>
+
     ${!d.ai_ready ? `<p class="muted tiny" style="margin:12px 0 0;">No AI key is set on this
       server, so captions come from a template and image generation is off. Your own
       photos still work everywhere.</p>` : ""}
@@ -1674,8 +1710,65 @@ function renderStudio() {
       renderStudio();
     } catch (e) { toast(e.message); }
   };
+  renderDesignLanguage();
   document.querySelectorAll("[data-stp]").forEach((n) =>
     n.onclick = () => openStudioProduct(n.dataset.stp));
+}
+
+function renderDesignLanguage() {
+  const b = (_studio && _studio.brand) || {};
+  const refs = b.refs || [];
+  const box = $("dlRefs");
+  if (box) {
+    box.innerHTML = refs.length ? refs.map((u) => `
+      <div class="dl-ref" style="background-image:url('${esc(u)}')">
+        <button class="dl-x" data-dlx="${esc(u)}" title="Remove">✕</button>
+      </div>`).join("")
+      : `<div class="dl-blank">Nothing here yet. Add four pictures whose look you want to copy.</div>`;
+    box.querySelectorAll("[data-dlx]").forEach((n) => n.onclick = async () => {
+      try {
+        const r = await api("/api/studio/design-language/remove",
+                            { method: "POST", json: { url: n.dataset.dlx } });
+        _studio.brand = r; renderDesignLanguage();
+      } catch (e) { toast(e.message); }
+    });
+  }
+
+  const out = $("dlOut");
+  if (out) {
+    out.innerHTML = b.aesthetic ? `
+      <div class="dl-read">
+        <div class="dl-read-h">${sic("check")}<b>What I see in your references</b>
+          <span class="muted tiny">read from ${esc(String(b.aesthetic_from || 0))} image${b.aesthetic_from === 1 ? "" : "s"}</span></div>
+        <p>${esc(b.aesthetic)}</p>
+        <p class="muted tiny">Every image generated from here on is shot in this
+          language instead of the preset look. Change the references and read again
+          to change it.</p>
+      </div>` : "";
+  }
+
+  const add = $("dlAdd");
+  if (add) add.onclick = () => pickImage(async (url) => {
+    try {
+      const r = await api("/api/studio/design-language/add",
+                          { method: "POST", json: { url } });
+      _studio.brand = r; renderDesignLanguage();
+    } catch (e) { toast(e.message); }
+  }, true);
+
+  const read = $("dlRead");
+  if (read) read.onclick = async () => {
+    read.disabled = true; read.innerHTML = sic("spark") + "Looking…";
+    try {
+      const r = await api("/api/studio/design-language/read", { method: "POST" });
+      _studio.brand = r.brand;
+      renderDesignLanguage();
+      toast(`Read ${r.read} reference${r.read === 1 ? "" : "s"}.`);
+    } catch (e) {
+      toast(e.message, 6000);
+      read.disabled = false; read.innerHTML = sic("spark") + "Read my aesthetic";
+    }
+  };
 }
 
 async function openStudioProduct(pid) {
@@ -1713,6 +1806,17 @@ function renderStudioProduct() {
         <p class="muted tiny" style="margin:-6px 0 10px;">Three or more, from different angles.
           One photo makes one post; three makes a week of them.</p>
         <div class="gal-wrap" id="stShots"></div>
+        <div class="st-seen">
+          <button class="btn ghost sm" id="stReadShots">${sic("spark")}Read my photos</button>
+          ${m.seen ? `<div class="st-seen-out">
+            <b>What I see in this product</b>
+            <p>${esc(m.seen)}</p>
+            <span class="muted tiny">This goes into every image generated for this
+              product, so the picture resembles the item you actually ship.</span>
+          </div>` : `<span class="muted tiny">Turn your photos into a written
+            description, so generated images look like <em>this</em> product rather
+            than a generic one.</span>`}
+        </div>
 
         <div class="sup-sub">Clips</div>
         <p class="muted tiny" style="margin:-6px 0 10px;">Even five seconds. Reels reach people
@@ -1742,6 +1846,7 @@ function renderStudioProduct() {
           <button class="btn primary sm" id="stMakeOwn">${sic("image")}Use my photo + write the caption</button>
           <button class="btn ghost sm" id="stMakeAi" ${_studio.ai_ready ? "" : "disabled"}>
             ${sic("spark")}Generate an image too</button>
+          <button class="btn ghost sm" id="stImageOnly">${sic("image")}Image only</button>
         </div>
         <p class="muted tiny" style="margin:10px 0 0;">${_studio.ai_ready
           ? "A generated image is built from your brand's look and colours — and is always labelled as generated, so you know which of your pictures is a real photograph."
@@ -1802,6 +1907,50 @@ function renderStudioProduct() {
   };
   $("stMakeOwn").onclick = () => make(false);
   const ai = $("stMakeAi"); if (ai && !ai.disabled) ai.onclick = () => make(true);
+
+  /* Read the product's own photographs into words.
+
+     This is the step that decides whether a generated image resembles the
+     actual item or a plausible invention of it. Without it the model is told
+     "a silk lehenga" and draws one; with it the model is told the maroon, the
+     zari butis and the scalloped hem, and draws that. */
+  const rs = $("stReadShots");
+  if (rs) rs.onclick = async () => {
+    if (!shots.length) return toast("Add a photo of the product first.");
+    rs.disabled = true; rs.innerHTML = sic("spark") + "Looking…";
+    try {
+      const r = await api("/api/studio/read-shots", { method: "POST",
+        json: { product_id: p.id } });
+      _studioProduct.material.seen = r.seen;
+      renderStudioProduct();
+      toast(`Read ${r.read} photo${r.read === 1 ? "" : "s"}.`);
+    } catch (e) {
+      toast(e.message, 6000);
+      rs.disabled = false; rs.innerHTML = sic("spark") + "Read my photos";
+    }
+  };
+
+  const io = $("stImageOnly");
+  if (io) io.onclick = async () => {
+    io.disabled = true; io.innerHTML = sic("image") + "Drawing…";
+    try {
+      const img = await api("/api/studio/image", { method: "POST",
+        json: { product_id: p.id, angle: $("stAngle").value } });
+      $("stOut").innerHTML = `
+        <div class="card st-imgonly">
+          <img src="${esc(img.url)}" alt="" />
+          <div class="st-imgmeta">
+            <b>Image only — no caption written.</b>
+            <span class="muted tiny">${img.used_seen ? "Built from your photos" : "No photo reading yet"}
+              · ${img.used_aesthetic ? "your design language" : "the preset look"}
+              · ${esc(img.engine)}${img.free ? " (free)" : ""}</span>
+            <details><summary class="muted tiny">The prompt used</summary>
+              <p class="muted tiny">${esc(img.prompt)}</p></details>
+          </div>
+        </div>`;
+    } catch (e) { toast(e.message, 6000); }
+    io.disabled = false; io.innerHTML = sic("image") + "Image only";
+  };
 }
 
 function renderStudioPost(post) {
@@ -4728,6 +4877,13 @@ function renderSocial() {
         <span class="sm-pillar">${esc(p.pillar_name)}</span>
         ${socialStateChip(p.state)}
       </div>
+      <div class="sm-shot">
+        ${p.image_url
+          ? `<img src="${esc(p.image_url)}" alt="" />
+             ${p.image_generated ? `<span class="sm-gen">AI</span>` : ""}`
+          : `<button class="sm-shot-make" data-act="image" title="Generate the image for this slot">
+               ${sic("image")}<span>Make the image</span></button>`}
+      </div>
       <div class="sm-prod">${esc(p.product_name || "—")}</div>
       <div class="sm-hook">${esc((p.caption || {}).hook || "")}</div>
       <div class="sm-body">${esc((p.caption || {}).body || "").slice(0, 140)}</div>
@@ -4840,6 +4996,23 @@ function renderSocial() {
         if (act === "skip") {
           try { await api("/api/social/state", { method: "POST", json: { post_id: id, state: "failed" } }); await openSocial(); }
           catch (e) { toast(e.message); }
+          return;
+        }
+        if (act === "image") {
+          if (!post.product_id) return toast("This slot has no product linked.");
+          b.disabled = true; b.innerHTML = sic("image") + "<span>Drawing…</span>";
+          try {
+            // Studio does the drawing, because the brand aesthetic and the
+            // product reading both live there. Social only says which slot it
+            // is for — the pillar and format become camera direction.
+            await api("/api/studio/image", { method: "POST", json: {
+              product_id: post.product_id, pillar: post.pillar,
+              format: post.format, post_id: post.id } });
+            await openSocial();
+          } catch (e) {
+            toast(e.message, 6000);
+            b.disabled = false; b.innerHTML = sic("image") + "<span>Make the image</span>";
+          }
           return;
         }
         if (act === "edit") openSocialEditor(post);

@@ -455,6 +455,73 @@ Consequences you will see in the code:
 Festival dates in `FESTIVALS_2026` are lunisolar and **must be refreshed each
 year, never extrapolated** — marketing blogs routinely get them a week wrong.
 
+## The approval panel, staffed
+
+`personas.py`. Every insight is attributed to one of five managers — Social
+Media, Operations, Supply Chain, Marketing, Brand — and the copy is rewritten
+in that manager's voice: recommendation first, reasoning second.
+
+The point is not decoration. A card that says "Reorder 4 items below reorder
+point" makes the seller work out who would have told them that and what happens
+if they ignore it. A card headed **Operations Manager** saying *"Place an order
+for 4 items before we run out — the tightest is down to 11 days of cover"*
+answers both before it is read.
+
+The copy is written, not generated. Sending each card through an LLM would be
+slower, non-deterministic, cost money on every panel render, and produce worse
+sentences than writing them once by hand.
+
+`dress()` only ADDS fields. The original `title` and `detail` survive untouched,
+because History, the email digest and the Today strip still render those.
+
+Three new cards exist so that every desk has something real to say:
+
+* **overstock** — the mirror of the reorder card, and the one nobody builds.
+  Running out is loud; a customer complains. Overstock is silent: the money
+  simply is not there when the seller wants to buy what IS selling. Skips items
+  with no sales history rather than guessing.
+* **supplier_risk** — items with a single supplier and no alternative on file.
+  Also the only honest price benchmark a small seller has.
+* **festival** — fires on the campaign START date, not the festival date. A
+  Diwali card that appears on Diwali is useless.
+
+## Design language
+
+Product Studio has a second image bucket, separate from product photos: pictures
+whose *look* the seller wants. Their packaging, their shop, shots they admire.
+
+A seller can rarely write "soft north light, warm sand, generous negative space"
+— but every one of them can point at five pictures and say "like this". The
+vision model reads those references and writes the aesthetic; that text then
+outranks the preset `look` dropdown in every generated image.
+
+Each product's own photographs get the same treatment, into `material.seen`.
+This is the step that decides whether a generated image resembles the item that
+actually ships or a plausible invention of one — the model is told "deep maroon
+Banarasi silk with gold zari butis and a scalloped hem" instead of "a lehenga".
+
+`image_prompt()` stacks three sources in decreasing authority:
+
+1. what the product actually looks like (`seen`),
+2. the brand's aesthetic (`aesthetic`),
+3. the Social Media Manager's pillar and format, translated into camera
+   direction — a "product in detail" carousel slide and a "behind the scenes"
+   reel cover are not the same photograph.
+
+The preset look is the fallback, used only when nothing has been read.
+
+Generation runs through Cloudflare Flux Schnell when configured: about 500
+images a day free, then roughly Rs 0.04 each against gpt-image-1's Rs 3.70. On
+an unlimited Pro plan that difference is the whole margin — 200 images a month
+costs Rs 740 of a Rs 999 subscription on OpenAI, and Rs 8 on Flux.
+
+`generate_image_only()` exists separately from `make_post()` because the two are
+wanted at different moments: a seller planning a week wants pictures for slots
+that already have captions, and writing a second caption over the first is
+actively unhelpful. Planned posts carry an empty image slot filled on demand —
+generating four images every time someone presses "Plan my week" would spend the
+free daily allowance on posts they may skip.
+
 ## Free AI
 
 `aiprovider.py` puts a provider chain behind every text call: Cloudflare

@@ -809,7 +809,101 @@ def build_reorder_insight(email: str) -> dict | None:
                    "orders with EOQ / MOQ suggested quantities — saved to your account and "
                    "downloaded as a PDF."),
         "action_label": "Approve → generate purchase order",
-        "count": len(below), "has_download": True,
+        "count": len(below), "names": names,
+        # the tightest item, so Operations can lead with the real urgency
+        # rather than a count
+        "min_cover": min((_num(r.get("days_of_cover")) for r in below
+                          if _num(r.get("days_of_cover")) > 0), default=None),
+        "has_download": True,
+    }
+
+
+OVERSTOCK_DAYS = 90          # more cover than this and cash is idling
+MIN_ROWS_FOR_OVERSTOCK = 3   # below this the sales rate is too noisy to judge
+
+
+def build_overstock_insight(email: str) -> dict | None:
+    """Items we are holding far more of than the sales rate justifies.
+
+    The mirror of the reorder card, and the one nobody builds. Running out is
+    loud — a customer complains. Overstock is silent: the money is simply not
+    there when a seller wants to buy the thing that IS selling, and nothing in
+    the app ever says why.
+
+    Deliberately conservative. An item with no sales history has no meaningful
+    days-of-cover, so it is skipped rather than guessed at — telling a seller
+    to stop buying something on the basis of no data is worse than saying
+    nothing."""
+    comp = compute_inventory(email)
+    rows = [r for r in comp["items"]
+            if r.get("has_enough_sales")
+            and _num(r.get("avg_daily_sales")) > 0
+            and _num(r.get("days_of_cover")) > OVERSTOCK_DAYS]
+    if len(rows) < 1:
+        return None
+    rows.sort(key=lambda r: -_num(r.get("days_of_cover")))
+    names = ", ".join(r.get("name", "?") for r in rows[:4])
+    if len(rows) > 4:
+        names += f" +{len(rows) - 4} more"
+    tied = 0.0
+    for r in rows:
+        uc = r.get("unit_cost")
+        if not _blank(uc):
+            tied += _num(r.get("current_stock")) * float(uc)
+    return {
+        "id": "overstock", "module": "supply", "page": "inventory", "icon": "📊",
+        "title": f"{len(rows)} item{'s' if len(rows) != 1 else ''} overstocked",
+        "detail": (f"{names} hold more than {OVERSTOCK_DAYS} days of cover at the "
+                   f"current sales rate."),
+        "action_label": "Review holdings",
+        "count": len(rows), "names": names,
+        "tied_up": round(tied, 2) if tied else None,
+        "item_ids": [r["id"] for r in rows],
+        "has_download": False,
+    }
+
+
+def build_supplier_risk_insight(email: str) -> dict | None:
+    """Items with exactly one supplier and no alternative on file.
+
+    Single-sourcing is invisible until the day it is not. It also removes the
+    only honest price benchmark a small seller has — with one quote there is no
+    way to know whether it is a good one."""
+    items = get_inventory(email)
+    if not items:
+        return None
+    # Count how many distinct suppliers exist across the whole account. With
+    # only one supplier in total this is a business fact, not an insight worth
+    # nagging about every week.
+    suppliers = {_norm(i.get("supplier_name")) for i in items if (i.get("supplier_name") or "").strip()}
+    if len(suppliers) < 2:
+        return None
+    lonely = [i for i in items
+              if (i.get("supplier_name") or "").strip()
+              and _num(i.get("current_stock")) > 0]
+    by_supplier: dict[str, list] = {}
+    for i in lonely:
+        by_supplier.setdefault(_norm(i.get("supplier_name")), []).append(i)
+    # An item is exposed when its supplier is the only one we buy that
+    # category from.
+    exposed = []
+    for name, group in by_supplier.items():
+        if len(group) >= 2:
+            exposed.extend(group)
+    if not exposed:
+        return None
+    exposed.sort(key=lambda r: -_num(r.get("current_stock")))
+    names = ", ".join(r.get("name", "?") for r in exposed[:4])
+    if len(exposed) > 4:
+        names += f" +{len(exposed) - 4} more"
+    return {
+        "id": "supplier_risk", "module": "supply", "page": "supply", "icon": "🔗",
+        "title": f"{len(exposed)} item{'s' if len(exposed) != 1 else ''} single-sourced",
+        "detail": f"{names} come from one supplier with no alternative on file.",
+        "action_label": "Find alternatives",
+        "count": len(exposed), "names": names,
+        "item_ids": [r["id"] for r in exposed],
+        "has_download": False,
     }
 
 

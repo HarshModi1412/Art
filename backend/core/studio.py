@@ -89,12 +89,173 @@ def blank_brand(email: str = "") -> dict:
         "avoid": "",                 # words or looks to stay away from
         "hashtags": "",              # the ones they always use
         "city": "",
+        # --- design language ------------------------------------------------
+        # Reference images that define the brand's AESTHETIC rather than its
+        # products: shots the seller admires, their packaging, their shop, a
+        # mood board. A seller can rarely write "warm sand, brass, low-key
+        # light" but can always point at five pictures and say "like this".
+        "refs": [],                  # urls of uploaded reference images
+        "aesthetic": "",             # what the AI read from those images
+        "aesthetic_from": 0,         # how many refs produced it
     }
 
 
 def get_brand(email: str) -> dict:
     saved = user_store.get_key(email, BRAND_KEY, {}) or {}
     return {**blank_brand(email), **(saved if isinstance(saved, dict) else {})}
+
+
+def add_ref(email: str, url: str) -> dict:
+    """Add one design-language reference image."""
+    b = get_brand(email)
+    refs = [r for r in (b.get("refs") or []) if r][:23]
+    if url and url not in refs:
+        refs.append(url)
+    b["refs"] = refs
+    user_store.set_key(email, BRAND_KEY, b)
+    return b
+
+
+def remove_ref(email: str, url: str) -> dict:
+    b = get_brand(email)
+    b["refs"] = [r for r in (b.get("refs") or []) if r != url]
+    # The reading was derived from the old set, so it no longer describes what
+    # is there. Better to blank it and let them re-read than to keep a
+    # description of pictures that have been removed.
+    if b.get("aesthetic_from", 0) != len(b["refs"]):
+        b["aesthetic"] = ""
+        b["aesthetic_from"] = 0
+    user_store.set_key(email, BRAND_KEY, b)
+    return b
+
+
+AESTHETIC_SYSTEM = (
+    "You are an art director writing a brief for a photographer. You are shown "
+    "reference images that a brand has chosen to represent its taste. Describe "
+    "the VISUAL LANGUAGE they share, not the objects in them.\n\n"
+    "Cover, concretely: lighting (hard or soft, direction, warmth); colour "
+    "palette in plain colour words; surfaces and materials; composition and "
+    "negative space; depth of field; mood; and any styling habits such as props, "
+    "hands, fabric folds, shadows.\n\n"
+    "Write 90-140 words of plain prose a photographer could shoot from. No "
+    "bullet points, no headings, no praise, no marketing adjectives like "
+    "'stunning' or 'elevated'. If the references disagree with each other, say "
+    "so plainly and describe the dominant one."
+)
+
+PRODUCT_SYSTEM = (
+    "You are cataloguing a product from its photograph for a seller's own "
+    "records. Describe ONLY what you can actually see.\n\n"
+    "Cover: what the item is; its colour or colours; the material and weave or "
+    "finish; the construction, cut or setting; any pattern, embroidery, stones "
+    "or hardware and where they sit; and the visible condition and scale.\n\n"
+    "Write 60-110 words of plain prose. Be specific about detail — 'gold-tone "
+    "filigree jhumka with three rows of white pearl drops' beats 'elegant "
+    "earrings'. Never invent a material, a measurement, a price or a brand you "
+    "cannot see. If something is unclear in the photograph, say it is unclear "
+    "rather than guessing."
+)
+
+
+def read_aesthetic(email: str) -> dict:
+    """Turn the reference images into a written aesthetic.
+
+    Reads up to four references. More than that costs tokens without sharpening
+    the answer, and a brand whose taste needs more than four pictures to
+    describe does not have a consistent one yet."""
+    from backend.core import aiprovider, media
+    b = get_brand(email)
+    refs = [r for r in (b.get("refs") or []) if r][:4]
+    if not refs:
+        return {"ok": False, "reason": "No reference images uploaded yet."}
+    if not aiprovider.vision_ready():
+        return {"ok": False, "reason": "No vision-capable AI is connected. Add a "
+                                       "Cloudflare, Gemini or OpenAI key and try again."}
+
+    readings, failed = [], 0
+    for url in refs:
+        got = media.read(url.rsplit("/", 1)[-1])
+        if not got:
+            failed += 1
+            continue
+        data, ctype = got
+        r = aiprovider.describe_image(
+            data, ctype, system=AESTHETIC_SYSTEM,
+            user="Describe the visual language of this reference image.",
+            sensitivity="public", max_tokens=320)
+        if r["text"]:
+            readings.append(r["text"])
+        else:
+            failed += 1
+
+    if not readings:
+        return {"ok": False, "reason": "Could not read any of the reference images."}
+
+    if len(readings) == 1:
+        summary = readings[0]
+    else:
+        merged = aiprovider.generate(
+            "You are an art director. You are given several separate readings of "
+            "reference images from one brand. Write ONE brief describing the "
+            "visual language they share. Lead with what is common to all of them. "
+            "Name any real disagreement in a final sentence rather than averaging "
+            "it away. 100-150 words, plain prose, no headings.",
+            "\n\n---\n\n".join(readings),
+            sensitivity="public", max_tokens=400, fallback=readings[0])
+        summary = merged["text"] or readings[0]
+
+    b["aesthetic"] = summary.strip()[:2000]
+    b["aesthetic_from"] = len(readings)
+    user_store.set_key(email, BRAND_KEY, b)
+    return {"ok": True, "aesthetic": b["aesthetic"], "read": len(readings),
+            "failed": failed, "brand": b}
+
+
+def read_product_shots(email: str, product_id: str, limit: int = 3) -> dict:
+    """Turn a product's own photographs into a written description.
+
+    This is what makes generated imagery look like the seller's ACTUAL product
+    rather than a stock idea of it. The description goes into the prompt as
+    text, so the model is told what the thing looks like instead of inventing
+    one."""
+    from backend.core import aiprovider, media
+    mat = get_material(email, product_id)
+    shots = [s for s in (mat.get("shots") or []) if s][:limit]
+    if not shots:
+        return {"ok": False, "reason": "No product photos uploaded yet."}
+    if not aiprovider.vision_ready():
+        return {"ok": False, "reason": "No vision-capable AI is connected."}
+
+    seen = []
+    for url in shots:
+        got = media.read(url.rsplit("/", 1)[-1])
+        if not got:
+            continue
+        data, ctype = got
+        r = aiprovider.describe_image(
+            data, ctype, system=PRODUCT_SYSTEM,
+            user="Describe this product exactly as photographed.",
+            sensitivity="public", max_tokens=260)
+        if r["text"]:
+            seen.append(r["text"])
+
+    if not seen:
+        return {"ok": False, "reason": "Could not read any of the product photos."}
+
+    if len(seen) == 1:
+        desc = seen[0]
+    else:
+        merged = aiprovider.generate(
+            "Several photographs of the SAME product were described separately. "
+            "Merge them into one description of that single item. Keep every "
+            "concrete detail. Drop anything the readings contradict each other "
+            "on rather than picking a side. 80-130 words, plain prose.",
+            "\n\n---\n\n".join(seen),
+            sensitivity="public", max_tokens=340, fallback=seen[0])
+        desc = merged["text"] or seen[0]
+
+    save_material(email, product_id, {"seen": desc.strip()[:1500]})
+    return {"ok": True, "seen": desc.strip()[:1500], "read": len(seen)}
 
 
 def save_brand(email: str, patch: dict) -> dict:
@@ -120,7 +281,10 @@ def brand_ready(brand: dict) -> bool:
 # ---------------------------------------------------------------------------
 def blank_material() -> dict:
     return {"story": "", "materials": "", "different": "", "for_who": "",
-            "occasions": "", "shots": [], "clips": []}
+            "occasions": "", "shots": [], "clips": [],
+            # what the AI actually saw in the product photographs — the bridge
+            # between "a photo exists" and "the generator knows what it looks like"
+            "seen": ""}
 
 
 def _all_material(email: str) -> dict:
@@ -135,9 +299,9 @@ def get_material(email: str, product_id: str) -> dict:
 def save_material(email: str, product_id: str, patch: dict) -> dict:
     rows = _all_material(email)
     cur = {**blank_material(), **(rows.get(product_id) or {})}
-    for k in ("story", "materials", "different", "for_who", "occasions"):
+    for k in ("story", "materials", "different", "for_who", "occasions", "seen"):
         if k in (patch or {}):
-            cur[k] = str(patch[k] or "").strip()[:1200]
+            cur[k] = str(patch[k] or "").strip()[:1500]
     for k in ("shots", "clips"):
         if k in (patch or {}):
             vals = patch[k] if isinstance(patch[k], list) else []
@@ -201,6 +365,12 @@ def build_brief(brand: dict, product: dict, material: dict, angle: str = "") -> 
     ] if f]
     return {
         "brand_name": brand.get("name") or "",
+        # The written reading of the brand's reference images. Where it exists
+        # it outranks the preset look, because a seller's own five pictures
+        # describe their taste far better than one of five dropdown options.
+        "aesthetic": brand.get("aesthetic") or "",
+        # What the AI actually saw in this product's photographs.
+        "seen": material.get("seen") or "",
         "about": brand.get("about") or "",
         "audience": brand.get("audience") or "",
         "palette": brand.get("palette") or "",
@@ -215,27 +385,86 @@ def build_brief(brand: dict, product: dict, material: dict, angle: str = "") -> 
     }
 
 
-def image_prompt(brief: dict) -> str:
-    """The instruction the image model gets. Brand-led, not template-led — the
-    whole reason Studio exists is that generic prompts produce generic pictures."""
-    bits = [
-        f"Instagram-ready product photograph of: {brief['product_name']}.",
-        f"Style: {brief['look_prompt']}.",
-    ]
-    if brief.get("palette"):
-        bits.append(f"Colour palette: {brief['palette']}.")
-    detail = [f for f in brief["facts"] if f.startswith(("Made of", "What makes"))]
-    if detail:
-        bits.append(" ".join(detail) + ".")
-    if brief.get("about"):
-        bits.append(f"The brand: {brief['about'][:200]}.")
-    if brief.get("angle"):
+def image_prompt(brief: dict, guidance: dict | None = None) -> str:
+    """The instruction the image model gets.
+
+    Three sources stack, in decreasing authority:
+
+      1. **What the product actually looks like** (`seen`) — read from the
+         seller's own photographs. Without this the model invents a plausible
+         kurta, and a plausible kurta is not the one that ships.
+      2. **The brand's aesthetic** (`aesthetic`) — read from their reference
+         images. This is what makes two sellers with the same product get
+         different pictures, which is the entire point of Studio.
+      3. **The social guidance** (`guidance`) — which pillar and format this
+         image is for. A "product in detail" carousel slide and a "behind the
+         scenes" reel cover are not the same photograph.
+
+    The preset `look` is the FALLBACK, used only when no references have been
+    read. It is a reasonable default, not the goal."""
+    g = guidance or {}
+    bits = [f"Instagram-ready photograph for a product: {brief['product_name']}."]
+
+    if brief.get("seen"):
+        bits.append(f"The product looks like this: {brief['seen']}")
+    else:
+        detail = [f for f in brief["facts"] if f.startswith(("Made of", "What makes"))]
+        if detail:
+            bits.append(" ".join(detail) + ".")
+
+    if brief.get("aesthetic"):
+        bits.append(f"Shoot it in this visual language: {brief['aesthetic']}")
+    else:
+        bits.append(f"Style: {brief['look_prompt']}.")
+        if brief.get("palette"):
+            bits.append(f"Colour palette: {brief['palette']}.")
+
+    if g.get("shot"):
+        bits.append(f"This particular shot: {g['shot']}")
+    elif brief.get("angle"):
         bits.append(f"This shot should show: {brief['angle']}.")
+
+    if g.get("aspect"):
+        bits.append(f"Composition: {g['aspect']}.")
+    else:
+        bits.append("Square composition.")
+
     if brief.get("avoid"):
         bits.append(f"Avoid: {brief['avoid']}.")
-    bits.append("Photorealistic, sharp, well-composed. No text, no logo, no watermark, "
-                "no hands unless they look natural. Square composition.")
+
+    bits.append("Photorealistic, sharp, well-composed. No text, no logo, no "
+                "watermark, no hands unless they look natural.")
     return " ".join(bits)
+
+
+# What each social pillar and format wants out of a picture. The Social Media
+# Manager decides WHY a post exists; this translates that into what the camera
+# should be doing.
+SHOT_FOR_PILLAR = {
+    "detail":  "a close, even, well-lit shot that makes the material, weave and "
+               "construction readable — this image has to answer 'what is it made of'",
+    "new":     "a clean hero shot with space around the product, the kind that "
+               "reads as an arrival rather than a restock",
+    "proof":   "the product in real use or worn, in an ordinary setting rather "
+               "than a studio, so it reads as someone's photo and not a catalogue",
+    "founder": "the making or packing of it — hands, workbench, materials, "
+               "process; the product need not be the subject",
+    "offer":   "a simple, uncluttered shot with clear space where a price or "
+               "offer could sit later",
+}
+ASPECT_FOR_FORMAT = {
+    "reel": "vertical 9:16, subject centred with headroom for text at top and bottom",
+    "carousel": "square 1:1, subject centred",
+    "story": "vertical 9:16, subject in the middle third away from the UI edges",
+    "image": "square 1:1, subject centred",
+}
+
+
+def guidance_for(pillar: str = "", fmt: str = "") -> dict:
+    """Translate a Social Media Manager slot into camera direction."""
+    return {"shot": SHOT_FOR_PILLAR.get(pillar or "", ""),
+            "aspect": ASPECT_FOR_FORMAT.get(fmt or "", ""),
+            "pillar": pillar or "", "format": fmt or ""}
 
 
 def caption_prompt(brief: dict) -> str:
@@ -307,33 +536,89 @@ def _fallback_caption(brief: dict) -> dict:
             "note": "Written from a template — add an OpenAI key for AI copy."}
 
 
-def generate_image(email: str, brief: dict) -> dict:
+def image_engine() -> dict:
+    """Which engine will draw, and what it costs.
+
+    Cloudflare Flux Schnell first, and not narrowly: at roughly 19 neurons per
+    1024x1024 image it sits inside the free 10,000/day — about 500 images a
+    day at no cost — and after that costs around Rs 0.04 against gpt-image-1's
+    Rs 3.70. On an unlimited Pro plan that difference is the whole margin: a
+    seller generating 200 images a month costs Rs 740 of a Rs 999 subscription
+    on OpenAI, and Rs 8 on Flux."""
+    from backend.core import aiprovider
+    if aiprovider.image_ready():
+        return {"engine": "cloudflare", "model": aiprovider.CF_IMAGE_MODEL,
+                "free": True,
+                "note": "Flux Schnell on Cloudflare — about 500 images a day free."}
+    if openai_ready():
+        return {"engine": "openai",
+                "model": os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1"),
+                "free": False,
+                "note": "OpenAI. Around Rs 3.70 per image — roughly 90x the "
+                        "Cloudflare cost. Add CF_ACCOUNT_ID and CF_API_TOKEN "
+                        "to switch."}
+    return {"engine": "", "model": "", "free": False,
+            "note": "No image engine connected. Your own photos still work."}
+
+
+def generate_image(email: str, brief: dict, guidance: dict | None = None) -> dict:
     """One AI photograph, stored durably like any other upload."""
-    if not openai_ready():
-        raise RuntimeError("No OpenAI key is set on the server, so images cannot "
-                           "be generated. Your own photos still work.")
-    import base64
-    from openai import OpenAI
-    client = OpenAI()
-    r = client.images.generate(
-        model=os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1"),
-        prompt=image_prompt(brief), size="1024x1024", n=1,
-    )
-    item = r.data[0]
-    if getattr(item, "b64_json", None):
-        content = base64.b64decode(item.b64_json)
-    elif getattr(item, "url", None):
-        import requests
-        content = requests.get(item.url, timeout=45).content
+    from backend.core import aiprovider
+    prompt = image_prompt(brief, guidance)
+    eng = image_engine()
+
+    if eng["engine"] == "cloudflare":
+        content = aiprovider.generate_image(prompt)
+        if not content:
+            raise RuntimeError("Cloudflare did not return an image. This is "
+                               "usually the daily free allowance being spent.")
+    elif eng["engine"] == "openai":
+        import base64
+        from openai import OpenAI
+        client = OpenAI()
+        r = client.images.generate(
+            model=eng["model"], prompt=prompt, size="1024x1024", n=1)
+        item = r.data[0]
+        if getattr(item, "b64_json", None):
+            content = base64.b64decode(item.b64_json)
+        elif getattr(item, "url", None):
+            import requests
+            content = requests.get(item.url, timeout=45).content
+        else:
+            raise RuntimeError("The image service returned nothing usable.")
     else:
-        raise RuntimeError("The image service returned nothing usable.")
+        raise RuntimeError("No image engine is connected on this server, so "
+                           "images cannot be generated. Your own photos still work.")
+
     saved = media.save(f"{uuid.uuid4().hex}.png", content, email)
-    return {"url": saved["url"], "durable": saved["durable"],
-            "generated": True, "prompt": image_prompt(brief)}
+    return {"url": saved["url"], "durable": saved["durable"], "generated": True,
+            "prompt": prompt, "engine": eng["engine"], "free": eng["free"]}
+
+
+def generate_image_only(email: str, product_id: str, pillar: str = "",
+                        fmt: str = "", angle: str = "") -> dict:
+    """Make a picture and nothing else.
+
+    Separate from make_post because the two are wanted at different moments:
+    a seller planning a week wants images for slots that already have captions,
+    and writing a second caption over the first one would be actively
+    unhelpful."""
+    brand = get_brand(email)
+    product = next((p for p in products.get_products(email) if p["id"] == product_id), None)
+    if not product:
+        raise ValueError("That product no longer exists.")
+    material = get_material(email, product_id)
+    brief = build_brief(brand, product, material, angle)
+    img = generate_image(email, brief, guidance_for(pillar, fmt))
+    return {**img, "product_id": product_id,
+            "product_name": product.get("name"),
+            "pillar": pillar, "format": fmt,
+            "used_aesthetic": bool(brief.get("aesthetic")),
+            "used_seen": bool(brief.get("seen"))}
 
 
 def make_post(email: str, product_id: str, angle: str = "",
-              want_image: bool = False) -> dict:
+              want_image: bool = False, pillar: str = "", fmt: str = "") -> dict:
     """One ready-to-post draft for one product."""
     brand = get_brand(email)
     product = next((p for p in products.get_products(email) if p["id"] == product_id), None)
@@ -361,7 +646,7 @@ def make_post(email: str, product_id: str, angle: str = "",
     }
     if want_image:
         try:
-            img = generate_image(email, brief)
+            img = generate_image(email, brief, guidance_for(pillar, fmt))
             out["image_url"] = img["url"]
             out["image_is_generated"] = True
             out["image_prompt"] = img["prompt"]

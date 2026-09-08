@@ -1514,3 +1514,68 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .ap-bulk { display: flex; gap: 6px; padding: 0 0 10px; margin-bottom: 10px;
   border-bottom: 1px solid var(--border); }
 .ap-bulk .btn { flex: 1; }
+
+/* ==========================================================
+   The approval panel, staffed.
+
+   Each card carries its manager's colour on the left edge and the desk
+   name sits above the group. The seller learns which part of the
+   business a card is about before reading a word of it — which is the
+   whole reason the personas exist.
+   ========================================================== */
+.mgr-head { display: flex; align-items: center; gap: 7px; margin: 16px 0 8px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.mgr-head:first-child { margin-top: 4px; }
+.mgr-head svg { color: var(--mgr); flex: none; }
+.mgr-head b { font-size: 12.5px; color: var(--mgr); }
+.mgr-head span { font-size: 11px; color: var(--muted); line-height: 1.4;
+  flex: 1; min-width: 0; }
+@media (max-width: 1200px) { .mgr-head span { display: none; } }
+
+.ins-card.mgr-card { border-left: 3px solid var(--mgr); }
+.mgr-card .ins-title { font-weight: 600; line-height: 1.4; }
+.mgr-card .ins-detail { line-height: 1.6; }
+
+/* ---------- Studio: design language ---------- */
+.dl-card { margin-top: 14px; }
+.dl-refs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.dl-ref { width: 92px; height: 92px; border-radius: 8px; background-size: cover;
+  background-position: center; position: relative; border: 1px solid var(--border); }
+.dl-x { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px;
+  border: none; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff;
+  cursor: pointer; font-size: 11px; line-height: 20px; padding: 0;
+  opacity: 0; transition: opacity .12s; }
+.dl-ref:hover .dl-x { opacity: 1; }
+.dl-blank { font-size: 12.5px; color: var(--muted); padding: 22px 0; }
+.dl-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.dl-read { margin-top: 12px; border-left: 3px solid var(--primary);
+  background: var(--surface-3); border-radius: 6px; padding: 11px 13px; }
+.dl-read-h { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.dl-read-h svg { color: var(--green); }
+.dl-read p { font-size: 13px; line-height: 1.6; margin: 0 0 6px; }
+
+.st-seen { margin: 10px 0 4px; }
+.st-seen-out { margin-top: 9px; border-left: 3px solid var(--primary);
+  background: var(--surface-3); border-radius: 6px; padding: 10px 12px; }
+.st-seen-out b { font-size: 12.5px; }
+.st-seen-out p { font-size: 12.5px; line-height: 1.6; margin: 5px 0 6px; }
+.st-imgonly { display: flex; gap: 14px; margin-top: 12px; align-items: flex-start; }
+.st-imgonly img { width: 200px; border-radius: 8px; flex: none; }
+.st-imgmeta { font-size: 12.5px; }
+.st-imgmeta span { display: block; margin-top: 4px; }
+.st-imgmeta details { margin-top: 8px; }
+.st-imgmeta summary { cursor: pointer; }
+
+/* ---------- Social: the planned image ---------- */
+.sm-shot { position: relative; border-radius: 6px; overflow: hidden;
+  background: var(--surface-2); aspect-ratio: 4 / 3; margin-bottom: 4px; }
+.sm-shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sm-gen { position: absolute; top: 6px; left: 6px; font-size: 9px; font-weight: 700;
+  letter-spacing: .05em; background: rgba(0,0,0,.62); color: #fff;
+  padding: 2px 6px; border-radius: 3px; }
+.sm-shot-make { width: 100%; height: 100%; border: 1px dashed var(--border-strong);
+  background: none; border-radius: 6px; cursor: pointer; color: var(--muted);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; font-size: 12px; }
+.sm-shot-make:hover { border-color: var(--primary); color: var(--primary); }
+.sm-shot-make svg { width: 20px; height: 20px; }

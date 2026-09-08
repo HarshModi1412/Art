@@ -435,6 +435,11 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None) -> 
             "scheduled_at": when.isoformat(timespec="minutes"),
             "state": "draft",
             "provider": cap.get("provider", "template"),
+            # The picture is planned, not made. Generating four images every
+            # time a seller presses "Plan my week" would burn the free daily
+            # allowance on posts they may skip, so the slot is created empty
+            # and filled on demand.
+            "image_url": "", "image_generated": False, "image_prompt": "",
             "metrics": {},
         }
         made.append(post)
@@ -497,6 +502,36 @@ def update_post(email: str, post_id: str, patch: dict) -> dict:
             _save_posts(email, rows)
             return p
     return {"error": "not found"}
+
+
+def attach_image(email: str, post_id: str, url: str, generated: bool = False,
+                 prompt: str = "") -> dict:
+    """Put a picture on a planned post.
+
+    Used both by Studio generation and by a seller uploading their own shot or
+    a clip they made in Flow — the post does not care where the file came
+    from, only that it has one."""
+    rows = _posts(email)
+    for p in rows:
+        if p.get("id") == post_id:
+            p["image_url"] = str(url or "")
+            p["image_generated"] = bool(generated)
+            p["image_prompt"] = str(prompt or "")[:2000]
+            _save_posts(email, rows)
+            return p
+    return {"error": "not found"}
+
+
+def post_guidance(email: str, post_id: str) -> dict:
+    """What Studio needs to draw for this slot: which product, which pillar,
+    which format."""
+    p = next((x for x in _posts(email) if x.get("id") == post_id), None)
+    if not p:
+        return {"error": "not found"}
+    return {"post_id": p["id"], "product_id": p.get("product_id") or "",
+            "product_name": p.get("product_name") or "",
+            "pillar": p.get("pillar") or "", "format": p.get("format") or "",
+            "has_image": bool(p.get("image_url"))}
 
 
 # --------------------------------------------------------------- shoot list

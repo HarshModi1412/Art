@@ -1135,5 +1135,141 @@ except ValueError:
     must(True, "an unknown sensitivity is rejected rather than silently defaulted")
 
 
+print("\n== 35. the approval panel, staffed ==")
+
+from backend.core import personas as _per
+
+must(len(_per.MANAGERS) == 5, "five managers")
+must(set(_per.ORDER) == set(_per.MANAGERS), "every manager has a place in the order")
+
+# Every card type must land on a desk. A card with no manager renders with no
+# heading and looks like a bug, so coverage is asserted rather than hoped for.
+for cid, want in [("winback", "marketing"), ("festival", "marketing"),
+                  ("reorder", "operations"), ("overstock", "operations"),
+                  ("supplier_risk", "supply"), ("reputation", "brand"),
+                  ("complaints", "brand"), ("content_ab12", "social")]:
+    got = _per.assign({"id": cid})
+    must(got == want, f"{cid} -> {want}" + ("" if got == want else f" (got {got})"))
+must(_per.assign({"id": "something_new", "module": "review"}) == "brand",
+     "an unknown card falls back to its module's desk rather than vanishing")
+must(_per.assign({"id": "?", "module": "?"}) == "operations",
+     "and a wholly unknown card still gets a desk")
+
+_d = _per.dress({"id": "reorder", "count": 4, "names": "Cotton fabric",
+                 "min_cover": 11, "title": "Reorder 4 items below reorder point",
+                 "detail": "the original detail"})
+must(_d["manager_name"] == "Operations Manager", "the card carries its manager")
+must("11 days of cover" in _d["body"], "and quotes the seller's real number")
+must(_d["headline"] != _d["title"], "the manager's headline is a recommendation, "
+     "not a restatement of the card title")
+must(_d["title"] == "Reorder 4 items below reorder point"
+     and _d["detail"] == "the original detail",
+     "and the original title and detail survive untouched, because History, "
+     "the digest and the Today strip still render them")
+
+_dw = _per.dress({"id": "winback", "count": 38, "value": 142000})
+must("Rs 1.4L" in _dw["body"], f"large money reads as lakhs ({_dw['body'][:60]})")
+
+# Every dressed card must be actionable — a manager who does not say what to do
+# is just a label.
+for cid in ("winback", "festival", "reorder", "overstock", "supplier_risk",
+            "reputation", "complaints"):
+    c = _per.dress({"id": cid, "count": 2})
+    must(bool(c["cta"]) and bool(c["headline"]) and bool(c["body"]),
+         f"{cid} has a headline, a body and something to press")
+
+_all = _per.dress_all([{"id": "complaints", "count": 1}, {"id": "reorder", "count": 1},
+                       {"id": "winback", "count": 1}])
+must([c["manager"] for c in _all] == ["operations", "marketing", "brand"],
+     "cards are grouped by desk, not shuffled")
+must(len(_per.desks(_all)) == 3, "and each desk reports its pending count")
+
+
+print("\n== 36. Product Studio design language ==")
+
+from backend.core import studio as _std
+
+_b = _std.blank_brand()
+must("refs" in _b and "aesthetic" in _b, "the brand has a design-language bucket")
+
+_std.add_ref(SELLER, "/generated_images/ref1.png")
+_std.add_ref(SELLER, "/generated_images/ref2.png")
+_std.add_ref(SELLER, "/generated_images/ref1.png")
+must(len(_std.get_brand(SELLER)["refs"]) == 2, "references de-duplicate")
+_std.remove_ref(SELLER, "/generated_images/ref1.png")
+must(len(_std.get_brand(SELLER)["refs"]) == 1, "and can be removed")
+
+_r = _std.read_aesthetic(SELLER)
+must(not _r["ok"] and "vision" in _r["reason"].lower(),
+     "reading without a vision model refuses clearly rather than inventing an aesthetic")
+
+# The composite prompt is where this feature either works or does not.
+_brief = _std.build_brief(
+    {"name": "Aureva", "look": "luxe", "palette": "sand, brass",
+     "aesthetic": "Soft north light, warm sand and brass, generous negative space.",
+     "avoid": "cheap, discount"},
+    {"name": "Silk lehenga", "category": "Clothing"},
+    {"seen": "Deep maroon Banarasi silk with gold zari butis and a scalloped hem."})
+_p = _std.image_prompt(_brief, _std.guidance_for("detail", "carousel"))
+must("Deep maroon Banarasi" in _p,
+     "the prompt describes the product as PHOTOGRAPHED, not as imagined")
+must("Soft north light" in _p, "and shoots it in the brand's own visual language")
+must("what is it made of" in _p,
+     "and the pillar becomes camera direction, not just a label")
+must("square 1:1" in _p, "and the format becomes composition")
+must("cheap, discount" in _p, "and what the brand refuses still applies")
+
+# Without a reading, it must degrade to the preset rather than to nothing.
+_bare = _std.build_brief({"name": "X", "look": "luxe", "palette": "sand, brass"},
+                         {"name": "Kurta"}, {})
+_pb = _std.image_prompt(_bare)
+must("sand, brass" in _pb and "Kurta" in _pb,
+     "with no references read, the preset look and palette still drive the prompt")
+must("Deep maroon" not in _pb, "and nothing is carried over from another product")
+
+_eng = _std.image_engine()
+must("engine" in _eng and "note" in _eng, "the image engine names itself")
+must(_eng["engine"] in ("", "cloudflare", "openai"), "and is one we know")
+
+_g = _std.guidance_for("founder", "reel")
+must("making" in _g["shot"] and "9:16" in _g["aspect"],
+     "a behind-the-scenes reel asks for process footage, shot vertical")
+
+
+print("\n== 37. planned images on social posts ==")
+
+_wk = _soc.build_week(SELLER, [{"id": "p1", "name": "Indigo kurta", "price": 1299}],
+                      _dt.date(2026, 9, 8))
+must(all("image_url" in x for x in _wk), "every planned post has an image slot")
+must(all(x["image_url"] == "" for x in _wk),
+     "left empty on purpose — generating four images per plan would burn the "
+     "free daily allowance on posts the seller may skip")
+
+_pid = _wk[0]["id"]
+_gd = _soc.post_guidance(SELLER, _pid)
+must(_gd["pillar"] and _gd["format"], "a post can tell Studio what it needs drawn")
+
+_att = _soc.attach_image(SELLER, _pid, "/generated_images/x.png", True, "a prompt")
+must(_att["image_url"].endswith("x.png") and _att["image_generated"] is True,
+     "an image attaches to the slot and is flagged as generated")
+must(_soc.attach_image(SELLER, "nope", "/x.png").get("error"),
+     "attaching to a post that does not exist fails cleanly")
+
+
+print("\n== 38. vision provider ==")
+
+must(hasattr(_aip, "describe_image"), "the provider chain can look at pictures")
+must(set(_aip.VISION_MODELS) <= {p["name"] for p in _aip.status()["providers"]},
+     "vision models only name providers that exist")
+must("groq" not in _aip.VISION_MODELS,
+     "Groq is skipped rather than sent an image it cannot read")
+_v = _aip.describe_image(b"", "image/png", system="s", user="u")
+must(_v["text"] == "" and _v["error"] == "no image",
+     "an empty image returns an error instead of raising")
+_v2 = _aip.describe_image(b"notanimage", "image/png", system="s", user="u")
+must(_v2["text"] == "" and _v2["error"],
+     "and an unreadable one degrades rather than breaking the upload")
+
+
 print("\nALL CHECKS PASSED \u2713")
 shutil.rmtree(TMP, ignore_errors=True)

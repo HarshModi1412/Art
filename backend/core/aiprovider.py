@@ -184,6 +184,83 @@ def generate(system: str, user: str, *, sensitivity: str,
             "error": "; ".join(errors[-2:]) if errors else "no provider configured"}
 
 
+# ---------------------------------------------------------------- vision
+
+# Vision models per provider. These are NOT the text models — asking a
+# text-only model to look at a picture returns a confident description of
+# nothing, which is worse than an error because it looks like it worked.
+VISION_MODELS = {
+    "cloudflare": "@cf/meta/llama-3.2-11b-vision-instruct",
+    "gemini": "gemini-2.5-flash",
+    "openai": "gpt-4.1-mini",
+    # Groq's free tier has no vision model we can rely on, so it is skipped
+    # rather than sent a request it will refuse.
+}
+
+
+def _vision_order(sensitivity: str) -> list[Provider]:
+    return [p for p in _order(sensitivity) if p.name in VISION_MODELS]
+
+
+def describe_image(image_bytes: bytes, content_type: str, *, system: str,
+                   user: str, sensitivity: str = "public",
+                   max_tokens: int = 500) -> dict:
+    """Look at a picture and write about it.
+
+    The image is sent inline as a base64 data URL rather than as a link.
+    Uploaded media lives in a private bucket, so a public URL either does not
+    exist or would mean making a seller's product photos world-readable to
+    describe them. Inline costs more tokens and is the only correct option.
+
+    Returns {text, provider, error} and never raises, on the same principle as
+    generate(): a missing description degrades the prompt, it should not break
+    the upload the seller just made."""
+    import base64
+    if not image_bytes:
+        return {"text": "", "provider": "", "error": "no image"}
+
+    b64 = base64.b64encode(image_bytes).decode()
+    data_url = f"data:{content_type or 'image/jpeg'};base64,{b64}"
+    errors = []
+
+    for p in _vision_order(sensitivity):
+        body = json.dumps({
+            "model": VISION_MODELS[p.name],
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": [
+                    {"type": "text", "text": user},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ]},
+            ],
+            "max_tokens": max_tokens,
+        }).encode()
+        req = urllib.request.Request(
+            f"{p.base_url}/chat/completions", data=body,
+            headers={"Authorization": f"Bearer {p.key()}",
+                     "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                payload = json.loads(r.read().decode())
+            text = (payload["choices"][0]["message"]["content"] or "").strip()
+            if text:
+                _STATS.setdefault(p.name, {"ok": 0, "err": 0})["ok"] += 1
+                return {"text": text, "provider": p.name, "error": ""}
+        except Exception as e:                                   # noqa: BLE001
+            errors.append(f"{p.name}: {e}")
+            _STATS.setdefault(p.name, {"ok": 0, "err": 0})["err"] += 1
+
+    if errors:
+        log.warning("vision failed: %s", " | ".join(errors))
+    return {"text": "", "provider": "",
+            "error": "; ".join(errors[-2:]) if errors
+                     else "no vision-capable provider configured"}
+
+
+def vision_ready(sensitivity: str = "public") -> bool:
+    return bool(_vision_order(sensitivity))
+
+
 # ---------------------------------------------------------------- images
 
 CF_IMAGE_MODEL = os.environ.get("CF_IMAGE_MODEL") or "@cf/black-forest-labs/flux-1-schnell"

@@ -219,6 +219,33 @@ def save_content_suggestion(email: str, insight_id: str, edits: dict) -> dict | 
     return stored
 
 
+def _festival_insight(email: str) -> dict | None:
+    """Fire when the campaign should START, not when the festival arrives.
+
+    A Diwali card that appears on Diwali is useless. The lead time is per
+    festival because they are not equal: Diwali wants roughly two and a half
+    weeks of run-up, Dhanteras about five days."""
+    try:
+        from backend.core import social as _social
+        s = _social.get_settings(email)
+        upcoming = _social.upcoming_festivals(category=s.get("category") or "")
+    except Exception:  # noqa: BLE001
+        return None
+    due = [f for f in upcoming if f.get("start_in_days", 99) <= 7]
+    if not due:
+        return None
+    f = due[0]
+    return {
+        "id": "festival", "module": "sales", "page": "social", "icon": "🪔",
+        "title": f"Plan the {f['name']} campaign",
+        "detail": f"{f['name']} is {f['days_away']} days away.",
+        "action_label": "Build the plan",
+        "festival": f["name"], "days_away": f["days_away"],
+        "start_on": f.get("start_on", ""), "act_now": bool(f.get("act_now")),
+        "count": 1, "has_download": False,
+    }
+
+
 def build_insights(email: str, include_decided: bool = False) -> list[dict]:
     """Ranked 'do this' cards from the owner's own data.
 
@@ -229,6 +256,7 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
     (used by build_history to know which historic items are still valid for
     re-download).
     """
+    from backend.core import personas
     decisions = user_store.get_key(email, "smart_decisions", {}) or {}
     out: list[dict] = []
     txns = load_sales(email)
@@ -244,7 +272,9 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
                 "title": f"Win back {len(at_risk)} at-risk customers",
                 "detail": (f"{len(at_risk)} regulars haven't visited in a while. Approve to generate a "
                            "ready-to-send message + personalised coupon for each, exported to Excel."),
-                "action_label": "Approve → download campaign", "count": len(at_risk), "has_download": True,
+                "action_label": "Approve → download campaign", "count": len(at_risk),
+                "value": round(sum(float(c.get("monetary") or 0) for c in at_risk), 2) or None,
+                "has_download": True,
             })
     if review is not None and len(review):
         pt = get_product_type(email)
@@ -281,6 +311,21 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
     reorder_card = _supply.build_reorder_insight(email)
     if reorder_card:
         out.append(reorder_card)
+    # 4b) the mirror card nobody builds — stock sitting too long. Running out
+    # is loud; overstock is silent, and it is where a small seller's cash goes.
+    over_card = _supply.build_overstock_insight(email)
+    if over_card:
+        out.append(over_card)
+    # 4c) single-sourced items. Invisible until the day it is not.
+    risk_card = _supply.build_supplier_risk_insight(email)
+    if risk_card:
+        out.append(risk_card)
+    # 4d) the calendar. Festival demand is the single biggest driver for
+    # clothing and jewellery in India, and it is missed by being late, not by
+    # being wrong — so the card fires on the START date, not the festival.
+    fest_card = _festival_insight(email)
+    if fest_card:
+        out.append(fest_card)
 
     # 5) one 'suggested post' — a content-creator idea in the same panel
     if not include_decided:
@@ -301,7 +346,7 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
             visible.append(card)
         elif card["decision"] == "pending":
             visible.append(card)
-    return visible
+    return personas.dress_all(visible)
 
 
 def build_history(email: str) -> dict:
