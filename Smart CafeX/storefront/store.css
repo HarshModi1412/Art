@@ -47,11 +47,17 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
-html { color-scheme: light; -webkit-text-size-adjust: 100%; }
+html {
+  color-scheme: light; -webkit-text-size-adjust: 100%;
+  /* `clip` contains a stray wide element WITHOUT promoting the element to a
+     scroll container the way `hidden` does. `hidden` on <body> breaks every
+     `position: sticky` descendant, and the spotlight image is sticky. */
+  overflow-x: clip;
+}
 [data-mode="dark"] { color-scheme: dark; }
 body {
   background: var(--bg); color: var(--ink); font-family: var(--fb);
-  font-size: calc(15.5px * var(--bs)); line-height: 1.62; overflow-x: hidden;
+  font-size: calc(15.5px * var(--bs)); line-height: 1.62;
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "kern" 1, "liga" 1;
 }
@@ -1034,3 +1040,82 @@ html.editing .announce:hover > .edit-tag { transform: translateY(-50%); }
 .cx-r:has(input:checked) { border-color: var(--fg); background: var(--soft); }
 .cx-acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 .b.s { padding: 6px 14px; font-size: 12px; }
+
+/* ==========================================================
+   PHONE POLISH — the storefront is the sales surface
+
+   The toast sat at `bottom: 30px` fixed, which on a phone put it directly
+   on top of the spotlight's product label and, on some browsers, behind
+   the bottom browser chrome. It read as broken text overlapping an image.
+
+   On a phone it now comes from the TOP, clear of both the product label
+   and the browser's own bottom bar. That is also where phone users expect
+   a confirmation to appear.
+   ========================================================== */
+/* Desktop keeps the bottom position, lifted clear of the home-indicator
+   area. This MUST come before the mobile override below — declared after
+   it, `bottom` won at equal specificity and the toast ended up with both a
+   `top` and a `bottom`, which stretched it into a 746px invisible box
+   covering most of the screen. */
+.toast { bottom: calc(30px + env(safe-area-inset-bottom, 0px)); }
+
+@media (max-width: 760px) {
+  .toast {
+    left: 12px; right: 12px;
+    top: calc(env(safe-area-inset-top, 0px) + 68px);
+    bottom: auto;                /* load-bearing: without it the toast has
+                                    both edges pinned and becomes a
+                                    full-height overlay */
+    height: auto;
+    transform: translateY(-16px); justify-content: center;
+    padding: 12px 18px; font-size: 13px;
+  }
+  .toast.on { transform: translateY(0); }
+}
+
+@media (max-width: 760px) {
+  /* The spotlight label and the price row were fighting for the same
+     corner once the grid collapsed to one column. */
+  .spot-plate { left: 12px; bottom: 12px; font-size: 10px; padding: 7px 11px; }
+  .spot-media { aspect-ratio: 4/3.6; }
+  .spot-buy { margin-top: 24px; padding-top: 20px; gap: 12px; }
+
+  /* Two full-width buttons stacked beat two cramped ones side by side. */
+  .pd-actions, .spot-actions { flex-direction: column; align-items: stretch; }
+  .pd-actions .b, .spot-actions .b { width: 100%; justify-content: center; }
+
+  .wrap { padding-left: 16px; padding-right: 16px; }
+}
+
+/* Long product names used to push the price row out of the card. */
+.card-name, .spot-copy h2 { overflow-wrap: anywhere; }
+
+/* ==========================================================
+   TOUCH TARGETS — shopper side
+   Measured on a real 390px render: menu links were 20-23px tall and the
+   brand mark 30px. A shopper who mis-taps a menu link leaves; there is no
+   support ticket, just a lost sale. 44px is Apple's number, 48dp Google's.
+   ========================================================== */
+@media (max-width: 760px) {
+  /* `.ul` is the animated-underline link used for every menu, footer and
+     policy link. Targeting it directly catches them all — the earlier
+     container-based selectors missed the `<li><a class="ul">` structure.
+     inline-flex keeps the ::after underline anchored correctly. */
+  a.ul { min-height: 44px; display: inline-flex; align-items: center; }
+  .menu a, .menu-links a, .drawer a, .foot a, .foot-col a {
+    min-height: 44px; display: flex; align-items: center;
+  }
+  /* A short breadcrumb word like "Shop" is only 31px wide. Padding gives
+     the thumb something to hit without moving the text. */
+  .crumbs a { min-height: 40px; min-width: 40px; padding: 0 6px;
+    display: inline-flex; align-items: center; justify-content: center; }
+  .brand { min-height: 44px; display: inline-flex; align-items: center; }
+  .icon-btn, .hdr-ico, .menu-btn { min-width: 44px; min-height: 44px; }
+
+  /* iOS zooms the page when a focused input is under 16px, and never zooms
+     back. On a checkout form that reads as the page breaking. */
+  input, select, textarea { font-size: 16px; }
+
+  /* Quantity steppers were comfortably mouse-sized and thumb-hostile. */
+  .qty button { min-width: 40px; min-height: 40px; }
+}

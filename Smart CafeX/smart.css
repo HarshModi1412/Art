@@ -89,7 +89,10 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html, body { margin: 0; height: 100%; }
+html, body { margin: 0; min-height: 100%; }
+/* `height: 100%` here pins the document to one viewport. Any child that
+   creates a scroll context then clips everything below the fold. min-height
+   lets the page grow, which is what a scrolling app needs. */
 html { color-scheme: light; } [data-theme="dark"] { color-scheme: dark; }
 body {
   font-family: var(--font); background: var(--bg); color: var(--text);
@@ -1750,3 +1753,240 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .cmp-caution-h { display: flex; align-items: center; gap: 6px; color: var(--red);
   margin-bottom: 6px; }
 .cmp-caution ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; }
+
+/* ==========================================================
+   PHONE LAYOUT
+   ----------------------------------------------------------
+   There were no mobile rules for the top bar at all. On a 390px phone it
+   was trying to fit: an apps button, the brand name, a breadcrumb, a
+   two-item mode switch with labels, a two-item theme switch with labels,
+   the seller's email, and a Log out button. It overflowed, and the only
+   way to read it was to pinch-zoom out — which then made everything else
+   too small to tap.
+
+   The fix is subtractive, in order of what a seller on a phone actually
+   needs: the email goes (they know who they are), the switch labels go
+   (the icons carry them), the brand wordmark goes (the chip identifies
+   it), and Log out becomes an icon.
+
+   Deliberately pure CSS. This is being fixed the day before a pitch and a
+   layout bug is cheaper to reason about than a new JS menu.
+   ========================================================== */
+@media (max-width: 860px) {
+  .topbar { padding: 0 10px; gap: 8px; min-height: 50px; }
+  .tb-left, .tb-right { gap: 6px; min-width: 0; }
+  .tb-user { display: none; }              /* they know their own email */
+  .mode-label, .tlabel { display: none; }  /* the icon is the label */
+  .mode-switch a { padding: 5px 9px; }
+  .theme-switch button { padding: 5px 8px; }
+  .tb-crumb { font-size: 13px; }
+}
+
+@media (max-width: 620px) {
+  .tb-brand span:last-child { display: none; }   /* keep the chip, drop the wordmark */
+  .tb-apps { width: 32px; height: 32px; font-size: 17px; }
+
+  /* The crumb is the only thing here that CAN shrink, so it must be the
+     thing that does. Without these two lines flexbox refuses to shrink it
+     below its content and the whole right-hand side is pushed off screen. */
+  .tb-left { flex: 1 1 auto; min-width: 0; }
+  .tb-right { flex: 0 0 auto; }
+  .tb-crumb { flex: 1 1 auto; min-width: 0; max-width: none; }
+
+  /* Classic/Smart is the least-used control in the bar and the widest.
+     A seller on a phone is not switching interface modes; they are looking
+     at one screen. It stays on tablet and desktop. */
+  .mode-switch { display: none; }
+  /* Log out becomes an icon. It is the least-used control up here and the
+     one most able to afford losing its label. */
+  #logoutBtn { font-size: 0; padding: 6px 9px; line-height: 1; }
+  #logoutBtn::after { content: "⏻"; font-size: 15px; }
+  .main { padding: 16px 14px 48px; }
+}
+
+/* The approval panel is a 340px column beside the workspace. On a phone
+   there is no beside — it stacks underneath, where it is still reachable
+   but is not competing with the thing the seller opened. */
+@media (max-width: 900px) {
+  .shell-body { grid-template-columns: 1fr; }
+  .approvals { position: static; height: auto; max-height: none;
+    border-left: none; border-top: 1px solid var(--border); }
+}
+
+/* NOTE: there used to be `html, body { overflow-x: hidden }` here.
+   It clipped every page at one viewport height.
+
+   `overflow-x` on <body> promotes it to a scroll container, and with the
+   `height: 100%` already set at the top of this file that container is
+   exactly one screen tall — so a product list, an order list, anything
+   longer than the fold simply stopped rendering and left dead grey below.
+   It looked like the app had failed to load.
+
+   The right fix was never to clamp the page; it was to stop individual
+   elements being too wide, which the rules above now do. */
+@media (max-width: 620px) {
+  .page-head { flex-wrap: wrap; gap: 8px; }
+  .page-actions { width: 100%; }
+  .sm-head-actions, .cmp-cards, .gst-top, .po-sup { width: 100%; }
+  .sm-ed-top { flex-direction: column; }
+  .sm-ed-shot { width: 100%; height: 200px; }
+  .st-imgonly { flex-direction: column; }
+  .st-imgonly img { width: 100%; }
+  .cr-row, .sm-dec { flex-wrap: wrap; }
+  .sm-dec-when { min-width: 0; }
+  .iv-tot { max-width: none; }
+}
+
+/* ==========================================================
+   Skeletons.
+
+   Shaped like the thing that is coming, so the layout does not jump when
+   it arrives. The shimmer is slow on purpose — a fast one reads as
+   agitation, and this is shown precisely when a seller is already
+   wondering whether the app is broken.
+   ========================================================== */
+.sk { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+.sk-bar, .sk-thumb, .sk-box {
+  display: block; border-radius: 5px;
+  background: linear-gradient(90deg, var(--surface-2) 25%,
+    var(--surface-3) 37%, var(--surface-2) 63%);
+  background-size: 400% 100%;
+  animation: sk-shimmer 1.6s ease-in-out infinite;
+}
+.sk-bar { height: 11px; margin-bottom: 8px; }
+.sk-row { display: flex; gap: 12px; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid var(--border); }
+.sk-row .sk-bar { margin: 0; }
+.sk-tiles { display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.sk-tile { border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 18px; height: 132px; }
+.sk-cards { display: flex; flex-direction: column; gap: 10px; }
+.sk-card { display: flex; gap: 14px; align-items: flex-start;
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.sk-card > div { flex: 1; }
+.sk-thumb { width: 64px; height: 64px; border-radius: 8px; flex: none; }
+.sk-form > div { margin-bottom: 14px; }
+.sk-box { height: 34px; border-radius: 7px; }
+
+@keyframes sk-shimmer { 0% { background-position: 100% 0; }
+                        100% { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .sk-bar, .sk-thumb, .sk-box { animation: none; opacity: .6; }
+}
+
+/* A failure the seller can act on. */
+.load-fail { display: flex; gap: 12px; align-items: flex-start;
+  border: 1px solid var(--amber); background: var(--amber-soft);
+  border-radius: var(--radius); padding: 16px 18px; max-width: 520px; }
+.load-fail svg { color: var(--amber); flex: none; margin-top: 2px; }
+.load-fail b { display: block; margin-bottom: 4px; }
+.load-fail p { margin: 0 0 12px; font-size: 13px; line-height: 1.55;
+  color: var(--text-2); }
+
+/* ==========================================================
+   TOUCH TARGETS AND TYPE FLOOR
+   ----------------------------------------------------------
+   Measured on a real 390px render: the theme toggles and Log out were
+   32x29, the product edit pencil 26x26, the calendar arrows 29x33, and
+   Site Builder alone had 44 controls under 32px. Apple asks for 44pt,
+   Android for 48dp. Below about 40px a thumb misses, and a mis-tap on
+   the delete button next to the edit button is not a cosmetic problem.
+   That mis-tapping is most of what "glitchy" actually feels like.
+
+   Type had the same problem: chips and helper text rendered at 9.5-10.5px,
+   which is unreadable on a phone held at arm's length outdoors.
+   ========================================================== */
+@media (max-width: 860px) {
+  .btn, button, select, .chip, [role="button"] { min-height: 40px; }
+  .btn.tiny, .btn.xs { min-height: 36px; padding-left: 12px; padding-right: 12px; }
+
+  /* Icon-only buttons need width as well as height, or they stay a sliver. */
+  .btn.tiny:not(:has(span)), .gal-x, .dl-x, .cal-post,
+  #logoutBtn, .theme-switch button, .tb-apps { min-width: 40px; }
+
+  .theme-switch button { min-height: 38px; padding: 0 12px; }
+  #logoutBtn { min-width: 42px; }
+
+  /* Row actions sat at 26x26 with 4px between them — the classic
+     edit-next-to-delete mis-tap. */
+  .row-acts .btn, .pi-acts .btn, .sup-card-h .btn { min-width: 40px; min-height: 40px; }
+  .row-acts, .pi-acts { gap: 8px; }
+
+  /* Calendar month arrows. */
+  #calPrev, #calNext, #calToday { min-width: 44px; min-height: 40px; }
+
+  /* Nothing readable drops below 11px on a phone. */
+  .tiny, .muted.tiny, .cmp-when, .sm-chip, .cal-fmt, .up-fmt,
+  .st-meta, .chan-pill, .sm-metric-w, .sm-pil-w, .cr-play,
+  .req, .sk-bar + span { font-size: 11.5px !important; }
+  .cal-num, .cal-fest, .cal-start { font-size: 11px !important; }
+
+  /* iOS zooms the whole page when a focused input is under 16px. That zoom
+     never returns on its own and is why forms felt like they broke the
+     layout. 16px is the threshold, not a preference. */
+  input, select, textarea { font-size: 16px !important; }
+}
+
+/* Horizontal chip rows must LOOK scrollable, or a clipped item reads as a
+   broken layout rather than as more content. */
+@media (max-width: 860px) {
+  .site-tabs, .pf-tabs, .wz-steps, .ord-chips, .cmp-cards {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity; padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .site-tabs::-webkit-scrollbar, .pf-tabs::-webkit-scrollbar,
+  .wz-steps::-webkit-scrollbar, .ord-chips::-webkit-scrollbar { display: none; }
+  .site-tabs > *, .pf-tabs > *, .wz-steps > *, .ord-chips > * {
+    scroll-snap-align: start; flex: none;
+  }
+}
+
+/* The Website Builder preview is a desktop canvas. On a phone it was a tall
+   empty box below the fold; previewing a desktop layout inside a phone is
+   not a useful thing to look at anyway. */
+@media (max-width: 860px) {
+  .prev-stage, .wb-stage { height: 52vh !important; min-height: 300px !important; }
+  .insp, .inspector { height: auto !important; min-height: 0 !important; }
+}
+
+/* ==========================================================
+   The last four, each found by measuring a real 390px render.
+   ========================================================== */
+@media (max-width: 860px) {
+  /* The builder's step rail is `repeat(5, 1fr)`. At 390px that is 78px a
+     chip for 114px of content, so the active step pushed 4px past the
+     viewport and the row looked cut off rather than scrollable. Two rows
+     of readable chips beats five clipped ones. */
+  .wz-rail { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .wz { min-height: 52px; }
+  .wz-t i { display: none; }        /* the hint line does not fit two-up */
+
+  /* Sliders were 13px tall — draggable with a mouse, not with a thumb. */
+  input[type="range"] { min-height: 40px; }
+  input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; }
+  input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; }
+
+  /* Real checkboxes and radios, not the decorative ones inside theme
+     preview cards — those are miniatures of the seller's site and must
+     stay miniature or the preview stops being a preview. */
+  input[type="checkbox"]:not(.theme-card input),
+  input[type="radio"]:not(.theme-card input) { width: 22px; height: 22px; }
+
+  /* Tile badges read at 10px. */
+  .badge, .app-tile .meta, .t-tag { font-size: 11.5px !important; }
+}
+
+/* A 22px checkbox is the right SIZE; what matters is the tappable AREA.
+   Browsers forward a click on a <label> to the input it wraps, so making
+   the whole row 44px tall gives a thumb a full-width target while the box
+   itself stays visually correct. This is the standard pattern and it beats
+   drawing a giant checkbox. */
+@media (max-width: 860px) {
+  label:has(> input[type="checkbox"]),
+  label:has(> input[type="radio"]),
+  .fld.chk, .chk-row, .toggle-row {
+    min-height: 44px; display: flex; align-items: center; gap: 10px;
+  }
+}

@@ -114,15 +114,66 @@ function toastUndo(message, undoFn, ms = 7000) {
   _undo = { timer: setTimeout(close, ms) };
 }
 
-async function api(path, opts = {}) {
+/* Every one of these had to be written out, because `res.statusText` - which
+   this function used to fall back on - is ALWAYS an empty string over HTTP/2,
+   and HTTP/2 is what Render serves. Any error whose body was not JSON with a
+   `detail` therefore reached the UI as `new Error("")`, and every catch block
+   in this file renders that message into a card. That is where the empty
+   bordered boxes came from: not a missing section, an error with nothing to
+   say. */
+const HTTP_MSG = {
+  400: "That request was not something the server could use.",
+  401: "Your session has expired - please log in again.",
+  403: "You do not have access to that.",
+  404: "That is not available.",
+  409: "Something changed while you were working - reload and try again.",
+  413: "That file is too large.",
+  429: "Too many requests just now - wait a few seconds.",
+  500: "Something went wrong on our side. Try that again in a moment.",
+  502: "The server is waking up. Give it a few seconds.",
+  503: "The server is waking up. Give it a few seconds.",
+  504: "The server took too long to answer. Try again in a moment.",
+};
+
+/* Retried only for reads. A GET can be repeated safely; a POST cannot, and
+   silently repeating one is how a seller ends up with two purchase orders.
+   502/503/504 are what a host returns while a sleeping instance wakes, and
+   they used to surface as a permanently broken-looking panel that a manual
+   reload would have fixed. */
+const RETRY_STATUS = new Set([429, 502, 503, 504]);
+const RETRY_MAX = 2;
+const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function api(path, opts = {}, attempt = 0) {
   const headers = { "X-Session-Id": state.sessionId, ...(opts.headers || {}) };
   if (state.token) headers["Authorization"] = "Bearer " + state.token;
   if (opts.json) { headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(opts.json); }
-  const res = await fetch(path, { ...opts, headers });
+  const retryable = !opts.method || opts.method.toUpperCase() === "GET";
+
+  let res;
+  try {
+    res = await fetch(path, { ...opts, headers });
+  } catch (netErr) {
+    // fetch() only rejects on a genuine transport failure - DNS, a dropped
+    // connection, a tunnel closing mid-request. On a phone moving between
+    // wifi and mobile data that is common and almost always transient.
+    if (retryable && attempt < RETRY_MAX) { await nap(400 * (attempt + 1)); return api(path, opts, attempt + 1); }
+    const e = new Error("Could not reach the server. Check your connection and try again.");
+    e.status = 0;
+    throw e;
+  }
+
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (retryable && attempt < RETRY_MAX && RETRY_STATUS.has(res.status)) {
+      await nap(600 * (attempt + 1));
+      return api(path, opts, attempt + 1);
+    }
     const d = data.detail;
-    const err = new Error((d && typeof d === "object" ? d.message : d) || res.statusText);
+    const fromServer = (d && typeof d === "object" ? d.message : d) || "";
+    const err = new Error(
+      fromServer || res.statusText || HTTP_MSG[res.status] || `The server returned ${res.status}.`
+    );
     // Callers need to tell "you are logged out" (401) apart from "the server
     // hiccuped" (500, timeout, cold start). Without this every blip looked
     // like an expired session and threw the seller back to the login screen.
@@ -276,7 +327,7 @@ async function goHome() {
   _afterUpload = null;
   _currentModule = null;
   setCrumb(""); showRail(true);
-  setView(`<div class="ap-empty">Loading your workspace…</div>`);
+  setView(skeleton("tiles"));
   try {
     const [s, pt] = await Promise.all([
       api("/api/smart/state"),
@@ -287,7 +338,7 @@ async function goHome() {
     renderHome(s);
     renderApprovals(s.insights);
   } catch (e) {
-    setView(`<div class="card">${esc(e.message)}</div>`);
+    setView(failed(e.message, goHome));
   }
 }
 
@@ -556,6 +607,8 @@ function renderHome(s) {
   renderChannels();
   renderToday();
   renderUpcomingSocial();
+  warmOnIntent();
+  warmModules();
   document.querySelectorAll("[data-up]").forEach((el) => el.onclick = () => startUpload(el.dataset.up));
   document.querySelectorAll("[data-add]").forEach((el) => el.onclick = () => openAddRecords(el.dataset.add));
   document.querySelectorAll("[data-clear]").forEach((el) => el.onclick = () => clearData(el.dataset.clear));
@@ -969,6 +1022,65 @@ if ($("addSave")) $("addSave").onclick = async () => {
    login — so "refresh my data" and "sign in again" had become the same action. */
 let _currentModule = null;
 
+
+/* ---------------------------------------------------------------------
+   Loading and failure states.
+
+   Every module used to open with `<div class="ap-empty">Loading…</div>` —
+   one small line of grey text in the middle of an empty page. On a slow
+   connection that reads as a broken app rather than a loading one, which
+   is exactly what "many things don't load, just a small box comes in"
+   describes.
+
+   A skeleton in the SHAPE of what is coming does two things a spinner
+   cannot: it tells the seller the page is working, and it stops the
+   layout jumping when the real content lands.
+   --------------------------------------------------------------------- */
+function skeleton(kind = "rows") {
+  const bar = (w) => `<span class="sk-bar" style="width:${w}"></span>`;
+  if (kind === "tiles") {
+    return `<div class="sk sk-tiles">${Array.from({ length: 6 }, () =>
+      `<div class="sk-tile">${bar("42%")}${bar("88%")}${bar("64%")}</div>`).join("")}</div>`;
+  }
+  if (kind === "cards") {
+    return `<div class="sk sk-cards">${Array.from({ length: 4 }, () =>
+      `<div class="sk-card"><span class="sk-thumb"></span>
+        <div>${bar("64%")}${bar("90%")}${bar("40%")}</div></div>`).join("")}</div>`;
+  }
+  if (kind === "table") {
+    return `<div class="sk sk-table">${Array.from({ length: 7 }, () =>
+      `<div class="sk-row">${bar("22%")}${bar("34%")}${bar("18%")}${bar("14%")}</div>`).join("")}</div>`;
+  }
+  if (kind === "form") {
+    return `<div class="sk sk-form">${Array.from({ length: 5 }, () =>
+      `<div>${bar("28%")}<span class="sk-box"></span></div>`).join("")}</div>`;
+  }
+  return `<div class="sk">${Array.from({ length: 5 }, (_, i) =>
+    `<div class="sk-row">${bar(`${90 - i * 9}%`)}</div>`).join("")}</div>`;
+}
+
+/* A failure the seller can act on, rather than a dead end.
+
+   The old behaviour printed the raw exception into a card and stopped. On a
+   cold server the message was a timeout string, which tells a seller nothing
+   and offers them nothing. */
+function failed(message, retry) {
+  const id = "rt" + Math.random().toString(36).slice(2, 8);
+  setTimeout(() => { const b = $(id); if (b && retry) b.onclick = retry; }, 0);
+  const cold = /timeout|network|fetch|failed|502|503|504/i.test(message || "");
+  return `
+    <div class="load-fail">
+      ${sic("alert")}
+      <div>
+        <b>${cold ? "That took too long" : "Could not load this"}</b>
+        <p>${cold
+          ? "The server may have been asleep. It wakes on the first request, so trying again usually works."
+          : esc(message || "Something went wrong.")}</p>
+        <button class="btn primary sm" id="${id}">${sic("refresh")}Try again</button>
+      </div>
+    </div>`;
+}
+
 function moduleShell(name, bodyHtml) {
   setCrumb(name); showRail(false);
   setView(`
@@ -1027,11 +1139,11 @@ async function openModule(id) {
 let _productsData = null;
 
 async function openProducts() {
-  moduleShell("Product Management", `<div class="ap-empty">Loading products…</div>`);
+  moduleShell("Product Management", skeleton("cards"));
   try {
     const d = await api("/api/products/state");
     renderProducts(d);
-  } catch (e) { moduleShell("Product Management", `<div class="card">${esc(e.message)}</div>`); }
+  } catch (e) { moduleShell("Product Management", failed(e.message, () => openModule(_currentModule))); }
 }
 
 function _prodCard(p) {
@@ -1637,9 +1749,9 @@ let _studio = null;
 let _studioProduct = null;
 
 async function openStudio() {
-  moduleShell("Product Studio", `<div class="ap-empty">Opening your studio…</div>`);
+  moduleShell("Product Studio", skeleton("cards"));
   try { _studio = await api("/api/studio/state"); }
-  catch (e) { return moduleShell("Product Studio", `<div class="card">${esc(e.message)}</div>`); }
+  catch (e) { return moduleShell("Product Studio", failed(e.message, () => openModule(_currentModule))); }
   renderStudio();
 }
 
@@ -2587,7 +2699,7 @@ async function supplyGeneratePo() {
 
 // ---------- MODULE: Sales Analytics ----------
 async function openSales() {
-  moduleShell("Sales Analytics", `<div class="ap-empty">Loading analytics…</div>`);
+  moduleShell("Sales Analytics", skeleton("tiles"));
   try {
     await api("/api/smart/state");
     // Cancellations come from your own website's orders, and they are already
@@ -2630,7 +2742,7 @@ async function openSales() {
     plot($("cWk"), [{ x: d.weekday_pattern.x, y: d.weekday_pattern.y, type: "bar", marker: { color: "#0ea5e9" } }], { yaxis: { tickprefix: "₹" } }, "Revenue by weekday");
     if (d.top_products) plot($("cTop"), [{ x: d.top_products.x, y: d.top_products.y, type: "bar", orientation: "h", marker: { color: "#10b981" } }], { xaxis: { tickprefix: "₹" }, yaxis: { autorange: "reversed" }, margin: { l: 150, r: 20, t: 8, b: 40 } }, "Top products");
   } catch (e) {
-    moduleShell("Sales Analytics", `<div class="card">${esc(e.message)}</div>`);
+    moduleShell("Sales Analytics", failed(e.message, () => openModule(_currentModule)));
   }
 }
 
@@ -2757,7 +2869,7 @@ async function openSubcategory() {
     $("subSel").onchange = () => $("subSel").value ? renderSubDetail($("subSel").value) : openSubcategory();
     plot($("cSubTrend"), d.series.map((s) => ({ x: s.x, y: s.y, name: s.name, type: "scatter", mode: "lines+markers" })), { yaxis: { tickprefix: "₹" } }, "Monthly trend");
     plot($("cSubTot"), [{ x: d.totals.x, y: d.totals.y, type: "bar", marker: { color: cssVar("--primary", "#6d28d9") } }], { yaxis: { tickprefix: "₹" } }, "Total revenue");
-  } catch (e) { moduleShell("Sub-Category Analysis", `<div class="card">${esc(e.message)}</div>`); }
+  } catch (e) { moduleShell("Sub-Category Analysis", failed(e.message, () => openModule(_currentModule))); }
 }
 
 async function renderSubDetail(value) {
@@ -2813,7 +2925,7 @@ async function openReview() {
     const primary = cssVar("--primary", "#6d28d9");
     plot($("cShare"), [{ x: d.share_chart.themes, y: d.share_chart.yours, type: "bar", marker: { color: primary } }], { margin: { l: 46, r: 16, t: 8, b: 120 }, xaxis: { tickangle: -35 } }, "What customers talk about");
     plot($("cSent"), [{ x: d.sentiment_chart.themes, y: d.sentiment_chart.yours, type: "bar", marker: { color: "#0ea5e9" } }], { margin: { l: 46, r: 16, t: 8, b: 120 }, xaxis: { tickangle: -35 } }, "Sentiment by theme");
-  } catch (e) { moduleShell("Review Analytics", `<div class="card">${esc(e.message)}</div>`); }
+  } catch (e) { moduleShell("Review Analytics", failed(e.message, () => openModule(_currentModule))); }
 }
 
 // ---------- MODULE: Complaint Analysis ----------
@@ -2841,7 +2953,7 @@ async function openComplaints() {
     }
     moduleShell("Complaint Analysis", html);
     if (d.monthly) plot($("cCompM"), [{ x: d.monthly.months, y: d.monthly.counts, type: "bar", marker: { color: "#f97316" } }], {}, "Complaints per month");
-  } catch (e) { moduleShell("Complaint Analysis", `<div class="card">${esc(e.message)}</div>`); }
+  } catch (e) { moduleShell("Complaint Analysis", failed(e.message, () => openModule(_currentModule))); }
 }
 
 // ---------- MODULE: Position Strategy + AI ----------
@@ -3223,7 +3335,7 @@ async function openInstagramModule() {
         await api("/api/instagram/disconnect", { method: "POST" }); openInstagramModule();
       };
     }
-  } catch (e) { moduleShell("Instagram", `<div class="card">${esc(e.message)}</div>`); }
+  } catch (e) { moduleShell("Instagram", failed(e.message, () => openModule(_currentModule))); }
 }
 
 // Open Meta's OAuth login in a popup; the callback posts a message back here.
@@ -3278,7 +3390,7 @@ async function openContentModule() {
       openContentModule();
     };
     if ($("ccOpen")) $("ccOpen").onclick = () => openContentEditor(s.id);
-  } catch (e) { moduleShell("Content Creator", `<div class="card">${esc(e.message)}</div>`); }
+  } catch (e) { moduleShell("Content Creator", failed(e.message, () => openModule(_currentModule))); }
 }
 
 // Details popup for a content_ insight — editable everything + Post/Schedule
@@ -3430,6 +3542,7 @@ let _coCtx = null;
 async function renderChannels() {
   const strip = $("chanStrip");
   if (!strip) return;
+  strip.innerHTML = skeleton("cards");
   try {
     const d = await api("/api/channels");
     strip.innerHTML = d.channels.map((c) => {
@@ -3478,7 +3591,7 @@ async function renderChannels() {
     strip.querySelectorAll("[data-co-pull]").forEach((b) => b.onclick = () => commercePull(b.dataset.coPull));
     strip.querySelectorAll("[data-co-disc]").forEach((b) => b.onclick = () => commerceDisconnect(b.dataset.coDisc));
   } catch (e) {
-    strip.innerHTML = `<div class="card">${esc(e.message)}</div>`;
+    strip.innerHTML = failed(e.message, renderChannels);
   }
 }
 
@@ -3536,7 +3649,7 @@ async function openAdsModule() {
     document.querySelectorAll("[data-ads-conn]").forEach((b) => b.onclick = () => connectAds(b.dataset.adsConn));
     document.querySelectorAll("[data-ads-dc]").forEach((b) => b.onclick = async () => { await api("/api/ads/disconnect", { method: "POST", json: { connector: b.dataset.adsDc, credentials: {} } }); openAdsModule(); });
     document.querySelectorAll("[data-ads-view]").forEach((b) => b.onclick = () => viewAdsMetrics(b.dataset.adsView));
-  } catch (e) { moduleShell("Ad Analytics", `<div class="card">${esc(e.message)}</div>`); }
+  } catch (e) { moduleShell("Ad Analytics", failed(e.message, () => openModule(_currentModule))); }
 }
 
 async function connectAds(id) {
@@ -3625,7 +3738,7 @@ async function openSite(step) {
     if (d.seeded_now) {
       toast("Started your site from your catalogue — change anything you like.", 6000);
     }
-  } catch (e) { moduleShell("Website Builder", `<div class="card">${esc(e.message)}</div>`); }
+  } catch (e) { moduleShell("Website Builder", failed(e.message, () => openModule(_currentModule))); }
 }
 
 function themeLabel() {
@@ -4589,7 +4702,7 @@ let _ordersFilter = "";
 let _ordersTab = "orders";
 
 async function openOrders() {
-  moduleShell("Orders", `<div class="ap-empty">Loading orders…</div>`);
+  moduleShell("Orders", skeleton("cards"));
   try {
     const [od, cr] = await Promise.all([
       api("/api/store/orders"),
@@ -4598,7 +4711,7 @@ async function openOrders() {
     _ordersData = od;
     _cancelReqs = cr;
     renderOrders();
-  } catch (e) { moduleShell("Orders", `<div class="card">${esc(e.message)}</div>`); }
+  } catch (e) { moduleShell("Orders", failed(e.message, () => openModule(_currentModule))); }
 }
 
 let _cancelReqs = { open: [], summary: {} };
@@ -4866,12 +4979,12 @@ async function loadCustomers() {
 let _socialData = null;
 
 async function openSocial() {
-  moduleShell("Social Media Manager", `<div class="ap-empty">Planning your week…</div>`);
+  moduleShell("Social Media Manager", skeleton("cards"));
   try {
     _socialData = await api("/api/social");
     await renderSocial();
   } catch (e) {
-    moduleShell("Social Media Manager", `<div class="card">${esc(e.message)}</div>`);
+    moduleShell("Social Media Manager", failed(e.message, () => openModule(_currentModule)));
   }
 }
 
@@ -4902,7 +5015,7 @@ async function renderSocial() {
   let cal;
   try {
     cal = await api(`/api/social/month?year=${_socialMonth.year}&month=${_socialMonth.month}`);
-  } catch (e) { return moduleShell("Social Media Manager", `<div class="card">${esc(e.message)}</div>`); }
+  } catch (e) { return moduleShell("Social Media Manager", failed(e.message, () => openModule(_currentModule))); }
   _socialCal = cal;
 
   const aiLine = ai.free_ready
@@ -5258,13 +5371,13 @@ function openSocialSetup() {
 let _gstData = null;
 
 async function openGst() {
-  moduleShell("Billing & GST", `<div class="ap-empty">Loading your billing setup…</div>`);
+  moduleShell("Billing & GST", skeleton("form"));
   try {
     const [inv, st] = await Promise.all([api("/api/invoices"), api("/api/gst/settings")]);
     _gstData = { invoices: inv.invoices || [], st, fy: inv.fy };
     renderGst();
   } catch (e) {
-    moduleShell("Billing & GST", `<div class="card">${esc(e.message)}</div>`);
+    moduleShell("Billing & GST", failed(e.message, () => openModule(_currentModule)));
   }
 }
 
@@ -5888,4 +6001,63 @@ async function openCampaign(key) {
       b.disabled = false; b.textContent = "Plan these posts";
     }
   };
+}
+
+/* ---------------------------------------------------------------------
+   Warming the modules a seller is about to open.
+
+   The API answers in single-digit milliseconds once it is awake, but the
+   FIRST request after the server has been idle pays the whole wake-up
+   cost. Whichever screen the seller happened to click first absorbed it —
+   which is why Site Builder felt like it took minutes while everything
+   else felt fine. It was not Site Builder; it was whatever was clicked
+   first.
+
+   So once home is on screen and the seller is reading it, we quietly warm
+   the handful of screens a pitch actually walks through. By the time they
+   click, the server is awake and its per-account cache is populated.
+
+   Deliberately: after first paint, lowest priority, failures ignored, and
+   never on a metered connection.
+   --------------------------------------------------------------------- */
+const WARM_PATHS = [
+  "/api/products/state",    // Product Management
+  "/api/store/orders",      // Orders
+  "/api/site/state",        // Website Builder — the slow-feeling one
+  "/api/supply/state",      // Inventory / Suppliers
+];
+let _warmed = false;
+
+function warmModules() {
+  if (_warmed || !state.token) return;
+  // Respect a seller on a metered or slow connection — warming costs them
+  // data they did not ask to spend.
+  const c = navigator.connection;
+  if (c && (c.saveData || /2g/.test(c.effectiveType || ""))) return;
+  _warmed = true;
+
+  const run = () => WARM_PATHS.forEach((p, i) =>
+    setTimeout(() => { api(p).catch(() => {}); }, i * 250));
+
+  if ("requestIdleCallback" in window) requestIdleCallback(run, { timeout: 3000 });
+  else setTimeout(run, 1200);
+}
+
+/* Hovering a tile is a strong signal it is about to be opened. On a phone
+   there is no hover, so touchstart does the same job a beat earlier than
+   the click. */
+function warmOnIntent() {
+  document.querySelectorAll("[data-mod]").forEach((el) => {
+    const path = {
+      products: "/api/products/state", orders: "/api/store/orders",
+      site: "/api/site/state", supply: "/api/supply/state",
+      inventory: "/api/supply/state", social: "/api/social",
+      studio: "/api/studio/state", gst: "/api/invoices",
+    }[el.dataset.mod];
+    if (!path) return;
+    let done = false;
+    const warm = () => { if (done) return; done = true; api(path).catch(() => {}); };
+    el.addEventListener("pointerenter", warm, { once: true, passive: true });
+    el.addEventListener("touchstart", warm, { once: true, passive: true });
+  });
 }

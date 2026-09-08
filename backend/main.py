@@ -17,9 +17,12 @@ import os
 import secrets
 
 import pandas as pd
+import logging
+
 from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
-from fastapi.responses import Response, FileResponse
+from fastapi.responses import Response, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 
 from backend.core import (ad_analytics, ai, analytics, auth, billing, complaints, connectors,
@@ -68,15 +71,94 @@ except Exception:
 
 app = FastAPI(title="Cafe_X Intelligence Platform")
 
+# ---------------------------------------------------------------------------
+# Wire-level performance.
+#
+# The app shipped 404 KB of uncompressed JavaScript and CSS on every single
+# load. On a phone on a shop's 4G that is several seconds of blank screen
+# before anything renders, and it is the actual reason the app felt slow — the
+# API itself answers in single-digit milliseconds.
+#
+# gzip takes that 404 KB to about 103 KB. Nothing else in this file will ever
+# buy a 4x improvement for one line.
+# ---------------------------------------------------------------------------
+app.add_middleware(GZipMiddleware, minimum_size=800, compresslevel=6)
+
+
+log = logging.getLogger("onetap")
+
+
+# ---------------------------------------------------------------------------
+# One account read per request, not fifty
+# ---------------------------------------------------------------------------
+# In Supabase mode every user_store.load_state() is an HTTPS round trip. The
+# modules each read a few keys and none of them knew what the others were
+# doing, so one home screen made roughly 48 of them: ~2.5s of pure waiting on
+# a good connection, and a visible failure whenever one of them timed out.
+#
+# The window has to be the request. Anything longer needs a TTL and can serve
+# one Render instance's stale copy to another; anything shorter does not help.
+# ---------------------------------------------------------------------------
+@app.middleware("http")
+async def _state_scope(request, call_next):
+    with user_store.request_scope():
+        return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
+# An error the seller can read
+# ---------------------------------------------------------------------------
+# An unhandled exception used to leave FastAPI to return the string
+# "Internal Server Error" as text/plain. The frontend parses JSON, got nothing,
+# and fell back to response.statusText - which is ALWAYS empty over HTTP/2,
+# which is what Render serves. The seller saw an empty bordered box and no
+# clue what had happened.
+#
+# So: always JSON, always a sentence, and the traceback goes to the Render log
+# with the path attached so the cause is findable.
+# ---------------------------------------------------------------------------
+@app.exception_handler(Exception)
+async def _unhandled(request: Request, exc: Exception):
+    log.exception("unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Something went wrong on our side. Try that again in a moment."},
+    )
+
+
+
+
 
 @app.middleware("http")
-async def _no_cache_frontend(request, call_next):
-    """Never let the browser cache the app shell / JS / CSS. This is what
-    prevents an old smart.js from sticking around after an update (the cause of
-    the 'upload shows Uploading then nothing / no mapping popup' reports)."""
+async def _cache_policy(request, call_next):
+    """Two rules, and the distinction between them is load-bearing.
+
+    **The HTML shell is never cached.** An old index.html pins a seller to an
+    old bundle forever, which is the classic way to ship a bug you cannot fix
+    remotely. This is what the original blanket no-store rule was protecting
+    against, and it stays.
+
+    **A VERSIONED asset is cached for a year.** `smart.js?v=30` is immutable —
+    bumping to v=31 is a different URL, so the browser re-fetches on its own.
+    Blanket no-store meant re-downloading 404 KB of JavaScript on every single
+    page load, which on a phone in a shop is several seconds of blank screen.
+    That was the real reason the app felt slow; the API answers in single-digit
+    milliseconds.
+
+    The `v=` check is what makes this safe: an unversioned request for the same
+    file still gets no-store, so nothing can be pinned by accident."""
     resp = await call_next(request)
     path = request.url.path
-    if (path.startswith("/smart") or path.startswith("/static") or path == "/app"
+    versioned = bool(request.query_params.get("v"))
+    is_asset = path.endswith((".js", ".css", ".woff2", ".woff", ".svg"))
+
+    if is_asset and versioned:
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        # MutableHeaders has no .pop(); del is the supported removal.
+        for h in ("pragma", "expires"):
+            if h in resp.headers:
+                del resp.headers[h]
+    elif (path.startswith("/smart") or path.startswith("/static") or path == "/app"
             or path.startswith("/s/") or path.startswith("/store-static")
             or path.endswith((".js", ".css", ".html"))):
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"

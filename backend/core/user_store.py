@@ -19,6 +19,9 @@ Storage backend is pluggable (see backend/core/db.py):
 
 Public function signatures are unchanged.
 """
+import contextlib
+import contextvars
+import copy
 import hashlib
 import json
 import os
@@ -84,7 +87,62 @@ def _state_path(email: str) -> str:
 # ---------------------------------------------------------
 # JSON state
 # ---------------------------------------------------------
+# Every load_state() in Supabase mode is a full HTTPS round trip to PostgREST.
+# Nothing about that is obvious from the call sites: reading one flag looks
+# free, so the modules read one flag at a time and a single home screen ended
+# up making ~48 of them. At 50-200ms each that is the whole of the "the page
+# never loads" complaint, and any one of them timing out took the whole
+# response down with it.
+#
+# So we memoise per REQUEST rather than for a duration. A request only ever
+# reads one account, and it can only see writes it made itself, so the first
+# read pays the round trip and the rest are free. The cache dies with the
+# request, which means no TTL to tune and no window in which a second request
+# - or a second Render instance - can serve a stale value.
+_scope: contextvars.ContextVar = contextvars.ContextVar("user_state_scope", default=None)
+
+
+@contextlib.contextmanager
+def request_scope():
+    """Open a memoisation window. main.py wraps every HTTP request in one."""
+    token = _scope.set({})
+    try:
+        yield
+    finally:
+        _scope.reset(token)
+
+
+def _norm_email(email: str) -> str:
+    return (email or "").strip().lower()
+
+
+def _scope_get(email: str):
+    box = _scope.get()
+    if box is None:                      # outside a request (CLI, tests, jobs)
+        return None
+    hit = box.get(_norm_email(email))
+    # Copy on the way out. update_state() and a good deal of module code mutate
+    # the dict they are handed; sharing one object would let a half-finished
+    # edit leak into the next reader inside the same request.
+    return copy.deepcopy(hit) if hit is not None else None
+
+
+def _scope_put(email: str, state: dict) -> None:
+    box = _scope.get()
+    if box is not None:
+        box[_norm_email(email)] = copy.deepcopy(state)
+
+
 def load_state(email: str) -> dict:
+    cached = _scope_get(email)
+    if cached is not None:
+        return cached
+    state = _read_state(email)
+    _scope_put(email, state)
+    return state
+
+
+def _read_state(email: str) -> dict:
     if db.SUPABASE_ENABLED:
         row = db.fetch_one("user_state", {"email": (email or "").strip().lower()})
         if not row:
@@ -103,8 +161,9 @@ def load_state(email: str) -> dict:
 
 def save_state(email: str, state: dict) -> None:
     if db.SUPABASE_ENABLED:
-        db.upsert("user_state", {"email": (email or "").strip().lower(), "state": state},
+        db.upsert("user_state", {"email": _norm_email(email), "state": state},
                   on_conflict="email")
+        _scope_put(email, state)
         return
     path = _state_path(email)
     with _lock:
@@ -112,6 +171,7 @@ def save_state(email: str, state: dict) -> None:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
         os.replace(tmp, path)
+    _scope_put(email, state)
 
 
 def update_state(email: str, patch: dict) -> dict:
@@ -121,14 +181,16 @@ def update_state(email: str, patch: dict) -> dict:
         state = load_state(email)
         state.update(patch)
         if db.SUPABASE_ENABLED:
-            db.upsert("user_state", {"email": (email or "").strip().lower(), "state": state},
+            db.upsert("user_state", {"email": _norm_email(email), "state": state},
                       on_conflict="email")
+            _scope_put(email, state)
             return state
         path = _state_path(email)
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
         os.replace(tmp, path)
+        _scope_put(email, state)
         return state
 
 
