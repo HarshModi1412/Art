@@ -561,17 +561,58 @@ def image_engine() -> dict:
             "note": "No image engine connected. Your own photos still work."}
 
 
-def generate_image(email: str, brief: dict, guidance: dict | None = None) -> dict:
-    """One AI photograph, stored durably like any other upload."""
+def _reference_shot(email: str, product: dict, material: dict) -> tuple[bytes, str] | None:
+    """The seller's own photograph of this product, if there is one."""
+    from backend.core import media
+    urls = [u for u in (material.get("shots") or []) if u]
+    urls += [u for u in [product.get("image_url")] + list(product.get("images") or []) if u]
+    for u in urls:
+        got = media.read(u.rsplit("/", 1)[-1])
+        if got:
+            return got
+    return None
+
+
+def generate_image(email: str, brief: dict, guidance: dict | None = None,
+                   reference: tuple[bytes, str] | None = None,
+                   strength: float | None = None) -> dict:
+    """One photograph, stored durably like any other upload.
+
+    Two paths, and the difference matters more than anything else in Studio:
+
+      * **With a reference** — the seller's own photo is re-shot. Same garment,
+        same stones, same colour; new light and setting. The thing in the
+        picture is the thing that ships.
+      * **Without one** — the model invents a product from the description.
+        Fine for a backdrop or a mood piece; NOT fine as "here is my kurta",
+        because it is not their kurta.
+
+    The result says which path ran, so the UI can tell the seller plainly.
+    """
     from backend.core import aiprovider
     prompt = image_prompt(brief, guidance)
     eng = image_engine()
 
     if eng["engine"] == "cloudflare":
-        content = aiprovider.generate_image(prompt)
-        if not content:
-            raise RuntimeError("Cloudflare did not return an image. This is "
-                               "usually the daily free allowance being spent.")
+        if reference:
+            content = aiprovider.restyle_image(
+                reference[0], prompt, strength,
+                negative="different product, changed pattern, extra items, text, "
+                         "watermark, distorted proportions")
+            from_ref = True
+            if not content:
+                # Falling back silently to invention would be the worst
+                # possible failure here: the seller asked for THEIR product.
+                raise RuntimeError(
+                    "Could not re-shoot your photo. This is usually the daily "
+                    "free allowance being spent. Try again tomorrow, or use "
+                    "'Invent a picture' if you only need a backdrop.")
+        else:
+            content = aiprovider.generate_image(prompt)
+            from_ref = False
+            if not content:
+                raise RuntimeError("Cloudflare did not return an image. This is "
+                                   "usually the daily free allowance being spent.")
     elif eng["engine"] == "openai":
         import base64
         from openai import OpenAI
@@ -579,6 +620,7 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None) -> dic
         r = client.images.generate(
             model=eng["model"], prompt=prompt, size="1024x1024", n=1)
         item = r.data[0]
+        from_ref = False
         if getattr(item, "b64_json", None):
             content = base64.b64decode(item.b64_json)
         elif getattr(item, "url", None):
@@ -592,27 +634,38 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None) -> dic
 
     saved = media.save(f"{uuid.uuid4().hex}.png", content, email)
     return {"url": saved["url"], "durable": saved["durable"], "generated": True,
-            "prompt": prompt, "engine": eng["engine"], "free": eng["free"]}
+            "prompt": prompt, "engine": eng["engine"], "free": eng["free"],
+            "from_reference": from_ref,
+            "strength": (aiprovider.STRENGTH_DEFAULT if strength is None else strength)
+                        if from_ref else None}
 
 
 def generate_image_only(email: str, product_id: str, pillar: str = "",
-                        fmt: str = "", angle: str = "") -> dict:
+                        fmt: str = "", angle: str = "",
+                        use_reference: bool = True,
+                        strength: float | None = None) -> dict:
     """Make a picture and nothing else.
 
-    Separate from make_post because the two are wanted at different moments:
-    a seller planning a week wants images for slots that already have captions,
+    Separate from make_post because the two are wanted at different moments: a
+    seller planning a week wants images for slots that already have captions,
     and writing a second caption over the first one would be actively
-    unhelpful."""
+    unhelpful.
+
+    `use_reference` defaults to True — the seller's own photo is the starting
+    point unless they deliberately ask for an invented image. That default is
+    the difference between a catalogue and a fiction."""
     brand = get_brand(email)
     product = next((p for p in products.get_products(email) if p["id"] == product_id), None)
     if not product:
         raise ValueError("That product no longer exists.")
     material = get_material(email, product_id)
     brief = build_brief(brand, product, material, angle)
-    img = generate_image(email, brief, guidance_for(pillar, fmt))
+    ref = _reference_shot(email, product, material) if use_reference else None
+    img = generate_image(email, brief, guidance_for(pillar, fmt), ref, strength)
     return {**img, "product_id": product_id,
             "product_name": product.get("name"),
             "pillar": pillar, "format": fmt,
+            "had_reference": bool(ref),
             "used_aesthetic": bool(brief.get("aesthetic")),
             "used_seen": bool(brief.get("seen"))}
 
@@ -646,7 +699,8 @@ def make_post(email: str, product_id: str, angle: str = "",
     }
     if want_image:
         try:
-            img = generate_image(email, brief, guidance_for(pillar, fmt))
+            img = generate_image(email, brief, guidance_for(pillar, fmt),
+                                 _reference_shot(email, product, material))
             out["image_url"] = img["url"]
             out["image_is_generated"] = True
             out["image_prompt"] = img["prompt"]

@@ -32,6 +32,20 @@ good manager says "reorder these four, you have eleven days of cover and your
 supplier takes fourteen" — not "inventory levels may warrant attention."
 No exclamation marks, no "Great news!", no pretending a small number is a
 crisis. Where the data is thin, the manager says so rather than bluffing.
+
+TWO LENGTHS
+-----------
+The approval panel is a narrow column beside the workspace. A five-line
+paragraph there is a wall of text that gets skipped, which defeats the whole
+exercise. So every card carries:
+
+  * `body` — one sentence, under about 140 characters. The recommendation and
+    the single number that justifies it. This is what the panel shows.
+  * `why`  — the full reasoning. Lives behind Details, for the seller who wants
+    to know before they press the button.
+
+Cutting the panel text is not dumbing it down; it is putting the argument where
+someone has room to read it.
 """
 from __future__ import annotations
 
@@ -124,13 +138,15 @@ def _rupees(v) -> str:
 def _winback(card: dict) -> dict:
     n = _n(card.get("count"))
     value = card.get("value")
-    worth = f" They are worth {_rupees(value)} of past business." if value else ""
+    worth = f" worth {_rupees(value)}" if value else ""
     return {
-        "headline": f"Let me win back {n} customers who have gone quiet",
-        "body": (f"{n} people who used to buy regularly have not been back in a "
-                 f"while.{worth} I have the list and a message written for each "
-                 f"one. This is cheaper than discounting everybody, and I will "
-                 f"tell you in 30 days how much actually came back."),
+        "headline": f"Win back {n} quiet customers",
+        "body": f"{n} regulars{worth} have stopped coming. List and messages ready.",
+        "why": (f"{n} people who used to buy regularly have not been back in a "
+                f"while.{' They are worth ' + _rupees(value) + ' of past business.' if value else ''} "
+                f"I have the list and a message written for each one. This is "
+                f"cheaper than discounting everybody, and I will tell you in 30 "
+                f"days how much actually came back."),
         "cta": "Send the win-back",
     }
 
@@ -140,15 +156,17 @@ def _festival(card: dict) -> dict:
     days = _n(card.get("days_away"))
     start = card.get("start_on") or ""
     late = bool(card.get("act_now"))
-    when = ("We are already inside the window — this should have started."
-            if late else f"Posting should start on {start}.")
     return {
         "headline": f"Start the {fest} campaign",
-        "body": (f"{fest} is {days} days out. {when} I have built a plan around "
-                 f"your festival stock and the customers most likely to buy it. "
-                 f"Worth knowing: ad costs climb hard from mid-September as "
-                 f"everyone piles in, so the cheap audience-building happens now, "
-                 f"not in the last week."),
+        "body": (f"{fest} is {days} days out — "
+                 + ("we are already late." if late else f"posting starts {start}.")),
+        "why": (f"{fest} is {days} days away. "
+                + ("We are already inside the window, so this should have started."
+                   if late else f"Posting should start on {start}.")
+                + f" I have built a plan around your festival stock and the "
+                  f"customers most likely to buy it. Worth knowing: ad costs "
+                  f"climb hard from mid-September as everyone piles in, so the "
+                  f"cheap audience-building happens now, not in the last week."),
         "cta": "Build the campaign",
     }
 
@@ -157,14 +175,17 @@ def _reorder(card: dict) -> dict:
     n = _n(card.get("count"))
     names = card.get("names") or ""
     cover = card.get("min_cover")
-    urgency = (f" The tightest is down to {_n(cover)} days of cover." if cover else "")
     return {
-        "headline": f"Place an order for {n} item{'s' if n != 1 else ''} before we run out",
-        "body": (f"{names} {'are' if n != 1 else 'is'} at or below the point where "
-                 f"lead time eats the remaining stock.{urgency} I have worked out "
-                 f"the order quantity for each from your own usage rate — economic "
-                 f"order quantity, respecting each supplier's minimum. Approve and "
-                 f"the purchase order is written and ready to send."),
+        "headline": f"Order {n} item{'s' if n != 1 else ''} before we run out",
+        "body": (f"{_n(cover)} days of cover left on the tightest. Quantities worked out."
+                 if cover else f"{names[:60]} at or below reorder point."),
+        "why": (f"{names} {'are' if n != 1 else 'is'} at or below the point where "
+                f"lead time eats the remaining stock."
+                + (f" The tightest is down to {_n(cover)} days of cover." if cover else "")
+                + f" I have worked out the order quantity for each from your own "
+                  f"usage rate — economic order quantity, respecting each "
+                  f"supplier's minimum. Approve and the purchase order is "
+                  f"written and ready to send."),
         "cta": "Raise the purchase order",
     }
 
@@ -173,14 +194,17 @@ def _overstock(card: dict) -> dict:
     n = _n(card.get("count"))
     names = card.get("names") or ""
     cash = card.get("tied_up")
-    money = f" That is roughly {_rupees(cash)} sitting still." if cash else ""
     return {
-        "headline": f"We are holding too much of {n} item{'s' if n != 1 else ''}",
-        "body": (f"{names} {'have' if n != 1 else 'has'} far more cover than the "
-                 f"sales rate justifies.{money} Nothing is going wrong, but that "
-                 f"is working capital doing nothing and stock that ages. Either "
-                 f"stop reordering these for now, or push them — a bundle or a "
-                 f"feature slot moves them faster than a discount does."),
+        "headline": f"Too much stock on {n} item{'s' if n != 1 else ''}",
+        "body": (f"About {_rupees(cash)} sitting still. Stop reordering, or push them."
+                 if cash else f"{names[:60]} — far more cover than sales justify."),
+        "why": (f"{names} {'have' if n != 1 else 'has'} far more cover than the "
+                f"sales rate justifies."
+                + (f" That is roughly {_rupees(cash)} sitting still." if cash else "")
+                + " Nothing is going wrong, but that is working capital doing "
+                  "nothing and stock that ages. Either stop reordering these for "
+                  "now, or push them — a bundle or a feature slot moves them "
+                  "faster than a discount does."),
         "cta": "Review what we are holding",
     }
 
@@ -190,12 +214,13 @@ def _supplier_risk(card: dict) -> dict:
     names = card.get("names") or ""
     return {
         "headline": f"Find a second supplier for {n} item{'s' if n != 1 else ''}",
-        "body": (f"{names} {'come' if n != 1 else 'comes'} from a single supplier "
-                 f"with nothing behind {'them' if n != 1 else 'it'}. If they raise "
-                 f"prices, miss a delivery or simply stop answering, we have no "
-                 f"second option and no benchmark to tell whether the price is "
-                 f"fair. I would get quotes from two alternatives before the next "
-                 f"reorder rather than during a stockout."),
+        "body": "One supplier, no backup and no price benchmark.",
+        "why": (f"{names} {'come' if n != 1 else 'comes'} from a single supplier "
+                f"with nothing behind {'them' if n != 1 else 'it'}. If they raise "
+                f"prices, miss a delivery or simply stop answering, we have no "
+                f"second option and no benchmark to tell whether the price is "
+                f"fair. I would get quotes from two alternatives before the next "
+                f"reorder rather than during a stockout."),
         "cta": "Start sourcing alternatives",
     }
 
@@ -204,11 +229,12 @@ def _reputation(card: dict) -> dict:
     n = _n(card.get("count"))
     return {
         "headline": "Sharpen how we are positioned",
-        "body": (f"Your reviews say something fairly specific about what people "
-                 f"come to you for. I have {n} move{'s' if n != 1 else ''} that "
-                 f"would make that clearer — on the website, in the listings and "
-                 f"in what we lead with. This is the difference between being "
-                 f"chosen for a reason and being chosen on price."),
+        "body": f"{n} move{'s' if n != 1 else ''} from what your reviews already say.",
+        "why": (f"Your reviews say something fairly specific about what people "
+                f"come to you for. I have {n} move{'s' if n != 1 else ''} that "
+                f"would make that clearer — on the website, in the listings and "
+                f"in what we lead with. This is the difference between being "
+                f"chosen for a reason and being chosen on price."),
         "cta": "See the positioning plan",
     }
 
@@ -217,23 +243,28 @@ def _complaints(card: dict) -> dict:
     n = _n(card.get("count"))
     return {
         "headline": f"Fix the {n} complaint{'s' if n != 1 else ''} costing us most",
-        "body": (f"These are the themes doing real damage right now, ranked by how "
-                 f"often they come up against how badly they land. Most of them are "
-                 f"operational rather than about the product, which means they are "
-                 f"fixable this week. I would rather we fix the top {n} properly "
-                 f"than acknowledge twelve."),
+        "body": "Ranked by how often and how badly. Mostly fixable this week.",
+        "why": (f"These are the themes doing real damage right now, ranked by how "
+                f"often they come up against how badly they land. Most of them are "
+                f"operational rather than about the product, which means they are "
+                f"fixable this week. I would rather we fix the top {n} properly "
+                f"than acknowledge twelve."),
         "cta": "See the fix-first plan",
     }
 
 
 def _social(card: dict) -> dict:
     product = card.get("product_name") or card.get("title") or "a product"
+    occ = card.get("occasion")
     return {
-        "headline": "A post is ready for you to look at",
-        "body": (f"I have drafted this around {product} — caption, question and "
-                 f"hashtags. Worth remembering that the posts which sell are the "
-                 f"boring informational ones about fabric, sizing and care, not the "
-                 f"pretty ones. Check it reads like you, then it goes out."),
+        "headline": (f"{occ} post ready to check" if occ else "A post is ready to check"),
+        "body": f"Drafted around {product}. Caption, question and hashtags done.",
+        "why": (f"I have drafted this around {product} — caption, question and "
+                f"hashtags"
+                + (f", tied to {occ}." if occ else ".")
+                + " Worth remembering that the posts which sell are the boring "
+                  "informational ones about fabric, sizing and care, not the "
+                  "pretty ones. Check it reads like you, then it goes out."),
         "cta": "Review the post",
     }
 
@@ -265,7 +296,8 @@ def dress(card: dict) -> dict:
         # An unknown card still gets a desk and a sane presentation rather than
         # falling out of the redesign looking like a bug.
         said = {"headline": card.get("title") or "Something needs a decision",
-                "body": card.get("detail") or "",
+                "body": (card.get("detail") or "")[:140],
+                "why": card.get("detail") or "",
                 "cta": card.get("action_label") or "Approve"}
 
     return {**card,
@@ -273,7 +305,7 @@ def dress(card: dict) -> dict:
             "manager_short": mgr["short"], "manager_icon": mgr["icon"],
             "manager_colour": mgr["colour"], "manager_remit": mgr["remit"],
             "headline": said["headline"], "body": said["body"],
-            "cta": said["cta"]}
+            "why": said.get("why") or said["body"], "cta": said["cta"]}
 
 
 def dress_all(cards: list[dict]) -> list[dict]:

@@ -1108,11 +1108,12 @@ must(any(m["key"] == "followers" for m in _work["muted"]),
 print("\n== 34. AI provider fallback ==")
 
 from backend.core import aiprovider as _aip
-_st = _aip.status()
-must(isinstance(_st["providers"], list) and len(_st["providers"]) >= 4,
+_aistat = _aip.status()
+must(isinstance(_aistat["providers"], list) and len(_aistat["providers"]) >= 4,
      "the provider chain is declared")
-must(_st["providers"][0]["name"] == "cloudflare", "Cloudflare leads — it is the free one")
-_gem = next(p for p in _st["providers"] if p["name"] == "gemini")
+must(_aistat["providers"][0]["name"] == "cloudflare",
+     "Cloudflare leads — it is the free one")
+_gem = next(p for p in _aistat["providers"] if p["name"] == "gemini")
 must(_gem["trains"] is True, "Gemini's free tier is marked as training on requests")
 
 # A seller's revenue must never reach a provider that trains on it. With no
@@ -1269,6 +1270,125 @@ must(_v["text"] == "" and _v["error"] == "no image",
 _v2 = _aip.describe_image(b"notanimage", "image/png", system="s", user="u")
 must(_v2["text"] == "" and _v2["error"],
      "and an unreadable one degrades rather than breaking the upload")
+
+
+print("\n== 39. replanning must not double the week ==")
+
+_cat2 = [{"id": "q1", "name": "Navratri chaniya choli"},
+         {"id": "q2", "name": "Cotton kurta"}, {"id": "q3", "name": "Silk lehenga"}]
+
+# Clear the slate first so earlier sections do not skew the counts.
+import backend.core.user_store as _us
+_us.set_key(SELLER, "social_posts", [])
+
+_w1 = _soc.build_week(SELLER, _cat2, _dt.date(2026, 9, 8))
+_w2 = _soc.build_week(SELLER, _cat2, _dt.date(2026, 9, 8))
+_live = _soc.week(SELLER)
+must(len(_w1) == len(_w2) == 4, "each plan makes four posts")
+must(len(_live) == 4, f"replanning REPLACES the week, it does not double it ({len(_live)})")
+_slots = [p["scheduled_at"] for p in _live]
+must(len(set(_slots)) == len(_slots),
+     "and no two posts land on the same day and time — the bug that started this")
+
+# A decision the seller made is not undone by pressing the button again.
+_soc.set_state(SELLER, _live[0]["id"], "scheduled")
+_soc.build_week(SELLER, _cat2, _dt.date(2026, 9, 8))
+_after = _soc.week(SELLER)
+must(any(p["state"] == "scheduled" for p in _after),
+     "a post the seller already scheduled survives a replan")
+must(len(_after) == 5, f"the scheduled one is kept ALONGSIDE the new draft ({len(_after)})")
+
+
+print("\n== 40. occasion blending ==")
+
+_occ = _soc.occasion_for(_dt.date(2026, 10, 14), "clothing")
+must(_occ and _occ["name"] == "Navratri",
+     "a mid-October day falls inside Navratri, not just its run-up")
+must(_soc.occasion_for(_dt.date(2026, 10, 25), "clothing")["name"] == "Diwali",
+     "late October is inside Diwali's 17-day run-up")
+must(_soc.occasion_for(_dt.date(2026, 9, 1), "clothing") is None,
+     "and early September belongs to no festival")
+# Category filtering is real, and easiest to see on 6 November. That is
+# Dhanteras — the biggest jewellery-buying day of the Indian year — and it also
+# sits inside Diwali's run-up, which does include perfume. A jewellery seller
+# should be told about Dhanteras; a perfume seller should not, and should get
+# Diwali instead.
+must(_soc.occasion_for(_dt.date(2026, 11, 6), "jewellery")["name"] == "Dhanteras",
+     "a jewellery seller is told about Dhanteras")
+must(_soc.occasion_for(_dt.date(2026, 11, 6), "perfume")["name"] == "Diwali",
+     "a perfume seller gets Diwali instead — Dhanteras is not their day")
+must(_soc.occasion_for(_dt.date(2026, 10, 14), "perfume") is None,
+     "and Navratri is skipped for perfume entirely")
+
+_us.set_key(SELLER, "social_posts", [])
+_nav = _soc.build_week(SELLER, _cat2, _dt.date(2026, 10, 12))
+must(all(p["occasion"] == "Navratri" for p in _nav),
+     "every post in a festival week is tagged with the occasion")
+_names = [p["product_name"] for p in _nav]
+must(len(set(_names)) > 1,
+     f"and the week does NOT become four posts about one tagged product ({_names})")
+must("Navratri chaniya choli" in _names,
+     "while the festival product still appears")
+
+
+print("\n== 41. the calendar ==")
+
+_m = _soc.month(SELLER, 2026, 10)
+must(_m["label"] == "October 2026", "the month names itself")
+must(_m["days_in_month"] == 31 and 0 <= _m["starts_on"] <= 6, "and lays out correctly")
+must(_m["counts"]["planned"] == 4, "posts land on their days")
+_fn = [f["name"] for f in _m["festivals"]]
+must("Navratri" in _fn and "Diwali" in _fn,
+     f"festivals whose run-up touches the month are shown ({_fn})")
+_diw = next(f for f in _m["festivals"] if f["name"] == "Diwali")
+must(_diw["start_on"] == "2026-10-22",
+     "including one in NOVEMBER, because its campaign starts in October")
+must("planned" in _diw,
+     "and each says how many posts exist for it — the empty ones are the point")
+
+_nov = _soc.month(SELLER, 2026, 11)
+must(any(f["name"] == "Diwali" for f in _nov["festivals"]),
+     "flipping forward a month still shows the festival")
+
+_up = _soc.upcoming(SELLER, 5)
+must(isinstance(_up, list), "the home strip reads the next few days")
+
+
+print("\n== 42. images must show the real product ==")
+
+must(_aip.STRENGTH_MAX <= 0.6,
+     f"drift from the seller's own photo is CAPPED at {_aip.STRENGTH_MAX}, not just "
+     "defaulted — a seller dragging a slider is not consenting to misrepresent stock")
+must(_aip.STRENGTH_DEFAULT < _aip.STRENGTH_MAX, "and the default is conservative")
+must(_aip.restyle_image(b"", "x") is None, "no source image yields nothing, not a crash")
+
+must(hasattr(_st, "_reference_shot"), "Studio can find a product's own photograph")
+import inspect as _ins
+_src = _ins.getsource(_st.generate_image)
+must("from_ref = True" in _src, "the result records whether a reference was used")
+must("raise RuntimeError" in _src and "Could not re-shoot" in _src,
+     "and a failed re-shoot RAISES rather than silently inventing a product — "
+     "falling back to invention is the worst possible failure here")
+must("use_reference: bool = True" in _ins.getsource(_st.generate_image_only),
+     "using the seller's own photo is the DEFAULT, not an option they must find")
+
+
+print("\n== 43. panel copy fits the panel ==")
+
+for cid, extra in [("winback", {"count": 38, "value": 142000}),
+                   ("reorder", {"count": 4, "names": "Cotton fabric", "min_cover": 11}),
+                   ("overstock", {"count": 3, "names": "Silk", "tied_up": 48000}),
+                   ("supplier_risk", {"count": 5, "names": "Zari"}),
+                   ("complaints", {"count": 3}), ("reputation", {"count": 4}),
+                   ("festival", {"festival": "Diwali", "days_away": 61,
+                                 "start_on": "22 Oct"})]:
+    c = _per.dress({"id": cid, **extra})
+    must(len(c["body"]) <= 140,
+         f"{cid} panel line is {len(c['body'])} chars, fits the column")
+    must(len(c["why"]) > len(c["body"]),
+         f"{cid} keeps the full reasoning behind Details")
+    must(c["headline"] and len(c["headline"]) <= 60,
+         f"{cid} headline is short enough to read at a glance")
 
 
 print("\nALL CHECKS PASSED \u2713")

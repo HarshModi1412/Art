@@ -277,6 +277,7 @@ class SocialSettingsBody(BaseModel):
 
 class SocialWeekBody(BaseModel):
     regenerate: bool = False
+    weeks: int = 1
 
 
 class SocialPostBody(BaseModel):
@@ -309,6 +310,8 @@ class StudioImageOnlyBody(BaseModel):
     format: str | None = ""
     angle: str | None = ""
     post_id: str | None = ""
+    use_reference: bool = True
+    strength: float | None = None
 
 
 class SocialAttachBody(BaseModel):
@@ -3842,7 +3845,11 @@ def social_week(body: SocialWeekBody, authorization: str | None = Header(default
     cat = _social_catalogue(email)
     if not cat:
         raise HTTPException(400, "Add a product first — there is nothing to post about.")
-    made = social.build_week(email, cat)
+    # Replaces this window's undecided drafts rather than appending to them.
+    # Without that, pressing Plan my week twice produced two posts at the same
+    # day and time and the week doubled on every press.
+    made = (social.plan_ahead(email, cat, body.weeks)
+            if body.weeks and body.weeks > 1 else social.build_week(email, cat))
     return {"posts": made, "week": social.week(email)}
 
 
@@ -3978,7 +3985,9 @@ def studio_image_only(body: StudioImageOnlyBody,
     try:
         img = studio.generate_image_only(email, body.product_id,
                                          body.pillar or "", body.format or "",
-                                         body.angle or "")
+                                         body.angle or "",
+                                         use_reference=body.use_reference,
+                                         strength=body.strength)
     except (RuntimeError, ValueError) as e:
         raise HTTPException(400, str(e))
     if body.post_id:
@@ -4005,3 +4014,26 @@ def manager_desks(authorization: str | None = Header(default=None)):
     cards = smart.build_insights(email)
     return {"managers": list(personas.MANAGERS.values()),
             "desks": personas.desks(cards), "pending": len(cards)}
+
+
+@app.get("/api/social/month")
+def social_month(year: int = 0, month: int = 0,
+                 authorization: str | None = Header(default=None)):
+    """One month of the plan, laid out as a calendar.
+
+    Festivals come back whether or not anything is planned for them — the empty
+    ones are the point. A seller flipping to October should see Navratri and
+    Diwali sitting there with nothing against them."""
+    email = require_user(authorization)
+    from datetime import date as _date
+    t = _date.today()
+    return social.month(email, year or t.year, month or t.month)
+
+
+@app.get("/api/social/upcoming")
+def social_upcoming(days: int = 5, authorization: str | None = Header(default=None)):
+    """The next few days, for the home screen."""
+    email = require_user(authorization)
+    rows = social.upcoming(email, days)
+    return {"posts": rows,
+            "needs_decision": len([p for p in rows if p.get("state") == "draft"])}

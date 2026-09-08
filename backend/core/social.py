@@ -126,17 +126,17 @@ LANGUAGES = {
 # routinely get these wrong by a week. Lunisolar dates shift every year, so this
 # table is DATED and must be refreshed — never extrapolate it forward.
 FESTIVALS_2026 = [
-    {"date": "2026-10-11", "name": "Navratri begins", "lead": 3,
+    {"date": "2026-10-11", "name": "Navratri", "lead": 3, "span": 9,
      "categories": ["clothing", "jewellery"],
      "note": "Peak clothing window. Chaniya choli, lehenga, ethnic sets."},
     {"date": "2026-10-20", "name": "Dussehra", "lead": 2, "categories": ["clothing"]},
     {"date": "2026-11-06", "name": "Dhanteras", "lead": 5, "categories": ["jewellery"],
      "note": "The single biggest jewellery-buying day of the Indian year."},
-    {"date": "2026-11-08", "name": "Diwali", "lead": 17, "categories": ["clothing", "jewellery", "perfume"],
+    {"date": "2026-11-08", "name": "Diwali", "lead": 17, "span": 3, "categories": ["clothing", "jewellery", "perfume"],
      "note": "Start pre-campaign around 22 Oct. Meta and Google CPMs climb hard "
              "from mid-September, so build the audience in August, not November."},
     {"date": "2026-11-11", "name": "Bhai Dooj", "lead": 3, "categories": ["jewellery", "clothing"]},
-    {"date": "2026-12-25", "name": "Christmas", "lead": 10, "categories": ["clothing", "perfume"]},
+    {"date": "2026-12-25", "name": "Christmas", "lead": 10, "span": 6, "categories": ["clothing", "perfume"]},
     {"date": "2026-12-31", "name": "New Year's Eve", "lead": 5, "categories": ["clothing", "perfume"]},
 ]
 
@@ -317,13 +317,20 @@ def _fallback_caption(product: dict, pillar: dict, settings: dict) -> dict:
 
 
 def write_caption(email: str, product: dict, pillar_id: str,
-                  angle: str = "") -> dict:
+                  angle: str = "", occasion: dict | None = None) -> dict:
     s = get_settings(email)
     pillar = PILLAR_BY_ID.get(pillar_id) or PILLARS[0]
     facts = {k: product.get(k) for k in
              ("name", "price", "description", "fabric", "sizes", "care", "stock", "category")
              if product.get(k)}
+    occ = ""
+    if occasion:
+        occ = (f"Occasion: {occasion['name']}, {occasion['days_away']} days away. "
+               f"Write it as a {occasion['name']} post — mention the occasion "
+               f"naturally, and give a reason to buy NOW rather than later. "
+               f"Do not invent a discount.\n")
     user = (f"Pillar: {pillar['name']} ({pillar['type']}).\n"
+            f"{occ}"
             f"Angle: {angle or pillar['prompts'][0]}\n"
             f"Seller city: {s.get('city') or 'India'}\n"
             f"How to order: {s.get('order_cta')}\n"
@@ -401,26 +408,105 @@ def _save_posts(email: str, rows: list[dict]) -> None:
     user_store.set_key((email or "").lower(), POSTS_KEY, rows[-400:])
 
 
-def build_week(email: str, catalogue: list[dict], start: date | None = None) -> list[dict]:
-    """Generate this week's slate. One product per slot, cycling the catalogue
-    so the same three products do not carry every post."""
+def occasion_for(day: date, category: str = "") -> dict | None:
+    """Is this day inside a festival's run-up?
+
+    A post two weeks before Diwali should be a Diwali post. Cycling the
+    catalogue blindly through a festival window is the single most obvious way
+    a content plan looks automated — the seller's customers are thinking about
+    one thing and the feed is talking about something else."""
+    for f in FESTIVALS_2026:
+        d = date.fromisoformat(f["date"])
+        lead = f.get("lead", 7)
+        if category and f.get("categories") and category not in f["categories"]:
+            continue
+        # The window runs from the campaign start through the festival AND its
+        # span. Navratri is nine nights; a post on the fourth of them is still
+        # a Navratri post, and that is when people are actually buying.
+        if d - timedelta(days=lead) <= day <= d + timedelta(days=f.get("span", 0)):
+            return {"name": f["name"], "date": f["date"],
+                    "days_away": (d - day).days,
+                    "note": f.get("note", "")}
+    return None
+
+
+def _pick_product(pool: list[dict], i: int, occasion: dict | None,
+                  slots: int = 4) -> dict:
+    """Which product this slot is about.
+
+    Inside a festival window, prefer products actually tagged for it — but
+    never let the occasion take over the whole week. A seller with one lehenga
+    tagged for Navratri would otherwise get four consecutive posts about that
+    one lehenga, which reads as a broken feed rather than a campaign.
+
+    The rule: tagged products get at most half the slots unless there are
+    enough of them to fill the week without repeating."""
+    if occasion:
+        tag = occasion["name"].split()[0].lower()
+        tagged = [p for p in pool
+                  if tag in " ".join(str(t).lower() for t in (p.get("festival_tags") or []))
+                  or tag in str(p.get("category") or "").lower()
+                  or tag in str(p.get("name") or "").lower()]
+        if tagged:
+            if len(tagged) >= slots:
+                return tagged[i % len(tagged)]
+            # Not enough tagged products to carry the week — alternate, so the
+            # occasion is present without becoming the only thing on the feed.
+            if i % 2 == 0:
+                return tagged[(i // 2) % len(tagged)]
+            others = [p for p in pool if p not in tagged] or tagged
+            return others[(i // 2) % len(others)]
+    return pool[i % len(pool)]
+
+
+def build_week(email: str, catalogue: list[dict], start: date | None = None,
+               replace: bool = True) -> list[dict]:
+    """Generate the coming week's slate.
+
+    `replace` clears any post in the same window that the seller has NOT yet
+    acted on. Without it, pressing "Plan my week" twice produced two posts at
+    the same day and time — the first press's drafts were never cleared, so the
+    week doubled every time somebody pressed the button again. Published posts
+    and anything already scheduled by hand are left alone, because those are
+    decisions the seller made and re-planning is not permission to undo them."""
     s = get_settings(email)
     start = start or date.today()
     shape = slate_shape(s.get("cadence") or "standard")
     pool = [p for p in catalogue if p.get("name")] or [{"name": "your product"}]
     rows = _posts(email)
-    made = []
 
     # Best slots from 9.6M posts: Wed and Thu strongest, evenings 6-11pm,
     # Fri/Sat weakest. Local time — no India-specific adjustment needed.
     best_hours = [18, 12, 19, 9, 20, 18]
     day_offsets = [2, 3, 0, 4, 1, 5]
+    window_end = start + timedelta(days=max(day_offsets[:len(shape)] or [6]) + 1)
 
+    if replace:
+        keep = []
+        for p in rows:
+            if p.get("state") not in ("draft", "ready"):
+                keep.append(p)                       # published, scheduled, skipped
+                continue
+            when = (p.get("scheduled_at") or "")[:10]
+            try:
+                on = date.fromisoformat(when) if when else None
+            except ValueError:
+                on = None
+            if on and start <= on <= window_end:
+                continue                             # superseded by this replan
+            keep.append(p)
+        rows = keep
+
+    made = []
     for i, slot in enumerate(shape):
-        product = pool[i % len(pool)]
-        cap = write_caption(email, product, slot["pillar"])
-        when = datetime.combine(start + timedelta(days=day_offsets[i % len(day_offsets)]),
-                                datetime.min.time()).replace(hour=best_hours[i % len(best_hours)])
+        when_day = start + timedelta(days=day_offsets[i % len(day_offsets)])
+        occasion = occasion_for(when_day, s.get("category") or "")
+        product = _pick_product(pool, i, occasion, len(shape))
+        cap = write_caption(email, product, slot["pillar"],
+                            angle=(f"tie it to {occasion['name']}" if occasion else ""),
+                            occasion=occasion)
+        when = datetime.combine(when_day, datetime.min.time()).replace(
+            hour=best_hours[i % len(best_hours)])
         post = {
             "id": secrets.token_hex(6),
             "created_at": _now(),
@@ -429,6 +515,8 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None) -> 
             "pillar": slot["pillar"],
             "pillar_name": PILLAR_BY_ID[slot["pillar"]]["name"],
             "format": slot["format"],
+            "occasion": (occasion or {}).get("name", ""),
+            "occasion_days": (occasion or {}).get("days_away"),
             "caption": cap,
             "text": assemble(cap),
             "checks": caption_check(cap, s),
@@ -446,6 +534,18 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None) -> 
         rows.append(post)
 
     _save_posts(email, rows)
+    return made
+
+
+def plan_ahead(email: str, catalogue: list[dict], weeks: int = 4,
+               start: date | None = None) -> list[dict]:
+    """Plan several weeks out, so a festival that is a month away already has
+    posts on the calendar when the seller flips forward to look."""
+    start = start or date.today()
+    made = []
+    for w in range(max(1, min(8, weeks))):
+        made += build_week(email, catalogue, start + timedelta(days=7 * w),
+                           replace=(w == 0))
     return made
 
 
@@ -532,6 +632,78 @@ def post_guidance(email: str, post_id: str) -> dict:
             "product_name": p.get("product_name") or "",
             "pillar": p.get("pillar") or "", "format": p.get("format") or "",
             "has_image": bool(p.get("image_url"))}
+
+
+def month(email: str, year: int, mon: int) -> dict:
+    """One month, laid out as a calendar.
+
+    Festivals are included whether or not anything is planned for them, because
+    the empty ones are the point: a seller flipping to October should SEE that
+    Navratri and Diwali are there and that nothing is planned yet."""
+    import calendar as _cal
+    s = get_settings(email)
+    first = date(year, mon, 1)
+    last = date(year, mon, _cal.monthrange(year, mon)[1])
+
+    posts = [p for p in _posts(email) if p.get("scheduled_at")]
+    by_day: dict[str, list] = {}
+    for p in posts:
+        d = (p.get("scheduled_at") or "")[:10]
+        if d[:7] == f"{year:04d}-{mon:02d}":
+            by_day.setdefault(d, []).append(p)
+    for v in by_day.values():
+        v.sort(key=lambda p: p.get("scheduled_at") or "")
+
+    fests = []
+    for f in FESTIVALS_2026:
+        d = date.fromisoformat(f["date"])
+        lead = f.get("lead", 7)
+        start = d - timedelta(days=lead)
+        # Show a festival whose day OR whose run-up touches this month, so the
+        # seller sees "start posting on the 22nd" while looking at October.
+        end = d + timedelta(days=f.get("span", 0))
+        if (first <= d <= last) or (start <= last and end >= first):
+            fests.append({**f, "start_on": start.isoformat(),
+                          "planned": len([p for p in posts
+                                          if p.get("occasion") == f["name"]]),
+                          "relevant": (not f.get("categories")
+                                       or (s.get("category") or "") in f["categories"])})
+
+    # Which weekday the month starts on, so the grid can be padded. Monday = 0.
+    return {
+        "year": year, "month": mon,
+        "label": first.strftime("%B %Y"),
+        "days_in_month": last.day,
+        "starts_on": first.weekday(),
+        "today": date.today().isoformat(),
+        "days": [{"date": f"{year:04d}-{mon:02d}-{d:02d}",
+                  "posts": by_day.get(f"{year:04d}-{mon:02d}-{d:02d}", [])}
+                 for d in range(1, last.day + 1)],
+        "festivals": fests,
+        "counts": {"planned": sum(len(v) for v in by_day.values()),
+                   "needs_decision": sum(1 for v in by_day.values()
+                                         for p in v if p.get("state") == "draft")},
+    }
+
+
+def upcoming(email: str, days: int = 5) -> list[dict]:
+    """The next few days, for the home screen. Undecided posts first, because
+    those are the ones that need the seller rather than just informing them."""
+    today = date.today()
+    horizon = today + timedelta(days=max(1, days))
+    out = []
+    for p in _posts(email):
+        d = (p.get("scheduled_at") or "")[:10]
+        if not d:
+            continue
+        try:
+            on = date.fromisoformat(d)
+        except ValueError:
+            continue
+        if today <= on <= horizon and p.get("state") in ("draft", "ready", "scheduled"):
+            out.append(p)
+    out.sort(key=lambda p: (p.get("state") != "draft", p.get("scheduled_at") or ""))
+    return out
 
 
 # --------------------------------------------------------------- shoot list

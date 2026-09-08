@@ -271,36 +271,96 @@ def image_ready() -> bool:
                 and (os.environ.get("CF_API_TOKEN") or "").strip())
 
 
-def generate_image(prompt: str, steps: int = 4) -> bytes | None:
-    """Flux Schnell on Cloudflare. ~19 neurons per 1024x1024 image, so the free
-    10,000/day works out to roughly 500 images a day at no cost.
-
-    Returns raw PNG/JPEG bytes, or None. Callers must treat None as "no image
-    today" and still produce the post — an Instagram caption without a picture
-    is worth more than an error page."""
+def _cf_run(model: str, payload: dict, timeout: int = 90) -> dict | None:
+    """POST to a Cloudflare Workers AI model and return the parsed body."""
     if not image_ready():
         return None
     acct = os.environ["CF_ACCOUNT_ID"].strip()
-    url = f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/run/{CF_IMAGE_MODEL}"
-    body = json.dumps({"prompt": prompt[:2000], "steps": max(1, min(8, steps))}).encode()
     req = urllib.request.Request(
-        url, data=body,
+        f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/run/{model}",
+        data=json.dumps(payload).encode(),
         headers={"Authorization": f"Bearer {os.environ['CF_API_TOKEN'].strip()}",
                  "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            payload = json.loads(r.read().decode())
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            raw = r.read()
     except Exception as e:                                       # noqa: BLE001
-        log.warning("cloudflare image failed: %s", e)
+        log.warning("cloudflare %s failed: %s", model, e)
         return None
+    # Some image models return raw bytes rather than JSON.
+    if raw[:1] not in (b"{", b"["):
+        return {"_raw": raw}
+    try:
+        return json.loads(raw.decode())
+    except Exception:                                            # noqa: BLE001
+        return {"_raw": raw}
 
-    # Flux returns base64 in result.image; some models return raw binary.
+
+def _image_bytes(payload: dict | None) -> bytes | None:
+    if not payload:
+        return None
+    if payload.get("_raw"):
+        return payload["_raw"]
     import base64
     result = payload.get("result") or {}
-    b64 = result.get("image") or result.get("images", [None])[0]
+    b64 = result.get("image") or (result.get("images") or [None])[0]
     if not b64:
         return None
     try:
         return base64.b64decode(b64)
     except Exception:                                            # noqa: BLE001
         return None
+
+
+def generate_image(prompt: str, steps: int = 4) -> bytes | None:
+    """Flux Schnell, text to image. ~19 neurons per 1024x1024, so the free
+    10,000/day works out to roughly 500 images a day at no cost.
+
+    Returns raw bytes, or None. Callers must treat None as "no image today" and
+    still produce the post — an Instagram caption without a picture is worth
+    more than an error page."""
+    return _image_bytes(_cf_run(
+        CF_IMAGE_MODEL,
+        {"prompt": prompt[:2000], "steps": max(1, min(8, steps))}, timeout=60))
+
+
+CF_IMG2IMG_MODEL = (os.environ.get("CF_IMG2IMG_MODEL")
+                    or "@cf/runwayml/stable-diffusion-v1-5-img2img")
+
+# How far the output may drift from the seller's own photograph.
+#
+# This number decides whether the picture still shows the product that ships.
+# At 0.35 the shape, colour and pattern survive and the lighting and setting
+# change; by 0.7 the model has effectively redrawn the item and the embroidery,
+# stones and hardware are its invention rather than the seller's.
+#
+# It is capped rather than merely defaulted, because a seller dragging a slider
+# to "more creative" is not consenting to misrepresenting their own stock to
+# customers — they are just trying to get a nicer picture.
+STRENGTH_DEFAULT = 0.35
+STRENGTH_MAX = 0.55
+
+
+def restyle_image(source: bytes, prompt: str, strength: float | None = None,
+                  negative: str = "") -> bytes | None:
+    """Re-shoot the seller's own photograph: same product, new setting.
+
+    This is image-to-image, not generation. The source photo is the starting
+    point, so the thing in the output is the thing in the input — which is the
+    whole difference between a picture a seller can honestly post and one that
+    shows a product they do not sell."""
+    if not source:
+        return None
+    import base64
+    st = STRENGTH_DEFAULT if strength is None else float(strength)
+    st = max(0.05, min(STRENGTH_MAX, st))
+    payload = {
+        "prompt": prompt[:2000],
+        "image_b64": base64.b64encode(source).decode(),
+        "strength": st,
+        "num_steps": 20,
+        "guidance": 7.5,
+    }
+    if negative:
+        payload["negative_prompt"] = negative[:500]
+    return _image_bytes(_cf_run(CF_IMG2IMG_MODEL, payload))

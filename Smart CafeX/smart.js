@@ -515,6 +515,8 @@ function renderHome(s) {
       <div id="proofLine" class="today-proof" hidden></div>
     </section>
 
+    <section class="up-strip" id="upStrip" hidden></section>
+
     <div class="section-title">Your data
       <button class="btn ghost tiny pt-chip" id="ptChip" title="What you sell — drives keyword tracking">${sic("tag")}${productLabel(state.productType)}</button>
     </div>
@@ -553,6 +555,7 @@ function renderHome(s) {
   if (rp) rp.onclick = refreshCurrent;
   renderChannels();
   renderToday();
+  renderUpcomingSocial();
   document.querySelectorAll("[data-up]").forEach((el) => el.onclick = () => startUpload(el.dataset.up));
   document.querySelectorAll("[data-add]").forEach((el) => el.onclick = () => openAddRecords(el.dataset.add));
   document.querySelectorAll("[data-clear]").forEach((el) => el.onclick = () => clearData(el.dataset.clear));
@@ -764,6 +767,33 @@ $("drawerBack").onclick = closeHistory;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("historyDrawer").hidden) closeHistory(); });
 
 function openDetails(id) {
+  /* The panel body is one line by design — it has to fit a narrow column.
+     The manager's full reasoning lives here, so a seller who wants to know
+     WHY before pressing the button can read it without the panel becoming a
+     wall of text for everyone who does not. */
+  const card = ((state.lastState || {}).insights || []).find((x) => x.id === id);
+  if (card && card.why && card.why !== card.body) {
+    openModal(card.manager_name || "Details", `
+      <div class="det-why">
+        <div class="det-h" style="--mgr:${esc(card.manager_colour || "#5c6790")}">
+          ${sic(card.manager_icon || "spark")}<b>${esc(card.manager_name || "")}</b></div>
+        <h4>${esc(card.headline || card.title || "")}</h4>
+        <p>${esc(card.why)}</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" data-detclose>Close</button>
+        <button class="btn ghost" id="detOpen">Open the module</button>
+        <button class="btn primary" id="detGo">${esc(card.cta || "Approve")}</button>
+      </div>`);
+    document.querySelector("[data-detclose]").onclick = closeModal;
+    $("detOpen").onclick = () => { closeModal(); openDetailsModule(id); };
+    $("detGo").onclick = () => { closeModal(); decide(id, "approve"); };
+    return;
+  }
+  return openDetailsModule(id);
+}
+
+function openDetailsModule(id) {
   if (id === "reorder") return openModule("supply");
   if (id === "complaints") return openModule("complaints");
   if (id === "reputation") return openModule("review");
@@ -4839,7 +4869,7 @@ async function openSocial() {
   moduleShell("Social Media Manager", `<div class="ap-empty">Planning your week…</div>`);
   try {
     _socialData = await api("/api/social");
-    renderSocial();
+    await renderSocial();
   } catch (e) {
     moduleShell("Social Media Manager", `<div class="card">${esc(e.message)}</div>`);
   }
@@ -4853,94 +4883,124 @@ function socialStateChip(st) {
   return `<span class="sm-chip ${cls}">${label}</span>`;
 }
 
-function renderSocial() {
+let _socialMonth = null;   // {year, month} being viewed
+
+function socialStateChipFor(st) {
+  const map = { draft: ["Needs you", "st-draft"], ready: ["Ready", "st-ready"],
+                scheduled: ["Scheduled", "st-sched"], published: ["Posted", "st-pub"],
+                failed: ["Skipped", "st-fail"] };
+  const [label, cls] = map[st] || ["Draft", "st-draft"];
+  return `<span class="sm-chip ${cls}">${label}</span>`;
+}
+
+async function renderSocial() {
   const d = _socialData;
-  const week = d.week || [];
-  const rad = d.radar || {};
   const ai = d.ai || {};
+  const t = new Date();
+  if (!_socialMonth) _socialMonth = { year: t.getFullYear(), month: t.getMonth() + 1 };
+
+  let cal;
+  try {
+    cal = await api(`/api/social/month?year=${_socialMonth.year}&month=${_socialMonth.month}`);
+  } catch (e) { return moduleShell("Social Media Manager", `<div class="card">${esc(e.message)}</div>`); }
+  _socialCal = cal;
 
   const aiLine = ai.free_ready
     ? `<span class="sm-ok">${sic("check")}Writing with ${esc(ai.active)} — free tier</span>`
-    : `<span class="sm-warn">${sic("alert")}No AI connected. Captions use a template until you add a free key in Settings.</span>`;
+    : `<span class="sm-warn">${sic("alert")}No AI connected — captions come from a template.</span>`;
 
-  const radarHtml = (rad.headline || []).length ? `
-    <div class="sm-radar">
-      <div class="sm-radar-h">${sic("bell")}Coming up</div>
-      ${(rad.headline || []).map(h => `<div class="sm-radar-i">${esc(h)}</div>`).join("")}
-      <div class="sm-note">${esc(rad.dates_note || "")}</div>
+  // --- the decisions strip: everything still waiting on the seller
+  const undecided = [];
+  (cal.days || []).forEach((day) => (day.posts || []).forEach((p) => {
+    if (p.state === "draft") undecided.push(p);
+  }));
+
+  const decisions = undecided.length ? `
+    <div class="sm-decide">
+      <div class="sm-decide-h">
+        <b>${undecided.length} post${undecided.length === 1 ? "" : "s"} waiting on you this month</b>
+        <button class="btn primary sm" id="smApproveAll">${sic("check")}Approve all</button>
+      </div>
+      <div class="sm-decide-list">
+        ${undecided.slice(0, 6).map((p) => `
+          <div class="sm-dec" data-id="${esc(p.id)}">
+            <span class="sm-dec-when">${esc(shortWhen(p.scheduled_at))}</span>
+            <span class="sm-dec-body">
+              <b>${esc(p.product_name || "—")}</b>
+              ${p.occasion ? `<em class="sm-occ">${esc(p.occasion)}</em>` : ""}
+              <span>${esc(((p.caption || {}).hook || "").slice(0, 70))}</span>
+            </span>
+            <span class="sm-dec-acts">
+              <button class="btn ghost xs" data-open="${esc(p.id)}">Open</button>
+              <button class="btn ghost xs" data-ok="${esc(p.id)}">Approve</button>
+              <button class="btn ghost xs danger" data-no="${esc(p.id)}">Skip</button>
+            </span>
+          </div>`).join("")}
+        ${undecided.length > 6 ? `<div class="muted tiny" style="padding:6px 2px;">
+          +${undecided.length - 6} more on the calendar below.</div>` : ""}
+      </div>
     </div>` : "";
 
-  const cards = week.length ? week.map(p => `
-    <div class="sm-card" data-id="${esc(p.id)}">
-      <div class="sm-card-top">
-        <span class="sm-fmt sm-fmt-${esc(p.format)}">${esc((d.formats[p.format] || {}).label || p.format)}</span>
-        <span class="sm-pillar">${esc(p.pillar_name)}</span>
-        ${socialStateChip(p.state)}
-      </div>
-      <div class="sm-shot">
-        ${p.image_url
-          ? `<img src="${esc(p.image_url)}" alt="" />
-             ${p.image_generated ? `<span class="sm-gen">AI</span>` : ""}`
-          : `<button class="sm-shot-make" data-act="image" title="Generate the image for this slot">
-               ${sic("image")}<span>Make the image</span></button>`}
-      </div>
-      <div class="sm-prod">${esc(p.product_name || "—")}</div>
-      <div class="sm-hook">${esc((p.caption || {}).hook || "")}</div>
-      <div class="sm-body">${esc((p.caption || {}).body || "").slice(0, 140)}</div>
-      <div class="sm-tags">${((p.caption || {}).tags || []).map(t => `<span>${esc(t)}</span>`).join("")}</div>
-      ${(p.checks || []).length ? `<div class="sm-checks">${
-        (p.checks || []).map(c => `<div class="sm-check sm-${esc(c.level)}">${esc(c.text)}</div>`).join("")
-      }</div>` : ""}
-      <div class="sm-when">${sic("clock")}${esc((p.scheduled_at || "").replace("T", " · "))}</div>
-      <div class="sm-actions">
-        <button class="btn ghost xs" data-act="edit">Edit</button>
-        <button class="btn ghost xs" data-act="regen">Rewrite</button>
-        <button class="btn ghost xs" data-act="copy">Copy caption</button>
-        <button class="btn ghost xs danger" data-act="skip">Skip</button>
-      </div>
-    </div>`).join("") : `
-    <div class="sm-blank">
-      <div class="sm-blank-h">No posts planned yet</div>
-      <p>One tap builds a week: ${esc((d.cadence[d.settings.cadence] || {}).posts || 4)} posts,
-         each tied to a product, each written and timed for you.</p>
-      <button class="btn primary" id="smBuild">${sic("spark")}Plan my week</button>
-    </div>`;
+  // --- the month grid
+  const pad = cal.starts_on;                       // Monday = 0
+  const cells = [];
+  for (let i = 0; i < pad; i++) cells.push(`<div class="cal-cell is-pad"></div>`);
+  (cal.days || []).forEach((day) => {
+    const fest = (cal.festivals || []).find((f) => f.date === day.date);
+    const startsFest = (cal.festivals || []).find((f) => f.start_on === day.date);
+    const isToday = day.date === cal.today;
+    cells.push(`
+      <div class="cal-cell${isToday ? " is-today" : ""}${fest ? " is-fest" : ""}" data-day="${esc(day.date)}">
+        <div class="cal-num">${Number(day.date.slice(-2))}</div>
+        ${fest ? `<div class="cal-fest" title="${esc(fest.note || "")}">${esc(fest.name)}</div>` : ""}
+        ${startsFest && !fest ? `<div class="cal-start">${esc(startsFest.name)} starts</div>` : ""}
+        ${(day.posts || []).map((p) => `
+          <button class="cal-post st-${esc(p.state)}" data-open="${esc(p.id)}"
+                  title="${esc((p.caption || {}).hook || "")}">
+            <span class="cal-fmt">${esc((p.format || "").slice(0, 4))}</span>
+            <span class="cal-name">${esc(p.product_name || "")}</span>
+            ${p.image_url ? `<i class="cal-has-img"></i>` : ""}
+          </button>`).join("")}
+      </div>`);
+  });
 
-  const pillars = (d.pillars || []).map(p => `
-    <div class="sm-pil">
-      <div class="sm-pil-h"><b>${esc(p.name)}</b><span>${p.share}%</span></div>
-      <div class="sm-pil-w">${esc(p.why)}</div>
-    </div>`).join("");
-
-  const work = d.working || {};
-  const metrics = `
-    <div class="sm-metrics">
-      ${(work.headline || []).map(m => `
-        <div class="sm-metric">
-          <div class="sm-metric-v">${m.value === null ? "—" : esc(String(m.value))}</div>
-          <div class="sm-metric-l">${esc(m.label)}</div>
-          <div class="sm-metric-w">${esc(m.why || m.benchmark || "")}</div>
-        </div>`).join("")}
-    </div>
-    <div class="sm-muted-metrics">
-      ${(work.muted || []).map(m => `
-        <div class="sm-muted"><b>${esc(m.label)}</b>
-          <span>${m.value === null ? "—" : esc(String(m.value))}</span>
-          <em>${esc(m.note)}</em></div>`).join("")}
-    </div>`;
+  const fests = (cal.festivals || []).filter((f) => f.relevant);
 
   moduleShell("Social Media Manager", `
     <div class="sm-head">
       <div>${aiLine}</div>
       <div class="sm-head-actions">
-        ${week.length ? `<button class="btn primary" id="smApprove">${sic("check")}Approve all ${week.filter(p => p.state === "draft").length}</button>` : ""}
-        <button class="btn ghost sm" id="smBuild2">${sic("spark")}Plan a new week</button>
+        <button class="btn primary" id="smBuild">${sic("spark")}Plan this week</button>
+        <button class="btn ghost sm" id="smBuild4">${sic("spark")}Plan 4 weeks</button>
         <button class="btn ghost sm" id="smShoot">${sic("camera")}Shoot list</button>
         <button class="btn ghost sm" id="smSettings">${sic("settings")}Setup</button>
       </div>
     </div>
-    ${radarHtml}
-    <div class="sm-grid">${cards}</div>
+
+    ${decisions}
+
+    ${fests.length ? `<div class="sm-radar">
+      <div class="sm-radar-h">${sic("bell")}This month</div>
+      ${fests.map((f) => `<div class="sm-radar-i">
+        <b>${esc(f.name)}</b> ${esc(f.date.slice(-2))} ${esc(cal.label.split(" ")[0])}
+        — ${f.planned ? `${f.planned} post${f.planned === 1 ? "" : "s"} planned`
+                      : `<span class="sm-warn2">nothing planned yet</span>`}.
+        Start posting ${esc(f.start_on)}.${f.note ? ` <span class="muted">${esc(f.note)}</span>` : ""}
+      </div>`).join("")}
+    </div>` : ""}
+
+    <div class="cal-wrap">
+      <div class="cal-head">
+        <button class="btn ghost sm" id="calPrev">‹</button>
+        <b>${esc(cal.label)}</b>
+        <button class="btn ghost sm" id="calNext">›</button>
+        <span class="muted tiny">${cal.counts.planned} planned</span>
+        <button class="btn ghost sm" id="calToday" style="margin-left:auto;">Today</button>
+      </div>
+      <div class="cal-dow">${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+        .map((x) => `<span>${x}</span>`).join("")}</div>
+      <div class="cal-grid">${cells.join("")}</div>
+    </div>
 
     <details class="sm-fold">
       <summary>Why these posts, and not the ones you were going to make</summary>
@@ -4951,79 +5011,96 @@ function renderSocial() {
         sales; emotional content has −0.07. Discount posts are negatively
         associated with sales, which is why offers are capped at
         ${esc(String(d.offer_cap))}% of your week here rather than left to habit.</p>
-        <div class="sm-pillars">${pillars}</div>
+        <div class="sm-pillars">${(d.pillars || []).map((p) => `
+          <div class="sm-pil"><div class="sm-pil-h"><b>${esc(p.name)}</b><span>${p.share}%</span></div>
+            <div class="sm-pil-w">${esc(p.why)}</div></div>`).join("")}</div>
       </div>
-    </details>
+    </details>`);
 
-    <div class="card sm-working">
-      <h3>What's working</h3>
-      ${work.enough_data ? "" : `<p class="sm-note">Numbers appear once you have published about eight posts. Until then this is a reminder of what to watch, not a scorecard.</p>`}
-      ${metrics}
-    </div>`);
-
-  const build = async () => {
-    toast("Writing your week…");
-    try { await api("/api/social/week", { method: "POST", json: { regenerate: true } }); await openSocial(); }
-    catch (e) { toast(e.message); }
+  const move = (n) => {
+    let m = _socialMonth.month + n, y = _socialMonth.year;
+    if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; }
+    _socialMonth = { year: y, month: m };
+    renderSocial();
   };
-  if ($("smBuild")) $("smBuild").onclick = build;
-  if ($("smBuild2")) $("smBuild2").onclick = build;
-  if ($("smApprove")) $("smApprove").onclick = async () => {
-    try { const r = await api("/api/social/approve-all", { method: "POST" });
-      toast(`${r.scheduled} post${r.scheduled === 1 ? "" : "s"} scheduled.`); await openSocial(); }
-    catch (e) { toast(e.message); }
-  };
-  if ($("smShoot")) $("smShoot").onclick = openShootList;
-  if ($("smSettings")) $("smSettings").onclick = openSocialSetup;
+  $("calPrev").onclick = () => move(-1);
+  $("calNext").onclick = () => move(1);
+  $("calToday").onclick = () => { _socialMonth = null; renderSocial(); };
 
-  document.querySelectorAll(".sm-card").forEach(card => {
-    const id = card.dataset.id;
-    card.querySelectorAll("[data-act]").forEach(b => {
-      b.onclick = async () => {
-        const act = b.dataset.act;
-        const post = (_socialData.week || []).find(p => p.id === id);
-        if (act === "copy") {
-          try { await navigator.clipboard.writeText(post.text || ""); toast("Caption copied — paste it into Instagram."); }
-          catch (e) { toast("Could not copy. Select the text and copy it manually."); }
-          return;
-        }
-        if (act === "regen") {
-          b.disabled = true; b.textContent = "Writing…";
-          try { await api("/api/social/regenerate", { method: "POST", json: { post_id: id } }); await openSocial(); }
-          catch (e) { toast(e.message); b.disabled = false; b.textContent = "Rewrite"; }
-          return;
-        }
-        if (act === "skip") {
-          try { await api("/api/social/state", { method: "POST", json: { post_id: id, state: "failed" } }); await openSocial(); }
-          catch (e) { toast(e.message); }
-          return;
-        }
-        if (act === "image") {
-          if (!post.product_id) return toast("This slot has no product linked.");
-          b.disabled = true; b.innerHTML = sic("image") + "<span>Drawing…</span>";
-          try {
-            // Studio does the drawing, because the brand aesthetic and the
-            // product reading both live there. Social only says which slot it
-            // is for — the pillar and format become camera direction.
-            await api("/api/studio/image", { method: "POST", json: {
-              product_id: post.product_id, pillar: post.pillar,
-              format: post.format, post_id: post.id } });
-            await openSocial();
-          } catch (e) {
-            toast(e.message, 6000);
-            b.disabled = false; b.innerHTML = sic("image") + "<span>Make the image</span>";
-          }
-          return;
-        }
-        if (act === "edit") openSocialEditor(post);
-      };
-    });
-  });
+  const build = async (weeks) => {
+    toast(weeks > 1 ? `Planning ${weeks} weeks…` : "Writing your week…");
+    try {
+      await api("/api/social/week", { method: "POST", json: { weeks } });
+      _socialData = await api("/api/social");
+      await renderSocial();
+      toast("Planned. Replanning replaces drafts, it never doubles them.");
+    } catch (e) { toast(e.message); }
+  };
+  $("smBuild").onclick = () => build(1);
+  $("smBuild4").onclick = () => build(4);
+  $("smShoot").onclick = openShootList;
+  $("smSettings").onclick = openSocialSetup;
+
+  if ($("smApproveAll")) $("smApproveAll").onclick = async () => {
+    try {
+      const r = await api("/api/social/approve-all", { method: "POST" });
+      toast(`${r.scheduled} scheduled.`);
+      _socialData = await api("/api/social");
+      await renderSocial();
+    } catch (e) { toast(e.message); }
+  };
+
+  const findPost = (id) => {
+    for (const day of (_socialCal.days || []))
+      for (const p of (day.posts || [])) if (p.id === id) return p;
+    return null;
+  };
+  document.querySelectorAll("[data-open]").forEach((b) =>
+    b.onclick = () => { const p = findPost(b.dataset.open); if (p) openSocialEditor(p); });
+  document.querySelectorAll("[data-ok]").forEach((b) => b.onclick = () => decidePost(b.dataset.ok, "scheduled"));
+  document.querySelectorAll("[data-no]").forEach((b) => b.onclick = () => decidePost(b.dataset.no, "failed"));
+}
+
+let _socialCal = null;
+
+function shortWhen(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+       + " · " + d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+}
+
+async function decidePost(id, state) {
+  try {
+    await api("/api/social/state", { method: "POST", json: { post_id: id, state } });
+    _socialData = await api("/api/social");
+    await renderSocial();
+  } catch (e) { toast(e.message); }
 }
 
 function openSocialEditor(post) {
   const c = post.caption || {};
-  openModal(`Edit post — ${esc(post.product_name || "")}`, `
+  openModal(`${esc(shortWhen(post.scheduled_at))} — ${esc(post.product_name || "")}`, `
+    <div class="sm-ed-top">
+      <div class="sm-ed-shot" id="smEdShot">
+        ${post.image_url
+          ? `<img src="${esc(post.image_url)}" alt="" />${post.image_generated ? `<span class="sm-gen">AI</span>` : ""}`
+          : `<div class="sm-ed-noimg">${sic("image")}<span>No picture yet</span></div>`}
+      </div>
+      <div class="sm-ed-meta">
+        <div><b>${esc(post.pillar_name || "")}</b> · ${esc(post.format || "")}
+          ${post.occasion ? `<span class="sm-occ">${esc(post.occasion)}</span>` : ""}</div>
+        <div class="sm-ed-imgacts">
+          <button class="btn primary sm" id="smGenRef">${sic("image")}Re-shoot my photo</button>
+          <button class="btn ghost sm" id="smGenNew">${sic("spark")}Invent a picture</button>
+        </div>
+        <p class="sm-hint" style="margin:8px 0 0;">
+          <b>Re-shoot</b> starts from your own photograph, so the item in the picture
+          is the item you ship — only the light and setting change.
+          <b>Invent</b> draws from the description instead: fine for a backdrop,
+          not for showing a customer what they are buying.</p>
+      </div>
+    </div>
     <label class="fld"><span>Hook <em id="smHookCount">${(c.hook || "").length} / 125</em></span>
       <textarea id="smHook" rows="2">${esc(c.hook || "")}</textarea></label>
     <p class="sm-hint">Instagram cuts the caption at 125 characters. Everything past
@@ -5053,6 +5130,27 @@ function openSocialEditor(post) {
       <button class="btn ghost" data-mclose2>Cancel</button>
       <button class="btn primary" id="smSave">Save</button>
     </div>`);
+
+  const gen = async (useRef) => {
+    const btns = [$("smGenRef"), $("smGenNew")].filter(Boolean);
+    btns.forEach((b) => b.disabled = true);
+    const b = useRef ? $("smGenRef") : $("smGenNew");
+    const was = b.innerHTML; b.innerHTML = sic("image") + "Drawing…";
+    try {
+      const img = await api("/api/studio/image", { method: "POST", json: {
+        product_id: post.product_id, pillar: post.pillar, format: post.format,
+        post_id: post.id, use_reference: useRef } });
+      $("smEdShot").innerHTML = `<img src="${esc(img.url)}" alt="" /><span class="sm-gen">AI</span>`;
+      if (useRef && !img.had_reference) {
+        toast("No photo on this product, so it was invented rather than re-shot. " +
+              "Add a photo in Product Studio for a picture of the real item.", 7000);
+      }
+      _socialData = await api("/api/social");
+    } catch (e) { toast(e.message, 6000); b.innerHTML = was; }
+    btns.forEach((x) => x.disabled = false);
+  };
+  if ($("smGenRef")) $("smGenRef").onclick = () => gen(true);
+  if ($("smGenNew")) $("smGenNew").onclick = () => gen(false);
 
   const h = $("smHook"), cnt = $("smHookCount");
   if (h && cnt) h.oninput = () => {
@@ -5569,4 +5667,62 @@ function openPoActions(po) {
       toast("Nothing is cancelled yet — talk to them, then approve it in Orders.");
     } catch (e) { toast(e.message); }
   };
+}
+
+/* The next few days of the social plan, on the home screen.
+
+   It sits here rather than only inside the module because a plan the seller has
+   to remember to go and look at is a plan that quietly rots. Anything still
+   undecided can be approved or skipped without leaving the page — the whole
+   point is that deciding costs one tap from where they already are. */
+async function renderUpcomingSocial() {
+  const box = $("upStrip");
+  if (!box) return;
+  let d;
+  try { d = await api("/api/social/upcoming?days=5"); }
+  catch (e) { return; }
+  const rows = d.posts || [];
+  if (!rows.length) { box.hidden = true; return; }
+  box.hidden = false;
+
+  box.innerHTML = `
+    <div class="up-h">
+      <div>
+        <div class="today-eyebrow">Next 5 days</div>
+        <h3>${rows.length} post${rows.length === 1 ? "" : "s"} planned${
+          d.needs_decision ? ` · <span class="up-need">${d.needs_decision} need${d.needs_decision === 1 ? "s" : ""} you</span>` : ""}</h3>
+      </div>
+      <button class="btn ghost tiny" id="upOpen">${sic("spark")}Open the plan</button>
+    </div>
+    <div class="up-rows">
+      ${rows.slice(0, 5).map((p) => `
+        <div class="up-row" data-id="${esc(p.id)}">
+          <div class="up-shot">${p.image_url
+            ? `<img src="${esc(p.image_url)}" alt="" />`
+            : `<span>${sic("image")}</span>`}</div>
+          <div class="up-body">
+            <div class="up-when">${esc(shortWhen(p.scheduled_at))}
+              ${p.occasion ? `<em class="sm-occ">${esc(p.occasion)}</em>` : ""}
+              <span class="up-fmt">${esc(p.format || "")}</span></div>
+            <b>${esc(p.product_name || "—")}</b>
+            <span class="up-hook">${esc(((p.caption || {}).hook || "").slice(0, 80))}</span>
+          </div>
+          <div class="up-acts">
+            ${p.state === "draft" ? `
+              <button class="btn ghost xs" data-upok="${esc(p.id)}">Approve</button>
+              <button class="btn ghost xs danger" data-upno="${esc(p.id)}">Skip</button>`
+              : `<span class="sm-chip st-sched">Scheduled</span>`}
+          </div>
+        </div>`).join("")}
+    </div>`;
+
+  $("upOpen").onclick = () => openModule("social");
+  const decide = async (id, state_) => {
+    try {
+      await api("/api/social/state", { method: "POST", json: { post_id: id, state: state_ } });
+      renderUpcomingSocial();
+    } catch (e) { toast(e.message); }
+  };
+  box.querySelectorAll("[data-upok]").forEach((b) => b.onclick = () => decide(b.dataset.upok, "scheduled"));
+  box.querySelectorAll("[data-upno]").forEach((b) => b.onclick = () => decide(b.dataset.upno, "failed"));
 }
