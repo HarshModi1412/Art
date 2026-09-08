@@ -70,6 +70,22 @@ a { color: inherit; }
 .btn-ghost { border: 1.5px solid var(--ink); color: var(--ink); background: none; }
 .btn-ghost:hover { background: var(--ink); color: var(--paper); }
 
+
+/* where we sit */
+.cmp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 28px 0 22px; }
+.cmp-col { border: 1px solid var(--line); border-radius: 12px; padding: 20px; background: #fff; }
+.cmp-col p { font-size: 14px; line-height: 1.6; color: var(--ink-soft); margin: 0 0 12px; }
+.cmp-col p b { color: var(--ink); }
+.cmp-h { font-weight: 700; font-size: 15px; margin-bottom: 12px; }
+.cmp-us { border-color: var(--violet); box-shadow: 0 0 0 1px var(--violet); }
+.cmp-us .cmp-h { color: var(--violet); }
+.cmp-line { border-left: 3px solid var(--violet); padding: 12px 18px; font-size: 15px;
+  line-height: 1.6; margin-bottom: 16px; }
+.cmp-honest { background: #f7f7f9; border-radius: 12px; padding: 16px 18px; font-size: 14px;
+  line-height: 1.6; color: var(--ink-soft); }
+.cmp-honest b { color: var(--ink); }
+@media (max-width: 860px) { .cmp { grid-template-columns: 1fr; } }
+
 /* hero */
 .hero { display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; padding: 72px 0 80px; }
 .hero h1 { font-size: 46px; margin: 14px 0 18px; }
@@ -309,6 +325,68 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
 </section>
 
 <!-- PRICING -->
+<!-- ==================================================================
+     Where we sit: Shopify's customer, Odoo's depth.
+
+     This section exists because the honest objection to this product is
+     "why not just use Shopify?" and the honest answer is that Shopify
+     sells you a storefront and then sells you the thinking as apps. Odoo
+     has the depth but is built for someone with an implementation partner.
+     Saying that plainly beats claiming to be better than both.
+     ================================================================== -->
+<section id="where-we-sit">
+  <div class="wrap">
+    <h2>Built for Shopify's customer. Built to Odoo's standard.</h2>
+    <p class="lead" style="max-width:60ch">Two kinds of software already serve
+      small sellers, and each gets half of it right.</p>
+
+    <div class="cmp">
+      <div class="cmp-col">
+        <div class="cmp-h">Shopify</div>
+        <p><b>Right customer.</b> A person who sells things, set up in an
+           afternoon, no consultant.</p>
+        <p><b>Thin where it counts.</b> The storefront is the product; the
+           operations are apps. Inventory is an app. Win-back is an app.
+           Reports are an app. Each is ₹800–2,400 a month, none of them talk
+           to each other, and none of them know your GST position.</p>
+      </div>
+      <div class="cmp-col">
+        <div class="cmp-h">Odoo</div>
+        <p><b>Right depth.</b> One data model. Purchase orders, inventory,
+           invoicing and accounting are the same system, so a receipt moves
+           stock and a sale posts tax without anyone re-keying it.</p>
+        <p><b>Wrong customer.</b> Built for a business with someone to
+           implement it. A jewellery seller with 40 SKUs will not get through
+           the setup, and the UI assumes training.</p>
+      </div>
+      <div class="cmp-col cmp-us">
+        <div class="cmp-h">One Tap Manager</div>
+        <p><b>Odoo's spine.</b> Products, inventory, suppliers, orders,
+           invoices and GST are one connected model — a website order drops
+           stock, consumes materials, raises a compliant tax invoice and lands
+           in your analytics without a second entry.</p>
+        <p><b>Shopify's front door.</b> Sign up, upload a CSV or connect a
+           channel, and the first screen tells you what to do this morning
+           rather than asking you to configure a chart of accounts.</p>
+      </div>
+    </div>
+
+    <div class="cmp-line">
+      <b>The difference in one sentence:</b> Shopify tells you what happened
+      and sells you an app to work out what to do. We tell you what to do, and
+      the doing is already wired to the same data.
+    </div>
+
+    <div class="cmp-honest">
+      <b>What we are not, yet.</b> Odoo has manufacturing, multi-warehouse,
+      payroll and double-entry accounting. We have none of those and are not
+      pretending otherwise. If you have three warehouses and a factory floor,
+      buy Odoo. If you sell 40 to 400 products and your accountant only wants
+      a clean GSTR-1, that gap costs you nothing.
+    </div>
+  </div>
+</section>
+
 <section class="alt" id="pricing">
   <div class="wrap">
     <div class="section-head" style="text-align:center; margin-inline:auto;">

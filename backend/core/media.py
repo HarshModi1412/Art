@@ -83,6 +83,61 @@ def _storage_path(filename: str) -> str:
 # ---------------------------------------------------------------------------
 # write
 # ---------------------------------------------------------------------------
+def ensure_bucket() -> dict:
+    """Make sure the Storage bucket actually exists.
+
+    Without this, everything looks configured — SUPABASE_URL is set, the client
+    connects, `durable()` returns True — and every upload silently fails with a
+    404 on a bucket nobody created. The seller only finds out after the next
+    deploy, when the local cache is rebuilt empty and the images vanish again.
+    That is precisely the failure this whole module was written to end, so the
+    bucket is checked rather than assumed."""
+    if not durable():
+        return {"ok": False, "reason": "Supabase is not configured on this deployment."}
+    c = db.client()
+    if not c:
+        return {"ok": False, "reason": "Supabase client could not be created."}
+    try:
+        existing = {b.name if hasattr(b, "name") else b.get("name")
+                    for b in (c.storage.list_buckets() or [])}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "reason": f"Could not list buckets: {e}"}
+    if db.BUCKET in existing:
+        return {"ok": True, "created": False, "bucket": db.BUCKET}
+    try:
+        c.storage.create_bucket(db.BUCKET, options={"public": False})
+        return {"ok": True, "created": True, "bucket": db.BUCKET}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "reason": f"Bucket '{db.BUCKET}' is missing and could "
+                                       f"not be created automatically: {e}"}
+
+
+def health() -> dict:
+    """One honest answer to 'will my images survive the next deploy?'"""
+    if not durable():
+        return {
+            "durable": False,
+            "headline": "Uploads will be lost on the next deploy",
+            "detail": "This deployment has no Supabase Storage configured, so "
+                      "uploaded images and video live only on the server's local "
+                      "disk. Render rebuilds that disk from git on every deploy. "
+                      "Set SUPABASE_URL and the service key to fix this.",
+            "cache_dir": cache_dir(),
+        }
+    b = ensure_bucket()
+    if not b.get("ok"):
+        return {"durable": False,
+                "headline": "Storage is configured but not working",
+                "detail": b.get("reason", ""), "cache_dir": cache_dir()}
+    return {"durable": True,
+            "headline": "Uploads are safe",
+            "detail": f"Images and video are copied to Supabase Storage "
+                      f"(bucket '{b['bucket']}') as well as the local cache, so "
+                      f"they survive redeploys, restarts and changing host."
+                      + (" The bucket was created just now." if b.get("created") else ""),
+            "cache_dir": cache_dir()}
+
+
 def save(filename: str, data: bytes, email: str = "") -> dict:
     """Store one uploaded file. Always writes the local cache; also pushes to
     Supabase Storage when configured. Never raises for a storage failure — a

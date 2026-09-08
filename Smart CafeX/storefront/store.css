@@ -1021,3 +1021,16 @@ html.editing .announce:hover > .edit-tag { transform: translateY(-50%); }
 /* a success message reads differently from an error and should look it */
 .ok { color: #1f7a4d; font-size: 13px; margin-top: 10px; line-height: 1.5; }
 [data-mode="dark"] .ok { color: #77d3a4; }
+
+/* Cancellation request — a conversation, not a fired action. */
+.ord-cx { margin-top: 12px; font-size: 12px; padding: 5px 12px; }
+.ord-cx-open { margin-top: 12px; font-size: 12px; display: flex; gap: 7px;
+  align-items: center; color: var(--muted); line-height: 1.5; }
+.cx-reasons { display: flex; flex-direction: column; gap: 2px; margin: 14px 0 12px; }
+.cx-r { display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 8px; cursor: pointer; font-size: 14px; }
+.cx-r:hover { border-color: var(--fg); }
+.cx-r input { accent-color: var(--fg); }
+.cx-r:has(input:checked) { border-color: var(--fg); background: var(--soft); }
+.cx-acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.b.s { padding: 6px 14px; font-size: 12px; }

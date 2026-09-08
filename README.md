@@ -343,6 +343,141 @@ Product Management. If the seller has picked none, the site falls back to
 automatic — and the spotlight avoids whatever the featured rail is already
 showing, so the two blocks can never show the same thing.
 
+## Where this product sits
+
+Shopify has the right customer and sells the thinking as apps. Odoo has the
+right depth and is built for a business with an implementation partner. This is
+Shopify's customer served to Odoo's standard: one connected data model, entered
+through a front door a jewellery seller with 40 SKUs can actually get through.
+
+We do not have manufacturing, multi-warehouse, payroll or double-entry
+accounting, and the landing page says so rather than implying otherwise.
+
+## GST and billing
+
+`backend/core/gst.py` holds the rates and rules, `invoices.py` holds the
+records, `invoice_pdf.py` draws the document.
+
+Rates reflect **GST 2.0** (Notification 09/2025-CT(R), effective 22 September
+2025). Two numbers changed in a way that catches anyone working from older
+knowledge: the apparel threshold moved from ₹1,000 to **₹2,500**, and above it
+the rate is now **18%**, not 12%.
+
+Rate resolution is deliberately **not** an HSN lookup table:
+
+* apparel (Ch. 61/62/63) and footwear (Ch. 64) are **price-banded** per piece
+  or pair, so ten ₹800 shirts on one bill are each 5%;
+* Chapter 33 has **named carve-outs inside a heading** — 3304 is 18% but kajal,
+  kumkum, bindi and face powder are 5%; 3305 is 18% but hair oil and shampoo
+  are 5%.
+
+Other decisions worth knowing before changing anything:
+
+* **Money is integer paise.** Indian MRP is tax-inclusive by law (Legal
+  Metrology (Packaged Commodities) Rules, 2011), so tax is backed out of the
+  displayed price. In floats the total drifts off the printed MRP.
+* **Section 170 rounding is per tax head, half-up.** CGST and SGST round
+  independently and can legitimately land ₹1 apart. The invoice carries a note
+  saying so, because it looks like a bug.
+* **Numbers are allocated at issue, never at checkout.** Rule 46(b) requires a
+  consecutive series; reserving a number per cart would punch permanent holes
+  in it from abandoned checkouts.
+* **Invoices are never hard-deleted.** GSTR-1 Table 13 needs the number range
+  issued and the count cancelled. Cancelling sets a status.
+* **There are three documents, not one.** Tax Invoice (registered), Bill of
+  Supply (registered but exempt or composition), and a plain Receipt for an
+  unregistered seller. The common mistake is giving an unregistered seller a
+  Bill of Supply — that is a *registered* person's document, and CGST Sec 32(1)
+  bars an unregistered person from collecting any amount as tax at all.
+* **The registration warning is the most valuable thing in the module.**
+  Section 24(i) compels GST registration for inter-state supply of goods from
+  the first rupee — no turnover floor. Since D2C ships nationwide by default,
+  the ₹40 lakh threshold protects almost nobody, and a seller who believes it
+  does is in breach from their first order.
+
+`gst.NEEDS_CA_REVIEW` lists three things a chartered accountant should confirm
+before a seller files from this, the most important being imitation jewellery
+(HSN 7117) at 3% — sources disagreed and the primary CBIC schedule could not be
+read at source. It is in the code and surfaced in the UI, not buried here.
+
+## Shipping labels
+
+`labels.py` draws a 4×6" thermal label. Payment mode is the largest element
+after the address, because a rider who misses "COD ₹1,499" either fails to
+collect or wrongly demands money from a prepaid customer. The return address is
+mandatory: an undeliverable parcel without one is destroyed rather than
+returned, and RTO runs around a quarter of COD orders.
+
+## Cancellation as a conversation
+
+`cancel_requests.py`. A shopper tapping Cancel raises a **request**, not a
+cancellation. The seller is notified, the shopper is handed to WhatsApp, and
+only the seller approving actually cancels.
+
+This is a deliberate product decision. Most Indian D2C cancellations are
+recoverable — a wrong size, a delivery date, or anxiety about whether the
+parcel is moving. A one-click cancel converts every one of those into a lost
+sale. Each reason carries a suggested save shown to the seller when the request
+arrives, because the difference between saving and losing the order is usually
+whether they knew what to offer in the first thirty seconds.
+
+The same shape covers purchase orders, where the counterparty is a supplier.
+
+## Social Media Manager
+
+`social.py`. Built on Liadeli, Sotgiu & Verlegh (*Journal of Marketing*, 2023),
+a meta-analysis of 1,641 elasticities across 95M observations. The finding that
+shapes the module: **the content mix that maximises engagement is close to the
+inverse of the mix that maximises sales.** Informational product content has a
++0.580 elasticity to sales; emotional content has −0.073; deals content is
+negatively associated with sales.
+
+Consequences you will see in the code:
+
+* pillar mix weighted 60% informational, with offers **capped at 5%** and the
+  cap explained rather than silently applied;
+* "What's working" features reach rate, saves, sends and DMs. Followers and
+  likes are shown small and labelled as not sales signals — only 21% of
+  sub-10K accounts grew at all last year, so a seller measuring themselves on
+  followers concludes they are failing while selling fine;
+* **exactly 5 hashtags** — Instagram capped them in January 2026, and they are
+  worth about +2% reach now. Caption keywords do what hashtags used to;
+* captions under 30 words, hook capped at the 125-character truncation point,
+  and a mandatory comment-CTA question (worth roughly +202% comments);
+* Reels and carousels only — single-image reach is down 22% year on year;
+* Hinglish in Roman script by default (76% of Indian festive shoppers prefer
+  local-language advertising), and every CTA ends in a DM or WhatsApp, because
+  that is where Indian D2C actually converts;
+* the Shoot List matters more than the scheduler: reach per post *rises* with
+  frequency, so the binding constraint is production capacity, not the
+  algorithm. One 20-minute shoot atomises into nine assets.
+
+Festival dates in `FESTIVALS_2026` are lunisolar and **must be refreshed each
+year, never extrapolated** — marketing blogs routinely get them a week wrong.
+
+## Free AI
+
+`aiprovider.py` puts a provider chain behind every text call: Cloudflare
+Workers AI (10,000 neurons/day free) → Groq (1,000 req/day) → Gemini (1,500
+req/day) → OpenAI → a deterministic template that needs no network.
+
+Every call declares a `sensitivity`. `"public"` is copy written to be
+published, so free tiers are fine. `"private"` is anything derived from a
+seller's own sales or customers, and may only reach providers marked
+`trains=False` — which excludes Gemini's free tier. It is a required argument
+rather than an optional flag because getting it wrong leaks a seller's revenue
+into somebody else's training set.
+
+Environment: `CF_ACCOUNT_ID` + `CF_API_TOKEN`, `GROQ_API_KEY`, `GEMINI_API_KEY`,
+`OPENAI_API_KEY`. None are required — the app writes usable copy with none set.
+
+## Media storage
+
+`media.health()` **probes** Storage and creates the bucket if missing, rather
+than inferring safety from `SUPABASE_URL` being set. "Configured but the bucket
+does not exist" looks identical to "working" from outside and loses every
+upload — which is the original vanished-images bug wearing a different hat.
+
 ## Cancellations
 
 `backend/core/cancellations.py`, computed from the seller's own storefront

@@ -960,6 +960,10 @@ function viewOrders() {
           </div>
           <div class="tiny muted">${(o.items || []).map((it) => `${esc(it.name)} × ${it.qty}`).join(" · ")}</div>
           ${o.status === "cancelled" ? "" : `<div class="steps">${flow.map((_, k) => `<i class="${k <= i ? "on" : ""}"></i>`).join("")}</div>`}
+          ${["cancelled", "delivered"].includes(o.status) ? "" :
+            (o.cancel_requested
+              ? `<div class="ord-cx-open">${ic("clock")} You asked to cancel this. ${esc(S.site.brand)} will message you on WhatsApp — nothing has been cancelled yet.</div>`
+              : `<button class="b g s ord-cx" data-cancel="${esc(o.id)}">Request cancellation</button>`)}
         </div>`;
       }).join("") : `<div class="empty"><div class="i">${ic("package")}</div><h3>No orders yet</h3><p>When you order, it'll show up here.</p><button class="b p" data-go="shop">Start shopping${ic("arrow-right")}</button></div>`}
       <div style="height:90px"></div>
@@ -1496,8 +1500,71 @@ function render() {
   if (r.name === "orders" && S.customer && !S.myOrders) loadMe(true);
 }
 
+/* Requesting a cancellation is deliberately NOT a cancel button.
+
+   A shopper who wants to cancel usually wants a different size, a later
+   delivery date, or reassurance that the parcel is actually moving. A
+   one-tap cancel turns every one of those into a lost sale and a
+   restocking job. Asking why, then handing the conversation to the seller
+   on WhatsApp, saves a meaningful share of them — and the ones it does not
+   save are cancelled a few minutes later anyway, which costs nothing. */
+const CANCEL_REASONS = [
+  ["wrong_size", "I ordered the wrong size"],
+  ["wrong_item", "I ordered the wrong item"],
+  ["too_slow", "It is taking too long"],
+  ["changed_mind", "I changed my mind"],
+  ["ordered_twice", "I ordered twice by mistake"],
+  ["found_cheaper", "I found it cheaper elsewhere"],
+  ["other", "Something else"],
+];
+
+function askCancel(orderId) {
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.innerHTML = `
+    <div class="modal auth">
+      <h3>Request cancellation</h3>
+      <p class="tiny muted">Tell us why and we will pass it to ${esc(S.site.brand)}.
+         Nothing is cancelled until they confirm — they will message you on WhatsApp,
+         and quite often there is a quicker fix than cancelling.</p>
+      <div class="cx-reasons">
+        ${CANCEL_REASONS.map(([id, label], i) => `
+          <label class="cx-r"><input type="radio" name="cxr" value="${id}"${i === 0 ? " checked" : ""}>
+            <span>${esc(label)}</span></label>`).join("")}
+      </div>
+      <textarea id="cxNote" rows="2" placeholder="Anything else they should know? (optional)"></textarea>
+      <div class="cx-acts">
+        <button class="b g" id="cxBack">Keep my order</button>
+        <button class="b p" id="cxSend">Send request</button>
+      </div>
+    </div>`;
+  document.body.appendChild(back);
+  const close = () => back.remove();
+  back.onclick = (e) => { if (e.target === back) close(); };
+  back.querySelector("#cxBack").onclick = close;
+  back.querySelector("#cxSend").onclick = async () => {
+    const btn = back.querySelector("#cxSend");
+    btn.disabled = true; btn.textContent = "Sending…";
+    const code = (back.querySelector("input[name=cxr]:checked") || {}).value || "other";
+    try {
+      const r = await api("/cancel-request", { method: "POST", json: {
+        order_id: orderId, reason_code: code,
+        reason_text: back.querySelector("#cxNote").value.trim(),
+      } });
+      close();
+      toast(r.message || "Sent.");
+      loadMe(true);
+    } catch (e) {
+      btn.disabled = false; btn.textContent = "Send request";
+      toast(e.message || "Could not send that just now.");
+    }
+  };
+}
+
 function bindView() {
   document.querySelectorAll("[data-go]").forEach((n) => n.onclick = (e) => { e.preventDefault(); go(n.dataset.go); });
+  document.querySelectorAll("[data-cancel]").forEach((n) =>
+    n.onclick = () => askCancel(n.dataset.cancel));
   document.querySelectorAll("[data-p]").forEach((n) => n.onclick = (e) => {
     if (e.target.closest("[data-add]")) return;
     go("product", { id: n.dataset.p });

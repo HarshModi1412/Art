@@ -836,5 +836,304 @@ must(r.status_code == 200 and _post["caption"], f"a post draft is produced ({r.s
 must(_post["image_is_generated"] is False, "using your own photo is never labelled generated")
 must("hashtags" in _post, "with hashtags")
 
+# =====================================================================
+# 28. GST — rates, place of supply, documents, numbering
+# =====================================================================
+print("\n== 28. GST rates, place of supply and invoice documents ==")
+
+from backend.core import gst as _gst
+
+# GSTIN checksum, against vectors derived from the official GSTN reference.
+# The one that matters is 27AASCS2460H1Z0: its checksum sum is a multiple of
+# 36, which is exactly the case the popular JS implementation gets wrong by
+# omitting a trailing modulo. If this ever fails, someone "simplified" it.
+for _g in ("27AAPFU0939F1ZV", "29AAGCB7383J1Z4", "27AASCS2460H1Z0"):
+    must(_gst.valid_gstin(_g), f"{_g} validates")
+must(not _gst.valid_gstin("27AAPFU0939F1ZX"), "a wrong checksum is rejected")
+must(not _gst.valid_gstin("29AAGCB7383J1Z"), "a 14-character GSTIN is rejected")
+
+# Apparel is price-BANDED, and the 2025 rationalisation moved both numbers:
+# the threshold is Rs 2,500 (not Rs 1,000) and above it the rate is 18%
+# (not 12%). Anyone carrying forward pre-2025 knowledge gets both wrong.
+must(_gst.resolve_rate("6109", 50000, "kurta")["rate"] == 5, "cheap apparel is 5%")
+must(_gst.resolve_rate("6109", 400000, "lehenga")["rate"] == 18, "expensive apparel is 18%")
+must(_gst.resolve_rate("6403", 50000, "juti")["rate"] == 5, "cheap footwear is 5%")
+must(_gst.resolve_rate("7117", 120000, "jhumka")["rate"] == 3, "imitation jewellery is 3%")
+must(_gst.resolve_rate("7113", 4000000, "gold chain")["rate"] == 3, "gold jewellery is 3%")
+must(_gst.resolve_rate("3303", 120000, "oud perfume")["rate"] == 18, "perfume is 18%")
+
+# Chapter 33 is NOT uniform: a heading's rate is overridden by named
+# carve-outs inside it. A flat 4-digit HSN lookup would get these wrong.
+must(_gst.resolve_rate("3304", 60000, "matte lipstick")["rate"] == 18, "lipstick is 18%")
+must(_gst.resolve_rate("3304", 20000, "herbal kajal")["rate"] == 5, "but kajal is 5%")
+must(_gst.resolve_rate("3305", 30000, "coconut hair oil")["rate"] == 5, "and hair oil is 5%")
+
+# The threshold is per PIECE, not per line. Ten Rs 800 shirts are each 5%.
+_ln = _gst.compute_line(name="shirt", hsn="6109", qty=10, unit_price_paise=80000,
+                        inclusive=True, pos_kind="intra")
+must(_ln["rate"] == 5, "ten Rs 800 shirts stay at 5% — the band is per piece")
+must(_ln["cgst"] + _ln["sgst"] == _ln["tax_total"], "CGST + SGST accounts for all the tax")
+
+# Tax-inclusive pricing is the Indian default and, for MRP, the law.
+_taxable, _tax = _gst.split_inclusive(105000, 5)
+must(_taxable + _tax == 105000, "tax backed out of an inclusive price still totals the price")
+
+# Place of supply is decided by the DELIVERY address, not the seller's state.
+must(_gst.place_of_supply("Karnataka", "Karnataka")["heads"] == ["cgst", "sgst"],
+     "same state is CGST + SGST")
+must(_gst.place_of_supply("Karnataka", "Maharashtra")["heads"] == ["igst"],
+     "different state is IGST")
+must(not _gst.place_of_supply("Karnataka", "")["ok"],
+     "a missing delivery state is refused rather than defaulted")
+
+# Rule 46(b): 16 characters max, unique per financial year.
+_num = _gst.invoice_number("INV", 123)
+must(len(_num) <= 16 and _gst.valid_invoice_number(_num), f"{_num} is a legal invoice number")
+must(not _gst.valid_invoice_number("INV#2627#000123"), "'#' is not an allowed character")
+must(not _gst.valid_invoice_number("INVOICE/2627/00000123"), "17+ characters is rejected")
+
+# Three documents, not one. The common mistake is handing an unregistered
+# seller a Bill of Supply — that is a REGISTERED person's document.
+must(_gst.document_kind({"gstin": "29AAGCB7383J1Z4"})["kind"] == "tax_invoice",
+     "a registered seller issues a Tax Invoice")
+must(_gst.document_kind({"gstin": ""})["kind"] == "receipt",
+     "an unregistered seller issues a plain receipt, NOT a bill of supply")
+must(_gst.document_kind({"gstin": "29AAGCB7383J1Z4", "composition": True})["kind"]
+     == "bill_of_supply", "a composition dealer issues a Bill of Supply")
+must("not eligible to collect tax" in
+     _gst.document_kind({"gstin": "29AAGCB7383J1Z4", "composition": True})["declaration"],
+     "with the declaration the rule requires, verbatim")
+
+# The compliance warning that is worth more than any feature: Section 24(i)
+# compels registration for inter-state goods from the first rupee.
+_w = _gst.registration_warning({"gstin": ""}, ships_outside_state=True)
+must(_w and _w["level"] == "blocking", "shipping interstate with no GSTIN is blocking")
+must("first rupee" in _w["text"], "and says why — there is no turnover floor")
+must(_gst.registration_warning({"gstin": "29AAGCB7383J1Z4"}, True) is None,
+     "a registered seller sees no warning")
+
+
+# =====================================================================
+# 29. Invoicing — issue, cancel, GSTR-1
+# =====================================================================
+print("\n== 29. invoices, cancellation and the GSTR-1 export ==")
+
+r = c.post("/api/gst/settings", headers=H, json={"patch": {
+    "gstin": "29AAGCB7383J1Z4", "legal_name": "Indigo Weaves Pvt Ltd",
+    "trade_name": "Indigo Weaves", "series": "INV",
+    "pickup_address": {"line1": "Plot 387", "city": "Bengaluru",
+                       "state": "Karnataka", "pincode": "560008"}}})
+must(r.status_code == 200, f"GST settings save ({r.status_code})")
+must(r.json()["document"]["kind"] == "tax_invoice", "and switch the seller to tax invoices")
+
+_ord = {"id": "test-order-1", "order_no": "OT-9001", "customer_name": "Harsh Modi",
+        "phone": "9876543210", "shipping": 49.0,
+        "address": {"line1": "Flat 6", "city": "Bengaluru", "state": "Karnataka",
+                    "pincode": "560008"},
+        "items": [{"name": "Cotton kurta", "qty": 2, "price": 800.0, "hsn": "6109"},
+                  {"name": "Silk lehenga", "qty": 1, "price": 4200.0, "hsn": "6204"},
+                  {"name": "Jhumka", "qty": 1, "price": 1200.0, "hsn": "7117"}]}
+
+from backend.core import invoices as _inv, invoice_pdf as _ipdf
+_built = _inv.build_from_order(SELLER, _ord)
+_rates = sorted({l["rate"] for l in _built["lines"]})
+must(_rates == [3, 5, 18], f"three different rates on one invoice ({_rates})")
+must(_built["place_of_supply"]["kind"] == "intra", "intra-state order")
+
+_issued = _inv.issue(SELLER, _ord)
+must(_issued["number"].startswith("INV/"), f"numbered {_issued['number']}")
+must(_inv.issue(SELLER, _ord)["number"] == _issued["number"],
+     "issuing twice for one order does not burn a second number")
+
+_pdf = _ipdf.build(_issued)
+must(_pdf[:4] == b"%PDF" and len(_pdf) > 1500, f"a real PDF is produced ({len(_pdf)} bytes)")
+
+_g1 = _inv.gstr1(SELLER)
+must(_g1["documents_issued"]["total"] >= 1, "GSTR-1 reports the documents issued")
+must(_g1["b2cs"], "and consolidates B2C sales into the rate x state grid")
+
+_inv.cancel(SELLER, _issued["id"], "test")
+_g1b = _inv.gstr1(SELLER)
+must(_g1b["documents_issued"]["cancelled"] == 1,
+     "a cancelled invoice is COUNTED, not deleted — GSTR-1 Table 13 needs it")
+must(any(i["id"] == _issued["id"] for i in _inv.listing(SELLER)),
+     "and the row survives, so the number range stays contiguous")
+
+
+# =====================================================================
+# 30. Shipping labels
+# =====================================================================
+print("\n== 30. bill stickers ==")
+
+from backend.core import labels as _lab
+_cod = dict(_ord, payment="cod", due_on_delivery=1499, currency="Rs",
+            created_at="2026-09-08T10:00:00",
+            items=[{"name": "Cotton kurta", "qty": 2, "variant_label": "M / Indigo"}])
+_one = _lab.build(_cod, {"business_name": "Indigo Weaves",
+                         "pickup_address": {"line1": "Plot 387", "city": "Bengaluru",
+                                            "state": "Karnataka", "pincode": "560008"}},
+                  {"name": "Indigo Weaves"})
+must(_one[:4] == b"%PDF", "a single label is a PDF")
+_many = _lab.build_many([_cod, dict(_cod, order_no="OT-9002", payment="prepaid",
+                                    due_on_delivery=0)],
+                        {"business_name": "Indigo Weaves", "pickup_address": {}},
+                        {"name": "Indigo Weaves"})
+must(len(_many) > len(_one), "and a batch is one document with more in it")
+must(_many.count(b"/Type /Page\n") >= 2 or b"/Count 2" in _many,
+     "with one page per order, so a morning's dispatch prints in one go")
+
+
+# =====================================================================
+# 31. Cancellation as a conversation
+# =====================================================================
+print("\n== 31. cancellation requests ==")
+
+from backend.core import cancel_requests as _cr
+_req = _cr.raise_request(SELLER, kind="order", ref_id="test-order-1", ref_no="OT-9001",
+                         reason_code="wrong_size", reason_text="need L not M",
+                         counterparty={"name": "Harsh", "phone": "9876543210"})
+must(_req["status"] == "requested", "a request starts as a request, not a cancellation")
+must(_req["save_play"], "and carries a suggested save for that reason")
+must("free size exchange" in _req["save_play"], "wrong size suggests an exchange")
+
+_dupe = _cr.raise_request(SELLER, kind="order", ref_id="test-order-1", ref_no="OT-9001",
+                          reason_code="changed_mind")
+must(_dupe["id"] == _req["id"], "asking twice does not create a second request")
+
+_msg = _cr.seller_message(_req, "Indigo Weaves")
+must("Nothing has been cancelled yet" in _msg, "the seller is told nothing has happened yet")
+must(_cr.wa_link("9876543210", "hi").startswith("https://wa.me/919876543210"),
+     "a 10-digit Indian number gets the country code")
+must(_cr.wa_link("123", "hi") == "", "a number too short to be real yields no link")
+
+_res = _cr.resolve(SELLER, _req["id"], "declined", "sent L instead")
+must(_res["status"] == "declined", "declining keeps the order")
+must(_cr.summary(SELLER)["saved"] == 1, "and counts as a save")
+must(_cr.resolve(SELLER, _req["id"], "approved")["status"] == "declined",
+     "a resolved request cannot be re-resolved")
+
+
+# =====================================================================
+# 32. Manual purchase orders
+# =====================================================================
+print("\n== 32. manual purchase orders ==")
+
+r = c.post("/api/purchase-orders/manual", headers=H, json={
+    "supplier": {"name": "Surat Silk Mills", "phone": "9876500000"},
+    "lines": [{"name": "Banarasi silk 5m", "order_qty": 20, "unit_cost": 450},
+              {"name": "Gold zari thread", "order_qty": 5, "unit_cost": 1200}],
+    "expected_on": "2026-09-25", "terms": "50% advance"})
+must(r.status_code == 200, f"a manual PO is created ({r.status_code})", r.text[:200])
+_po = r.json()
+must(_po["total_qty"] == 25 and _po["total_amount"] == 15000.0,
+     f"with the arithmetic done ({_po['total_qty']} units, Rs {_po['total_amount']})")
+must(_po["source"] == "manual", "and marked as manual, not derived from reorder points")
+
+r = c.post("/api/purchase-orders/manual", headers=H,
+           json={"supplier": {"name": "X"}, "lines": []})
+must(r.status_code == 400, "an empty PO is refused")
+
+r = c.post("/api/purchase-orders/status", headers=H,
+           json={"po_number": _po["po_number"], "status": "sent"})
+must(r.status_code == 200 and r.json()["status"] == "sent", "and it can be marked sent")
+r = c.post("/api/purchase-orders/status", headers=H,
+           json={"po_number": _po["po_number"], "status": "teleported"})
+must(r.status_code == 400, "an invented status is refused")
+
+
+# =====================================================================
+# 33. Social Media Manager
+# =====================================================================
+print("\n== 33. social media manager ==")
+
+from backend.core import social as _soc
+import datetime as _dt
+
+r = c.post("/api/social/settings", headers=H,
+           json={"patch": {"category": "clothing", "cadence": "standard",
+                           "city": "Bengaluru"}})
+must(r.status_code == 200, f"social settings save ({r.status_code})")
+
+_shape = _soc.slate_shape("standard")
+must(len(_shape) == 4, "a standard week is 4 posts")
+must(not any(x["format"] == "image" for x in _shape),
+     "and never a single image — reach is down 22% year on year")
+
+# The offer cap is the commercially important bit: deals content is
+# NEGATIVELY associated with sales, and sellers over-post discounts.
+_offers = [x for x in _soc.slate_shape("standard") if x["pillar"] == "offer"]
+must(len(_offers) == 0, "a 4-post week contains no offer post — the 5% cap binds")
+must(_soc.PILLAR_BY_ID["offer"]["share"] == 5, "and the cap is 5%")
+must(sum(p["share"] for p in _soc.PILLARS) == 100, "pillar shares total 100%")
+_info = sum(p["share"] for p in _soc.PILLARS if p["type"] == "informational")
+must(_info == 60, f"informational content dominates the mix ({_info}%) — it is what sells")
+
+_week = _soc.build_week(SELLER, [{"id": "p1", "name": "Indigo kurta", "price": 1299,
+                                  "description": "Hand-block printed cotton"}],
+                        _dt.date(2026, 9, 8))
+must(len(_week) == 4, "a week is generated")
+must(all(p["text"] for p in _week), "every post has a caption, even with no AI key")
+must(all(len(p["caption"]["tags"]) <= 5 for p in _week),
+     "and never more than 5 hashtags — Instagram capped them in January 2026")
+must(all(p["caption"]["question"] for p in _week),
+     "every caption asks a question — worth about 200% more comments")
+
+_bad = _soc.caption_check({"hook": "x" * 200, "body": "w " * 60, "question": "",
+                           "tags": ["#a"] * 9}, {})
+_levels = {c["level"] for c in _bad}
+must("error" in _levels, "9 hashtags is flagged as an error")
+must(any("125" in c["text"] for c in _bad), "an over-long hook is flagged")
+must(any("question" in c["text"].lower() for c in _bad), "a missing question is flagged")
+
+must(_soc.approve_all(SELLER)["scheduled"] >= 4, "one tap schedules the whole week")
+
+_rad = _soc.radar(SELLER, _dt.date(2026, 9, 8))
+must(any("Navratri" in h for h in _rad["headline"]),
+     "the radar sees Navratri coming from early September")
+must("must be refreshed" in _rad["dates_note"],
+     "and says plainly that lunisolar dates cannot be extrapolated")
+
+_sl = _soc.shoot_list(SELLER, [{"id": "p1", "name": "A"}, {"id": "p2", "name": "B"}])
+must(len(_sl["yields"]) == 9, "one shoot atomises into 9 assets")
+
+_work = _soc.whats_working(SELLER)
+must(any(m["key"] == "sends" for m in _work["headline"]), "sends is a headline metric")
+must(any(m["key"] == "followers" for m in _work["muted"]),
+     "followers is deliberately NOT — 79% of small accounts did not grow last year")
+
+
+# =====================================================================
+# 34. AI provider chain
+# =====================================================================
+print("\n== 34. AI provider fallback ==")
+
+from backend.core import aiprovider as _aip
+_st = _aip.status()
+must(isinstance(_st["providers"], list) and len(_st["providers"]) >= 4,
+     "the provider chain is declared")
+must(_st["providers"][0]["name"] == "cloudflare", "Cloudflare leads — it is the free one")
+_gem = next(p for p in _st["providers"] if p["name"] == "gemini")
+must(_gem["trains"] is True, "Gemini's free tier is marked as training on requests")
+
+# A seller's revenue must never reach a provider that trains on it. With no
+# keys set at all the order is empty either way, so assert on the filter.
+_order_public = _aip._order("public")
+_order_private = _aip._order("private")
+must(all(not p.trains for p in _order_private),
+     "private work never reaches a provider that trains on it")
+must(len(_order_private) <= len(_order_public),
+     "and the private chain is a subset of the public one")
+
+_res = _aip.generate("sys", "user", sensitivity="public", fallback="FALLBACK")
+must(_res["text"] == "FALLBACK" or _res["provider"] != "template",
+     "with no keys configured the caller still gets usable text, never an exception")
+
+try:
+    _aip.generate("s", "u", sensitivity="whatever")
+    must(False, "an unknown sensitivity is rejected")
+except ValueError:
+    must(True, "an unknown sensitivity is rejected rather than silently defaulted")
+
+
 print("\nALL CHECKS PASSED \u2713")
 shutil.rmtree(TMP, ignore_errors=True)

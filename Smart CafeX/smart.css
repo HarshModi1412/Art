@@ -1330,3 +1330,187 @@ svg { width: 1em; height: 1em; flex: none; vertical-align: -0.125em; }
 }
 .wb-link:hover { border-color: var(--green); background: var(--green-soft); }
 .wb-link span { font-size: 11.5px; color: var(--muted); }
+
+/* ==========================================================
+   Odoo-grade polish pass
+   ----------------------------------------------------------
+   Three of these come straight out of reading Odoo's own source, and one
+   comes from reading the modules the community wrote to PATCH Odoo:
+
+   * Density. Odoo's backend runs a 14px base with 1.5 line-height and
+     labels at 0.8x (~11px). Most apps that "look less professional than
+     Odoo" are simply running 16px body text.
+   * Borders, not shadows. There is no card-shadow variable anywhere in
+     Odoo's SCSS; separation comes from a white sheet on a warm grey
+     ground with 1px borders at 4px radius.
+   * Secondary controls resolve rather than appear: opacity .5 at rest,
+     1 on hover. Nothing pops into existence.
+   * STICKY TABLE HEADERS. `web_responsive` is the most-installed Odoo
+     community module and the first line of its feature list is "sticky
+     header & footer in list view" — i.e. the single most-felt defect in
+     Odoo is that on an 80-row page you lose your column headers. We get
+     that for free by doing it from the start.
+   ========================================================== */
+
+.tbl-scroll { overflow-x: auto; overflow-y: visible; }
+
+table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.tbl thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-strong);
+  font-size: 11px; font-weight: 600; letter-spacing: .03em;
+  text-transform: uppercase; color: var(--muted);
+  text-align: left; padding: 8px 10px; white-space: nowrap;
+}
+table.tbl td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.tbl tbody tr:hover { background: var(--surface-3); }
+table.tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
+table.tbl .row-acts { white-space: nowrap; opacity: .5; transition: opacity .12s; }
+table.tbl tr:hover .row-acts { opacity: 1; }
+
+/* Odoo marks a required-but-empty input with the ACCENT colour, not red.
+   Red is kept for a value that is actually wrong. */
+input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--primary-line); }
+
+.btn.xs { padding: 2px 8px; font-size: 11px; line-height: 18px; }
+.btn.danger { color: var(--red); }
+.btn.danger:hover { background: var(--red-soft); }
+
+/* ---------- Social Media Manager ---------- */
+.sm-head { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.sm-head-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.sm-ok { color: var(--green); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.sm-warn { color: var(--amber); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+
+.sm-radar { border: 1px solid var(--border); border-left: 3px solid var(--primary);
+  border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; background: var(--surface); }
+.sm-radar-h { display: flex; align-items: center; gap: 6px; font-weight: 600; margin-bottom: 6px; }
+.sm-radar-i { font-size: 13px; color: var(--text-2); padding: 2px 0; }
+.sm-note { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.sm-hint { font-size: 11.5px; color: var(--muted); margin: -4px 0 12px; line-height: 1.5; }
+
+.sm-grid { display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.sm-card { border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.sm-card-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sm-fmt { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 3px; background: var(--primary-soft); color: var(--primary); }
+.sm-fmt-reel { background: var(--blue-soft); color: var(--blue); }
+.sm-pillar { font-size: 11px; color: var(--muted); }
+.sm-chip { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+  margin-left: auto; }
+.st-draft { background: var(--surface-2); color: var(--muted); }
+.st-ready { background: var(--blue-soft); color: var(--blue); }
+.st-sched { background: var(--amber-soft); color: var(--amber); }
+.st-pub   { background: var(--green-soft); color: var(--green); }
+.st-fail  { background: var(--red-soft); color: var(--red); }
+.sm-prod { font-size: 11px; color: var(--muted); }
+.sm-hook { font-weight: 600; line-height: 1.4; }
+.sm-body { font-size: 12.5px; color: var(--text-2); line-height: 1.5; white-space: pre-line; }
+.sm-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.sm-tags span { font-size: 10.5px; color: var(--primary); }
+.sm-checks { display: flex; flex-direction: column; gap: 3px; }
+.sm-check { font-size: 11px; padding: 4px 7px; border-radius: 4px; line-height: 1.4; }
+.sm-info  { background: var(--surface-2); color: var(--muted); }
+.sm-warn2, .sm-check.sm-warn { background: var(--amber-soft); color: var(--amber); }
+.sm-check.sm-error { background: var(--red-soft); color: var(--red); }
+.sm-when { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.sm-actions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px;
+  opacity: .55; transition: opacity .12s; }
+.sm-card:hover .sm-actions { opacity: 1; }
+
+.sm-blank { grid-column: 1 / -1; text-align: center; padding: 40px 20px;
+  border: 1px dashed var(--border-strong); border-radius: var(--radius); }
+.sm-blank-h { font-weight: 600; font-size: 15px; margin-bottom: 6px; }
+.sm-blank p { color: var(--muted); font-size: 13px; max-width: 460px; margin: 0 auto 16px; }
+
+.sm-fold { margin-top: 18px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); }
+.sm-fold summary { cursor: pointer; padding: 11px 14px; font-weight: 600; font-size: 13px; }
+.sm-explain { padding: 0 14px 14px; font-size: 13px; color: var(--text-2); line-height: 1.6; }
+.sm-pillars { display: grid; gap: 8px; margin-top: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.sm-pil { border: 1px solid var(--border); border-radius: 6px; padding: 9px 11px; }
+.sm-pil-h { display: flex; justify-content: space-between; font-size: 12.5px; }
+.sm-pil-h span { color: var(--primary); font-weight: 600; }
+.sm-pil-w { font-size: 11.5px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+
+.sm-working { margin-top: 18px; }
+.sm-metrics { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.sm-metric { border: 1px solid var(--border); border-radius: 6px; padding: 11px; }
+.sm-metric-v { font-size: 22px; font-weight: 700; }
+.sm-metric-l { font-size: 12px; font-weight: 600; }
+.sm-metric-w { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
+.sm-muted-metrics { display: flex; gap: 18px; margin-top: 12px; flex-wrap: wrap;
+  padding-top: 12px; border-top: 1px solid var(--border); opacity: .75; }
+.sm-muted { font-size: 11.5px; max-width: 300px; }
+.sm-muted b { margin-right: 5px; }
+.sm-muted em { display: block; color: var(--muted); font-style: normal; margin-top: 2px; }
+
+.sm-shoot h4 { margin: 14px 0 5px; font-size: 12px; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--muted); }
+.sm-shoot ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.7; }
+.sm-yield { width: 100%; font-size: 12px; border-collapse: collapse; }
+.sm-yield td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+#smHookCount { font-weight: 400; color: var(--muted); font-style: normal; }
+#smHookCount.over { color: var(--red); font-weight: 600; }
+
+/* ---------- Billing & GST ---------- */
+.gst-warn { display: flex; gap: 10px; padding: 12px 14px; border-radius: var(--radius);
+  margin-bottom: 14px; align-items: flex-start; }
+.gst-warn svg { flex: none; margin-top: 2px; }
+.gst-warn span { display: block; font-size: 13px; line-height: 1.55; margin-top: 3px; }
+.gst-blocking { background: var(--red-soft); color: var(--red); border: 1px solid var(--red); }
+.gst-info { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+.gst-top { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  margin-bottom: 14px; }
+.gst-doc { font-size: 13px; margin: 6px 0 2px; }
+.gst-check { min-height: 20px; font-size: 12px; margin: -6px 0 10px; }
+.gst-inv-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.gst-cancelled td { opacity: .5; text-decoration: line-through; }
+.gst-cancelled .sm-chip { text-decoration: none; }
+.gst-rule { white-space: pre-wrap; font-size: 11.5px; background: var(--surface-2);
+  padding: 10px 12px; border-radius: 6px; line-height: 1.6; }
+
+.iv-doc { font-size: 14px; margin-bottom: 4px; }
+.iv-doc span { display: block; font-size: 12px; margin-top: 3px; }
+.iv-pos { font-size: 12.5px; color: var(--text-2); margin-bottom: 10px; }
+.iv-why td { font-size: 11px; color: var(--muted); padding-top: 0; border-bottom: none; font-style: italic; }
+.iv-tot { margin-top: 12px; margin-left: auto; max-width: 260px; font-size: 13px; }
+.iv-tot > div { display: flex; justify-content: space-between; padding: 3px 0; }
+.iv-grand { border-top: 1px solid var(--border-strong); margin-top: 5px; padding-top: 7px !important;
+  font-size: 15px; }
+.iv-block { display: flex; gap: 9px; background: var(--amber-soft); color: var(--amber);
+  padding: 10px 12px; border-radius: 6px; margin-top: 12px; font-size: 12.5px; }
+.iv-block ul { margin: 5px 0 0; padding-left: 16px; }
+
+/* ---------- Cancellation inbox ---------- */
+.cr-inbox { border: 1px solid var(--amber); border-radius: var(--radius);
+  background: var(--amber-soft); padding: 12px 14px; margin-bottom: 14px; }
+.cr-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.cr-h .muted { font-size: 12px; font-weight: 400; }
+.cr-row { background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px 12px; margin-top: 7px; }
+.cr-meta { display: flex; gap: 9px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+.cr-reason { color: var(--amber); font-weight: 600; }
+.cr-play { font-size: 12px; color: var(--text-2); margin: 6px 0; display: flex; gap: 6px;
+  align-items: flex-start; line-height: 1.5; }
+.cr-play svg { flex: none; margin-top: 2px; }
+.cr-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+
+/* ---------- Purchase orders ---------- */
+.sup-head { display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin: 6px 0 8px; }
+.ord-tools { display: flex; gap: 6px; }
+.po-sup { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.po-tbl input { width: 100%; padding: 3px 6px; font-size: 13px; }
+.po-tbl td { padding: 5px 6px; }
+.po-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+.po-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+
+.ap-bulk { display: flex; gap: 6px; padding: 0 0 10px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--border); }
+.ap-bulk .btn { flex: 1; }

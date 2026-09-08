@@ -262,6 +262,8 @@ const MODULES = [
   { id: "products",   name: "Product Management",     sub: "Your catalogue of products, each linked to the names it carries on Amazon, Shopify and other platforms — sales roll up to the product everywhere.", ico: "tag", cls: "tile-supply",   needs: null,     tag: "CATALOG" },
   { id: "site",       name: "Website Builder",        sub: "Build your own selling website — pick a theme for your genre, set fonts, colours and images, then publish. Your listed products become its shop.", ico: "globe", cls: "tile-site",     needs: null,     tag: "SITE" },
   { id: "orders",     name: "Orders",                 sub: "Every order placed on your website — status, customer, address and export. Delivered orders feed straight into your sales analytics.", ico: "bag", cls: "tile-orders",   needs: null,     tag: "ORDERS" },
+  { id: "social",     name: "Social Media Manager",    sub: "A week of posts planned, written and scheduled for you — built on what actually drives sales, not what drives likes.", ico: "spark", cls: "tile-content",  needs: null,     tag: "SOCIAL" },
+  { id: "gst",        name: "Billing & GST",          sub: "Tax invoices, HSN codes, place of supply and a GSTR-1 export your accountant can file from.", ico: "receipt", cls: "tile-orders",   needs: null,     tag: "BILLING" },
   { id: "review",     name: "Review Analytics",       sub: "Your brand positioning from your own reviews — what customers come to you for.", ico: "star", cls: "tile-review",    needs: "review", tag: "BRAND" },
   { id: "complaints", name: "Complaint Analysis",     sub: "The fix-first plan for the complaint themes hurting your brand right now.",    ico: "flame", cls: "tile-complaint", needs: "review", tag: "BRAND" },
   { id: "strategy",   name: "Position Strategy + AI", sub: "A levelled checklist to strengthen or reposition your brand, plus the AI Analyst.", ico: "compass", cls: "tile-strategy", needs: "review", tag: "STRATEGY" },
@@ -634,7 +636,20 @@ function renderApprovals(insights) {
     list.innerHTML = `<div class="ap-empty">${decidedCount ? "All caught up — nothing pending. Check <b>History</b> for what you've handled." : "No pending insights. Upload data or check back after new activity."}</div>`;
     return;
   }
-  list.innerHTML = insights.map((i) => `
+  /* One tap for the whole panel.
+
+     Odoo's list views have a two-tier selection model — select what is on the
+     page, then escalate to "everything matching". The same idea applies here:
+     a seller with nine pending insights should not have to press Approve nine
+     times to agree with all of them. The count is in the label so the tap is
+     never ambiguous about how much it is agreeing to. */
+  const bulk = insights.length > 1 ? `
+    <div class="ap-bulk">
+      <button class="btn approve sm" id="apAll">✓ Approve all ${insights.length}</button>
+      <button class="btn ghost sm" id="apNone">Dismiss all</button>
+    </div>` : "";
+
+  list.innerHTML = bulk + insights.map((i) => `
     <div class="ins-card" data-ins="${i.id}">
       <div class="ins-title">${i.icon || "•"} <span>${esc(i.title)}</span></div>
       <div class="ins-detail">${esc(i.detail)}</div>
@@ -648,6 +663,22 @@ function renderApprovals(insights) {
   list.querySelectorAll("[data-approve]").forEach((b) => b.onclick = () => decide(b.dataset.approve, "approve"));
   list.querySelectorAll("[data-reject]").forEach((b) => b.onclick = () => decide(b.dataset.reject, "disapprove"));
   list.querySelectorAll("[data-details]").forEach((b) => b.onclick = () => openDetails(b.dataset.details));
+
+  const runAll = async (decision, label) => {
+    const btn = $(decision === "approve" ? "apAll" : "apNone");
+    if (btn) { btn.disabled = true; btn.textContent = label + "…"; }
+    // Sequential, not Promise.all: each decision mutates the same server-side
+    // insight list, and firing nine concurrent writes at it loses some of them.
+    let done = 0;
+    for (const i of insights) {
+      try { await api(`/api/smart/insight/${i.id}/decision`, { method: "POST", json: { decision } }); done++; }
+      catch (e) { /* keep going — one failure should not strand the rest */ }
+    }
+    toast(`${done} of ${insights.length} handled.`);
+    await goHome();
+  };
+  if ($("apAll")) $("apAll").onclick = () => runAll("approve", "Approving");
+  if ($("apNone")) $("apNone").onclick = () => runAll("disapprove", "Dismissing");
 }
 
 async function decide(id, decision) {
@@ -941,6 +972,8 @@ async function openModule(id) {
   if (id === "strategy") return openStrategy();
   if (id === "content") return openContentModule();
   if (id === "instagram") return openInstagramModule();
+  if (id === "social") return openSocial();
+  if (id === "gst") return openGst();
   if (id === "ads") return openAdsModule();
 }
 
@@ -2015,7 +2048,10 @@ async function renderSuppliers() {
   catch (e) { box.innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
 
   box.innerHTML = `
-    <div class="section-title" style="margin-top:6px;">Who you buy from</div>
+    <div class="sup-head">
+      <div class="section-title" style="margin:0;">Who you buy from</div>
+      <button class="btn primary sm" id="poNew">${sic("plus")}Create purchase order</button>
+    </div>
     ${rows.length ? `<div class="sup-grid">${rows.map((x) => `
       <div class="sup-card">
         <div class="sup-card-h">
@@ -2040,6 +2076,8 @@ async function renderSuppliers() {
 
   box.querySelectorAll("[data-supedit]").forEach((b) =>
     b.onclick = () => editSupplier(rows.find((r) => r.name === b.dataset.supedit)));
+  const poBtn = $("poNew");
+  if (poBtn) poBtn.onclick = () => openManualPo(rows);
 }
 
 function editSupplier(sup) {
@@ -4374,9 +4412,47 @@ let _ordersTab = "orders";
 async function openOrders() {
   moduleShell("Orders", `<div class="ap-empty">Loading orders…</div>`);
   try {
-    _ordersData = await api("/api/store/orders");
+    const [od, cr] = await Promise.all([
+      api("/api/store/orders"),
+      api("/api/cancel-requests").catch(() => ({ open: [], summary: {} })),
+    ]);
+    _ordersData = od;
+    _cancelReqs = cr;
     renderOrders();
   } catch (e) { moduleShell("Orders", `<div class="card">${esc(e.message)}</div>`); }
+}
+
+let _cancelReqs = { open: [], summary: {} };
+
+/* The cancellation inbox. It sits ABOVE the order list because an open request
+   is time-sensitive in a way a status change is not — a shopper waiting to hear
+   back is a sale still in play, and every hour of silence makes it less so. */
+function cancelInbox() {
+  const open = (_cancelReqs && _cancelReqs.open) || [];
+  if (!open.length) return "";
+  return `
+    <div class="cr-inbox">
+      <div class="cr-h">${sic("whatsapp")}
+        <b>${open.length} cancellation request${open.length === 1 ? "" : "s"}</b>
+        <span class="muted">Nothing is cancelled until you approve it.</span></div>
+      ${open.map(r => `
+        <div class="cr-row" data-cr="${esc(r.id)}">
+          <div class="cr-meta">
+            <b>${esc(r.ref_no)}</b>
+            <span>${esc((r.counterparty || {}).name || "")}</span>
+            <span class="cr-reason">${esc(r.reason_label)}</span>
+            ${r.reason_text ? `<span class="muted tiny">"${esc(r.reason_text)}"</span>` : ""}
+          </div>
+          ${r.save_play ? `<div class="cr-play">${sic("spark")}${esc(r.save_play)}</div>` : ""}
+          <div class="cr-acts">
+            ${(r.links || {}).shopper_wa
+              ? `<a class="btn ghost sm" href="${esc(r.links.shopper_wa)}" target="_blank" rel="noopener">${sic("whatsapp")}Message them</a>`
+              : `<span class="muted tiny">No phone number on this order</span>`}
+            <button class="btn ghost sm" data-crkeep="${esc(r.id)}">Keep the order</button>
+            <button class="btn ghost sm danger" data-crcancel="${esc(r.id)}">Cancel it</button>
+          </div>
+        </div>`).join("")}
+    </div>`;
 }
 
 function renderOrders() {
@@ -4409,16 +4485,41 @@ function renderOrders() {
     body = `
       <div class="ord-toolbar">
         <div class="ord-chips">${chips}</div>
-        <button class="btn ghost sm" id="ordExport">⬇ Export CSV</button>
+        <div class="ord-tools">
+          <button class="btn ghost sm" id="ordLabels">${sic("tag")}Print ${_ordersFilter ? "these" : "all"} labels</button>
+          <button class="btn ghost sm" id="ordExport">⬇ Export CSV</button>
+        </div>
       </div>
       <div class="ord-list">${rows.map(orderCard).join("") || `<div class="ap-empty">Nothing with that status.</div>`}</div>`;
   }
 
-  moduleShell("Orders", kpis + tabs + body);
+  moduleShell("Orders", kpis + cancelInbox() + tabs + body);
   document.querySelectorAll("[data-otab]").forEach((b) => b.onclick = () => { _ordersTab = b.dataset.otab; renderOrders(); if (_ordersTab === "customers") loadCustomers(); });
   document.querySelectorAll("[data-ofil]").forEach((b) => b.onclick = () => { _ordersFilter = b.dataset.ofil; renderOrders(); });
   const ex = $("ordExport");
   if (ex) ex.onclick = () => download("/api/store/orders/export", "site_orders.csv");
+
+  const lab = $("ordLabels");
+  if (lab) lab.onclick = async () => {
+    const ids = (_ordersFilter ? _ordersData.orders.filter(o => o.status === _ordersFilter)
+                               : _ordersData.orders).map(o => o.id);
+    if (!ids.length) return toast("No orders to print.");
+    await postDownload("/api/orders/labels", { order_ids: ids }, `labels-${ids.length}.pdf`);
+  };
+
+  document.querySelectorAll("[data-label]").forEach(b => b.onclick = async () => {
+    const o = _ordersData.orders.find(x => x.id === b.dataset.label);
+    await postDownload("/api/orders/labels", { order_ids: [b.dataset.label] },
+                       `label-${(o && o.order_no) || "order"}.pdf`);
+  });
+
+  document.querySelectorAll("[data-invoice]").forEach(b => b.onclick = () =>
+    openInvoiceFor(b.dataset.invoice));
+
+  document.querySelectorAll("[data-crkeep]").forEach(b => b.onclick = () =>
+    resolveCancel(b.dataset.crkeep, "declined"));
+  document.querySelectorAll("[data-crcancel]").forEach(b => b.onclick = () =>
+    resolveCancel(b.dataset.crcancel, "approved"));
   document.querySelectorAll("[data-ostat]").forEach((sel) => sel.onchange = async () => {
     const id = sel.dataset.ostat;
     // Cancelling is the one status change worth a question. Asked here, in the
@@ -4511,6 +4612,8 @@ function orderCard(o) {
       <div class="ord-card-f">
         <label class="muted tiny">Status <select data-ostat="${esc(o.id)}">${opts}</select></label>
         ${o.phone ? `<a class="btn ghost tiny" href="https://wa.me/${esc(String(o.phone).replace(/\D/g, ""))}" target="_blank" rel="noopener">${sic("whatsapp")}WhatsApp</a>` : ""}
+        <button class="btn ghost tiny" data-label="${esc(o.id)}">${sic("tag")}Bill sticker</button>
+        <button class="btn ghost tiny" data-invoice="${esc(o.id)}">${sic("receipt")}Invoice</button>
       </div>
     </div>`;
 }
@@ -4571,3 +4674,726 @@ async function loadCustomers() {
     }
   }
 })();
+
+/* =====================================================================
+   MODULE: Social Media Manager
+
+   The screen order follows the research rather than the obvious product
+   shape. "This Week" is the home screen, not a settings page, because the
+   binding constraint on a small seller is production capacity, not
+   scheduling — so the fastest possible path from opening the module to
+   having four posts approved is what the whole layout optimises for.
+   ===================================================================== */
+let _socialData = null;
+
+async function openSocial() {
+  moduleShell("Social Media Manager", `<div class="ap-empty">Planning your week…</div>`);
+  try {
+    _socialData = await api("/api/social");
+    renderSocial();
+  } catch (e) {
+    moduleShell("Social Media Manager", `<div class="card">${esc(e.message)}</div>`);
+  }
+}
+
+function socialStateChip(st) {
+  const map = { draft: ["Draft", "st-draft"], ready: ["Ready", "st-ready"],
+                scheduled: ["Scheduled", "st-sched"], published: ["Published", "st-pub"],
+                failed: ["Failed", "st-fail"] };
+  const [label, cls] = map[st] || ["Draft", "st-draft"];
+  return `<span class="sm-chip ${cls}">${label}</span>`;
+}
+
+function renderSocial() {
+  const d = _socialData;
+  const week = d.week || [];
+  const rad = d.radar || {};
+  const ai = d.ai || {};
+
+  const aiLine = ai.free_ready
+    ? `<span class="sm-ok">${sic("check")}Writing with ${esc(ai.active)} — free tier</span>`
+    : `<span class="sm-warn">${sic("alert")}No AI connected. Captions use a template until you add a free key in Settings.</span>`;
+
+  const radarHtml = (rad.headline || []).length ? `
+    <div class="sm-radar">
+      <div class="sm-radar-h">${sic("bell")}Coming up</div>
+      ${(rad.headline || []).map(h => `<div class="sm-radar-i">${esc(h)}</div>`).join("")}
+      <div class="sm-note">${esc(rad.dates_note || "")}</div>
+    </div>` : "";
+
+  const cards = week.length ? week.map(p => `
+    <div class="sm-card" data-id="${esc(p.id)}">
+      <div class="sm-card-top">
+        <span class="sm-fmt sm-fmt-${esc(p.format)}">${esc((d.formats[p.format] || {}).label || p.format)}</span>
+        <span class="sm-pillar">${esc(p.pillar_name)}</span>
+        ${socialStateChip(p.state)}
+      </div>
+      <div class="sm-prod">${esc(p.product_name || "—")}</div>
+      <div class="sm-hook">${esc((p.caption || {}).hook || "")}</div>
+      <div class="sm-body">${esc((p.caption || {}).body || "").slice(0, 140)}</div>
+      <div class="sm-tags">${((p.caption || {}).tags || []).map(t => `<span>${esc(t)}</span>`).join("")}</div>
+      ${(p.checks || []).length ? `<div class="sm-checks">${
+        (p.checks || []).map(c => `<div class="sm-check sm-${esc(c.level)}">${esc(c.text)}</div>`).join("")
+      }</div>` : ""}
+      <div class="sm-when">${sic("clock")}${esc((p.scheduled_at || "").replace("T", " · "))}</div>
+      <div class="sm-actions">
+        <button class="btn ghost xs" data-act="edit">Edit</button>
+        <button class="btn ghost xs" data-act="regen">Rewrite</button>
+        <button class="btn ghost xs" data-act="copy">Copy caption</button>
+        <button class="btn ghost xs danger" data-act="skip">Skip</button>
+      </div>
+    </div>`).join("") : `
+    <div class="sm-blank">
+      <div class="sm-blank-h">No posts planned yet</div>
+      <p>One tap builds a week: ${esc((d.cadence[d.settings.cadence] || {}).posts || 4)} posts,
+         each tied to a product, each written and timed for you.</p>
+      <button class="btn primary" id="smBuild">${sic("spark")}Plan my week</button>
+    </div>`;
+
+  const pillars = (d.pillars || []).map(p => `
+    <div class="sm-pil">
+      <div class="sm-pil-h"><b>${esc(p.name)}</b><span>${p.share}%</span></div>
+      <div class="sm-pil-w">${esc(p.why)}</div>
+    </div>`).join("");
+
+  const work = d.working || {};
+  const metrics = `
+    <div class="sm-metrics">
+      ${(work.headline || []).map(m => `
+        <div class="sm-metric">
+          <div class="sm-metric-v">${m.value === null ? "—" : esc(String(m.value))}</div>
+          <div class="sm-metric-l">${esc(m.label)}</div>
+          <div class="sm-metric-w">${esc(m.why || m.benchmark || "")}</div>
+        </div>`).join("")}
+    </div>
+    <div class="sm-muted-metrics">
+      ${(work.muted || []).map(m => `
+        <div class="sm-muted"><b>${esc(m.label)}</b>
+          <span>${m.value === null ? "—" : esc(String(m.value))}</span>
+          <em>${esc(m.note)}</em></div>`).join("")}
+    </div>`;
+
+  moduleShell("Social Media Manager", `
+    <div class="sm-head">
+      <div>${aiLine}</div>
+      <div class="sm-head-actions">
+        ${week.length ? `<button class="btn primary" id="smApprove">${sic("check")}Approve all ${week.filter(p => p.state === "draft").length}</button>` : ""}
+        <button class="btn ghost sm" id="smBuild2">${sic("spark")}Plan a new week</button>
+        <button class="btn ghost sm" id="smShoot">${sic("camera")}Shoot list</button>
+        <button class="btn ghost sm" id="smSettings">${sic("settings")}Setup</button>
+      </div>
+    </div>
+    ${radarHtml}
+    <div class="sm-grid">${cards}</div>
+
+    <details class="sm-fold">
+      <summary>Why these posts, and not the ones you were going to make</summary>
+      <div class="sm-explain">
+        <p>Across 86 studies and 95 million observations, the content mix that
+        wins <b>likes</b> is close to the inverse of the mix that wins
+        <b>sales</b>. Informational product content has a +0.58 elasticity to
+        sales; emotional content has −0.07. Discount posts are negatively
+        associated with sales, which is why offers are capped at
+        ${esc(String(d.offer_cap))}% of your week here rather than left to habit.</p>
+        <div class="sm-pillars">${pillars}</div>
+      </div>
+    </details>
+
+    <div class="card sm-working">
+      <h3>What's working</h3>
+      ${work.enough_data ? "" : `<p class="sm-note">Numbers appear once you have published about eight posts. Until then this is a reminder of what to watch, not a scorecard.</p>`}
+      ${metrics}
+    </div>`);
+
+  const build = async () => {
+    toast("Writing your week…");
+    try { await api("/api/social/week", { method: "POST", json: { regenerate: true } }); await openSocial(); }
+    catch (e) { toast(e.message); }
+  };
+  if ($("smBuild")) $("smBuild").onclick = build;
+  if ($("smBuild2")) $("smBuild2").onclick = build;
+  if ($("smApprove")) $("smApprove").onclick = async () => {
+    try { const r = await api("/api/social/approve-all", { method: "POST" });
+      toast(`${r.scheduled} post${r.scheduled === 1 ? "" : "s"} scheduled.`); await openSocial(); }
+    catch (e) { toast(e.message); }
+  };
+  if ($("smShoot")) $("smShoot").onclick = openShootList;
+  if ($("smSettings")) $("smSettings").onclick = openSocialSetup;
+
+  document.querySelectorAll(".sm-card").forEach(card => {
+    const id = card.dataset.id;
+    card.querySelectorAll("[data-act]").forEach(b => {
+      b.onclick = async () => {
+        const act = b.dataset.act;
+        const post = (_socialData.week || []).find(p => p.id === id);
+        if (act === "copy") {
+          try { await navigator.clipboard.writeText(post.text || ""); toast("Caption copied — paste it into Instagram."); }
+          catch (e) { toast("Could not copy. Select the text and copy it manually."); }
+          return;
+        }
+        if (act === "regen") {
+          b.disabled = true; b.textContent = "Writing…";
+          try { await api("/api/social/regenerate", { method: "POST", json: { post_id: id } }); await openSocial(); }
+          catch (e) { toast(e.message); b.disabled = false; b.textContent = "Rewrite"; }
+          return;
+        }
+        if (act === "skip") {
+          try { await api("/api/social/state", { method: "POST", json: { post_id: id, state: "failed" } }); await openSocial(); }
+          catch (e) { toast(e.message); }
+          return;
+        }
+        if (act === "edit") openSocialEditor(post);
+      };
+    });
+  });
+}
+
+function openSocialEditor(post) {
+  const c = post.caption || {};
+  openModal(`Edit post — ${esc(post.product_name || "")}`, `
+    <label class="fld"><span>Hook <em id="smHookCount">${(c.hook || "").length} / 125</em></span>
+      <textarea id="smHook" rows="2">${esc(c.hook || "")}</textarea></label>
+    <p class="sm-hint">Instagram cuts the caption at 125 characters. Everything past
+      that hides behind "… more", so the product and the reason to care both belong here.</p>
+
+    <label class="fld"><span>Body</span>
+      <textarea id="smBody" rows="4">${esc(c.body || "")}</textarea></label>
+    <p class="sm-hint">Under 30 words performs best across nine million posts studied.</p>
+
+    <label class="fld"><span>Question</span>
+      <input id="smQ" value="${esc(c.question || "")}" /></label>
+    <p class="sm-hint">A comment-focused question is the single biggest lever in a
+      caption — worth roughly 200% more comments.</p>
+
+    <label class="fld"><span>How to order</span>
+      <input id="smCta" value="${esc(c.cta || "")}" /></label>
+
+    <label class="fld"><span>Hashtags <em>max 5</em></span>
+      <input id="smTags" value="${esc((c.tags || []).join(" "))}" /></label>
+    <p class="sm-hint">Instagram capped hashtags at 5 in January 2026. They are worth
+      about +2% reach now — the category words in your hook matter more.</p>
+
+    <label class="fld"><span>When</span>
+      <input id="smWhen" type="datetime-local" value="${esc(post.scheduled_at || "")}" /></label>
+
+    <div class="modal-actions">
+      <button class="btn ghost" data-mclose2>Cancel</button>
+      <button class="btn primary" id="smSave">Save</button>
+    </div>`);
+
+  const h = $("smHook"), cnt = $("smHookCount");
+  if (h && cnt) h.oninput = () => {
+    cnt.textContent = `${h.value.length} / 125`;
+    cnt.classList.toggle("over", h.value.length > 125);
+  };
+  document.querySelector("[data-mclose2]").onclick = closeModal;
+  $("smSave").onclick = async () => {
+    const tags = ($("smTags").value || "").split(/\s+/).filter(Boolean).slice(0, 5);
+    try {
+      await api("/api/social/post", { method: "POST", json: { post_id: post.id, patch: {
+        hook: $("smHook").value, body: $("smBody").value, question: $("smQ").value,
+        cta: $("smCta").value, tags, scheduled_at: $("smWhen").value } } });
+      closeModal(); await openSocial();
+    } catch (e) { toast(e.message); }
+  };
+}
+
+async function openShootList() {
+  let sl;
+  try { sl = await api("/api/social/shoot-list"); }
+  catch (e) { return toast(e.message); }
+  openModal("Shoot list", `
+    <p class="muted" style="margin-top:0;">One session of about ${esc(String(sl.minutes))}
+       minutes on ${esc(String((sl.products || []).length))} products gives you
+       ${esc(String((sl.yields || []).length))} assets — two to three weeks of posting.
+       Batching is the only way the arithmetic works.</p>
+    <div class="sm-shoot">
+      <h4>Shoot these</h4>
+      <ul>${(sl.products || []).map(p => `<li>${esc(p.name)}</li>`).join("") || "<li>Add a product first</li>"}</ul>
+      <h4>For each one</h4>
+      <ul>${(sl.per_product || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+      <h4>What it turns into</h4>
+      <table class="sm-yield"><tbody>
+        ${(sl.yields || []).map(y => `<tr><td><b>${esc(y.asset)}</b></td><td>${esc(y.from)}</td><td>${esc(y.angle)}</td></tr>`).join("")}
+      </tbody></table>
+      <p class="sm-note">${esc(sl.note || "")}</p>
+    </div>
+    <div class="modal-actions"><button class="btn primary" data-mclose3>Close</button></div>`);
+  document.querySelector("[data-mclose3]").onclick = closeModal;
+}
+
+function openSocialSetup() {
+  const d = _socialData, s = d.settings || {};
+  openModal("Social setup", `
+    <label class="fld"><span>What do you sell?</span>
+      <select id="soCat">${["clothing", "jewellery", "perfume"].map(c =>
+        `<option value="${c}"${s.category === c ? " selected" : ""}>${c}</option>`).join("")}</select></label>
+
+    <label class="fld"><span>Language</span>
+      <select id="soLang">${Object.entries(d.languages || {}).map(([k, v]) =>
+        `<option value="${k}"${s.language === k ? " selected" : ""}>${esc(v)}</option>`).join("")}</select></label>
+    <p class="sm-hint">Hinglish in Roman script is the default because 76% of Indian
+      festive shoppers prefer advertising in their own language, and Roman script reads
+      across literacy levels without a keyboard switch.</p>
+
+    <label class="fld"><span>How much time do you have?</span>
+      <select id="soCad">${Object.entries(d.cadence || {}).map(([k, v]) =>
+        `<option value="${k}"${s.cadence === k ? " selected" : ""}>${esc(v.label)} — ${esc(String(v.posts))} posts a week, ${esc(v.hours)}</option>`).join("")}</select></label>
+    <p class="sm-hint" id="soCadWhy">${esc(((d.cadence || {})[s.cadence] || {}).why || "")}</p>
+
+    <label class="fld"><span>Your city</span><input id="soCity" value="${esc(s.city || "")}" /></label>
+
+    <label class="fld"><span>How people order</span>
+      <input id="soCta" value="${esc(s.order_cta || "")}" /></label>
+    <p class="sm-hint">In India the sale closes in DMs or on WhatsApp, not at a
+      link-in-bio checkout. Every caption ends here.</p>
+
+    <div class="modal-actions">
+      <button class="btn ghost" data-mclose4>Cancel</button>
+      <button class="btn primary" id="soSave">Save</button>
+    </div>`);
+  const cad = $("soCad");
+  if (cad) cad.onchange = () => {
+    const why = ((_socialData.cadence || {})[cad.value] || {}).why || "";
+    if ($("soCadWhy")) $("soCadWhy").textContent = why;
+  };
+  document.querySelector("[data-mclose4]").onclick = closeModal;
+  $("soSave").onclick = async () => {
+    try {
+      await api("/api/social/settings", { method: "POST", json: { patch: {
+        category: $("soCat").value, language: $("soLang").value,
+        cadence: $("soCad").value, city: $("soCity").value,
+        order_cta: $("soCta").value } } });
+      closeModal(); await openSocial();
+    } catch (e) { toast(e.message); }
+  };
+}
+
+/* =====================================================================
+   MODULE: Billing & GST
+
+   The screen leads with the registration warning rather than with the
+   settings form, because the most valuable thing this module can tell an
+   Indian D2C seller is that Section 24(i) compels GST registration for
+   inter-state sale of goods from the first rupee — there is no turnover
+   floor. A seller who believes the Rs 40 lakh threshold protects them
+   while shipping to the next state is in breach from their first order
+   and will not find out until it is expensive.
+   ===================================================================== */
+let _gstData = null;
+
+async function openGst() {
+  moduleShell("Billing & GST", `<div class="ap-empty">Loading your billing setup…</div>`);
+  try {
+    const [inv, st] = await Promise.all([api("/api/invoices"), api("/api/gst/settings")]);
+    _gstData = { invoices: inv.invoices || [], st, fy: inv.fy };
+    renderGst();
+  } catch (e) {
+    moduleShell("Billing & GST", `<div class="card">${esc(e.message)}</div>`);
+  }
+}
+
+function renderGst() {
+  const d = _gstData, st = d.st, s = st.settings || {}, doc = st.document || {};
+  const w = st.warning;
+
+  const warnHtml = w ? `
+    <div class="gst-warn gst-${esc(w.level)}">
+      ${sic(w.level === "blocking" ? "alert" : "shield")}
+      <div><b>${w.level === "blocking" ? "This needs your attention" : "Where you stand"}</b>
+        <span>${esc(w.text)}</span></div>
+    </div>` : "";
+
+  const rows = (d.invoices || []).map(i => `
+    <tr class="${i.status === "cancelled" ? "gst-cancelled" : ""}">
+      <td><b>${esc(i.number)}</b></td>
+      <td>${esc(i.date)}</td>
+      <td>${esc((i.buyer || {}).name || "")}</td>
+      <td>${esc((i.place_of_supply || {}).kind === "inter" ? "IGST" : "CGST+SGST")}
+          <span class="muted">${esc((i.buyer || {}).state || "")}</span></td>
+      <td class="num">₹${fmt(i.grand_total / 100)}</td>
+      <td>${i.status === "cancelled"
+            ? `<span class="sm-chip st-fail">Cancelled</span>`
+            : `<span class="sm-chip st-pub">Issued</span>`}</td>
+      <td class="row-acts">
+        <button class="btn ghost xs" data-pdf="${esc(i.id)}">PDF</button>
+        ${i.status === "cancelled" ? "" : `<button class="btn ghost xs danger" data-void="${esc(i.id)}">Cancel</button>`}
+      </td>
+    </tr>`).join("");
+
+  moduleShell("Billing & GST", `
+    ${warnHtml}
+    <div class="gst-top">
+      <div class="card gst-ident">
+        <h3>Who you are on an invoice</h3>
+        <div class="gst-doc">You currently issue: <b>${esc(doc.title || "Receipt")}</b></div>
+        <p class="muted">${esc(doc.why || "")}</p>
+        <label class="fld"><span>GSTIN</span>
+          <input id="gsGstin" value="${esc(s.gstin || "")}" placeholder="29AAGCB7383J1Z4"
+                 maxlength="15" style="text-transform:uppercase" /></label>
+        <div id="gsCheck" class="gst-check">${
+          st.gstin_check ? (st.gstin_check.ok
+            ? `<span class="sm-ok">${sic("check")}Valid — ${esc(st.gstin_check.state)}</span>`
+            : `<span class="sm-warn">${sic("alert")}${esc(st.gstin_check.reason)}</span>`) : ""}</div>
+        <label class="fld"><span>Legal name</span>
+          <input id="gsLegal" value="${esc(s.legal_name || "")}" /></label>
+        <label class="fld"><span>Trading name</span>
+          <input id="gsTrade" value="${esc(s.trade_name || "")}" /></label>
+        <label class="fld"><span>Invoice series</span>
+          <input id="gsSeries" value="${esc(s.series || "INV")}" maxlength="3" /></label>
+        <p class="sm-hint">Rule 46(b) caps an invoice number at 16 characters and
+          requires it to be unique within a financial year. A 3-letter series keeps
+          you inside that: ${esc((s.series || "INV").toUpperCase())}/2627/000001.</p>
+        <label class="fld chk"><input type="checkbox" id="gsIncl"${s.prices_include_tax !== false ? " checked" : ""} />
+          <span>My prices already include GST</span></label>
+        <p class="sm-hint">This is the Indian default and, for packaged goods, the law —
+          the Legal Metrology rules require MRP to include all taxes. Tax is worked
+          backwards out of the price your shopper sees.</p>
+        <div class="modal-actions"><button class="btn primary" id="gsSave">Save</button></div>
+      </div>
+
+      <div class="card gst-pickup">
+        <h3>Pickup and return address</h3>
+        <p class="muted">Printed on every shipping label. A parcel that cannot be
+          delivered and has no return address is destroyed rather than returned.</p>
+        ${["line1", "line2", "city", "state", "pincode"].map(k => `
+          <label class="fld"><span>${k === "line1" ? "Address" : k === "line2" ? "Area" : k[0].toUpperCase() + k.slice(1)}</span>
+            <input id="gsA_${k}" value="${esc((s.pickup_address || {})[k] || "")}" /></label>`).join("")}
+        <div class="modal-actions"><button class="btn primary" id="gsSaveAddr">Save address</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="gst-inv-head">
+        <h3>Invoices <span class="muted">FY ${esc(d.fy)}</span></h3>
+        <button class="btn ghost sm" id="gsGstr1">${sic("receipt")}Export GSTR-1</button>
+      </div>
+      ${rows ? `<div class="tbl-scroll"><table class="tbl">
+        <thead><tr><th>Number</th><th>Date</th><th>Customer</th><th>Tax</th>
+          <th class="num">Total</th><th>Status</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`
+      : `<div class="ap-empty">No invoices yet. Issue one from any order in the Orders module.</div>`}
+      <p class="sm-hint">Cancelled invoices stay in this list on purpose. GSTR-1
+        Table 13 requires the number range issued and the count cancelled, so
+        deleting one would make that table unproducible for the rest of the year.</p>
+    </div>
+
+    <details class="sm-fold">
+      <summary>What still needs a chartered accountant to confirm</summary>
+      <div class="sm-explain">
+        <p>These rates were researched against the CBIC notifications, but three
+        things could not be verified at source and a confident wrong answer here
+        is expensive. Please have your CA check them before you rely on this for filing.</p>
+        <ul>${(st.needs_ca_review || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+        <h4>Where the rounding convention comes from</h4>
+        <pre class="gst-rule">${esc(st.threshold_rule || "")}</pre>
+      </div>
+    </details>`);
+
+  const gstinBox = $("gsGstin");
+  let t = null;
+  if (gstinBox) gstinBox.oninput = () => {
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      const v = gstinBox.value.trim().toUpperCase();
+      if (!v) { $("gsCheck").innerHTML = ""; return; }
+      try {
+        const r = await api("/api/gst/check?gstin=" + encodeURIComponent(v));
+        $("gsCheck").innerHTML = r.ok
+          ? `<span class="sm-ok">${sic("check")}Valid — ${esc(r.state)}</span>`
+          : `<span class="sm-warn">${sic("alert")}${esc(r.reason)}</span>`;
+      } catch (e) { /* typing; not worth a toast */ }
+    }, 350);
+  };
+
+  $("gsSave").onclick = async () => {
+    try {
+      await api("/api/gst/settings", { method: "POST", json: { patch: {
+        gstin: $("gsGstin").value.trim().toUpperCase(),
+        legal_name: $("gsLegal").value.trim(), trade_name: $("gsTrade").value.trim(),
+        series: $("gsSeries").value.trim(), prices_include_tax: $("gsIncl").checked } } });
+      toast("Saved."); await openGst();
+    } catch (e) { toast(e.message); }
+  };
+  $("gsSaveAddr").onclick = async () => {
+    const addr = {};
+    ["line1", "line2", "city", "state", "pincode"].forEach(k => addr[k] = $("gsA_" + k).value.trim());
+    try {
+      await api("/api/gst/settings", { method: "POST", json: { patch: { pickup_address: addr } } });
+      toast("Address saved."); await openGst();
+    } catch (e) { toast(e.message); }
+  };
+  $("gsGstr1").onclick = () => download("/api/gstr1.csv?fy=" + encodeURIComponent(_gstData.fy),
+                                        `gstr1-${_gstData.fy}.csv`);
+
+  document.querySelectorAll("[data-pdf]").forEach(b => b.onclick = () =>
+    download("/api/invoices/" + encodeURIComponent(b.dataset.pdf) + "/pdf", "invoice.pdf"));
+  document.querySelectorAll("[data-void]").forEach(b => b.onclick = async () => {
+    const why = prompt("Why is this invoice being cancelled?");
+    if (why === null) return;
+    try {
+      await api("/api/invoices/cancel", { method: "POST", json: { invoice_id: b.dataset.void, reason: why } });
+      toast("Invoice cancelled. The number stays in the series."); await openGst();
+    } catch (e) { toast(e.message); }
+  });
+}
+
+/* A POST that yields a file. `download` only does GET, and a label request
+   carries a list of order ids too long to sit safely in a query string. */
+async function postDownload(url, json, filename) {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Session-Id": state.sessionId,
+                 "Authorization": "Bearer " + state.token },
+      body: JSON.stringify(json),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.detail || res.statusText);
+    }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch (e) { toast(e.message || "Could not build that file."); }
+}
+
+async function resolveCancel(id, decision) {
+  const note = decision === "declined"
+    ? prompt("What did you agree with them? (optional)") : "";
+  if (note === null) return;
+  try {
+    await api("/api/cancel-requests/resolve", { method: "POST",
+      json: { request_id: id, decision, note: note || "" } });
+    toast(decision === "approved" ? "Order cancelled." : "Kept — request closed.");
+    await openOrders();
+  } catch (e) { toast(e.message); }
+}
+
+/* Invoice preview before issuing. The preview exists because issuing burns a
+   number out of a legally consecutive series — you cannot take it back, only
+   cancel it, and a cancelled number still has to be reported. */
+async function openInvoiceFor(orderId) {
+  let d;
+  try { d = await api("/api/invoices/preview?order_id=" + encodeURIComponent(orderId)); }
+  catch (e) { return toast(e.message); }
+
+  if (d.existing) {
+    openModal(`Invoice ${d.existing.number}`, `
+      <p class="muted" style="margin-top:0;">Already issued on ${esc(d.existing.date)}.</p>
+      <div class="modal-actions">
+        <button class="btn ghost" data-mclose5>Close</button>
+        <button class="btn primary" id="ivDl">Download PDF</button>
+      </div>`);
+    document.querySelector("[data-mclose5]").onclick = closeModal;
+    $("ivDl").onclick = () => download("/api/invoices/" + encodeURIComponent(d.existing.id) + "/pdf",
+                                       (d.existing.number || "invoice").replace(/\//g, "-") + ".pdf");
+    return;
+  }
+
+  const p = d.preview, doc = p.document || {}, pos = p.place_of_supply || {};
+  const lines = (p.lines || []).map(l => `
+    <tr><td>${esc(l.name)}</td><td>${esc(l.hsn || "—")}</td>
+        <td class="num">${l.qty}</td><td class="num">${l.rate}%</td>
+        <td class="num">₹${fmt(l.taxable / 100)}</td></tr>
+    ${l.rate_why ? `<tr class="iv-why"><td colspan="5">${esc(l.rate_why)}</td></tr>` : ""}`).join("");
+
+  openModal("Issue invoice", `
+    <div class="iv-doc"><b>${esc(doc.title || "Receipt")}</b>
+      <span class="muted">${esc(doc.why || "")}</span></div>
+    <div class="iv-pos">Place of supply: <b>${esc((p.buyer || {}).state || "—")}</b>
+      — ${esc(pos.kind === "inter" ? "inter-state, IGST" : "intra-state, CGST + SGST")}</div>
+    <div class="tbl-scroll"><table class="tbl">
+      <thead><tr><th>Item</th><th>HSN</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Taxable</th></tr></thead>
+      <tbody>${lines}</tbody></table></div>
+    <div class="iv-tot">
+      <div><span>Taxable</span><b>₹${fmt(p.taxable / 100)}</b></div>
+      ${pos.kind === "inter"
+        ? `<div><span>IGST</span><b>₹${fmt((p.heads || {}).igst / 100)}</b></div>`
+        : `<div><span>CGST</span><b>₹${fmt((p.heads || {}).cgst / 100)}</b></div>
+           <div><span>SGST</span><b>₹${fmt((p.heads || {}).sgst / 100)}</b></div>`}
+      ${p.shipping ? `<div><span>Shipping</span><b>₹${fmt(p.shipping / 100)}</b></div>` : ""}
+      <div class="iv-grand"><span>Total</span><b>₹${fmt(p.grand_total / 100)}</b></div>
+    </div>
+    ${(p.blockers || []).length ? `<div class="iv-block">${sic("alert")}
+      <div><b>Fix these first</b><ul>${p.blockers.map(b => `<li>${esc(b)}</li>`).join("")}</ul></div></div>` : ""}
+    <p class="sm-hint">Issuing takes the next number in your series. Numbers must run
+      consecutively, so a number that is issued and later cancelled still has to be
+      reported — that is why this preview exists.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" data-mclose6>Not yet</button>
+      <button class="btn primary" id="ivIssue">Issue ${esc(doc.title || "invoice")}</button>
+    </div>`);
+
+  document.querySelector("[data-mclose6]").onclick = closeModal;
+  $("ivIssue").onclick = async () => {
+    try {
+      const r = await api("/api/invoices/issue", { method: "POST",
+        json: { order_id: orderId, force: (p.blockers || []).length > 0 } });
+      if (r.error === "blocked") return toast("Still blocked: " + (r.blockers || []).join(" "));
+      closeModal();
+      toast("Issued " + r.number);
+      download("/api/invoices/" + encodeURIComponent(r.id) + "/pdf",
+               (r.number || "invoice").replace(/\//g, "-") + ".pdf");
+    } catch (e) { toast(e.message); }
+  };
+}
+
+/* =====================================================================
+   Manual purchase order.
+
+   The automatic PO only knows about inventory items that have fallen below
+   a reorder point, which covers restocking and nothing else — not a first
+   order from a new supplier, not a sample run, not fabric for a product
+   that does not exist yet. Those are most of the POs a small seller
+   actually raises.
+   ===================================================================== */
+let _poLines = [];
+
+function poLineRow(l, i) {
+  return `
+    <tr data-poi="${i}">
+      <td><input class="po-name" value="${esc(l.name || "")}" placeholder="What are you buying?" /></td>
+      <td><input class="po-qty" type="number" min="1" value="${esc(String(l.order_qty || 1))}" /></td>
+      <td><input class="po-unit" value="${esc(l.unit_label || "unit")}" /></td>
+      <td><input class="po-cost" type="number" min="0" step="0.01" value="${l.unit_cost != null ? esc(String(l.unit_cost)) : ""}" placeholder="—" /></td>
+      <td class="num po-amt">${l.unit_cost != null ? "₹" + fmt(l.unit_cost * (l.order_qty || 1)) : "—"}</td>
+      <td><button class="btn ghost tiny danger" data-podel="${i}">✕</button></td>
+    </tr>`;
+}
+
+function renderPoLines() {
+  const body = $("poBody");
+  if (!body) return;
+  body.innerHTML = _poLines.map(poLineRow).join("");
+  const total = _poLines.reduce((a, l) =>
+    a + (l.unit_cost != null ? Number(l.unit_cost) * Number(l.order_qty || 1) : 0), 0);
+  const anyCost = _poLines.some(l => l.unit_cost != null);
+  $("poTotal").innerHTML = anyCost
+    ? `<b>₹${fmt(total)}</b>`
+    : `<span class="muted">No rates entered — the PO will show quantities only.</span>`;
+
+  body.querySelectorAll("[data-poi]").forEach(tr => {
+    const i = Number(tr.dataset.poi);
+    const sync = () => {
+      _poLines[i].name = tr.querySelector(".po-name").value;
+      _poLines[i].order_qty = Number(tr.querySelector(".po-qty").value || 0);
+      _poLines[i].unit_label = tr.querySelector(".po-unit").value;
+      const c = tr.querySelector(".po-cost").value;
+      _poLines[i].unit_cost = c === "" ? null : Number(c);
+      renderPoLines();
+    };
+    tr.querySelectorAll("input").forEach(inp => inp.onchange = sync);
+    tr.querySelector("[data-podel]").onclick = () => { _poLines.splice(i, 1); renderPoLines(); };
+  });
+}
+
+function openManualPo(suppliers) {
+  _poLines = [{ name: "", order_qty: 1, unit_label: "unit", unit_cost: null }];
+  const opts = (suppliers || []).map(x =>
+    `<option value="${esc(x.name)}">${esc(x.name)}</option>`).join("");
+
+  openModal("Create purchase order", `
+    <div class="po-form">
+      <div class="po-sup">
+        <label class="fld"><span>Supplier</span>
+          <input id="poSupName" list="poSupList" placeholder="Name" />
+          <datalist id="poSupList">${opts}</datalist></label>
+        <label class="fld"><span>Phone</span><input id="poSupPhone" placeholder="+91 …" /></label>
+        <label class="fld"><span>Email</span><input id="poSupEmail" /></label>
+        <label class="fld"><span>Expected by</span><input id="poWhen" type="date" /></label>
+      </div>
+      <label class="fld"><span>Terms</span>
+        <input id="poTerms" placeholder="50% advance, balance on delivery" /></label>
+
+      <div class="section-title">What you are ordering</div>
+      <div class="tbl-scroll"><table class="tbl po-tbl">
+        <thead><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Rate ₹</th><th class="num">Amount</th><th></th></tr></thead>
+        <tbody id="poBody"></tbody>
+      </table></div>
+      <div class="po-foot">
+        <button class="btn ghost sm" id="poAdd">${sic("plus")}Add a line</button>
+        <div id="poTotal"></div>
+      </div>
+      <label class="fld"><span>Note to the supplier</span>
+        <textarea id="poNote" rows="2"></textarea></label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-mclose7>Cancel</button>
+      <button class="btn primary" id="poSave">Create</button>
+    </div>`, { wide: true });
+
+  renderPoLines();
+  $("poAdd").onclick = () => {
+    _poLines.push({ name: "", order_qty: 1, unit_label: "unit", unit_cost: null });
+    renderPoLines();
+  };
+  const sup = $("poSupName");
+  sup.onchange = () => {
+    const hit = (suppliers || []).find(x => x.name === sup.value);
+    if (hit) { $("poSupPhone").value = hit.phone || ""; $("poSupEmail").value = hit.email || ""; }
+  };
+  document.querySelector("[data-mclose7]").onclick = closeModal;
+  $("poSave").onclick = async () => {
+    const lines = _poLines.filter(l => (l.name || "").trim() && Number(l.order_qty) > 0);
+    if (!lines.length) return toast("Every line needs a name and a quantity.");
+    if (!sup.value.trim()) return toast("Who are you ordering from?");
+    try {
+      const po = await api("/api/purchase-orders/manual", { method: "POST", json: {
+        supplier: { name: sup.value.trim(), phone: $("poSupPhone").value.trim(),
+                    email: $("poSupEmail").value.trim() },
+        lines, expected_on: $("poWhen").value, terms: $("poTerms").value.trim(),
+        note: $("poNote").value.trim() } });
+      closeModal();
+      toast(`${po.po_number} created.`);
+      openPoActions(po);
+    } catch (e) { toast(e.message); }
+  };
+}
+
+/* After creating one, the seller has three things they might want: send it,
+   download it, or ask the supplier to cancel it. Offering them together beats
+   making them hunt through a list for the PO they just made. */
+function openPoActions(po) {
+  const phone = ((po.supplier || {}).phone || "").replace(/\D/g, "");
+  const text = encodeURIComponent(
+    `Purchase order ${po.po_number}\n` +
+    (po.lines || []).map(l => `${l.order_qty} ${l.unit_label} ${l.name}`).join("\n") +
+    (po.expected_on ? `\nNeeded by ${po.expected_on}` : "") +
+    (po.terms ? `\nTerms: ${po.terms}` : ""));
+  openModal(po.po_number, `
+    <p class="muted" style="margin-top:0;">${fmt(po.n_items)} line${po.n_items === 1 ? "" : "s"},
+       ${fmt(po.total_qty)} units${po.total_amount != null ? `, ₹${fmt(po.total_amount)}` : ""}.</p>
+    <div class="po-acts">
+      ${phone ? `<a class="btn primary" href="https://wa.me/${phone}?text=${text}" target="_blank" rel="noopener">${sic("whatsapp")}Send on WhatsApp</a>` : ""}
+      <button class="btn ghost" id="poDl">Download PDF</button>
+      <button class="btn ghost" id="poSent">Mark as sent</button>
+      <button class="btn ghost danger" id="poCancelReq">Ask to cancel</button>
+    </div>
+    <div class="modal-actions"><button class="btn ghost" data-mclose8>Close</button></div>`);
+  document.querySelector("[data-mclose8]").onclick = closeModal;
+  $("poDl").onclick = () => download("/api/supply/po/" + encodeURIComponent(po.po_number) + "/pdf",
+                                     po.po_number + ".pdf");
+  $("poSent").onclick = async () => {
+    try {
+      await api("/api/purchase-orders/status", { method: "POST",
+        json: { po_number: po.po_number, status: "sent" } });
+      toast("Marked as sent."); closeModal();
+    } catch (e) { toast(e.message); }
+  };
+  $("poCancelReq").onclick = async () => {
+    const why = prompt("Why are you cancelling this order with them?");
+    if (why === null) return;
+    try {
+      const r = await api("/api/purchase-orders/cancel-request", { method: "POST",
+        json: { po_number: po.po_number, reason_code: "other", reason_text: why } });
+      closeModal();
+      const wa = (r.links || {}).shopper_wa;
+      if (wa) window.open(wa, "_blank", "noopener");
+      toast("Nothing is cancelled yet — talk to them, then approve it in Orders.");
+    } catch (e) { toast(e.message); }
+  };
+}

@@ -309,6 +309,34 @@ def get_products(email: str) -> list[str]:
 # ---------------------------------------------------------
 # waste / spoilage
 # ---------------------------------------------------------
+def receive_stock(email: str, inventory_id: str, qty, reason: str = "") -> float:
+    """Add stock to an inventory item. The mirror of record_waste, used when a
+    purchase order is marked received.
+
+    Returns the new stock level. Raises if the item is gone, because silently
+    dropping a receipt leaves the seller's stock permanently understated and
+    they will not notice until they oversell."""
+    email = _email(email)
+    qty = _num(qty, 0)
+    if qty <= 0:
+        raise ValueError("Received quantity must be greater than zero.")
+    item = _get_item(email, inventory_id)
+    if not item:
+        raise ValueError("Inventory item not found.")
+    new_stock = _num(item.get("current_stock")) + qty
+
+    if _tables():
+        db.update(T_INV, {"id": inventory_id, "email": email},
+                  {"current_stock": new_stock, "updated_at": _now_iso()})
+    else:
+        items = get_inventory(email)
+        for it in items:
+            if it["id"] == inventory_id:
+                it["current_stock"] = new_stock
+        _save_inventory_json(email, items)
+    return new_stock
+
+
 def record_waste(email: str, inventory_id: str, qty, reason: str = "") -> list[dict]:
     email = _email(email)
     qty = _num(qty, 0)
@@ -897,6 +925,133 @@ def create_po(email: str, item_ids: list[str] | None = None,
     if not item_ids:
         mark_reorder_handled(email, "approved")
     return po
+
+
+def create_manual_po(email: str, supplier: dict, lines: list[dict],
+                     expected_on: str = "", terms: str = "", note: str = "") -> dict:
+    """A purchase order the seller types out, rather than one derived from
+    reorder points.
+
+    The automatic PO only knows about items already in Inventory that have
+    fallen below their reorder point. That covers restocking and nothing else —
+    not a first order from a new supplier, not a sample run, not a one-off
+    festive buy, not fabric for a product that does not exist yet. Those are
+    most of the purchase orders a small seller actually raises, which is why
+    this exists rather than forcing everything through the suggestion engine.
+
+    Lines are free-text on purpose: a supplier order often names things the way
+    the SUPPLIER calls them, which is not what Inventory calls them. Where a
+    line does match an inventory item the id is kept so receiving can post
+    stock against it."""
+    email = _email(email)
+    lines = lines or []
+    if not lines:
+        raise ValueError("A purchase order needs at least one line.")
+
+    clean, total_qty, total_amount, has_cost = [], 0, 0.0, False
+    for r in lines:
+        name = str(r.get("name") or "").strip()[:120]
+        if not name:
+            continue
+        qty = int(_num(r.get("order_qty")) or 0)
+        if qty <= 0:
+            continue
+        unit_cost = r.get("unit_cost")
+        amount = round(qty * float(unit_cost), 2) if not _blank(unit_cost) else None
+        if amount is not None:
+            total_amount += amount
+            has_cost = True
+        total_qty += qty
+        clean.append({
+            "inventory_id": str(r.get("inventory_id") or ""),
+            "name": name,
+            "category": str(r.get("category") or "").strip()[:60],
+            "unit_label": str(r.get("unit_label") or "unit").strip()[:20],
+            "supplier_name": str(supplier.get("name") or "").strip()[:120],
+            "supplier_phone": str(supplier.get("phone") or "").strip()[:20],
+            "supplier_email": str(supplier.get("email") or "").strip()[:120],
+            "order_qty": qty,
+            "unit_cost": (None if _blank(unit_cost) else float(unit_cost)),
+            "line_amount": amount,
+            "note": str(r.get("note") or "").strip()[:200],
+        })
+    if not clean:
+        raise ValueError("Every line needs a name and a quantity above zero.")
+
+    number = _next_po_number(email)
+    po = {
+        "id": number, "po_number": number, "insight_id": None,
+        "created_at": _now_iso(), "status": "open", "source": "manual",
+        "supplier": {"name": str(supplier.get("name") or "").strip()[:120],
+                     "phone": str(supplier.get("phone") or "").strip()[:20],
+                     "email": str(supplier.get("email") or "").strip()[:120],
+                     "address": str(supplier.get("address") or "").strip()[:300]},
+        "expected_on": str(expected_on or "")[:10],
+        "terms": str(terms or "").strip()[:200],
+        "note": str(note or "").strip()[:400],
+        "n_items": len(clean), "total_qty": int(total_qty),
+        "total_amount": round(total_amount, 2) if has_cost else None,
+        "suppliers": [supplier.get("name")] if supplier.get("name") else [],
+        "lines": clean,
+        "history": [{"at": _now_iso(), "status": "open", "by": "seller"}],
+    }
+
+    if _tables():
+        row = dict(po); row["email"] = email
+        db.insert(T_PO, row)
+    else:
+        pos = user_store.get_key(email, PO_KEY, []) or []
+        pos.append(po)
+        user_store.set_key(email, PO_KEY, pos)
+    return po
+
+
+PO_STATUSES = ["open", "sent", "shipped", "received", "cancelled"]
+
+
+def set_po_status(email: str, po_number: str, status: str,
+                  note: str = "", by: str = "seller") -> dict | None:
+    """Move a PO along. Receiving posts stock back into Inventory, because a PO
+    that arrives and does not update stock is worse than no PO at all — the
+    seller now has to remember to do it manually and will not."""
+    if status not in PO_STATUSES:
+        raise ValueError(f"status must be one of {PO_STATUSES}")
+    email = _email(email)
+    pos = get_purchase_orders(email)
+    target = None
+    for po in pos:
+        if str(po.get("po_number")) == str(po_number):
+            target = po
+            break
+    if target is None:
+        return None
+
+    was = target.get("status")
+    target["status"] = status
+    target.setdefault("history", []).append(
+        {"at": _now_iso(), "status": status, "by": by, "note": str(note or "")[:200]})
+
+    if status == "received" and was != "received":
+        for ln in target.get("lines", []):
+            if ln.get("inventory_id"):
+                try:
+                    receive_stock(email, ln["inventory_id"],
+                                  float(ln.get("order_qty") or 0),
+                                  reason=f"PO {po_number} received")
+                except Exception:  # noqa: BLE001
+                    pass
+
+    if _tables():
+        db.update(T_PO, {"email": email, "po_number": str(po_number)},
+                  {"status": status, "history": target.get("history")})
+    else:
+        rows = user_store.get_key(email, PO_KEY, []) or []
+        for r in rows:
+            if str(r.get("po_number")) == str(po_number):
+                r["status"] = status
+                r["history"] = target.get("history")
+        user_store.set_key(email, PO_KEY, rows)
+    return target
 
 
 # ---------------------------------------------------------

@@ -36,6 +36,11 @@ from backend.core import cancellations
 from backend.core import store_payments
 from backend.core import campaigns
 from backend.core import studio
+from backend.core import aiprovider
+from backend.core import gst, invoices, invoice_pdf
+from backend.core import labels
+from backend.core import cancel_requests
+from backend.core import social
 
 # ---------------------------------------------------------
 # numpy/pandas JSON safety net
@@ -207,6 +212,84 @@ class StudioPostBody(BaseModel):
     product_id: str
     angle: str | None = ""
     generate_image: bool = False
+
+
+
+# --- GST / invoicing -----------------------------------------------------
+class GstSettingsBody(BaseModel):
+    patch: dict = {}
+
+
+class IssueInvoiceBody(BaseModel):
+    order_id: str
+    force: bool = False
+
+
+class CancelInvoiceBody(BaseModel):
+    invoice_id: str
+    reason: str | None = ""
+
+
+# --- labels --------------------------------------------------------------
+class LabelBody(BaseModel):
+    order_ids: list[str] = []
+
+
+# --- cancellation requests ----------------------------------------------
+class CancelRequestBody(BaseModel):
+    order_id: str
+    reason_code: str
+    reason_text: str | None = ""
+
+
+class ResolveCancelBody(BaseModel):
+    request_id: str
+    decision: str
+    note: str | None = ""
+
+
+class PoCancelRequestBody(BaseModel):
+    po_number: str
+    reason_code: str
+    reason_text: str | None = ""
+
+
+# --- purchase orders -----------------------------------------------------
+class ManualPoBody(BaseModel):
+    supplier: dict = {}
+    lines: list[dict] = []
+    expected_on: str | None = ""
+    terms: str | None = ""
+    note: str | None = ""
+
+
+class PoStatusBody(BaseModel):
+    po_number: str
+    status: str
+    note: str | None = ""
+
+
+# --- social media manager ------------------------------------------------
+class SocialSettingsBody(BaseModel):
+    patch: dict = {}
+
+
+class SocialWeekBody(BaseModel):
+    regenerate: bool = False
+
+
+class SocialPostBody(BaseModel):
+    post_id: str
+    patch: dict = {}
+
+
+class SocialStateBody(BaseModel):
+    post_id: str
+    state: str
+
+
+class SocialCloneBody(BaseModel):
+    post_id: str
 
 
 class MappingBody(BaseModel):
@@ -1091,13 +1174,12 @@ def media_status(authorization: str | None = Header(default=None)):
     """Is uploaded media actually safe here? The builder shows this, because a
     seller should not find out at the next redeploy."""
     require_user(authorization)
-    return {"durable": media.durable(), "cache_dir": media.cache_dir(),
-            "detail": "Uploads are stored in Supabase Storage and survive redeploys."
-            if media.durable() else
-            "Supabase is not configured, so uploads live on this server's disk "
-            "and will be lost when it restarts or redeploys. Set SUPABASE_URL "
-            "and the service key, or attach a persistent disk and point "
-            "CAFEX_DATA_DIR at it."}
+    # health() actually probes Storage and creates the bucket if it is missing,
+    # rather than inferring safety from an environment variable being set.
+    # "Configured but the bucket does not exist" looks identical to "working"
+    # from the outside and loses every upload, which is the exact failure this
+    # endpoint exists to catch.
+    return media.health()
 
 
 @app.get("/api/product-types")
@@ -3203,7 +3285,8 @@ def shop_logout(handle: str, x_store_token: str | None = Header(default=None)):
 def shop_me(handle: str, x_store_token: str | None = Header(default=None)):
     seller, cust = _shopper(handle, x_store_token)
     return {"customer": storefront._public_customer(cust),
-            "orders": storefront.get_orders(seller, customer_id=cust["id"])}
+            "orders": _flag_cancel_requests(seller,
+                storefront.get_orders(seller, customer_id=cust["id"]))}
 
 
 @app.post("/api/shop/{handle}/cart")
@@ -3430,3 +3513,379 @@ def app_page():
 @app.get("/privacy")
 def privacy_page():
     return FileResponse(os.path.join(STATIC_DIR, "privacy.html"))
+
+
+# =========================================================================
+# GST, invoicing and shipping labels
+# =========================================================================
+def _flag_cancel_requests(seller: str, orders: list[dict]) -> list[dict]:
+    """Mark orders that already have an open cancellation request.
+
+    Both the shopper's order list and the seller's Orders module read this, so
+    a shopper cannot fire off five requests for the same parcel and the seller
+    is never shown a Cancel control for something already in the inbox."""
+    try:
+        open_ids = {r["ref_id"] for r in cancel_requests.open_requests(seller)}
+    except Exception:  # noqa: BLE001
+        return orders
+    for o in orders:
+        o["cancel_requested"] = o.get("id") in open_ids
+    return orders
+
+
+def _seller_profile(email: str) -> dict:
+    """The seller identity a label or invoice needs, assembled from GST
+    settings with the site as a fallback for the trading name."""
+    s = invoices.get_settings(email)
+    site = sitebuilder.get_site(email)
+    return {**s, "business_name": s.get("legal_name") or site.get("name") or ""}
+
+
+@app.get("/api/gst/settings")
+def gst_settings(authorization: str | None = Header(default=None)):
+    return invoices.settings_status(require_user(authorization))
+
+
+@app.post("/api/gst/settings")
+def gst_settings_save(body: GstSettingsBody,
+                      authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    invoices.save_settings(email, body.patch or {})
+    return invoices.settings_status(email)
+
+
+@app.get("/api/gst/check")
+def gst_check(gstin: str = "", authorization: str | None = Header(default=None)):
+    require_user(authorization)
+    return gst.describe_gstin(gstin)
+
+
+@app.get("/api/gst/rate")
+def gst_rate(hsn: str = "", price: float = 0, name: str = "",
+             authorization: str | None = Header(default=None)):
+    """Live rate preview while a seller types an HSN into the product form."""
+    require_user(authorization)
+    return gst.resolve_rate(hsn, int(round(price * 100)), name, inclusive=True)
+
+
+@app.get("/api/gst/suggest-hsn")
+def gst_suggest(category: str = "", name: str = "",
+                authorization: str | None = Header(default=None)):
+    require_user(authorization)
+    return {"hsn": gst.suggest_hsn(category, name)}
+
+
+@app.get("/api/invoices")
+def invoice_list(fy: str = "", authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return {"invoices": invoices.listing(email, fy),
+            "fy": fy or gst.financial_year(),
+            "settings": invoices.settings_status(email)}
+
+
+@app.get("/api/invoices/preview")
+def invoice_preview(order_id: str, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    order = next((o for o in storefront.get_orders(email) if o.get("id") == order_id), None)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    existing = invoices.for_order(email, order_id)
+    return {"preview": invoices.build_from_order(email, order), "existing": existing}
+
+
+@app.post("/api/invoices/issue")
+def invoice_issue(body: IssueInvoiceBody,
+                  authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    order = next((o for o in storefront.get_orders(email) if o.get("id") == body.order_id), None)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    return invoices.issue(email, order, force=body.force)
+
+
+@app.post("/api/invoices/cancel")
+def invoice_cancel(body: CancelInvoiceBody,
+                   authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return invoices.cancel(email, body.invoice_id, body.reason or "")
+
+
+@app.get("/api/invoices/{invoice_id}/pdf")
+def invoice_download(invoice_id: str, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    inv = invoices.get(email, invoice_id)
+    if not inv:
+        raise HTTPException(404, "Invoice not found")
+    pdf = invoice_pdf.build(inv)
+    name = (inv.get("number") or invoice_id).replace("/", "-")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
+
+
+@app.get("/api/gstr1")
+def gstr1_view(fy: str = "", authorization: str | None = Header(default=None)):
+    return invoices.gstr1(require_user(authorization), fy)
+
+
+@app.get("/api/gstr1.csv")
+def gstr1_csv(fy: str = "", authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    csv = invoices.gstr1_csv(email, fy)
+    return Response(content=csv, media_type="text/csv",
+                    headers={"Content-Disposition":
+                             f'attachment; filename="gstr1-{fy or gst.financial_year()}.csv"'})
+
+
+@app.post("/api/orders/labels")
+def order_labels(body: LabelBody, authorization: str | None = Header(default=None)):
+    """The Generate Bill Sticker button. Takes one order or a whole morning's
+    dispatch and returns a single print-ready PDF."""
+    email = require_user(authorization)
+    wanted = set(body.order_ids or [])
+    rows = [o for o in storefront.get_orders(email) if not wanted or o.get("id") in wanted]
+    if not rows:
+        raise HTTPException(404, "No matching orders")
+    pdf = labels.build_many(rows, _seller_profile(email), sitebuilder.get_site(email))
+    fname = ("label-" + rows[0].get("order_no", "order")) if len(rows) == 1 else \
+            f"labels-{len(rows)}-orders"
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}.pdf"'})
+
+
+# =========================================================================
+# Cancellation requests — the WhatsApp conversation, not a fired action
+# =========================================================================
+@app.post("/api/shop/{handle}/cancel-request")
+def shopper_cancel_request(handle: str, body: CancelRequestBody, request: Request):
+    """Called from the shopper's own order page. Deliberately does NOT cancel."""
+    seller = sitebuilder.resolve_handle(handle)
+    if not seller:
+        raise HTTPException(404, "Store not found")
+    order = next((o for o in storefront.get_orders(seller) if o.get("id") == body.order_id), None)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.get("status") in ("delivered", "cancelled"):
+        return {"ok": False,
+                "message": "This order is already " + str(order.get("status")) + "."}
+
+    req = cancel_requests.raise_request(
+        seller, kind="order", ref_id=order["id"], ref_no=order.get("order_no", ""),
+        reason_code=body.reason_code, reason_text=body.reason_text or "",
+        raised_by="shopper",
+        counterparty={"name": order.get("customer_name"), "phone": order.get("phone")})
+
+    site = sitebuilder.get_site(seller)
+    payload = cancel_requests.notify_payload(
+        seller, req, site.get("name") or "the store",
+        (invoices.get_settings(seller).get("pickup_address") or {}).get("phone")
+        or site.get("contact_phone") or "")
+
+    try:
+        messaging.send(to_email=seller,
+                       subject=f"Cancellation request - order {order.get('order_no')}",
+                       text=payload["seller_text"])
+    except Exception:  # noqa: BLE001
+        # A failed email must never lose the request itself. The seller still
+        # sees it in Orders, and the WhatsApp link still works.
+        pass
+    cancel_requests.mark_notified(seller, req["id"])
+    cache.clear(seller)
+
+    return {"ok": True, "request": req,
+            "message": "We've told the seller. Nothing is cancelled yet — they "
+                       "will message you on WhatsApp shortly.",
+            "seller_wa": payload["seller_wa"]}
+
+
+@app.get("/api/cancel-requests")
+def cancel_request_list(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    site = sitebuilder.get_site(email)
+    rows = cancel_requests.open_requests(email)
+    for r in rows:
+        r["links"] = cancel_requests.notify_payload(email, r, site.get("name") or "our store", "")
+    return {"open": rows, "history": cancel_requests.history(email, 60),
+            "summary": cancel_requests.summary(email)}
+
+
+@app.post("/api/cancel-requests/resolve")
+def cancel_request_resolve(body: ResolveCancelBody,
+                           authorization: str | None = Header(default=None)):
+    """Approving is the ONLY thing that actually cancels."""
+    email = require_user(authorization)
+    req = cancel_requests.resolve(email, body.request_id, body.decision, body.note or "")
+    if req.get("error"):
+        raise HTTPException(404, req["error"])
+    if body.decision == "approved":
+        if req.get("kind") == "po":
+            supply.set_po_status(email, req["ref_id"], "cancelled",
+                                 note=req.get("reason_label", ""))
+        else:
+            storefront.set_status(email, req["ref_id"], "cancelled", by="shopper",
+                                  reason=req.get("reason_code") or "requested")
+    cache.clear(email)
+    return {"request": req, "summary": cancel_requests.summary(email)}
+
+
+@app.post("/api/purchase-orders/cancel-request")
+def po_cancel_request(body: PoCancelRequestBody,
+                      authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    po = supply.get_po(email, body.po_number)
+    if not po:
+        raise HTTPException(404, "Purchase order not found")
+    sup = po.get("supplier") or {}
+    req = cancel_requests.raise_request(
+        email, kind="po", ref_id=str(po.get("po_number")), ref_no=str(po.get("po_number")),
+        reason_code=body.reason_code, reason_text=body.reason_text or "",
+        raised_by="seller",
+        counterparty={"name": sup.get("name"), "phone": sup.get("phone")})
+    site = sitebuilder.get_site(email)
+    return {"request": req,
+            "links": cancel_requests.notify_payload(email, req,
+                                                    site.get("name") or "our store", "")}
+
+
+# =========================================================================
+# Purchase orders — the manual path
+# =========================================================================
+@app.post("/api/purchase-orders/manual")
+def po_manual(body: ManualPoBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    try:
+        po = supply.create_manual_po(email, body.supplier or {}, body.lines or [],
+                                     body.expected_on or "", body.terms or "",
+                                     body.note or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    cache.clear(email)
+    return po
+
+
+@app.post("/api/purchase-orders/status")
+def po_status(body: PoStatusBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    try:
+        po = supply.set_po_status(email, body.po_number, body.status, body.note or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if po is None:
+        raise HTTPException(404, "Purchase order not found")
+    cache.clear(email)
+    return po
+
+
+# =========================================================================
+# Social Media Manager
+# =========================================================================
+def _social_catalogue(email: str) -> list[dict]:
+    out = []
+    for p in products.listed_products(email):
+        out.append({"id": p.get("id"), "name": p.get("name"), "price": p.get("price"),
+                    "description": p.get("description"), "category": p.get("category"),
+                    "stock": p.get("stock")})
+    return out
+
+
+@app.get("/api/social")
+def social_home(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return {
+        "settings": social.get_settings(email),
+        "pillars": social.PILLARS,
+        "cadence": social.CADENCE,
+        "formats": social.FORMATS,
+        "languages": social.LANGUAGES,
+        "week": social.week(email),
+        "radar": social.radar(email),
+        "working": social.whats_working(email),
+        "ai": aiprovider.status(),
+        "offer_cap": social.OFFER_CAP_PERCENT,
+        "catalogue_size": len(_social_catalogue(email)),
+    }
+
+
+@app.post("/api/social/settings")
+def social_settings(body: SocialSettingsBody,
+                    authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return social.save_settings(email, body.patch or {})
+
+
+@app.post("/api/social/week")
+def social_week(body: SocialWeekBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    cat = _social_catalogue(email)
+    if not cat:
+        raise HTTPException(400, "Add a product first — there is nothing to post about.")
+    made = social.build_week(email, cat)
+    return {"posts": made, "week": social.week(email)}
+
+
+@app.post("/api/social/approve-all")
+def social_approve(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return {**social.approve_all(email), "week": social.week(email)}
+
+
+@app.post("/api/social/post")
+def social_post_update(body: SocialPostBody,
+                       authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    p = social.update_post(email, body.post_id, body.patch or {})
+    if p.get("error"):
+        raise HTTPException(404, p["error"])
+    return p
+
+
+@app.post("/api/social/state")
+def social_post_state(body: SocialStateBody,
+                      authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    p = social.set_state(email, body.post_id, body.state)
+    if p.get("error"):
+        raise HTTPException(400, p["error"])
+    return p
+
+
+@app.post("/api/social/regenerate")
+def social_regenerate(body: SocialCloneBody,
+                      authorization: str | None = Header(default=None)):
+    """Rewrite one post's caption without touching the rest of the week."""
+    email = require_user(authorization)
+    post = next((p for p in social.week(email) if p.get("id") == body.post_id), None)
+    if not post:
+        raise HTTPException(404, "Post not found")
+    cat = {p["id"]: p for p in _social_catalogue(email)}
+    product = cat.get(post.get("product_id")) or {"name": post.get("product_name")}
+    cap = social.write_caption(email, product, post.get("pillar") or "detail")
+    return social.update_post(email, body.post_id, {
+        "hook": cap.get("hook"), "body": cap.get("body"),
+        "question": cap.get("question"), "cta": cap.get("cta"),
+        "tags": cap.get("tags")})
+
+
+@app.post("/api/social/clone")
+def social_clone(body: SocialCloneBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    p = social.clone_winner(email, body.post_id, _social_catalogue(email))
+    if p.get("error"):
+        raise HTTPException(400, p["error"])
+    return p
+
+
+@app.get("/api/social/shoot-list")
+def social_shoot(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return social.shoot_list(email, _social_catalogue(email))
+
+
+# =========================================================================
+# AI provider status — so a seller can see what is writing their copy
+# =========================================================================
+@app.get("/api/ai/providers")
+def ai_providers(authorization: str | None = Header(default=None)):
+    require_user(authorization)
+    st = aiprovider.status()
+    st["storage_durable"] = media.durable()
+    return st
