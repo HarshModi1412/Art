@@ -42,6 +42,7 @@ from backend.core import labels
 from backend.core import cancel_requests
 from backend.core import social
 from backend.core import personas
+from backend.core import playbook
 
 # ---------------------------------------------------------
 # numpy/pandas JSON safety net
@@ -292,6 +293,10 @@ class SocialStateBody(BaseModel):
 
 class SocialCloneBody(BaseModel):
     post_id: str
+
+
+class FestivalCampaignBody(BaseModel):
+    festival: str
 
 
 
@@ -4037,3 +4042,67 @@ def social_upcoming(days: int = 5, authorization: str | None = Header(default=No
     rows = social.upcoming(email, days)
     return {"posts": rows,
             "needs_decision": len([p for p in rows if p.get("state") == "draft"])}
+
+
+# =========================================================================
+# Festival campaigns — a plan with a shape, not a queue of suggestions
+# =========================================================================
+@app.get("/api/social/festivals")
+def social_festivals(authorization: str | None = Header(default=None)):
+    """The festivals worth this seller's time, best first.
+
+    Filtered by category weight rather than listed exhaustively: a perfume
+    seller offered Dhanteras learns quickly that the suggestions are not
+    thought through."""
+    email = require_user(authorization)
+    s = social.get_settings(email)
+    cat = s.get("category") or "clothing"
+    live = {c["key"]: c for c in social.campaigns(email)}
+    out = []
+    for f in playbook.for_category(cat):
+        prev = social.campaign_preview(email, f["key"])
+        out.append({
+            "key": f["key"], "name": f["name"], "weight": f["weight_for"],
+            "core": f["core"], "buys_for": f["buys_for"],
+            "date": prev.get("date", ""), "days_out": prev.get("days_out"),
+            "undated": bool(prev.get("undated")),
+            "late": bool(prev.get("late")),
+            "running": f["key"] in live,
+            "note": f.get("note", ""),
+        })
+    return {"category": cat, "festivals": out,
+            "campaigns": social.campaigns(email)}
+
+
+@app.get("/api/social/campaign")
+def social_campaign_preview(festival: str,
+                            authorization: str | None = Header(default=None)):
+    """What the campaign would be, before anything is created."""
+    email = require_user(authorization)
+    return social.campaign_preview(email, festival)
+
+
+@app.post("/api/social/campaign")
+def social_campaign_start(body: FestivalCampaignBody,
+                          authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    cat = _social_catalogue(email)
+    if not cat:
+        raise HTTPException(400, "Add a product first — there is nothing to post about.")
+    res = social.start_campaign(email, body.festival, cat)
+    if res.get("error"):
+        raise HTTPException(400, res["error"])
+    cache.clear(email)
+    return res
+
+
+@app.get("/api/social/playbook")
+def social_playbook(festival: str, authorization: str | None = Header(default=None)):
+    """The full content library entry — angles, taglines, cautions, what people
+    actually buy. Shown to the seller, not just fed to the model."""
+    email = require_user(authorization)
+    s = social.get_settings(email)
+    b = playbook.brief(festival, s.get("category") or "clothing")
+    if not b:
+        raise HTTPException(404, "No playbook for that festival")
+    return b

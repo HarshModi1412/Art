@@ -126,19 +126,43 @@ LANGUAGES = {
 # routinely get these wrong by a week. Lunisolar dates shift every year, so this
 # table is DATED and must be refreshed — never extrapolate it forward.
 FESTIVALS_2026 = [
-    {"date": "2026-10-11", "name": "Navratri", "lead": 3, "span": 9,
-     "categories": ["clothing", "jewellery"],
-     "note": "Peak clothing window. Chaniya choli, lehenga, ethnic sets."},
-    {"date": "2026-10-20", "name": "Dussehra", "lead": 2, "categories": ["clothing"]},
-    {"date": "2026-11-06", "name": "Dhanteras", "lead": 5, "categories": ["jewellery"],
-     "note": "The single biggest jewellery-buying day of the Indian year."},
-    {"date": "2026-11-08", "name": "Diwali", "lead": 17, "span": 3, "categories": ["clothing", "jewellery", "perfume"],
-     "note": "Start pre-campaign around 22 Oct. Meta and Google CPMs climb hard "
-             "from mid-September, so build the audience in August, not November."},
-    {"date": "2026-11-11", "name": "Bhai Dooj", "lead": 3, "categories": ["jewellery", "clothing"]},
-    {"date": "2026-12-25", "name": "Christmas", "lead": 10, "span": 6, "categories": ["clothing", "perfume"]},
-    {"date": "2026-12-31", "name": "New Year's Eve", "lead": 5, "categories": ["clothing", "perfume"]},
+    {"key": "ganesh_chaturthi", "date": "2026-09-14", "name": "Ganesh Chaturthi",
+     "lead": 10, "span": 10, "categories": ["clothing"],
+     "note": "Regionally concentrated — Maharashtra, Goa, Karnataka."},
+    {"key": "navratri", "date": "2026-10-11", "name": "Navratri", "lead": 21,
+     "span": 9, "categories": ["clothing", "jewellery"],
+     "note": "Peak clothing window. Chaniya choli, lehenga, oxidised jewellery."},
+    {"key": "dussehra", "date": "2026-10-20", "name": "Dussehra", "lead": 3,
+     "span": 0, "categories": ["clothing", "jewellery"]},
+    {"key": "karva_chauth", "date": "2026-10-29", "name": "Karva Chauth",
+     "lead": 10, "span": 0, "categories": ["clothing", "jewellery", "perfume"],
+     "note": "A hard stop — intent dies at moonrise, with no tail at all."},
+    {"key": "dhanteras", "date": "2026-11-06", "name": "Dhanteras", "lead": 7,
+     "span": 0, "categories": ["jewellery"],
+     "note": "The highest-conversion jewellery day of the Indian year."},
+    {"key": "diwali", "date": "2026-11-08", "name": "Diwali", "lead": 17,
+     "span": 3, "categories": ["clothing", "jewellery", "perfume"],
+     "note": "Start pre-campaign around 22 Oct. Ad costs climb from mid-September, "
+             "so build the audience in August, not November."},
+    {"key": "bhai_dooj", "date": "2026-11-11", "name": "Bhai Dooj", "lead": 5,
+     "span": 0, "categories": ["jewellery", "perfume", "clothing"]},
+    {"key": "christmas_ny", "date": "2026-12-25", "name": "Christmas", "lead": 14,
+     "span": 7, "categories": ["clothing", "perfume"]},
+    {"key": "christmas_ny", "date": "2026-12-31", "name": "New Year's Eve",
+     "lead": 7, "span": 0, "categories": ["clothing", "perfume"],
+     "note": "The one night of the year when Western eveningwear outsells ethnic."},
+    {"key": "valentines", "date": "2027-02-14", "name": "Valentine's Day",
+     "lead": 14, "span": 0, "categories": ["jewellery", "perfume", "clothing"]},
 ]
+
+# Festivals in the library that have NO date here are not broken — they are
+# lunisolar and their next occurrence falls outside the dates verified for this
+# table. The app says so plainly rather than guessing: a festival campaign
+# planned against a wrong date is worse than no campaign, because the seller
+# only finds out when the day passes.
+UNDATED_NOTE = ("This festival's date moves with the lunar calendar and is not "
+                "in this year's verified table yet. Its content library is ready "
+                "— add the date and the campaign builds itself.")
 
 # Wedding demand runs on a different rhythm from festivals: Chaturmas means no
 # auspicious dates Aug-Oct, and January has none either. Together the two
@@ -298,33 +322,98 @@ def _parse_caption(text: str) -> dict:
     return out
 
 
-def _fallback_caption(product: dict, pillar: dict, settings: dict) -> dict:
+def _fallback_caption(product: dict, pillar: dict, settings: dict,
+                      playbook: dict | None = None,
+                      beat: dict | None = None) -> dict:
     """No AI configured, or every provider down. Still produces something a
-    seller can post — a duller caption beats an error message."""
+    seller can post — a duller caption beats an error message.
+
+    When a festival playbook is in hand the fallback uses it, so a Diwali post
+    is recognisably a Diwali post even with no model in the loop: the real
+    tagline, the real hashtags, and the right grammar for who is buying."""
     name = product.get("name") or "this piece"
     cat = settings.get("category") or "piece"
     price = product.get("price")
+    cta = settings.get("order_cta") or "DM us to order"
+
+    if playbook:
+        fest = playbook["festival"]
+        gifting = playbook.get("buys_for") == "gift"
+        # Rotate the tagline by beat, so two posts in the same campaign do not
+        # open with the identical line. Repeating the hook is the fastest way to
+        # make a planned campaign look automated.
+        lines = playbook.get("taglines") or [f"{fest} is close."]
+        idx = 0
+        if beat:
+            order = [b["key"] for b in __import__("backend.core.playbook",
+                                                  fromlist=["BEATS"]).BEATS]
+            idx = order.index(beat["key"]) if beat.get("key") in order else 0
+        hook = lines[idx % len(lines)]
+        if beat and beat.get("key") == "deadline":
+            hook = f"Last day to order and still have it for {fest}."
+            body = "Message us today and we will confirm the delivery date " \
+                   "before you pay."
+        elif beat and beat.get("key") == "day":
+            hook = f"{fest} from our workshop."
+            body = "Thank you to everyone who ordered. Photos of your pieces " \
+                   "arriving have made our week."
+            # This beat's whole job is to be present WITHOUT selling. Leaving a
+            # sales question and an order CTA on it would defeat the one thing
+            # it is for.
+            return {"hook": hook[:125], "body": body, "question": "", "cta": "",
+                    "tags": playbook.get("hashtags", [])[:5],
+                    "generated_by": "template"}
+        else:
+            body = (f"{name} — ready for {fest}."
+                    + (f" Rs {int(float(price))}." if price else ""))
+            if playbook.get("buys"):
+                body += f" Also in: {', '.join(playbook['buys'][:2])}."
+        question = (f"Who are you shopping for this {fest}?" if gifting
+                    else f"Which one are you wearing for {fest}?")
+        return {"hook": hook[:125], "body": body[:200], "question": question,
+                "cta": cta, "tags": playbook.get("hashtags", [])[:5],
+                "generated_by": "template"}
+
     hook = f"New in: {name}" if pillar["id"] == "new" else f"{name} — the details"
     if price:
         hook = f"{hook} · Rs {int(float(price))}"
     body = product.get("description") or f"Handpicked {cat}. Limited pieces."
     return {"hook": hook[:125], "body": body[:160],
             "question": "Which colour should we restock first?",
-            "cta": settings.get("order_cta") or "DM us to order",
+            "cta": cta,
             "tags": [f"#{re.sub(r'[^a-z]', '', cat.lower())}", "#indianfashion",
                      "#smallbusinessindia", "#handmade", "#shoplocal"][:5],
             "generated_by": "template"}
 
 
 def write_caption(email: str, product: dict, pillar_id: str,
-                  angle: str = "", occasion: dict | None = None) -> dict:
+                  angle: str = "", occasion: dict | None = None,
+                  playbook: dict | None = None, beat: dict | None = None) -> dict:
     s = get_settings(email)
     pillar = PILLAR_BY_ID.get(pillar_id) or PILLARS[0]
     facts = {k: product.get(k) for k in
              ("name", "price", "description", "fabric", "sizes", "care", "stock", "category")
              if product.get(k)}
     occ = ""
-    if occasion:
+    if playbook:
+        # The festival knowledge is handed over as FACTS, not left to the model
+        # to remember. A model asked to "write a Diwali post" produces a diya and
+        # the words "festival of lights"; a model told what people actually buy,
+        # who they are buying for, and what not to say produces something a
+        # seller can post.
+        occ += (f"FESTIVAL: {playbook['festival']}. {playbook['core']}\n"
+                f"WHO IS BUYING: {playbook['grammar']}\n"
+                f"WHAT PEOPLE BUY: {', '.join(playbook['buys'][:6])}\n"
+                f"COLOURS AND MOTIFS: {', '.join(playbook['colours'][:5])}; "
+                f"{', '.join(playbook['motifs'][:5])}\n"
+                f"NEVER: {' '.join(playbook['caution'])}\n")
+        if playbook.get("taglines"):
+            occ += (f"Lines in this register work well (do not copy them "
+                    f"verbatim): {' / '.join(playbook['taglines'][:3])}\n")
+    if beat:
+        occ += (f"THIS POST'S ONE JOB: {beat['job']} "
+                f"It is {beat['days_before']} days before the festival.\n")
+    if occasion and not playbook:
         occ = (f"Occasion: {occasion['name']}, {occasion['days_away']} days away. "
                f"Write it as a {occasion['name']} post — mention the occasion "
                f"naturally, and give a reason to buy NOW rather than later. "
@@ -337,7 +426,7 @@ def write_caption(email: str, product: dict, pillar_id: str,
             f"Product facts (use only these):\n"
             + "\n".join(f"- {k}: {v}" for k, v in facts.items()))
 
-    fb = _fallback_caption(product, pillar, s)
+    fb = _fallback_caption(product, pillar, s, playbook, beat)
     res = aiprovider.generate(_caption_system(s), user, sensitivity="public",
                               max_tokens=400, temperature=0.8,
                               fallback="")
@@ -411,23 +500,33 @@ def _save_posts(email: str, rows: list[dict]) -> None:
 def occasion_for(day: date, category: str = "") -> dict | None:
     """Is this day inside a festival's run-up?
 
-    A post two weeks before Diwali should be a Diwali post. Cycling the
-    catalogue blindly through a festival window is the single most obvious way
-    a content plan looks automated — the seller's customers are thinking about
-    one thing and the feed is talking about something else."""
+    Windows overlap — on 25 October a clothing seller is four days from Karva
+    Chauth and fourteen from Diwali, and both run-ups are live. The NEAREST
+    festival wins, because that is the one the customer is thinking about and
+    the one where a late post is wasted.
+
+    Without this rule the answer depended on the order of the table, which made
+    a real behaviour depend on an editing accident."""
+    best, best_gap = None, 10 ** 6
     for f in FESTIVALS_2026:
         d = date.fromisoformat(f["date"])
         lead = f.get("lead", 7)
+        span = f.get("span", 0)
         if category and f.get("categories") and category not in f["categories"]:
             continue
         # The window runs from the campaign start through the festival AND its
         # span. Navratri is nine nights; a post on the fourth of them is still
         # a Navratri post, and that is when people are actually buying.
-        if d - timedelta(days=lead) <= day <= d + timedelta(days=f.get("span", 0)):
-            return {"name": f["name"], "date": f["date"],
-                    "days_away": (d - day).days,
-                    "note": f.get("note", "")}
-    return None
+        if not (d - timedelta(days=lead) <= day <= d + timedelta(days=span)):
+            continue
+        gap = abs((d - day).days)
+        if gap < best_gap:
+            best, best_gap = f, gap
+    if not best:
+        return None
+    d = date.fromisoformat(best["date"])
+    return {"name": best["name"], "date": best["date"], "key": best.get("key", ""),
+            "days_away": (d - day).days, "note": best.get("note", "")}
 
 
 def _pick_product(pool: list[dict], i: int, occasion: dict | None,
@@ -632,6 +731,167 @@ def post_guidance(email: str, post_id: str) -> dict:
             "product_name": p.get("product_name") or "",
             "pillar": p.get("pillar") or "", "format": p.get("format") or "",
             "has_image": bool(p.get("image_url"))}
+
+
+# --------------------------------------------------------------- campaigns
+
+CAMPAIGN_KEY = "social_campaigns"
+
+
+def _campaigns(email: str) -> list[dict]:
+    rows = user_store.get_key((email or "").lower(), CAMPAIGN_KEY, []) or []
+    return rows if isinstance(rows, list) else []
+
+
+def _save_campaigns(email: str, rows: list[dict]) -> None:
+    user_store.set_key((email or "").lower(), CAMPAIGN_KEY, rows[-60:])
+
+
+def campaign_preview(email: str, festival_key: str,
+                     today: date | None = None) -> dict:
+    """What the campaign WOULD be, without creating anything.
+
+    Shown before the seller commits, because a campaign is a promise about the
+    next three weeks of their time and they should see the shape before
+    agreeing to it."""
+    from backend.core import playbook
+    s = get_settings(email)
+    today = today or date.today()
+    # Matched on key, not on name — name matching broke the moment two entries
+    # shared a library key (Christmas and New Year's Eve both map to one).
+    dated = [x for x in FESTIVALS_2026 if x.get("key") == festival_key
+             and date.fromisoformat(x["date"]) >= today]
+    f = dated[0] if dated else None
+    pb = playbook.brief(festival_key, s.get("category") or "clothing")
+    if not pb:
+        return {"error": "unknown festival"}
+    if not f:
+        return {"error": f"{pb['festival']}: {UNDATED_NOTE}",
+                "festival": pb["festival"], "undated": True,
+                "angles": pb["angles"], "taglines": pb["taglines"],
+                "caution": pb["caution"]}
+
+    day = date.fromisoformat(f["date"])
+    lead = f.get("lead", 7)
+    days_out = (day - today).days
+    runway = max(lead, 7)
+
+    beats = []
+    for b in playbook.BEATS:
+        on = day - timedelta(days=round(runway * b["offset_frac"]))
+        beats.append({**b, "date": on.isoformat(),
+                      "days_before": (day - on).days,
+                      "past": on < today})
+    return {
+        "festival": pb["festival"], "key": festival_key,
+        "date": f["date"], "days_out": days_out,
+        "weight": pb["weight"], "core": pb["core"],
+        "grammar": pb["grammar"], "buys_for": pb["buys_for"],
+        "caution": pb["caution"], "note": pb["note"],
+        "angles": pb["angles"], "taglines": pb["taglines"],
+        "hashtags": pb["hashtags"], "colours": pb["colours"],
+        "beats": beats,
+        "objective": (f"Get DMs about {pb['festival']} stock before "
+                      f"{day.strftime('%d %b')}."),
+        "late": days_out < runway * 0.5,
+        "runway": runway,
+    }
+
+
+def start_campaign(email: str, festival_key: str, catalogue: list[dict],
+                   today: date | None = None) -> dict:
+    """Turn a festival into a sequenced set of posts.
+
+    The properties that make this a campaign rather than a queue, all enforced
+    here rather than left to the writer:
+
+      * every beat has ONE job, and no job repeats;
+      * the beats are positioned relative to the festival date, not to today;
+      * the occasion, the grammar (gifting vs self-purchase) and the cautions
+        are carried into every caption in the set;
+      * it has a stated objective it can be judged against afterwards.
+    """
+    from backend.core import playbook
+    prev = campaign_preview(email, festival_key, today)
+    if prev.get("error"):
+        return prev
+    today = today or date.today()
+    s = get_settings(email)
+    pb = playbook.brief(festival_key, s.get("category") or "clothing", get_settings(email))
+
+    pool = [p for p in catalogue if p.get("name")] or [{"name": "your product"}]
+    rows = _posts(email)
+    made = []
+
+    # Drop any earlier undecided posts for this same festival, so pressing the
+    # button twice re-plans rather than doubling — the same rule as the week.
+    rows = [p for p in rows
+            if not (p.get("campaign") == festival_key and p.get("state") in ("draft", "ready"))]
+
+    for i, beat in enumerate(prev["beats"]):
+        if beat["past"]:
+            continue                       # do not schedule a post into the past
+        product = pool[i % len(pool)]
+        angle = pb["angles"][i % len(pb["angles"])]
+        cap = write_caption(email, product, _beat_pillar(beat["key"]),
+                            angle=angle,
+                            occasion={"name": pb["festival"],
+                                      "days_away": beat["days_before"]},
+                            playbook=pb, beat=beat)
+        when = datetime.combine(date.fromisoformat(beat["date"]),
+                                datetime.min.time()).replace(hour=18)
+        post = {
+            "id": secrets.token_hex(6), "created_at": _now(),
+            "product_id": product.get("id") or "",
+            "product_name": product.get("name") or "",
+            "pillar": _beat_pillar(beat["key"]),
+            "pillar_name": PILLAR_BY_ID[_beat_pillar(beat["key"])]["name"],
+            "format": beat["format"],
+            "occasion": pb["festival"],
+            "campaign": festival_key,
+            "beat": beat["key"], "beat_label": beat["label"],
+            "job": beat["job"], "beat_why": beat["why"],
+            "caption": cap, "text": assemble(cap),
+            "checks": caption_check(cap, s),
+            "scheduled_at": when.isoformat(timespec="minutes"),
+            "state": "draft", "provider": cap.get("provider", "template"),
+            "image_url": "", "image_generated": False, "image_prompt": "",
+            "metrics": {},
+        }
+        made.append(post)
+        rows.append(post)
+
+    _save_posts(email, rows)
+
+    camps = [c for c in _campaigns(email) if c.get("key") != festival_key]
+    camps.append({
+        "key": festival_key, "festival": pb["festival"], "date": prev["date"],
+        "started_at": _now(), "objective": prev["objective"],
+        "posts": [p["id"] for p in made], "beats": len(made),
+        "caution": pb["caution"],
+    })
+    _save_campaigns(email, camps)
+    return {**prev, "posts": made, "created": len(made)}
+
+
+_BEAT_PILLAR = {"tease": "new", "reveal": "new", "useful": "detail",
+                "proof": "proof", "deadline": "detail", "day": "founder"}
+
+
+def _beat_pillar(beat_key: str) -> str:
+    return _BEAT_PILLAR.get(beat_key, "detail")
+
+
+def campaigns(email: str) -> list[dict]:
+    """Running campaigns, with how far through each one is."""
+    rows = _posts(email)
+    out = []
+    for c in _campaigns(email):
+        mine = [p for p in rows if p.get("campaign") == c.get("key")]
+        done = [p for p in mine if p.get("state") == "published"]
+        out.append({**c, "total": len(mine), "published": len(done),
+                    "waiting": len([p for p in mine if p.get("state") == "draft"])})
+    return sorted(out, key=lambda c: c.get("date") or "")
 
 
 def month(email: str, year: int, mon: int) -> dict:

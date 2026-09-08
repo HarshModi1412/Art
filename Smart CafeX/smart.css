@@ -1682,3 +1682,71 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
   font-size: 12px; margin-bottom: 8px; }
 .det-why h4 { margin: 0 0 8px; font-size: 15px; }
 .det-why p { font-size: 13.5px; line-height: 1.65; color: var(--text-2); margin: 0; }
+
+/* ==========================================================
+   Festival campaigns.
+
+   Deliberately heavier visually than the week planner: a campaign is a
+   commitment to three weeks of a seller's time, and it should not look
+   like the same weight of decision as approving one post.
+   ========================================================== */
+.cmp-live { display: grid; gap: 10px; margin-bottom: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.cmp-run { border: 1px solid var(--primary-line); border-left: 3px solid var(--primary);
+  border-radius: var(--radius); background: var(--surface); padding: 11px 13px; }
+.cmp-run-h { display: flex; justify-content: space-between; align-items: baseline;
+  gap: 8px; flex-wrap: wrap; }
+.cmp-bar { height: 4px; background: var(--surface-2); border-radius: 2px;
+  margin: 8px 0 7px; overflow: hidden; }
+.cmp-bar i { display: block; height: 100%; background: var(--primary); }
+.cmp-obj { font-size: 12px; color: var(--muted); }
+
+.cmp-rail { margin-bottom: 14px; }
+.cmp-rail-h { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
+.cmp-rail-h svg { color: var(--primary); }
+.cmp-cards { display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); }
+.cmp-card { text-align: left; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); padding: 12px; cursor: pointer; display: flex;
+  flex-direction: column; gap: 5px; transition: border-color .12s, transform .12s; }
+.cmp-card:hover { border-color: var(--primary); transform: translateY(-1px); }
+.cmp-card.is-late { border-color: var(--amber); }
+.cmp-card.is-running { border-color: var(--green); background: var(--green-soft); }
+.cmp-when { font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--muted); }
+.cmp-card b { font-size: 15px; }
+.cmp-weight { font-size: 9px; color: var(--primary); letter-spacing: 1px; }
+.cmp-weight i { color: var(--border-strong); font-style: normal; }
+.cmp-core { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+.cmp-go { font-size: 11.5px; font-weight: 600; color: var(--primary); margin-top: 3px; }
+.cmp-card.is-late .cmp-go { color: var(--amber); }
+
+.cmp-obj-box { border-left: 3px solid var(--primary); background: var(--surface-3);
+  border-radius: 6px; padding: 11px 13px; margin-bottom: 12px; }
+.cmp-obj-h { font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.cmp-grammar, .cmp-late { display: flex; gap: 9px; padding: 10px 12px;
+  border-radius: 6px; margin-bottom: 12px; font-size: 12.5px; }
+.cmp-grammar { background: var(--surface-2); }
+.cmp-late { background: var(--amber-soft); color: var(--amber); }
+.cmp-grammar svg, .cmp-late svg { flex: none; margin-top: 2px; }
+.cmp-grammar span, .cmp-late span { display: block; margin-top: 3px; line-height: 1.5; }
+
+.cmp-beats { display: flex; flex-direction: column; gap: 2px; }
+.cmp-beat { display: flex; gap: 12px; padding: 9px 0;
+  border-bottom: 1px solid var(--border); }
+.cmp-beat.is-past { opacity: .45; }
+.cmp-beat-when { flex: none; width: 52px; text-align: right; }
+.cmp-beat-when b { display: block; font-size: 13px; }
+.cmp-beat-when span { font-size: 10px; color: var(--muted); }
+.cmp-beat-body { flex: 1; min-width: 0; }
+.cmp-beat-h { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.cmp-beat-job { font-size: 12.5px; margin-top: 3px; }
+.cmp-beat-why { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+
+.cmp-list { margin: 5px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.7; }
+.cmp-caution { border: 1px solid var(--red); background: var(--red-soft);
+  border-radius: var(--radius); padding: 11px 13px; margin-top: 14px; }
+.cmp-caution-h { display: flex; align-items: center; gap: 6px; color: var(--red);
+  margin-bottom: 6px; }
+.cmp-caution ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; }

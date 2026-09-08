@@ -4979,6 +4979,8 @@ async function renderSocial() {
 
     ${decisions}
 
+    <div id="smCampaigns"></div>
+
     ${fests.length ? `<div class="sm-radar">
       <div class="sm-radar-h">${sic("bell")}This month</div>
       ${fests.map((f) => `<div class="sm-radar-i">
@@ -5016,6 +5018,8 @@ async function renderSocial() {
             <div class="sm-pil-w">${esc(p.why)}</div></div>`).join("")}</div>
       </div>
     </details>`);
+
+  renderCampaignRail();
 
   const move = (n) => {
     let m = _socialMonth.month + n, y = _socialMonth.year;
@@ -5725,4 +5729,163 @@ async function renderUpcomingSocial() {
   };
   box.querySelectorAll("[data-upok]").forEach((b) => b.onclick = () => decide(b.dataset.upok, "scheduled"));
   box.querySelectorAll("[data-upno]").forEach((b) => b.onclick = () => decide(b.dataset.upno, "failed"));
+}
+
+/* =====================================================================
+   Festival campaigns.
+
+   The difference between this and "Plan my week" is the whole point of the
+   module. A week is four posts that happen to be in the same seven days.
+   A campaign is six posts positioned relative to a date, each with one job
+   that no other post in the set has, building toward a day when the seller's
+   customers are actually buying.
+
+   The seller does not build campaigns. The Indian calendar hands them ten a
+   year with known dates and known demand, so the app builds them and the
+   seller says yes.
+   ===================================================================== */
+let _fests = null;
+
+async function renderCampaignRail() {
+  const box = $("smCampaigns");
+  if (!box) return;
+  try { _fests = await api("/api/social/festivals"); }
+  catch (e) { return; }
+
+  const live = _fests.campaigns || [];
+  const next = (_fests.festivals || [])
+    .filter((f) => !f.undated && f.days_out != null && f.days_out >= 0)
+    .slice(0, 4);
+
+  box.innerHTML = `
+    ${live.length ? `
+      <div class="cmp-live">
+        ${live.map((c) => `
+          <div class="cmp-run">
+            <div class="cmp-run-h">
+              <b>${esc(c.festival)} campaign</b>
+              <span class="muted tiny">${c.published} of ${c.total} posted${
+                c.waiting ? ` · ${c.waiting} waiting on you` : ""}</span>
+            </div>
+            <div class="cmp-bar"><i style="width:${c.total ? (100 * c.published / c.total) : 0}%"></i></div>
+            <div class="cmp-obj">${esc(c.objective || "")}</div>
+          </div>`).join("")}
+      </div>` : ""}
+
+    ${next.length ? `
+      <div class="cmp-rail">
+        <div class="cmp-rail-h">${sic("spark")}<b>Campaigns worth running</b>
+          <span class="muted tiny">picked for what you sell, soonest first</span></div>
+        <div class="cmp-cards">
+          ${next.map((f) => `
+            <button class="cmp-card${f.late ? " is-late" : ""}${f.running ? " is-running" : ""}"
+                    data-fest="${esc(f.key)}">
+              <span class="cmp-when">${f.days_out === 0 ? "Today"
+                : f.days_out === 1 ? "Tomorrow" : `In ${f.days_out} days`}</span>
+              <b>${esc(f.name)}</b>
+              <span class="cmp-weight" title="How much this festival matters for what you sell">
+                ${"●".repeat(Math.round(f.weight / 2))}<i>${"●".repeat(5 - Math.round(f.weight / 2))}</i></span>
+              <span class="cmp-core">${esc((f.core || "").slice(0, 96))}…</span>
+              <span class="cmp-go">${f.running ? "Running · view"
+                : f.late ? "Start now — already late" : "Plan it"}</span>
+            </button>`).join("")}
+        </div>
+      </div>` : ""}`;
+
+  box.querySelectorAll("[data-fest]").forEach((b) =>
+    b.onclick = () => openCampaign(b.dataset.fest));
+}
+
+async function openCampaign(key) {
+  let p;
+  try { p = await api("/api/social/campaign?festival=" + encodeURIComponent(key)); }
+  catch (e) { return toast(e.message); }
+
+  if (p.error && p.undated) {
+    openModal(p.festival, `
+      <p class="muted" style="margin-top:0;">${esc(p.error)}</p>
+      <h4>What we would post</h4>
+      <ul class="cmp-list">${(p.angles || []).map((a) => `<li>${esc(a)}</li>`).join("")}</ul>
+      <div class="modal-actions"><button class="btn primary" data-cx>Close</button></div>`);
+    document.querySelector("[data-cx]").onclick = closeModal;
+    return;
+  }
+  if (p.error) return toast(p.error);
+
+  openModal(`${esc(p.festival)} campaign`, `
+    <div class="cmp-obj-box">
+      <div class="cmp-obj-h">The point of this campaign</div>
+      <b>${esc(p.objective)}</b>
+      <p class="muted tiny" style="margin:6px 0 0;">${esc(p.core)}</p>
+    </div>
+
+    <div class="cmp-grammar">${sic("edit")}<div>
+      <b>Who your customer is buying for</b>
+      <span>${esc(p.grammar)}</span></div></div>
+
+    ${p.late ? `<div class="cmp-late">${sic("alert")}<div>
+      <b>You are inside the window already</b>
+      <span>${esc(p.festival)} is ${p.days_out} days away and the run-up has
+      started. The early beats will be skipped — start now rather than
+      waiting.</span></div></div>` : ""}
+
+    <h4>The six posts, and what each one is for</h4>
+    <div class="cmp-beats">
+      ${(p.beats || []).map((b) => `
+        <div class="cmp-beat${b.past ? " is-past" : ""}">
+          <div class="cmp-beat-when">
+            <b>${esc(b.date.slice(8) + "/" + b.date.slice(5, 7))}</b>
+            <span>D-${b.days_before}</span>
+          </div>
+          <div class="cmp-beat-body">
+            <div class="cmp-beat-h"><b>${esc(b.label)}</b>
+              <span class="sm-fmt sm-fmt-${esc(b.format)}">${esc(b.format)}</span>
+              ${b.past ? `<span class="muted tiny">already passed — will be skipped</span>` : ""}</div>
+            <div class="cmp-beat-job">${esc(b.job)}</div>
+            <div class="cmp-beat-why">${esc(b.why)}</div>
+          </div>
+        </div>`).join("")}
+    </div>
+
+    <details class="sm-fold" style="margin-top:14px;">
+      <summary>What people actually buy, and the lines that work</summary>
+      <div class="sm-explain">
+        <h4>Angles worth taking</h4>
+        <ul class="cmp-list">${(p.angles || []).map((a) => `<li>${esc(a)}</li>`).join("")}</ul>
+        <h4>Lines in the right register</h4>
+        <ul class="cmp-list">${(p.taglines || []).map((t) => `<li><em>${esc(t)}</em></li>`).join("")}</ul>
+        <h4>Colours to shoot in</h4>
+        <p>${esc((p.colours || []).join(", "))}</p>
+        ${p.note ? `<h4>Worth knowing</h4><p>${esc(p.note)}</p>` : ""}
+      </div>
+    </details>
+
+    <div class="cmp-caution">
+      <div class="cmp-caution-h">${sic("shield")}<b>Do not do these</b></div>
+      <ul>${(p.caution || []).map((c) => `<li>${esc(c)}</li>`).join("")}</ul>
+      <p class="muted tiny" style="margin:6px 0 0;">Festival campaigns have been
+        pulled by much larger brands over exactly these mistakes. Worth thirty
+        seconds of reading.</p>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn ghost" data-cx>Not now</button>
+      <button class="btn primary" id="cmpGo">Plan these ${(p.beats || []).filter((b) => !b.past).length} posts</button>
+    </div>`, { wide: true });
+
+  document.querySelector("[data-cx]").onclick = closeModal;
+  $("cmpGo").onclick = async () => {
+    const b = $("cmpGo");
+    b.disabled = true; b.textContent = "Writing…";
+    try {
+      const r = await api("/api/social/campaign", { method: "POST", json: { festival: key } });
+      closeModal();
+      toast(`${r.created} posts planned for ${r.festival}.`);
+      _socialData = await api("/api/social");
+      await renderSocial();
+    } catch (e) {
+      toast(e.message, 6000);
+      b.disabled = false; b.textContent = "Plan these posts";
+    }
+  };
 }

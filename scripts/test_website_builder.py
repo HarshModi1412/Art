@@ -1175,8 +1175,8 @@ must("Rs 1.4L" in _dw["body"], f"large money reads as lakhs ({_dw['body'][:60]})
 # is just a label.
 for cid in ("winback", "festival", "reorder", "overstock", "supplier_risk",
             "reputation", "complaints"):
-    c = _per.dress({"id": cid, "count": 2})
-    must(bool(c["cta"]) and bool(c["headline"]) and bool(c["body"]),
+    _card = _per.dress({"id": cid, "count": 2})
+    must(bool(_card["cta"]) and bool(_card["headline"]) and bool(_card["body"]),
          f"{cid} has a headline, a body and something to press")
 
 _all = _per.dress_all([{"id": "complaints", "count": 1}, {"id": "reorder", "count": 1},
@@ -1304,8 +1304,14 @@ print("\n== 40. occasion blending ==")
 _occ = _soc.occasion_for(_dt.date(2026, 10, 14), "clothing")
 must(_occ and _occ["name"] == "Navratri",
      "a mid-October day falls inside Navratri, not just its run-up")
-must(_soc.occasion_for(_dt.date(2026, 10, 25), "clothing")["name"] == "Diwali",
-     "late October is inside Diwali's 17-day run-up")
+# Windows overlap. On 25 October a clothing seller is 4 days from Karva Chauth
+# and 14 from Diwali, and both run-ups are live. The NEAREST wins — that is the
+# festival the customer is thinking about, and the one where a late post is
+# wasted. Before this rule the answer depended on the order of the table.
+must(_soc.occasion_for(_dt.date(2026, 10, 25), "clothing")["name"] == "Karva Chauth",
+     "with two live windows the NEARER festival wins, not the first in the table")
+must(_soc.occasion_for(_dt.date(2026, 11, 2), "clothing")["name"] == "Diwali",
+     "and once Karva Chauth has passed, Diwali takes over")
 must(_soc.occasion_for(_dt.date(2026, 9, 1), "clothing") is None,
      "and early September belongs to no festival")
 # Category filtering is real, and easiest to see on 6 November. That is
@@ -1382,13 +1388,130 @@ for cid, extra in [("winback", {"count": 38, "value": 142000}),
                    ("complaints", {"count": 3}), ("reputation", {"count": 4}),
                    ("festival", {"festival": "Diwali", "days_away": 61,
                                  "start_on": "22 Oct"})]:
-    c = _per.dress({"id": cid, **extra})
-    must(len(c["body"]) <= 140,
-         f"{cid} panel line is {len(c['body'])} chars, fits the column")
-    must(len(c["why"]) > len(c["body"]),
+    _card = _per.dress({"id": cid, **extra})
+    must(len(_card["body"]) <= 140,
+         f"{cid} panel line is {len(_card['body'])} chars, fits the column")
+    must(len(_card["why"]) > len(_card["body"]),
          f"{cid} keeps the full reasoning behind Details")
-    must(c["headline"] and len(c["headline"]) <= 60,
+    must(_card["headline"] and len(_card["headline"]) <= 60,
          f"{cid} headline is short enough to read at a glance")
+
+
+print("\n== 44. the festival content library ==")
+
+from backend.core import playbook as _pb
+
+must(len(_pb.FESTIVALS) >= 12, f"{len(_pb.FESTIVALS)} festivals in the library")
+for key, f in _pb.FESTIVALS.items():
+    for field in ("name", "core", "weight", "buys_for", "buys", "colours",
+                  "motifs", "angles", "taglines", "hashtags", "caution"):
+        must(f.get(field), f"{key} has {field}")
+    must(len(f["angles"]) >= 3, f"{key} has real post angles, not one")
+    must(len(f["hashtags"]) >= 5, f"{key} has enough hashtags to pick 5 from")
+    must(f["buys_for"] in ("self", "gift", "both"), f"{key} says who is buying")
+
+# Category weighting is the thing that stops the module offering a perfume
+# seller Dhanteras. Getting this wrong teaches the seller the suggestions are
+# not thought through, which is worse than showing them nothing.
+_cl = {f["key"] for f in _pb.for_category("clothing")}
+_jw = {f["key"] for f in _pb.for_category("jewellery")}
+_pf = {f["key"] for f in _pb.for_category("perfume")}
+must("navratri" in _cl, "Navratri is offered to a clothing seller")
+must("dhanteras" in _jw, "Dhanteras is offered to a jewellery seller")
+must("dhanteras" not in _pf, "but NOT to a perfume seller — it is a metal day")
+must("dhanteras" not in _cl, "and not to a clothing seller either")
+must("eid" in _pf, "Eid is offered to a perfume seller — attar is embedded in it")
+must("holi" not in _jw, "Holi is not offered to a jewellery seller")
+
+# The gifting/self grammar is the highest-leverage caption variable there is.
+must(_pb.FESTIVALS["raksha_bandhan"]["buys_for"] == "gift",
+     "Raksha Bandhan is a gifting festival")
+must(_pb.FESTIVALS["navratri"]["buys_for"] == "self",
+     "Navratri is a self-purchase festival")
+_g = _pb.brief("raksha_bandhan", "jewellery")
+must("GIFTER" in _g["grammar"], "and the brief tells the writer to address the gifter")
+must("WEARER" in _pb.brief("navratri", "clothing")["grammar"],
+     "while Navratri addresses the wearer")
+
+# The safety field. Large brands have had festival campaigns pulled over
+# exactly these; a seller with 40 SKUs could not absorb that.
+must(any("Durga" in c for c in _pb.FESTIVALS["navratri"]["caution"]),
+     "Navratri warns against putting the deity on a discount creative")
+must(any("crescent" in c for c in _pb.FESTIVALS["karva_chauth"]["caution"]),
+     "Karva Chauth warns about the crescent moon — wrong on two counts")
+must(any("Urdu" in c for c in _pb.FESTIVALS["diwali"]["caution"]),
+     "Diwali warns about the collection-naming mistake that got one pulled")
+must(any("protect your sister" in c for c in _pb.FESTIVALS["raksha_bandhan"]["caution"]),
+     "Raksha Bandhan warns that the protection framing is dated")
+must(any("Eid-ul-Adha" in c for c in _pb.FESTIVALS["eid"]["caution"]),
+     "Eid warns against confusing the two Eids")
+
+
+print("\n== 45. campaigns have a shape ==")
+
+_us.set_key(SELLER, "social_posts", [])
+_us.set_key(SELLER, "social_campaigns", [])
+c.post("/api/social/settings", headers=H, json={"patch": {"category": "clothing"}})
+
+_prev = _soc.campaign_preview(SELLER, "diwali", _dt.date(2026, 10, 15))
+must(not _prev.get("error"), f"a Diwali campaign can be previewed ({_prev.get('error','')})")
+must(_prev["objective"], "it states what it is FOR — the thing a queue of posts lacks")
+must(len(_prev["beats"]) == 6, "six beats")
+
+# Positioned relative to the FESTIVAL, not to today. That is the property that
+# makes it a campaign rather than a content calendar.
+_offsets = [b["days_before"] for b in _prev["beats"]]
+must(_offsets == sorted(_offsets, reverse=True),
+     f"beats run from furthest-out to the day itself {_offsets}")
+must(_offsets[-1] == 0, "and the last one lands ON the festival")
+
+_jobs = [b["job"] for b in _prev["beats"]]
+must(len(set(_jobs)) == len(_jobs),
+     "every beat has a DIFFERENT job — no post repeats another's purpose")
+must(all(b["why"] for b in _prev["beats"]),
+     "and each says why it exists, so the seller can disagree with it")
+
+_res = _soc.start_campaign(SELLER, "diwali",
+                           [{"id": "c1", "name": "Banarasi lehenga", "price": 4200},
+                            {"id": "c2", "name": "Cotton kurta set", "price": 1299}],
+                           _dt.date(2026, 10, 15))
+must(_res["created"] == 6, f"six posts created ({_res['created']})")
+_hooks = [p["caption"]["hook"] for p in _res["posts"]]
+must(len(set(_hooks)) > 1,
+     "and they do not all open with the same line, even from the template")
+must(all(p["campaign"] == "diwali" for p in _res["posts"]),
+     "each post knows which campaign it belongs to")
+must(all(p["job"] for p in _res["posts"]), "and carries its own job")
+
+_day = [p for p in _res["posts"] if p["beat"] == "day"][0]
+must(not _day["caption"]["cta"] and not _day["caption"]["question"],
+     "the on-the-day post has no CTA and no sales question — its whole job is "
+     "to be present WITHOUT selling")
+_dl = [p for p in _res["posts"] if p["beat"] == "deadline"][0]
+must("order" in _dl["caption"]["hook"].lower(),
+     "while the deadline post is exactly about ordering in time")
+
+# Re-planning replaces, same rule as the week.
+_soc.start_campaign(SELLER, "diwali", [{"id": "c1", "name": "Banarasi lehenga"}],
+                    _dt.date(2026, 10, 15))
+_diw = [p for p in _soc.week(SELLER) if p.get("campaign") == "diwali"]
+must(len(_diw) == 6, f"re-planning a campaign replaces it, never doubles it ({len(_diw)})")
+
+_running = _soc.campaigns(SELLER)
+must(len(_running) == 1 and _running[0]["total"] == 6,
+     "the campaign is tracked with its progress")
+
+# A festival whose date is not in the verified table must SAY so, not guess.
+_undated = _soc.campaign_preview(SELLER, "holi", _dt.date(2026, 10, 15))
+must(_undated.get("undated") and "lunar" in _undated["error"],
+     "an undated festival is reported honestly rather than planned against a guess")
+must(_undated.get("angles"), "but its content library is still shown")
+
+# Category filtering reaches the API.
+r = c.get("/api/social/festivals", headers=H)
+must(r.status_code == 200, f"festivals endpoint ({r.status_code})")
+_keys = {f["key"] for f in r.json()["festivals"]}
+must("dhanteras" not in _keys, "a clothing seller is not offered Dhanteras")
 
 
 print("\nALL CHECKS PASSED \u2713")
