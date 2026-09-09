@@ -439,9 +439,20 @@ td { color: var(--text-2); }
 .tile-content   { --tile-accent: #9b5d78; --tile-bg: rgba(155, 93, 120, 0.10); }
 .tile-ig        { --tile-accent: #6b6ea0; --tile-bg: var(--primary-soft); }
 .tile-ads       { --tile-accent: #3f7d63; --tile-bg: var(--green-soft); }
+.tile-marketing { --tile-accent: #96702f; --tile-bg: var(--amber-soft); }
 [data-theme="dark"] .tile-content   { --tile-accent: #ce9ab0; }
 [data-theme="dark"] .tile-ig        { --tile-accent: #a6a3cf; }
 [data-theme="dark"] .tile-ads       { --tile-accent: #79bd9c; }
+[data-theme="dark"] .tile-marketing { --tile-accent: #d6ac6e; }
+
+/* Marketing module */
+.mk-card { margin-top: 14px; }
+.mk-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mk-list li { display: flex; flex-direction: column; gap: 1px; font-size: 12.8px; }
+.mk-sends { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.mk-send-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px;
+  padding: 6px 0; border-bottom: 1px solid var(--border); }
+.mk-send-row:last-child { border-bottom: none; }
 
 /* content editor */
 .cc-grid { display: grid; grid-template-columns: 320px 1fr; gap: 18px; }

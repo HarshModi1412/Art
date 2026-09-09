@@ -222,10 +222,9 @@ function showShell() {
 $("homeBtn").onclick = goHome;
 
 /* Not a general router -- just enough to reach a module that isn't on the
-   Home grid by URL, e.g. #/module/sales for Sales Analytics while it's off
-   the grid pending the storefront-data rework. Anyone can still type the
-   hash; the module itself is what decides whether there's anything to show
-   (openSales()/openSubcategory() already handle "no data yet" on their own). */
+   Home grid by URL, e.g. #/module/ads for Ad Analytics while ad-account
+   connections aren't built out yet. Anyone can still type the hash; the
+   module itself is what decides whether there's anything to show. */
 function deepLinkModule() {
   const m = /^#\/module\/([a-z]+)$/.exec(location.hash);
   return m ? m[1] : null;
@@ -320,16 +319,17 @@ function redrawCharts() {
 }
 
 // ---------- HOME ----------
-// Sales Analytics and Sub-Category Analysis are deliberately NOT in this
-// list — they're being reworked against the storefront-native data model and
-// aren't ready for sellers to rely on. The routes are still fully wired
-// (openModule("sales") / openModule("subcategory") both work) so they stay
-// reachable directly at #/module/sales and #/module/subcategory while that
-// work continues -- see the hash-route handler near DOMContentLoaded.
+// Ad Analytics is deliberately NOT in this list -- connecting Google/Meta ad
+// accounts isn't built out yet, so it stays off the grid rather than sitting
+// there as a dead end. The route is still fully wired (openModule("ads")
+// works) so it's reachable directly at #/module/ads while that work
+// continues -- see the hash-route handler near DOMContentLoaded.
 //
 // Content Creator and Instagram (the "in build" placeholder) were removed
 // outright, not just hidden: nothing routes to them from anywhere.
 const MODULES = [
+  { id: "sales",      name: "Sales Analytics",        sub: "KPIs, revenue trends and a 30-day forecast from your order data.",             ico: "chart", cls: "tile-sales",     needs: "sales",  tag: "SALES" },
+  { id: "subcategory",name: "Sub-Category Analysis",  sub: "Which categories & sub-categories drive revenue — trends and drill-downs.",   ico: "layers", cls: "tile-sub",       needs: "sales",  tag: "SALES" },
   { id: "inventory",  name: "Inventory Management",   sub: "What you hold, what each sold product uses up, and what gets wasted. Stock falls automatically as orders come in.", ico: "package", cls: "tile-supply",   needs: null,     tag: "STOCK" },
   { id: "supply",     name: "Suppliers & Purchase Orders", sub: "Who you buy from, when to reorder, and a purchase order PDF you can send them.", ico: "truck", cls: "tile-supply",   needs: null,     tag: "SUPPLY" },
   { id: "studio",     name: "Product Studio",         sub: "Your photos, clips and the words behind each product — turned into Instagram posts that look like your brand, not a template.", ico: "spark", cls: "tile-content",  needs: null,     tag: "STUDIO" },
@@ -337,11 +337,11 @@ const MODULES = [
   { id: "site",       name: "Website Builder",        sub: "Build your own selling website — pick a theme for your genre, set fonts, colours and images, then publish. Your listed products become its shop.", ico: "globe", cls: "tile-site",     needs: null,     tag: "SITE" },
   { id: "orders",     name: "Orders",                 sub: "Every order placed on your website — status, customer, address and export. Delivered orders feed straight into your sales analytics.", ico: "bag", cls: "tile-orders",   needs: null,     tag: "ORDERS" },
   { id: "social",     name: "Social Media Manager",    sub: "A week of posts planned, written and scheduled for you — built on what actually drives sales, not what drives likes.", ico: "spark", cls: "tile-content",  needs: null,     tag: "SOCIAL" },
+  { id: "marketing",  name: "Marketing",              sub: "Win-back campaigns for customers who've gone quiet, written and ready — plus what past campaigns actually recovered.", ico: "mail", cls: "tile-marketing", needs: null,     tag: "MARKETING" },
   { id: "gst",        name: "Billing & GST",          sub: "Tax invoices, HSN codes, place of supply and a GSTR-1 export your accountant can file from.", ico: "receipt", cls: "tile-orders",   needs: null,     tag: "BILLING" },
   { id: "review",     name: "Review Analytics",       sub: "Your brand positioning from your own reviews — what customers come to you for.", ico: "star", cls: "tile-review",    needs: "review", tag: "BRAND" },
   { id: "complaints", name: "Complaint Analysis",     sub: "The fix-first plan for the complaint themes hurting your brand right now.",    ico: "flame", cls: "tile-complaint", needs: "review", tag: "BRAND" },
   { id: "strategy",   name: "Position Strategy + AI", sub: "A levelled checklist to strengthen or reposition your brand, plus the AI Analyst.", ico: "compass", cls: "tile-strategy", needs: "review", tag: "STRATEGY" },
-  { id: "ads",        name: "Ad Analytics",           sub: "Connect Google, Meta, Instagram and other ad accounts to see your spend.",    ico: "trend", cls: "tile-ads",       needs: null,     tag: "ADS" },
 ];
 
 async function goHome() {
@@ -1162,6 +1162,7 @@ async function openModule(id) {
   if (id === "complaints") return openComplaints();
   if (id === "strategy") return openStrategy();
   if (id === "social") return openSocial();
+  if (id === "marketing") return openMarketing();
   if (id === "gst") return openGst();
   if (id === "ads") return openAdsModule();
 }
@@ -3095,6 +3096,83 @@ function renderActions(insights) {
     const type = ["positive", "negative", "warning", "neutral"].includes(ins.type) ? ins.type : "neutral";
     return `<div class="action-card ${type}">${ins.action ? `<div class="do">✅ ${esc(ins.action)}</div><div class="why">${esc(ins.text)}</div>` : `<div class="do">${esc(ins.text)}</div>`}</div>`;
   }).join("")}</div>`;
+}
+
+// ---------- MODULE: Marketing ----------
+// Win-back used to surface only as an Approval-panel card, and only when the
+// insight engine decided to generate one -- so a seller who wanted to check
+// on it between those moments had nowhere to go. This gives it a permanent
+// home: open it any time and it fetches the current at-risk list itself,
+// same endpoint the panel card uses, no waiting for an insight to appear.
+async function openMarketing() {
+  moduleShell("Marketing", skeleton("cards"));
+  try {
+    const [wb, proof, sends] = await Promise.all([
+      api("/api/rfm/winback", { method: "POST" }).catch((e) => ({ customers: [], _error: e.message })),
+      api("/api/rfm/winback/proof").catch(() => null),
+      api("/api/rfm/winback/sends").catch(() => null),
+    ]);
+    renderMarketing(wb, proof, sends);
+  } catch (e) {
+    moduleShell("Marketing", failed(e.message, () => openModule(_currentModule)));
+  }
+}
+
+function renderMarketing(wb, proof, sends) {
+  const rows = (wb && wb.customers) || [];
+  const sendRows = (sends && sends.sends) || [];
+
+  const proofLine = proof && proof.headline && proof.totals && proof.totals.contacted
+    ? `<div class="today-proof">${sic("trend")}<span>${esc(proof.headline)}</span>
+         <button class="btn ghost tiny" id="mkProofMore">How this is counted</button></div>`
+    : "";
+
+  let body;
+  if (wb && wb._error) {
+    body = `<div class="ap-empty">${esc(wb._error)}</div>`;
+  } else if (!rows.length) {
+    body = `<div class="ap-empty">No customers are at risk of going quiet right now —
+      nice work. This list is built from your order history, so check back as it grows.</div>`;
+  } else {
+    body = `
+      <div class="card mk-card">
+        <h4 style="margin:0 0 4px;">${rows.length} customer${rows.length === 1 ? "" : "s"} have gone quiet</h4>
+        <p class="muted tiny" style="margin:0 0 12px;">Each one gets a written message
+          with their favourite item and a coupon — you edit every row before anything sends.</p>
+        <ul class="mk-list">
+          ${rows.slice(0, 8).map((r) => `<li><b>${esc(r.customer_name || "Customer")}</b>
+            <span class="muted tiny">${esc(r.favorite_item || "")}${r.favorite_item ? " · " : ""}last order ${esc(r.last_purchase_date || "—")}</span></li>`).join("")}
+        </ul>
+        ${rows.length > 8 ? `<p class="muted tiny">+ ${rows.length - 8} more</p>` : ""}
+        <button class="btn primary" id="mkReview">Review &amp; send</button>
+      </div>`;
+  }
+
+  const pastCampaigns = sendRows.length ? `
+    <details class="sm-fold">
+      <summary>Past campaigns (${sendRows.length})</summary>
+      <div class="mk-sends">
+        ${sendRows.slice(0, 20).map((s) => `
+          <div class="mk-send-row">
+            <b>${esc((s.channels || []).join(" + ") || "—")}</b>
+            <span class="muted tiny">${esc(String(s.at || "").slice(0, 10))}
+              · ${fmt(s.recipients || 0)} sent
+              ${s.skipped ? ` · ${fmt(s.skipped)} skipped (no email/phone)` : ""}</span>
+          </div>`).join("")}
+      </div>
+    </details>` : "";
+
+  moduleShell("Marketing", `
+    <p class="muted" style="margin-top:0;">Win-back campaigns for customers who used to
+      buy from you and have gone quiet — written and ready, one tap to send.</p>
+    ${proofLine}
+    ${body}
+    ${pastCampaigns}`);
+
+  const m = $("mkProofMore");
+  if (m) m.onclick = () => toast(proof.method, 7000);
+  const rv = $("mkReview");
+  if (rv) rv.onclick = openWinbackEditor;
 }
 
 // ---------- Win-back — approve = direct Excel download; details = editable popup ----------
