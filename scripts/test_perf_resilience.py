@@ -258,10 +258,32 @@ check("generating a picture uses it", "Re-shooting your photo" in JS)
 check("writing a shot list uses it", "Writing the shot list" in JS)
 check("starting a campaign uses it", "Building the campaign" in JS)
 check("reading the reference images uses it", "Reading your reference images" in JS)
-check("it tells the seller they can walk away",
-      "Go and do something else" in JS)
-check("and that the work survives them leaving",
-      "keeps running even if you close this" in JS)
+check("it tells the seller they can carry on working",
+      "Carry on using the app" in JS)
+check("and that the work finishes on the server either way",
+      "finishes whether you wait here or not" in JS)
+# The first version of this said "go and do something else" from inside a
+# full-screen scrim that blocked every way of doing it. The promise and the
+# UI have to agree.
+check("the indicator does NOT cover the screen",
+      "position: fixed; inset: 0" not in CSS.split(".busy-back")[1][:200],
+      CSS.split(".busy-back")[1][:120])
+check("it does not dim or blur the app either",
+      "backdrop-filter" not in CSS.split(".busy-back")[1][:200])
+check("it sits clear of the toast corner",
+      "left: 20px" in CSS.split(".busy-back")[1][:200])
+check("and above the post editor, so it is visible during a generation",
+      "z-index: 70" in CSS.split(".busy-back")[1][:200])
+check("a finished plan does not yank the seller back to Social",
+      'if (_currentModule === "social") await renderSocial();' in JS)
+check("it tells them where to look instead",
+      "open Social Media Manager to see it" in JS)
+check("a picture landing after the editor closed does not throw",
+      "const shotEl = $(\"smEdShot\");" in JS and "if (shotEl)" in JS)
+check("nor does a clip landing after it closed",
+      "const slotEl = $(\"smVidSlot\");" in JS and "if (slotEl)" in JS)
+check("Plan cannot be double-pressed now that it no longer blocks the screen",
+      "if (planBtns.some((b) => b.disabled)) return;" in JS)
 check("the motion is CSS, not a timer a background tab would freeze",
       "@keyframes busyPulse" in CSS and "animation: busyPulse" in CSS)
 check("reduced-motion still leaves something moving",

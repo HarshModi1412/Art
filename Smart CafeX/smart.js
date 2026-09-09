@@ -1319,8 +1319,8 @@ function busyStart(title, detail) {
       <div class="busy-dots" aria-hidden="true"><i></i><i></i><i></i></div>
       <b id="busyTitle">${esc(title || "Working…")}</b>
       <p id="busyDetail">${esc(detail || "")}</p>
-      <p class="busy-leave">This keeps running even if you close this.
-        Go and do something else — it will be here when you come back.</p>
+      <p class="busy-leave">Carry on using the app — this runs on the server, so
+        it finishes whether you wait here or not.</p>
     </div>`;
   el.hidden = false;
   return el;
@@ -5564,6 +5564,14 @@ async function renderSocial() {
     // Every slot gets a written caption, and every reel slot a shot list and a
     // video prompt on top — so a four-week plan is dozens of model calls. This
     // is the slowest thing in the app and the one people re-press.
+    //
+    // The indicator no longer covers the screen, which is the point — but it
+    // means these buttons stay clickable, so they are disabled for the
+    // duration. Pressing Plan twice would otherwise start a second plan over
+    // the first.
+    const planBtns = [$("smBuild"), $("smBuild4")].filter(Boolean);
+    if (planBtns.some((b) => b.disabled)) return;
+    planBtns.forEach((b) => b.disabled = true);
     const n = weeks > 1 ? `${weeks} weeks` : "your week";
     try {
       await withBusy(
@@ -5574,9 +5582,17 @@ async function renderSocial() {
           busyStep("Laying the posts out across the calendar…");
           _socialData = await api("/api/social");
         });
-      await renderSocial();
-      toast("Planned. Replanning replaces drafts, it never doubles them.");
+      // The seller was told they could carry on using the app, so they may well
+      // be somewhere else by now. Repainting Social over whatever they opened
+      // would be the app grabbing the wheel back.
+      if (_currentModule === "social") await renderSocial();
+      toast(_currentModule === "social"
+        ? "Planned. Replanning replaces drafts, it never doubles them."
+        : `Your ${n} ${weeks > 1 ? "are" : "is"} planned — open Social Media Manager to see it.`);
     } catch (e) { toast(e.message); }
+    // Re-enabled by id, because renderSocial() above may have replaced the DOM
+    // these references point at.
+    [$("smBuild"), $("smBuild4")].forEach((b) => { if (b) b.disabled = false; });
   };
   $("smBuild").onclick = () => build(1);
   $("smBuild4").onclick = () => build(4);
@@ -5835,10 +5851,13 @@ function openSocialEditor(post) {
             return u;
           });
         post.video_url = url;
-        $("smVidSlot").innerHTML =
-          `<video src="${esc(url)}" controls playsinline preload="metadata"></video>`;
-        vidPick.innerHTML = sic("arrow-up-right") + "Replace clip";
-        vidPick.className = "btn ghost sm";
+        const slotEl = $("smVidSlot");
+        if (slotEl) {
+          slotEl.innerHTML =
+            `<video src="${esc(url)}" controls playsinline preload="metadata"></video>`;
+          vidPick.innerHTML = sic("arrow-up-right") + "Replace clip";
+          vidPick.className = "btn ghost sm";
+        }
         _socialData = await api("/api/social");
         toast("Clip attached — this post is ready to schedule.");
       } catch (e) { toast(e.message, 7000); }
@@ -5871,7 +5890,12 @@ function openSocialEditor(post) {
         () => api("/api/studio/image", { method: "POST", json: {
           product_id: post.product_id, pillar: post.pillar, format: post.format,
           post_id: post.id, use_reference: useRef, shot_type: post.shot_type || "" } }));
-      $("smEdShot").innerHTML = `<img src="${esc(img.url)}" alt="" /><span class="sm-gen">AI</span>`;
+      // The editor may have been closed while this was drawing — the picture is
+      // saved to the post either way, so there is nothing to recover, only a
+      // missing element to not write into.
+      const shotEl = $("smEdShot");
+      if (shotEl) shotEl.innerHTML = `<img src="${esc(img.url)}" alt="" /><span class="sm-gen">AI</span>`;
+      else toast("Your picture is ready — reopen the post to see it.", 6000);
       if (useRef && !img.had_reference) {
         toast("No photo on this product, so it was invented rather than re-shot. " +
               "Add a photo in Product Studio for a picture of the real item.", 7000);
@@ -6746,7 +6770,7 @@ async function openCampaign(key) {
       closeModal();
       toast(`${r.created} posts planned for ${r.festival}.`);
       _socialData = await api("/api/social");
-      await renderSocial();
+      if (_currentModule === "social") await renderSocial();
     } catch (e) {
       toast(e.message, 6000);
       b.disabled = false; b.textContent = "Plan these posts";
