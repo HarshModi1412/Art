@@ -11,6 +11,7 @@ What replaced what:
   st.secrets["OPENAI_..."]   -> OPENAI_API_KEY environment variable
   st.plotly_chart            -> JSON chart data rendered with Plotly.js
 """
+import hashlib
 import io
 import json
 import os
@@ -2107,9 +2108,32 @@ def _smart_status_payload(email: str, sess) -> dict:
 
 
 @app.get("/api/smart/state")
-def smart_state(x_session_id: str | None = Header(default=None),
+def smart_state(response: Response,
+                x_session_id: str | None = Header(default=None),
+                if_none_match: str | None = Header(default=None),
                 authorization: str | None = Header(default=None)):
+    """The home screen's payload, with a conditional GET on top.
+
+    WHY: this is the first thing every page load asks for, and a browser that
+    reclaims the tab (switch apps on a phone, come back) throws the whole page
+    away and asks again. cache.stamp() is already an exact fingerprint of the
+    account's data — row counts, updated_at, order count — so it makes a
+    correct ETag for free: when nothing has changed the browser gets a 304 with
+    no body, and the app repaints from what it already had instead of
+    re-downloading and re-rendering the same screen.
+
+    The stamp changes the moment a dataset, an order or an upload changes, so
+    a seller can never be shown a stale figure waiting for a timer."""
     email = require_user(authorization)
+    tag = f'W/"{hashlib.md5(cache.stamp(email).encode()).hexdigest()}"'
+    # Private: this is one seller's data and must never be held by a shared
+    # proxy. no-cache means "revalidate every time", not "do not store" — the
+    # browser keeps the body and we answer 304 when it is still good.
+    response.headers["Cache-Control"] = "private, no-cache"
+    response.headers["ETag"] = tag
+    if if_none_match and if_none_match.strip() == tag:
+        return Response(status_code=304, headers={
+            "ETag": tag, "Cache-Control": "private, no-cache"})
     return _smart_status_payload(email, get_session(x_session_id))
 
 
@@ -4173,6 +4197,25 @@ def social_attach(body: SocialAttachBody,
     p = social.attach_image(email, body.post_id, body.url, False, "")
     if p.get("error"):
         raise HTTPException(404, p["error"])
+    return p
+
+
+@app.post("/api/social/attach-video")
+def social_attach_video(body: SocialAttachBody,
+                        authorization: str | None = Header(default=None)):
+    """Attach the finished clip to a planned post — filmed on a phone, or
+    generated from the shot-list prompt and downloaded.
+
+    Upload the file through /api/site/image first (it already takes MP4 and
+    WEBM up to 48MB and stores them durably); this endpoint only records which
+    clip belongs to which post. Sending an empty url takes the clip off again,
+    so a wrong upload is one action to undo rather than a reason to delete a
+    post the seller has already written and scheduled."""
+    email = require_user(authorization)
+    p = social.attach_video(email, body.post_id, body.url)
+    if p.get("error"):
+        raise HTTPException(404, p["error"])
+    cache.clear(email)
     return p
 
 

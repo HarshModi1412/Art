@@ -330,7 +330,8 @@ FORMAT_FOR_ARCHETYPE = {
 }
 
 
-def slate_shape(cadence: str, occasion: dict | None = None) -> list[dict]:
+def slate_shape(cadence: str, occasion: dict | None = None,
+                rotation: int = 0, shootable: list[str] | None = None) -> list[dict]:
     """Which beat, archetype, pillar and format each slot in the week gets.
 
     The week is built as an ARC, not a rotation. Slot 1 teases, the middle
@@ -359,20 +360,41 @@ def slate_shape(cadence: str, occasion: dict | None = None) -> list[dict]:
 
     by_beat = {b["beat"]: b for b in WEEK_ARC}
     slots, used, seen_counts = [], None, {}
+    # Reels carry reach and carousels carry saves, so a week wants both. Left
+    # to a blind rotation the arc produced four reels to two carousels, and a
+    # lopsided week makes a balanced per-product mix impossible downstream —
+    # somebody always ends up reels-only. Counting as we go keeps the week
+    # near even, which is also just the better content mix.
+    fmt_count = {"reel": 0, "image": 0}
+
+    def bucket(a):
+        return "reel" if FORMAT_FOR_ARCHETYPE.get(a) == "reel" else "image"
+
     for i, beat in enumerate(plan):
         spec = by_beat[beat]
         options = list(spec["archetypes"])
         if occasion and beat == "close" and "festival" in options:
             arch = "festival"                     # a live festival owns the close
         else:
-            # Rotate within the beat, and never repeat the previous slot's
-            # archetype -- two identical-looking posts back to back is exactly
-            # the "everything looks the same" complaint.
+            # Never repeat the previous slot's archetype -- two identical-looking
+            # posts back to back is exactly the "everything looks the same"
+            # complaint. Among what is left, prefer the format the week is short
+            # of, then rotate so repeated beats do not all pick the same thing.
             options = [a for a in options if a != used] or options
-            k = seen_counts.get(beat, 0)
-            arch = options[k % len(options)]
-            seen_counts[beat] = k + 1
+            k = seen_counts.get(beat, 0) + rotation
+            # Prefer a beat the seller has actually shown they can shoot. Their
+            # Product Studio references say which kinds of photograph they
+            # produce; asking for an unboxing beat from someone who has never
+            # photographed their packaging is a post that will not get made.
+            # A stretch is still allowed — it just goes last, and only when
+            # nothing they already shoot fits this beat.
+            arch = min(options, key=lambda a, k=k: (
+                0 if (not shootable or ARCHETYPES[a]["shot_type"] in shootable) else 1,
+                (options.index(a) - k) % len(options),
+                fmt_count[bucket(a)]))
+            seen_counts[beat] = seen_counts.get(beat, 0) + 1
         used = arch
+        fmt_count[bucket(arch)] += 1
         a = ARCHETYPES[arch]
         pillar = spec["pillar"]
         # The offer cap survives the rewrite: deals content is negatively
@@ -1009,6 +1031,83 @@ def occasion_for(day: date, category: str = "") -> dict | None:
             "days_away": (d - day).days, "note": best.get("note", "")}
 
 
+def assign_products(shape: list[dict], pool: list[dict], hero: dict,
+                    occasion: dict | None = None,
+                    already: list[dict] | None = None) -> list[dict]:
+    """Which product each slot in the week is about.
+
+    BUG THIS FIXES: the arc's opening beats were pinned to the hero and every
+    remaining beat fell through to a rotation — and because the format follows
+    the archetype, the leftover beats happened to be the reel ones. A seller
+    with three products got four well-mixed posts about the first and a single
+    reel each for the other two, with no carousel between them. The catalogue
+    looked like one product plus two afterthoughts.
+
+    Two things have to hold at once, so both are balanced explicitly rather
+    than left to fall out of the ordering:
+
+      * the hero opens the week (tease, reveal) — that is what makes the week
+        a story about something rather than a rotation;
+      * after that, every slot goes to whichever product is furthest behind,
+        preferring one that does not yet have THIS slot's format. So no piece
+        ends up reels-only, and no piece ends up carousels-only.
+
+    A single-product catalogue is not a special case to apologise for: the
+    hero carries all of it, which is correct, because there is nothing else
+    to show.
+
+    `already` is the plan that exists on the calendar. Balancing only within
+    one week is not enough: planning four weeks in a row, each starting from
+    zero, still let a piece collect four carousels and no reel across the
+    month. Counting what is already scheduled makes the balance hold over the
+    whole plan, not just each week in isolation."""
+    names = [p.get("name") or f"item{i}" for i, p in enumerate(pool)]
+    counts = {n: {"total": 0, "reel": 0, "image": 0} for n in names}
+    hero_name = hero.get("name") or names[0]
+
+    def bucket(fmt):
+        return "reel" if fmt == "reel" else "image"
+
+    for p in (already or []):
+        n = p.get("product_name") or ""
+        if n in counts:
+            counts[n]["total"] += 1
+            counts[n][bucket(p.get("format"))] += 1
+
+    # Inside a festival window a product actually tagged for it should be
+    # preferred where the balance is otherwise equal — the same rule
+    # _pick_product applies, kept rather than dropped.
+    tag = (occasion or {}).get("name", "").split()[0].lower() if occasion else ""
+
+    def tagged(p):
+        if not tag:
+            return False
+        hay = " ".join(str(x).lower() for x in (p.get("festival_tags") or []))
+        return (tag in hay or tag in str(p.get("category") or "").lower()
+                or tag in str(p.get("name") or "").lower())
+
+    out = []
+    for slot in shape:
+        if len(pool) == 1 or slot["beat"] in ("tease", "reveal"):
+            chosen = hero
+        else:
+            b = bucket(slot["format"])
+            chosen = min(
+                pool,
+                key=lambda p, b=b: (
+                    counts[p.get("name") or ""]["total"],      # furthest behind first
+                    counts[p.get("name") or ""][b],            # then missing this format
+                    0 if tagged(p) else 1,                     # then festival-relevant
+                    names.index(p.get("name") or ""),          # then stable order
+                ))
+        n = chosen.get("name") or hero_name
+        counts.setdefault(n, {"total": 0, "reel": 0, "image": 0})
+        counts[n]["total"] += 1
+        counts[n][bucket(slot["format"])] += 1
+        out.append(chosen)
+    return out
+
+
 def _pick_product(pool: list[dict], i: int, occasion: dict | None,
                   slots: int = 4) -> dict:
     """Which product this slot is about.
@@ -1094,9 +1193,34 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
     # repeated noun is most of what makes a feed read as planned rather than
     # accumulated.
     lead_occasion = occasion_for(start + timedelta(days=3), s.get("category") or "")
-    shape = slate_shape(s.get("cadence") or "standard", lead_occasion)
-    hero = _pick_product(pool, 0, lead_occasion, len(shape))
+    # Rotate the archetype choice week to week, so consecutive weeks are not the
+    # same six posts with new words. It is derived from the date rather than
+    # stored, so re-planning the SAME week is stable while the NEXT week moves
+    # on -- and over a month every archetype gets its turn.
+    week_no = start.isocalendar()[1]
+    # What Product Studio learned from this seller's own reference images: the
+    # kinds of photograph they demonstrably shoot. The planner leans on it so a
+    # week asks for pictures they can actually produce.
+    try:
+        from backend.core import studio
+        shootable = studio.shootable_shot_types(email)
+    except Exception:  # noqa: BLE001 — planning must never depend on Studio
+        shootable = []
+    shape = slate_shape(s.get("cadence") or "standard", lead_occasion,
+                        rotation=week_no, shootable=shootable)
+    # A DIFFERENT piece leads each week. The hero owns the opening beats, so
+    # pinning it to the same product meant that product collected every tease
+    # and every reveal for the whole month while the rest of the catalogue got
+    # the leftovers. Rotating it also gives the seller what a drop calendar
+    # gives a real brand: this week is about this piece, next week another.
+    # Inside a festival window a product actually tagged for it still leads,
+    # because that is the one people are shopping for.
+    hero = _pick_product(pool, week_no, lead_occasion, len(shape))
     theme = week_theme(hero, lead_occasion)
+    # Worked out for the whole week up front, because balancing the product mix
+    # and the format mix needs to see every slot at once — decided slot by slot
+    # it degenerates into one product taking all the carousels.
+    slot_products = assign_products(shape, pool, hero, lead_occasion, already=rows)
 
     # The slate is an ARC, so it has to run in calendar order: the tease must
     # go out before the reveal, and the reveal before the proof. The weekday
@@ -1130,14 +1254,7 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
         when = times[i]
         when_day = when.date()
         occasion = occasion_for(when_day, s.get("category") or "")
-        # The SETUP of the arc (tease, reveal, prove) is about one piece —
-        # that is what makes the week a story instead of a list. The PAYOFF
-        # (place it in a life, close) widens to the rest of the range, so a
-        # seller with a real catalogue never gets a week that is literally one
-        # product five times. With a single product the hero simply carries all
-        # of it, which is correct: there is nothing else to show.
-        product = (hero if slot["beat"] in ("tease", "reveal", "prove") or len(pool) == 1
-                   else _pick_product(pool, i, occasion, len(shape)))
+        product = slot_products[i]
         story = _story_context(theme, slot, prev)
         cap = write_caption(email, product, slot["pillar"],
                             angle=slot["job"], occasion=occasion, story=story,
@@ -1188,6 +1305,10 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
             # allowance on posts they may skip, so the slot is created empty
             # and filled on demand.
             "image_url": "", "image_generated": False, "image_prompt": "",
+            # A reel is filmed or generated elsewhere and uploaded here. The
+            # field exists from the moment the slot does, so the editor always
+            # has somewhere to put the clip.
+            "video_url": "",
             "metrics": {},
         }
         made.append(post)
@@ -1379,6 +1500,43 @@ def attach_image(email: str, post_id: str, url: str, generated: bool = False,
     return {"error": "not found"}
 
 
+def attach_video(email: str, post_id: str, url: str) -> dict:
+    """Put the finished clip on a planned post.
+
+    WHY THIS EXISTS: a reel slot could be planned, scripted and given a
+    paste-ready prompt for a video AI — and then there was nowhere to put the
+    video. The seller filmed it (or generated it), and the post still showed an
+    empty picture frame, so the one format the research says out-reaches
+    everything below 50K followers was the one format that could never actually
+    be finished and scheduled.
+
+    Deliberately a SEPARATE field from image_url rather than reusing it. A reel
+    wants a clip; a carousel wants stills; a few posts sensibly carry both (a
+    cover frame and the video). Overloading one field would have made "does
+    this post have what it needs" unanswerable.
+
+    Passing an empty url removes the clip, which is how a seller undoes a
+    wrong upload without deleting the post they have already written."""
+    rows = _posts(email)
+    for p in rows:
+        if p.get("id") == post_id:
+            p["video_url"] = str(url or "")
+            _save_posts(email, rows)
+            return p
+    return {"error": "not found"}
+
+
+def post_ready(post: dict) -> bool:
+    """Does this post have the media it needs to actually go out?
+
+    A reel needs a clip. Everything else needs a picture. This is what the
+    editor uses to tell a seller why a post is not schedulable yet, instead of
+    letting them approve an empty frame and find out on the day."""
+    if (post or {}).get("format") == "reel":
+        return bool(post.get("video_url"))
+    return bool(post.get("image_url") or post.get("video_url"))
+
+
 def post_guidance(email: str, post_id: str) -> dict:
     """What Studio needs to draw for this slot: which product, which pillar,
     which format."""
@@ -1525,6 +1683,10 @@ def start_campaign(email: str, festival_key: str, catalogue: list[dict],
             "scheduled_at": when.isoformat(timespec="minutes"),
             "state": "draft", "provider": cap.get("provider", "template"),
             "image_url": "", "image_generated": False, "image_prompt": "",
+            # A reel is filmed or generated elsewhere and uploaded here. The
+            # field exists from the moment the slot does, so the editor always
+            # has somewhere to put the clip.
+            "video_url": "",
             "metrics": {},
         }
         made.append(post)

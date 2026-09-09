@@ -305,14 +305,46 @@ def read_aesthetic(email: str) -> dict:
         signature = (merged["text"] or " ".join(sig_lines) or
                      _reading_prose(readings[0]))
 
-    b["aesthetic"] = signature.strip()[:2000]          # the shared signature
-    b["aesthetic_shots"] = shots                        # per shot type
+    # Three layers, deliberately kept apart rather than flattened into one
+    # paragraph — each answers a different question, and merging them is what
+    # made generated pictures look like nobody's brand in particular:
+    #   aesthetic        the THEME. What holds across everything they shoot.
+    #   aesthetic_shots  the TYPES. How an unboxing differs from a packshot.
+    #   aesthetic_reads  every INDIVIDUAL picture, kept so the seller can see
+    #                    what was read out of each one and nothing is silently
+    #                    averaged away.
+    b["aesthetic"] = signature.strip()[:2000]
+    b["aesthetic_shots"] = shots
+    b["aesthetic_reads"] = [{"shot": r["shot"], "shot_label":
+                             SHOT_TYPES.get(r["shot"], {}).get("label", r["shot"]),
+                             "reading": _reading_prose(r)[:700]}
+                            for r in readings][:12]
     b["aesthetic_from"] = len(readings)
     user_store.set_key(email, BRAND_KEY, b)
     return {"ok": True, "aesthetic": b["aesthetic"], "shots": shots,
+            "reads": b["aesthetic_reads"],
             "shot_labels": {k: SHOT_TYPES[k]["label"] for k in shots
                             if k in SHOT_TYPES},
             "read": len(readings), "failed": failed, "brand": b}
+
+
+def shootable_shot_types(email: str) -> list[str]:
+    """Which kinds of photograph this seller has actually shown they shoot.
+
+    The Social Media Manager plans a week of posts, and some archetypes only
+    work if the seller can produce that kind of picture: an unboxing beat is
+    useless to someone who has never photographed their packaging. Their own
+    reference set is the honest answer to what they can produce, so the
+    planner favours archetypes backed by a real reference and treats the rest
+    as a stretch rather than a default.
+
+    Empty means "we do not know yet" — NOT "they can shoot nothing" — and the
+    planner falls back to the full range rather than refusing to plan."""
+    try:
+        shots = (get_brand(email) or {}).get("aesthetic_shots") or {}
+        return [k for k in shots if k in SHOT_TYPES and shots[k]]
+    except Exception:  # noqa: BLE001 — never let this stop a week being planned
+        return []
 
 
 def read_product_shots(email: str, product_id: str, limit: int = 3) -> dict:

@@ -552,6 +552,88 @@ check("and no longer appends an unstyled div to the body",
 check("it closes through the shared layer helper",
       "closeLayer()" in _store.split("function askCancel")[1][:1400])
 
+
+# =========================================================================
+print("\n== 15. a reel can be finished: upload the clip, then schedule it ==")
+# =========================================================================
+# A reel slot could be planned, scripted and handed a paste-ready prompt for a
+# video AI -- and then there was nowhere to put the resulting video. The one
+# format that out-reaches everything below 50K followers was the one format
+# that could never actually be completed.
+_ve = f"vid{int(time.time() * 1000)}@t.co"
+_vtok = c.post("/api/register", json={"email": _ve, "password": "Test12345!"}).json()["token"]
+_VH = {"Authorization": "Bearer " + _vtok, "X-Session-Id": "vid"}
+c.post("/api/products/item", json={"name": "Women Wallet", "category": "Accessories",
+                                   "price": 2499, "stock": 5}, headers=_VH)
+c.post("/api/social/settings", json={"patch": {"category": "clothing",
+                                               "cadence": "standard"}}, headers=_VH)
+c.post("/api/social/week", json={"weeks": 1}, headers=_VH)
+_vps = social.week(_ve)
+_reel = next((p for p in _vps if p["format"] == "reel"), None)
+_img = next((p for p in _vps if p["format"] != "reel"), None)
+
+check("every planned post has a slot for a clip from the start",
+      all("video_url" in p for p in _vps))
+check("a reel with no clip is not ready to go out",
+      _reel is not None and social.post_ready(_reel) is False)
+check("nor is an image post with no picture",
+      _img is not None and social.post_ready(_img) is False)
+
+_fake = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 2048
+_up = c.post("/api/site/image", headers=_VH,
+             files={"files": ("clip.mp4", io.BytesIO(_fake), "video/mp4")})
+check("a video uploads through the durable media store", _up.status_code == 200, _up.text[:160])
+check("and is stored as a video, not mistaken for a still",
+      _up.json().get("kind") == "video", _up.json())
+_url = _up.json().get("url")
+
+_at = c.post("/api/social/attach-video", headers=_VH,
+             json={"post_id": _reel["id"], "url": _url})
+check("the clip attaches to the post", _at.status_code == 200, _at.text[:200])
+_after = social.get_post(_ve, _reel["id"])
+check("the post now carries the clip", bool(_after["video_url"]))
+check("and is ready to schedule", social.post_ready(_after))
+check("attaching a clip leaves the caption alone",
+      _after["caption"]["hook"] == _reel["caption"]["hook"])
+check("and leaves the shot list alone", bool(_after.get("script")))
+
+_sc = c.post("/api/social/state", headers=_VH,
+             json={"post_id": _reel["id"], "state": "scheduled"})
+check("a reel with a clip schedules cleanly",
+      _sc.status_code == 200 and _sc.json().get("state") == "scheduled", _sc.text[:160])
+
+c.post("/api/social/attach-video", headers=_VH, json={"post_id": _reel["id"], "url": ""})
+_gone = social.get_post(_ve, _reel["id"])
+check("sending an empty url removes the clip", _gone["video_url"] == "")
+check("removing it does NOT delete the post or its caption",
+      _gone["caption"]["hook"] == _reel["caption"]["hook"])
+check("and does not silently unschedule it", _gone["state"] == "scheduled")
+
+check("an unknown post id 404s rather than failing silently",
+      c.post("/api/social/attach-video", headers=_VH,
+             json={"post_id": "nope", "url": _url}).status_code == 404)
+
+# The video slot must actually be reachable in the editor.
+_js3 = pathlib.Path("Smart CafeX/smart.js").read_text(encoding="utf-8")
+_css3 = pathlib.Path("Smart CafeX/smart.css").read_text(encoding="utf-8")
+check("the editor renders a clip slot", "sm-vid-slot" in _js3)
+check("a reel shows it up front", "No clip uploaded yet" in _js3)
+check("an image post keeps it as a folded-away option",
+      "Post a video instead of the picture" in _js3 and "sm-vid-opt" in _css3)
+check("the file picker only offers real video types",
+      'accept="video/mp4,video/webm,video/quicktime"' in _js3)
+check("oversized clips are caught before the upload starts",
+      "48 * 1024 * 1024" in _js3)
+check("uploading shows the working indicator", "Uploading your clip" in _js3)
+check("the post is told which clip is its own after upload",
+      "/api/social/attach-video" in _js3)
+check("a post missing its media says so instead of failing on the day",
+      "sm-needs" in _js3 and "ready to schedule" in _js3)
+check("but it is a warning, never a block — Approve stays enabled",
+      "needsMedia ?" in _js3 and 'id="smApprove"' in _js3)
+check("the calendar marks which posts already have a clip",
+      "cal-has-vid" in _js3 and ".cal-has-vid" in _css3)
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
 

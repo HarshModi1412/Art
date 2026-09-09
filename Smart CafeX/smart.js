@@ -76,10 +76,36 @@ function mediaWarning() {
     <span>${esc(_media.detail)}</span></div></div>`;
 }
 
+/* The icon set is the same for everyone and only changes when the app is
+   redeployed, so it is stored against the asset version in the page URL. That
+   removes one blocking round trip from every single cold start — and a cold
+   start is what a seller gets every time the browser reclaims the tab. */
+const ICON_KEY = "cx_icons";
+
+function assetVersion() {
+  const s = document.querySelector('script[src*="smart.js"]');
+  const m = s && /[?&]v=([\w.-]+)/.exec(s.getAttribute("src") || "");
+  return m ? m[1] : "0";
+}
+
 async function loadIcons() {
+  const v = assetVersion();
+  try {
+    const raw = localStorage.getItem(ICON_KEY);
+    if (raw) {
+      const c = JSON.parse(raw);
+      if (c.v === v && c.icons && Object.keys(c.icons).length) {
+        Object.assign(ICONS, c.icons);
+        return;                         // painted from cache, no request at all
+      }
+    }
+  } catch (e) { /* fall through to the network */ }
   try {
     const d = await fetch("/api/icons").then((r) => r.json());
     Object.assign(ICONS, d.icons || {});
+    try {
+      localStorage.setItem(ICON_KEY, JSON.stringify({ v, icons: d.icons || {} }));
+    } catch (e) { /* quota — harmless, we just fetch again next time */ }
   } catch (e) { /* icons degrade to empty glyphs, never to a broken page */ }
 }
 
@@ -181,6 +207,13 @@ async function api(path, opts = {}, attempt = 0) {
     err.detail = d;
     throw err;
   }
+  // Any successful write can change what several modules would show — adding a
+  // product moves Products, the Studio catalogue AND the Social planner. Rather
+  // than track which write touches which screen and get it wrong once, the
+  // cached copies are dropped here, at the single point every write passes
+  // through. Reads are unaffected, so the instant-paint still works; the cost
+  // is one refetch after a change, which is what used to happen every time.
+  if (!retryable) { warmClear(); warmModClearAll(); }
   return data;
 }
 
@@ -209,6 +242,9 @@ $("logoutBtn").onclick = async () => {
   try { await api("/api/logout", { method: "POST" }); } catch {}
   state.token = null; state.email = null;
   localStorage.removeItem("cx_token"); localStorage.removeItem("cx_email");
+  // The cached screens hold this seller's figures. Signing out has to take
+  // them with it, or the next person at this browser sees them.
+  warmClear(); warmModClearAll();
   $("appShell").hidden = true; $("loginView").hidden = false;
 };
 
@@ -344,22 +380,157 @@ const MODULES = [
   { id: "strategy",   name: "Position Strategy + AI", sub: "A levelled checklist to strengthen or reposition your brand, plus the AI Analyst.", ico: "compass", cls: "tile-strategy", needs: "review", tag: "STRATEGY" },
 ];
 
+/* ------------------------------------------------------- the warm cache ----
+   THE PROBLEM: switch to another app and come back, and the browser has
+   often thrown the whole page away to reclaim memory — normal behaviour on a
+   phone, and nothing the page can prevent. What it CAN control is what the
+   seller sees on the way back: a skeleton and four sequential round trips
+   before the first pixel, which is why returning to the app felt like a full
+   reload every time.
+
+   So the last home screen is kept in localStorage and painted immediately on
+   return, before the network is touched at all. The server is then asked
+   whether anything actually changed — /api/smart/state answers 304 with no
+   body when it has not — and the screen is only repainted when the answer is
+   different. Coming back to the app now shows the home screen at once and
+   quietly corrects itself if something moved.
+
+   Rules that keep this honest:
+     * keyed to the signed-in account, so switching login never shows the
+       previous seller's figures;
+     * dropped after MAX_AGE, so nothing genuinely old is ever painted;
+     * cleared on sign-out;
+     * every read and write wrapped — Safari private mode throws on
+       localStorage, and a cache that breaks the app is worse than no cache. */
+const WARM_KEY = "cx_home_cache";
+const WARM_VERSION = 2;                 // bump to invalidate every stored copy
+const WARM_MAX_AGE = 6 * 60 * 60 * 1000;   // 6 hours
+
+function warmRead() {
+  try {
+    const raw = localStorage.getItem(WARM_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw);
+    if (c.v !== WARM_VERSION) return null;
+    if (c.email !== state.email) return null;          // different account
+    if (Date.now() - c.at > WARM_MAX_AGE) return null;  // too old to trust
+    return c;
+  } catch (e) { return null; }
+}
+
+function warmWrite(s, pt) {
+  try {
+    localStorage.setItem(WARM_KEY, JSON.stringify({
+      v: WARM_VERSION, email: state.email, at: Date.now(), state: s, pt,
+    }));
+  } catch (e) { /* quota or private mode — the app works without it */ }
+}
+
+function warmClear() {
+  try { localStorage.removeItem(WARM_KEY); } catch (e) { /* nothing to do */ }
+}
+
+/* The same warm-cache idea, per module.
+   ------------------------------------------------------------------
+   Home was cached but every module still started from a skeleton and a fetch,
+   so moving between Social, Products and Orders showed a loading screen every
+   single time even though the data had usually not changed since the last
+   look. Each module's last payload is kept under its own key and painted
+   immediately on reopen, then revalidated in the background exactly like
+   Home.
+
+   Shares the account key, the age limit and the sign-out clearing with the
+   home cache, so there is ONE rule about whose data may sit on disk and for
+   how long — two different answers to that question is how a stale-data bug
+   gets in. */
+function modKey(mod) { return `${WARM_KEY}_m_${mod}`; }
+
+function warmModRead(mod) {
+  try {
+    const raw = localStorage.getItem(modKey(mod));
+    if (!raw) return null;
+    const c = JSON.parse(raw);
+    if (c.v !== WARM_VERSION || c.email !== state.email) return null;
+    if (Date.now() - c.at > WARM_MAX_AGE) return null;
+    return c.payload;
+  } catch (e) { return null; }
+}
+
+function warmModWrite(mod, payload) {
+  try {
+    localStorage.setItem(modKey(mod), JSON.stringify({
+      v: WARM_VERSION, email: state.email, at: Date.now(), payload,
+    }));
+  } catch (e) { /* quota or private mode — the module still works without it */ }
+}
+
+/* Every module's cached copy. Used on sign-out, and after any write big
+   enough to make several modules' views stale at once. */
+function warmModClearAll() {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.indexOf(`${WARM_KEY}_m_`) === 0)
+      .forEach((k) => localStorage.removeItem(k));
+  } catch (e) { /* nothing to do */ }
+}
+
+/* One shape for every module: paint what we had, fetch, repaint only if it
+   actually changed. `render` must be safe to call twice with equal data —
+   every caller below re-renders from scratch, so it is. */
+async function openCached(mod, title, fetcher, render) {
+  const warm = warmModRead(mod);
+  let painted = false;
+  if (warm) {
+    try { render(warm); painted = true; } catch (e) { painted = false; }
+  }
+  if (!painted) moduleShell(title, skeleton("cards"));
+  try {
+    const fresh = await fetcher();
+    if (!painted || JSON.stringify(warm) !== JSON.stringify(fresh)) render(fresh);
+    warmModWrite(mod, fresh);
+  } catch (e) {
+    // Keep a usable screen rather than swapping it for an error card.
+    if (painted) toast("Showing your last saved view — could not reach the "
+                       + "server just now.", 5000);
+    else moduleShell(title, failed(e.message, () => openModule(_currentModule)));
+  }
+}
+
+function paintHome(s, pt) {
+  state.lastState = s;
+  state.data = s.data;
+  if (pt) { state.productType = pt.product_type; state.productTypes = pt.types; }
+  renderHome(s);
+  renderApprovals(s.insights);
+}
+
 async function goHome() {
   _afterUpload = null;
   _currentModule = null;
   setCrumb(""); showRail(true);
-  setView(skeleton("tiles"));
+
+  // Paint the last known home screen first. The seller is looking at their
+  // app within a frame instead of at a loading skeleton.
+  const warm = warmRead();
+  if (warm) paintHome(warm.state, warm.pt);
+  else setView(skeleton("tiles"));
+
   try {
     const [s, pt] = await Promise.all([
       api("/api/smart/state"),
       api("/api/product-type").catch(() => null),
     ]);
-    state.lastState = s; state.data = s.data;
-    if (pt) { state.productType = pt.product_type; state.productTypes = pt.types; }
-    renderHome(s);
-    renderApprovals(s.insights);
+    // Only repaint when something actually moved. Re-rendering identical HTML
+    // is what made the return feel like a reload even once it was fast.
+    const changed = !warm || JSON.stringify(warm.state) !== JSON.stringify(s);
+    if (changed || !warm) paintHome(s, pt);
+    warmWrite(s, pt);
   } catch (e) {
-    setView(failed(e.message, goHome));
+    // A warm screen already on-screen is far better than throwing it away for
+    // an error card — the seller keeps working and the next action retries.
+    if (warm) toast("Showing your last saved view — could not reach the server "
+                    + "just now.", 5000);
+    else setView(failed(e.message, goHome));
   }
 }
 
@@ -1114,6 +1285,70 @@ function failed(message, retry) {
     </div>`;
 }
 
+/* Long jobs, with something moving on the screen.
+   ------------------------------------------------------------------
+   Planning a week writes a caption AND a shot list for every slot, each one a
+   call to an AI provider. Generating a picture is a model round trip. On a
+   free tier over a phone connection that is tens of seconds, and a toast that
+   fades after four leaves the seller staring at a still screen with no idea
+   whether it is working or wedged — so they press the button again, which
+   starts the whole thing a second time.
+
+   This puts a moving indicator on the screen for the whole job, says what is
+   being done, and tells them plainly they can walk away and come back. It is
+   deliberately NOT cancellable: the work continues on the server whatever the
+   browser does, so offering a Cancel that only closes a dialog would be a lie.
+
+   The dots animate via CSS, so nothing here depends on a timer that a
+   backgrounded tab would freeze. */
+let _busyDepth = 0;
+
+function busyStart(title, detail) {
+  _busyDepth += 1;
+  let el = $("busyOverlay");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "busyOverlay";
+    el.className = "busy-back";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `
+    <div class="busy-box">
+      <div class="busy-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+      <b id="busyTitle">${esc(title || "Working…")}</b>
+      <p id="busyDetail">${esc(detail || "")}</p>
+      <p class="busy-leave">This keeps running even if you close this.
+        Go and do something else — it will be here when you come back.</p>
+    </div>`;
+  el.hidden = false;
+  return el;
+}
+
+/* Update the line without restarting the animation — used when one job moves
+   through stages ("writing captions" -> "writing shot lists"). */
+function busyStep(detail) {
+  const d = $("busyDetail");
+  if (d) d.textContent = detail || "";
+}
+
+function busyEnd() {
+  _busyDepth = Math.max(0, _busyDepth - 1);
+  if (_busyDepth === 0) {
+    const el = $("busyOverlay");
+    if (el) el.hidden = true;
+  }
+}
+
+/* Wrap any slow call. Guarantees the overlay is taken down on success, on
+   failure and on an exception — a stuck overlay would be worse than none. */
+async function withBusy(title, detail, fn) {
+  busyStart(title, detail);
+  try { return await fn(); }
+  finally { busyEnd(); }
+}
+
 /* Not enough data yet, shown as the shape of what is coming.
    ------------------------------------------------------------------
    A bare "Not enough data." sentence tells a seller nothing about what they
@@ -1186,6 +1421,9 @@ async function refreshCurrent() {
   try {
     await api("/api/cache/clear", { method: "POST" });
   } catch (e) { /* the reopen below still fetches fresh */ }
+  // Pressing Refresh means "I want to see the real numbers now", so the warm
+  // copies are dropped rather than painted first. The reopen writes new ones.
+  warmClear(); warmModClearAll();
   try {
     if (_currentModule) await openModule(_currentModule);
     else await goHome();
@@ -1219,11 +1457,8 @@ async function openModule(id) {
 let _productsData = null;
 
 async function openProducts() {
-  moduleShell("Product Management", skeleton("cards"));
-  try {
-    const d = await api("/api/products/state");
-    renderProducts(d);
-  } catch (e) { moduleShell("Product Management", failed(e.message, () => openModule(_currentModule))); }
+  await openCached("products", "Product Management",
+    () => api("/api/products/state"), renderProducts);
 }
 
 function _prodCard(p) {
@@ -1982,7 +2217,12 @@ function renderDesignLanguage() {
   if (read) read.onclick = async () => {
     read.disabled = true; read.innerHTML = sic("spark") + "Looking…";
     try {
-      const r = await api("/api/studio/design-language/read", { method: "POST" });
+      // Reads up to twelve references, one model call each, then writes the
+      // brand signature over the top of them — the slowest thing in Studio.
+      const r = await withBusy(
+        "Reading your reference images…",
+        "Looking at each picture on its own, then working out what they share.",
+        () => api("/api/studio/design-language/read", { method: "POST" }));
       _studio.brand = r.brand;
       renderDesignLanguage();
       toast(`Read ${r.read} reference${r.read === 1 ? "" : "s"}.`);
@@ -2141,8 +2381,11 @@ function renderStudioProduct() {
     if (!shots.length) return toast("Add a photo of the product first.");
     rs.disabled = true; rs.innerHTML = sic("spark") + "Looking…";
     try {
-      const r = await api("/api/studio/read-shots", { method: "POST",
-        json: { product_id: p.id } });
+      const r = await withBusy(
+        "Reading this product's photos…",
+        "Describing what the item actually is, so generated pictures match it.",
+        () => api("/api/studio/read-shots", { method: "POST",
+          json: { product_id: p.id } }));
       _studioProduct.material.seen = r.seen;
       renderStudioProduct();
       toast(`Read ${r.read} photo${r.read === 1 ? "" : "s"}.`);
@@ -4880,16 +5123,15 @@ let _ordersFilter = "";
 let _ordersTab = "orders";
 
 async function openOrders() {
-  moduleShell("Orders", skeleton("cards"));
-  try {
-    const [od, cr] = await Promise.all([
-      api("/api/store/orders"),
-      api("/api/cancel-requests").catch(() => ({ open: [], summary: {} })),
-    ]);
-    _ordersData = od;
-    _cancelReqs = cr;
-    renderOrders();
-  } catch (e) { moduleShell("Orders", failed(e.message, () => openModule(_currentModule))); }
+  await openCached("orders", "Orders",
+    async () => {
+      const [od, cr] = await Promise.all([
+        api("/api/store/orders"),
+        api("/api/cancel-requests").catch(() => ({ open: [], summary: {} })),
+      ]);
+      return { od, cr };
+    },
+    ({ od, cr }) => { _ordersData = od; _cancelReqs = cr; renderOrders(); });
 }
 
 let _cancelReqs = { open: [], summary: {} };
@@ -5109,6 +5351,8 @@ async function loadCustomers() {
 
 // ---------- boot ----------
 (async function init() {
+  // Icons come from localStorage on any warm start, so this almost never
+  // blocks. On a cold one it is still the only thing the shell needs first.
   await loadIcons();
   if (!state.token) { $("loginView").hidden = false; return; }
 
@@ -5121,8 +5365,25 @@ async function loadCustomers() {
     state.token = null;
     localStorage.removeItem("cx_token");
     localStorage.removeItem("cx_email");
+    warmClear(); warmModClearAll();   // never leave one account's screens for the next
     $("loginView").hidden = false;
   };
+
+  // With a warm home screen already on disk there is nothing to wait for: show
+  // the app now and check the session alongside it, rather than holding a
+  // blank page for a round trip. This is the difference the seller actually
+  // feels when they switch away and come back.
+  //
+  // Safe because the only thing painted early is THIS account's own last view,
+  // and nothing privileged can happen without a valid token — every action
+  // goes back to the server. If the check does come back 401, we sign out.
+  if (warmRead()) {
+    showShell();
+    loadMediaStatus();
+    api("/api/me").catch((e) => { if (signedOut(e)) forget(); });
+    return;
+  }
+
   try {
     await api("/api/me");
     loadMediaStatus();
@@ -5157,13 +5418,9 @@ async function loadCustomers() {
 let _socialData = null;
 
 async function openSocial() {
-  moduleShell("Social Media Manager", skeleton("cards"));
-  try {
-    _socialData = await api("/api/social");
-    await renderSocial();
-  } catch (e) {
-    moduleShell("Social Media Manager", failed(e.message, () => openModule(_currentModule)));
-  }
+  await openCached("social", "Social Media Manager",
+    () => api("/api/social"),
+    (d) => { _socialData = d; renderSocial(); });
 }
 
 function socialStateChip(st) {
@@ -5229,7 +5486,8 @@ async function renderSocial() {
                   title="${esc((p.caption || {}).hook || "")}">
             <span class="cal-fmt">${esc((p.format || "").slice(0, 4))}</span>
             <span class="cal-name">${esc(p.product_name || "")}</span>
-            ${p.image_url ? `<i class="cal-has-img"></i>` : ""}
+            ${p.video_url ? `<i class="cal-has-img cal-has-vid" title="Clip uploaded"></i>`
+              : p.image_url ? `<i class="cal-has-img"></i>` : ""}
           </button>`).join("")}
       </div>`);
   });
@@ -5303,10 +5561,19 @@ async function renderSocial() {
   $("calToday").onclick = () => { _socialMonth = null; renderSocial(); };
 
   const build = async (weeks) => {
-    toast(weeks > 1 ? `Planning ${weeks} weeks…` : "Writing your week…");
+    // Every slot gets a written caption, and every reel slot a shot list and a
+    // video prompt on top — so a four-week plan is dozens of model calls. This
+    // is the slowest thing in the app and the one people re-press.
+    const n = weeks > 1 ? `${weeks} weeks` : "your week";
     try {
-      await api("/api/social/week", { method: "POST", json: { weeks } });
-      _socialData = await api("/api/social");
+      await withBusy(
+        `Planning ${n}…`,
+        "Writing a caption for every post, and a shot list for every reel.",
+        async () => {
+          await api("/api/social/week", { method: "POST", json: { weeks } });
+          busyStep("Laying the posts out across the calendar…");
+          _socialData = await api("/api/social");
+        });
       await renderSocial();
       toast("Planned. Replanning replaces drafts, it never doubles them.");
     } catch (e) { toast(e.message); }
@@ -5424,6 +5691,39 @@ function openSocialEditor(post) {
       ${post.theme ? `<p class="sm-hint" style="margin:2px 0 0;"><b>This week:</b> ${esc(post.theme)}</p>` : ""}
     </div>` : "";
 
+  /* Where the finished clip goes.
+     A reel slot could be planned, scripted and handed a prompt for a video AI
+     — and then there was nowhere to put the resulting video, so the format
+     that reaches the most people was the one that could never be finished.
+     The slot is always visible, empty or full, so it is obvious that a clip is
+     what this post is still waiting for. */
+  const videoBlock = (label) => `
+    <div class="sm-vid" id="smVidBlock">
+      <div class="sm-vid-slot" id="smVidSlot">
+        ${post.video_url
+          ? `<video src="${esc(post.video_url)}" controls playsinline preload="metadata"></video>`
+          : `<div class="sm-vid-empty">${sic("play")}
+               <b>${esc(label)}</b>
+               <span>MP4 or WEBM, up to 48MB. Film it on your phone, or generate it
+                     from the prompt below and upload the file here.</span>
+             </div>`}
+      </div>
+      <div class="sm-vid-acts">
+        <button class="btn ${post.video_url ? "ghost" : "primary"} sm" id="smVidPick">
+          ${sic("arrow-up-right")}${post.video_url ? "Replace clip" : "Upload clip"}</button>
+        ${post.video_url
+          ? `<button class="btn ghost sm danger" id="smVidClear">${sic("close")}Remove</button>`
+          : ""}
+        <input type="file" id="smVidFile" accept="video/mp4,video/webm,video/quicktime" hidden />
+      </div>
+    </div>`;
+
+  /* Warned about, never blocked. The app's rule everywhere else (caption
+     checks, GST) is to say what the evidence says and let the seller decide;
+     refusing to schedule a post because we cannot see a file would be a
+     worse product than telling them plainly what is missing. */
+  const needsMedia = isReel ? !post.video_url : !(post.image_url || post.video_url);
+
   const topHtml = isReel ? `
     ${storyBar}
     <div class="sm-ed-script-block">
@@ -5431,9 +5731,10 @@ function openSocialEditor(post) {
         <div><b>${esc(post.pillar_name || "")}</b> · Reel
           ${post.occasion ? `<span class="sm-occ">${esc(post.occasion)}</span>` : ""}</div>
       </div>
-      <p class="sm-hint" style="margin:8px 0 12px;">A reel is filmed, not generated.
+      ${videoBlock("No clip uploaded yet")}
+      <p class="sm-hint" style="margin:12px 0;">A reel is filmed, not generated.
         Below is the shot list to film it yourself — or copy the prompt and paste it
-        into Gemini, Veo or Sora to have it generated.</p>
+        into Gemini, Veo or Sora, then upload the clip above.</p>
       <div id="smEdScript"></div>
     </div>` : `
     ${storyBar}
@@ -5456,7 +5757,11 @@ function openSocialEditor(post) {
           <b>Invent</b> draws from the description instead: fine for a backdrop,
           not for showing a customer what they are buying.</p>
       </div>
-    </div>`;
+    </div>
+    <details class="sm-vid-opt">
+      <summary>Post a video instead of the picture</summary>
+      ${videoBlock("No clip on this post")}
+    </details>`;
 
   openModal(`${esc(shortWhen(post.scheduled_at))} — ${esc(post.product_name || "")}`, `
     ${topHtml}
@@ -5485,6 +5790,12 @@ function openSocialEditor(post) {
     <label class="fld"><span>When</span>
       <input id="smWhen" type="datetime-local" value="${esc(post.scheduled_at || "")}" /></label>
 
+    ${needsMedia ? `<div class="sm-needs">${sic("alert")}
+      <span>${isReel
+        ? "This reel has no clip yet. Upload one above and it is ready to schedule."
+        : "This post has no picture or clip yet. Add one above and it is ready to schedule."}</span>
+    </div>` : ""}
+
     <div class="modal-actions">
       <button class="btn ghost" data-mclose2>Cancel</button>
       <button class="btn reject" id="smSkip">Skip</button>
@@ -5494,15 +5805,72 @@ function openSocialEditor(post) {
 
   if (isReel) renderScriptSection(post);
 
+  /* Uploading the clip. Two steps on purpose: the file goes to the durable
+     media store first (which already handles video up to 48MB and survives a
+     redeploy), then the post records which clip is its own. Doing it in one
+     endpoint would have meant a second upload path to keep correct. */
+  const vidPick = $("smVidPick"), vidFile = $("smVidFile");
+  if (vidPick && vidFile) {
+    vidPick.onclick = () => vidFile.click();
+    vidFile.onchange = async () => {
+      const f = vidFile.files && vidFile.files[0];
+      if (!f) return;
+      // Checked here as well as on the server so a seller on a slow connection
+      // is told immediately, instead of after uploading 60MB.
+      if (f.size > 48 * 1024 * 1024) {
+        return toast("That clip is over 48MB. Export it at 1080p — a reel rarely "
+                     + "needs more.", 7000);
+      }
+      try {
+        const url = await withBusy("Uploading your clip…",
+          "Large videos take a moment on a phone connection.",
+          async () => {
+            const fd = new FormData();
+            fd.append("files", f);
+            const up = await api("/api/site/image", { method: "POST", body: fd });
+            const u = up.url || up.image_url;
+            if (!u) throw new Error("The upload did not come back with a file.");
+            await api("/api/social/attach-video", { method: "POST",
+              json: { post_id: post.id, url: u } });
+            return u;
+          });
+        post.video_url = url;
+        $("smVidSlot").innerHTML =
+          `<video src="${esc(url)}" controls playsinline preload="metadata"></video>`;
+        vidPick.innerHTML = sic("arrow-up-right") + "Replace clip";
+        vidPick.className = "btn ghost sm";
+        _socialData = await api("/api/social");
+        toast("Clip attached — this post is ready to schedule.");
+      } catch (e) { toast(e.message, 7000); }
+      vidFile.value = "";       // so picking the same file again still fires
+    };
+  }
+  const vidClear = $("smVidClear");
+  if (vidClear) vidClear.onclick = async () => {
+    try {
+      await api("/api/social/attach-video", { method: "POST",
+        json: { post_id: post.id, url: "" } });
+      post.video_url = "";
+      closeModal();
+      await afterEdit();
+      toast("Clip removed. The post and its caption are untouched.");
+    } catch (e) { toast(e.message); }
+  };
+
   const gen = async (useRef) => {
     const btns = [$("smGenRef"), $("smGenNew")].filter(Boolean);
     btns.forEach((b) => b.disabled = true);
     const b = useRef ? $("smGenRef") : $("smGenNew");
     const was = b.innerHTML; b.innerHTML = sic("image") + "Drawing…";
     try {
-      const img = await api("/api/studio/image", { method: "POST", json: {
-        product_id: post.product_id, pillar: post.pillar, format: post.format,
-        post_id: post.id, use_reference: useRef } });
+      const img = await withBusy(
+        useRef ? "Re-shooting your photo…" : "Drawing your picture…",
+        useRef
+          ? "Starting from your own photograph, so the item stays the item you ship."
+          : "Building it from your brand's look and this product's description.",
+        () => api("/api/studio/image", { method: "POST", json: {
+          product_id: post.product_id, pillar: post.pillar, format: post.format,
+          post_id: post.id, use_reference: useRef, shot_type: post.shot_type || "" } }));
       $("smEdShot").innerHTML = `<img src="${esc(img.url)}" alt="" /><span class="sm-gen">AI</span>`;
       if (useRef && !img.had_reference) {
         toast("No photo on this product, so it was invented rather than re-shot. " +
@@ -5647,7 +6015,10 @@ async function generateScript(post, btn) {
   const was = btn.innerHTML;
   btn.disabled = true; btn.innerHTML = sic("spark") + "Writing…";
   try {
-    const updated = await api("/api/social/regenerate-script", { method: "POST", json: { post_id: post.id } });
+    const updated = await withBusy(
+      "Writing the shot list…",
+      "Turning this post into beats you can film, plus a prompt for a video AI.",
+      () => api("/api/social/regenerate-script", { method: "POST", json: { post_id: post.id } }));
     const sc = updated.script || {};
     _smScript = {
       beats: (sc.beats || []).map((b) => ({ ...b })),
@@ -6368,7 +6739,10 @@ async function openCampaign(key) {
     const b = $("cmpGo");
     b.disabled = true; b.textContent = "Writing…";
     try {
-      const r = await api("/api/social/campaign", { method: "POST", json: { festival: key } });
+      const r = await withBusy(
+        "Building the campaign…",
+        "Six beats, each with its own job, written and dated against the festival.",
+        () => api("/api/social/campaign", { method: "POST", json: { festival: key } }));
       closeModal();
       toast(`${r.created} posts planned for ${r.festival}.`);
       _socialData = await api("/api/social");

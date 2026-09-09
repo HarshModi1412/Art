@@ -233,6 +233,10 @@ ICONS = {
     "package": '<path d="m12 3 8 4.2v9.6L12 21l-8-4.2V7.2L12 3Z"/><path d="M4 7.2 12 11.5l8-4.3M12 11.5V21"/>',
     "heart": '<path d="M12 20s-7-4.4-7-9.3A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.7C19 15.6 12 20 12 20Z"/>',
     "image": '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4.5 17 4.6-4.4L13 16l2.8-2.5 3.7 3.4"/>',
+    # A reel slot needs a clip, so the empty state needs something that reads
+    # as video rather than as another still.
+    "play": '<circle cx="12" cy="12" r="8.5"/><path d="M10.2 8.6 16 12l-5.8 3.4V8.6Z"/>',
+    "camera": '<path d="M3.5 8.5h3l1.5-2h8l1.5 2h3v10h-17v-10Z"/><circle cx="12" cy="13" r="3.4"/>',
     "map-pin": '<path d="M12 21c4-4.4 6-7.6 6-10a6 6 0 1 0-12 0c0 2.4 2 5.6 6 10Z"/><circle cx="12" cy="11" r="2.2"/>',
     "mail": '<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="m3.6 7 8.4 6 8.4-6"/>',
     "phone": '<path d="M6 3.8h3.2l1.6 4-2 1.4a11.6 11.6 0 0 0 5 5l1.4-2 4 1.6V17c0 1.7-1.4 3.1-3.1 2.9C9.6 19.2 4.8 14.4 3.9 6.9 3.7 5.2 4.3 3.8 6 3.8Z"/>',
