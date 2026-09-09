@@ -1518,11 +1518,18 @@ const CANCEL_REASONS = [
   ["other", "Something else"],
 ];
 
+/* BUG THIS FIXES: this used to build a `modal-back` div and append it straight
+   to <body>. There is no `.modal-back` rule anywhere in store.css — the only
+   overlay class is `.modal-s` — so the dialog got no fixed positioning and no
+   scrim, and rendered as ordinary block content at the very end of the
+   document. The shopper saw the whole cancellation form sitting below the
+   footer on page load instead of it opening over the page when they press
+   "Request cancellation". It now goes through the same el("layer") + .modal-s
+   scrim every other dialog on the storefront already uses, so it exists only
+   while it is open and closes the same way as the rest. */
 function askCancel(orderId) {
-  const back = document.createElement("div");
-  back.className = "modal-back";
-  back.innerHTML = `
-    <div class="modal auth">
+  el("layer").innerHTML = `
+    <div class="modal-s" id="cxScrim"><div class="modal auth">
       <h3>Request cancellation</h3>
       <p class="tiny muted">Tell us why and we will pass it to ${esc(S.site.brand)}.
          Nothing is cancelled until they confirm — they will message you on WhatsApp,
@@ -1537,21 +1544,20 @@ function askCancel(orderId) {
         <button class="b g" id="cxBack">Keep my order</button>
         <button class="b p" id="cxSend">Send request</button>
       </div>
-    </div>`;
-  document.body.appendChild(back);
-  const close = () => back.remove();
-  back.onclick = (e) => { if (e.target === back) close(); };
-  back.querySelector("#cxBack").onclick = close;
-  back.querySelector("#cxSend").onclick = async () => {
-    const btn = back.querySelector("#cxSend");
+    </div></div>`;
+  el("cxScrim").onclick = (e) => { if (e.target.id === "cxScrim") closeLayer(); };
+  el("cxBack").onclick = closeLayer;
+  el("cxSend").onclick = async () => {
+    const btn = el("cxSend");
     btn.disabled = true; btn.textContent = "Sending…";
-    const code = (back.querySelector("input[name=cxr]:checked") || {}).value || "other";
+    const picked = document.querySelector("input[name=cxr]:checked");
+    const code = (picked || {}).value || "other";
     try {
       const r = await api("/cancel-request", { method: "POST", json: {
         order_id: orderId, reason_code: code,
-        reason_text: back.querySelector("#cxNote").value.trim(),
+        reason_text: el("cxNote").value.trim(),
       } });
-      close();
+      closeLayer();
       toast(r.message || "Sent.");
       loadMe(true);
     } catch (e) {

@@ -207,21 +207,185 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def slate_shape(cadence: str) -> list[dict]:
-    """Which pillar and format each slot in the week gets.
+# --------------------------------------------------------------- archetypes
+#
+# THE PROBLEM THIS FIXES: a planned week used to be N independent slots. Each
+# one picked a pillar, wrote a caption and stopped. Nothing connected Monday to
+# Thursday, so a seller opened their week and saw the same product photographed
+# the same way four times with four interchangeable captions. It read as a
+# template, because it was one.
+#
+# Brands whose feeds look designed rather than accumulated do something else:
+# they run ONE theme per week and rotate deliberately different KINDS of
+# photograph through it, each doing a different job. Comet (Indian D2C
+# sneakers, ~215K followers, built with no celebrity spend) runs a named drop
+# per month and moves tease -> half-open packaging -> the one detail you can
+# only see up close -> worn on a real person -> sold out. Subko runs named
+# recurring buckets and caps itself at three posts a week. The common
+# machinery is: a named theme, a fixed arc, and no two adjacent posts of the
+# same archetype.
+#
+# `earns` is what the archetype is FOR. Instagram's own ranking signals for
+# reels are watch time, likes per reach and SENDS per reach -- and sends are
+# what carries a post to people who do not follow you yet. So "what would make
+# someone send this to a friend" is a design input here, not an afterthought.
+ARCHETYPES = {
+    "tease": {
+        "label": "Tease",
+        "shot_type": "detail",
+        "job": "Withhold the product. Show one cropped, shadowed or partial detail "
+               "and ask what it is.",
+        "earns": "comments and DMs — this is the post that opens the week",
+    },
+    "hero": {
+        "label": "Cinematic hero",
+        "shot_type": "product_only",
+        "job": "The product alone, lit and composed properly. No person, no clutter.",
+        "earns": "the brand's look — this is the post someone screenshots",
+    },
+    "unbox": {
+        "label": "Half-open packaging",
+        "shot_type": "packaging",
+        "job": "The box or pouch caught mid-open — tissue, tags, the reveal frozen "
+               "halfway.",
+        "earns": "saves and sends; the strongest anticipation trigger there is",
+    },
+    "detail": {
+        "label": "The one detail",
+        "shot_type": "detail",
+        "job": "Macro on the thing that only reads from four inches away — the "
+               "stitch, the clasp, the weave, the setting.",
+        "earns": "saves, and it is what justifies the price",
+    },
+    "in_use": {
+        "label": "A real person using it",
+        "shot_type": "in_use",
+        "job": "Worn, carried or used by an actual person in an ordinary place. "
+               "Not a model card.",
+        "earns": "trust and DMs — the post that converts",
+    },
+    "process": {
+        "label": "Made by hand",
+        "shot_type": "held",
+        "job": "The making of it — hands, workbench, tools, materials mid-work.",
+        "earns": "watch time, the best of any archetype, and trust",
+    },
+    "styling": {
+        "label": "One piece, three ways",
+        "shot_type": "lifestyle",
+        "job": "The same item styled or used several ways, as a carousel the "
+               "viewer can flick through.",
+        "earns": "saves — the highest save rate of any archetype",
+    },
+    "proof": {
+        "label": "Someone else already bought it",
+        "shot_type": "in_use",
+        "job": "A customer's own photo, a review, or a real 'we shipped these "
+               "today' moment.",
+        "earns": "conversion; it does the convincing you cannot do about yourself",
+    },
+    "answer": {
+        "label": "The question they actually have",
+        "shot_type": "detail",
+        "job": "Kill one real objection — sizing, care, does it tarnish, is the "
+               "leather real.",
+        "earns": "saves, and it removes the reason people hesitate",
+    },
+    "festival": {
+        "label": "Festival or occasion",
+        "shot_type": "lifestyle",
+        "job": "Tie the piece to the occasion people are actually shopping for.",
+        "earns": "reach and revenue — but it degrades fast if overused",
+    },
+}
 
-    Format mix follows the reach data: Reels for new customers, carousels for
-    saves and consideration, single images essentially retired."""
+# The arc. A week is an episode, not a bag of posts: withhold, reveal, prove,
+# then place it in someone's life. Each beat references the one before it, so
+# the captions read as a sequence rather than a set.
+WEEK_ARC = [
+    {"beat": "tease",  "archetypes": ["tease"],                       "pillar": "new"},
+    {"beat": "reveal", "archetypes": ["hero", "unbox"],               "pillar": "new"},
+    {"beat": "prove",  "archetypes": ["detail", "answer", "process"], "pillar": "detail"},
+    {"beat": "place",  "archetypes": ["in_use", "styling", "proof"],  "pillar": "proof"},
+    {"beat": "close",  "archetypes": ["festival", "proof", "styling"], "pillar": "founder"},
+]
+
+# What each beat is trying to do, said to the caption writer in plain words so
+# the copy carries the arc too and not just the pictures.
+BEAT_JOB = {
+    "tease":  "Open the week. Do not name the product outright — make them ask.",
+    "reveal": "Show it properly for the first time. This is the announcement.",
+    "prove":  "Earn the price. Show the detail or answer the doubt.",
+    "place":  "Put it in a real life so they can picture owning it.",
+    "close":  "Close the loop the week opened, and give a reason to act now.",
+}
+
+# Carousels get roughly nine times the saves of a single image, and reels
+# out-reach everything below ~50K followers -- so the format follows the JOB of
+# the beat rather than rotating blindly.
+FORMAT_FOR_ARCHETYPE = {
+    "tease": "reel", "hero": "carousel", "unbox": "reel", "detail": "carousel",
+    "in_use": "reel", "process": "reel", "styling": "carousel",
+    "proof": "carousel", "answer": "carousel", "festival": "reel",
+}
+
+
+def slate_shape(cadence: str, occasion: dict | None = None) -> list[dict]:
+    """Which beat, archetype, pillar and format each slot in the week gets.
+
+    The week is built as an ARC, not a rotation. Slot 1 teases, the middle
+    slots reveal and prove, the last places the product in a real life. Within
+    a beat the archetype is varied so two weeks in a row do not produce the
+    same photographs, and no two adjacent slots ever share an archetype --
+    consecutive near-identical posts are the single fastest way to make a
+    planned feed look automated.
+
+    `occasion` steers the closing beat onto the festival when one is live,
+    which is how the week connects to what people are actually shopping for."""
     n = CADENCE.get(cadence, CADENCE["standard"])["posts"]
-    order = ["detail", "new", "proof", "detail", "founder", "detail", "proof", "offer"]
-    fmts = ["reel", "carousel", "reel", "carousel", "reel", "carousel", "reel", "carousel"]
-    slots = []
-    for i in range(n):
-        pid = order[i % len(order)]
-        # Enforce the offer cap by slot count rather than by nagging.
-        if pid == "offer" and (i + 1) / n * 100 > OFFER_CAP_PERCENT and n < 20:
-            pid = "detail"
-        slots.append({"slot": i + 1, "pillar": pid, "format": fmts[i % len(fmts)]})
+    # Which arc beats this cadence can afford. Two posts a week still get a
+    # beginning and an end; six get the full arc with the middle expanded.
+    if n <= 2:
+        plan = ["reveal", "place"]
+    elif n == 3:
+        plan = ["tease", "reveal", "place"]
+    elif n == 4:
+        plan = ["tease", "reveal", "prove", "place"]
+    else:
+        plan = ["tease", "reveal", "prove", "place", "close"]
+        while len(plan) < n:                      # expand the middle, never the ends
+            plan.insert(3, "prove" if len(plan) % 2 else "place")
+    plan = plan[:n]
+
+    by_beat = {b["beat"]: b for b in WEEK_ARC}
+    slots, used, seen_counts = [], None, {}
+    for i, beat in enumerate(plan):
+        spec = by_beat[beat]
+        options = list(spec["archetypes"])
+        if occasion and beat == "close" and "festival" in options:
+            arch = "festival"                     # a live festival owns the close
+        else:
+            # Rotate within the beat, and never repeat the previous slot's
+            # archetype -- two identical-looking posts back to back is exactly
+            # the "everything looks the same" complaint.
+            options = [a for a in options if a != used] or options
+            k = seen_counts.get(beat, 0)
+            arch = options[k % len(options)]
+            seen_counts[beat] = k + 1
+        used = arch
+        a = ARCHETYPES[arch]
+        pillar = spec["pillar"]
+        # The offer cap survives the rewrite: deals content is negatively
+        # associated with sales, so it stays capped by slot count.
+        if pillar == "offer" and (i + 1) / n * 100 > OFFER_CAP_PERCENT and n < 20:
+            pillar = "detail"
+        slots.append({
+            "slot": i + 1, "beat": beat, "archetype": arch,
+            "archetype_label": a["label"], "job": a["job"], "earns": a["earns"],
+            "beat_job": BEAT_JOB.get(beat, ""),
+            "shot_type": a["shot_type"], "pillar": pillar,
+            "format": FORMAT_FOR_ARCHETYPE.get(arch, "carousel"),
+        })
     return slots
 
 
@@ -322,15 +486,63 @@ def _parse_caption(text: str) -> dict:
     return out
 
 
+HOOK_BY_ARCHETYPE = {
+    "tease":    "Something new lands this week.",
+    "hero":     "New in: {name}",
+    "unbox":    "This is how {name} arrives.",
+    "detail":   "Look closer at {name}",
+    "in_use":   "{name}, out in the real world",
+    "process":  "How {name} gets made",
+    "styling":  "{name}, three ways",
+    "proof":    "Another {name} went out today",
+    "answer":   "The thing everyone asks about {name}",
+    "festival": "{name} — ready for the season",
+}
+BODY_BY_ARCHETYPE = {
+    "tease":    "Not showing the whole thing yet. Guess what it is.",
+    "hero":     "Handpicked {cat}. Limited pieces.",
+    "unbox":    "Wrapped by hand, packed the same day.",
+    "detail":   "The part you only notice when you are holding it.",
+    "in_use":   "Worn in, carried around, still holding up.",
+    "process":  "Made in small batches, by hand, here.",
+    "styling":  "One piece, three ways to wear it.",
+    "proof":    "Packed and shipped this morning.",
+    "answer":   "The honest answer, before you ask.",
+    "festival": "Ready in time, if you order this week.",
+}
+QUESTION_BY_ARCHETYPE = {
+    "tease":    "Any guesses?",
+    "hero":     "Which colour should we restock first?",
+    "unbox":    "Should we keep this packaging?",
+    "detail":   "Would you have spotted this?",
+    "in_use":   "Where would you carry this?",
+    "process":  "Want to see the rest of the process?",
+    "styling":  "Which of the three is yours?",
+    "proof":    "Tag someone who needs one.",
+    "answer":   "What else do you want to know?",
+    "festival": "Who are you shopping for?",
+}
+
+
 def _fallback_caption(product: dict, pillar: dict, settings: dict,
                       playbook: dict | None = None,
-                      beat: dict | None = None) -> dict:
+                      beat: dict | None = None,
+                      slot: dict | None = None) -> dict:
     """No AI configured, or every provider down. Still produces something a
     seller can post — a duller caption beats an error message.
 
     When a festival playbook is in hand the fallback uses it, so a Diwali post
     is recognisably a Diwali post even with no model in the loop: the real
-    tagline, the real hashtags, and the right grammar for who is buying."""
+    tagline, the real hashtags, and the right grammar for who is buying.
+
+    BUG THIS FIXES: outside a festival this had exactly TWO possible hooks —
+    one for the `new` pillar and one for literally everything else — and the
+    body, question and tags never varied at all. A seller with one product
+    pressing "Plan my week" with no AI reachable (no key, a rate limit, an
+    outage) got four posts of which three were identical. The campaign path
+    already rotated its lines by beat; the weekly path never got the same
+    treatment. Now the ARCHETYPE picks the line, so each beat of the week
+    reads differently even with no model in the loop."""
     name = product.get("name") or "this piece"
     cat = settings.get("category") or "piece"
     price = product.get("price")
@@ -374,16 +586,73 @@ def _fallback_caption(product: dict, pillar: dict, settings: dict,
                 "cta": cta, "tags": playbook.get("hashtags", [])[:5],
                 "generated_by": "template"}
 
-    hook = f"New in: {name}" if pillar["id"] == "new" else f"{name} — the details"
-    if price:
-        hook = f"{hook} · Rs {int(float(price))}"
-    body = product.get("description") or f"Handpicked {cat}. Limited pieces."
+    arch = (slot or {}).get("archetype") or ""
+    if arch in HOOK_BY_ARCHETYPE:
+        hook = HOOK_BY_ARCHETYPE[arch].format(name=name)
+        body = BODY_BY_ARCHETYPE[arch].format(name=name, cat=cat)
+        question = QUESTION_BY_ARCHETYPE[arch]
+        # A tease that names its own price has stopped teasing.
+        if price and arch not in ("tease", "process", "proof"):
+            hook = f"{hook} · Rs {int(float(price))}"
+    else:
+        hook = f"New in: {name}" if pillar["id"] == "new" else f"{name} — the details"
+        if price:
+            hook = f"{hook} · Rs {int(float(price))}"
+        body = product.get("description") or f"Handpicked {cat}. Limited pieces."
+        question = "Which colour should we restock first?"
     return {"hook": hook[:125], "body": body[:160],
-            "question": "Which colour should we restock first?",
-            "cta": cta,
+            "question": question,
+            "cta": "" if arch == "tease" else cta,
             "tags": [f"#{re.sub(r'[^a-z]', '', cat.lower())}", "#indianfashion",
                      "#smallbusinessindia", "#handmade", "#shoplocal"][:5],
             "generated_by": "template"}
+
+
+def week_theme(product: dict, occasion: dict | None = None) -> dict:
+    """The one thing this week is about.
+
+    Brands whose grids look designed run a NAMED unit -- a drop, a series, a
+    chapter -- and every post that week belongs to it. A small seller rarely
+    has a launch to hang a week on, so one is manufactured from what they do
+    have: the piece the week is built around, and the occasion if one is live.
+    The name is repeated in every caption, which is most of what makes seven
+    posts read as one story."""
+    name = (product.get("name") or "this piece").strip()
+    if occasion:
+        return {"name": f"{name} for {occasion['name']}",
+                "product": name, "occasion": occasion.get("name", ""),
+                "note": f"Every post this week is about {name}, building towards "
+                        f"{occasion['name']}."}
+    return {"name": name, "product": name, "occasion": "",
+            "note": f"Every post this week is about {name}, from first look to "
+                    f"someone actually using it."}
+
+
+def _story_context(theme: dict, slot: dict, prev: dict | None = None) -> str:
+    """What the writer needs to make this post part of a week, not a one-off.
+
+    Three things do the work: the week's theme (so the same noun recurs), this
+    beat's job (so the post has a reason to exist that the others do not), and
+    what the PREVIOUS post did (so the opening line can pick the thread up
+    instead of starting cold). The third is the one that actually makes a feed
+    feel sequenced, and it is the one nothing in this module used to carry."""
+    if not theme or not slot:
+        return ""
+    out = (f"THIS WEEK'S STORY: {theme['note']}\n"
+           f"THIS POST'S PLACE IN IT: {slot.get('beat_job', '')} "
+           f"Its job is: {slot.get('job', '')}\n"
+           f"THE PICTURE: {slot.get('archetype_label', '')} — {slot.get('job', '')}\n")
+    if prev:
+        out += (f"THE PREVIOUS POST: was the {prev.get('archetype_label', '')} "
+                f"({prev.get('job', '')}). Open by picking that thread up in a "
+                f"few words — a reader who saw it should feel continued, and a "
+                f"reader who did not should still follow.\n")
+    else:
+        out += ("This is the FIRST post of the week. Do not refer to an earlier "
+                "one.\n")
+    out += ("Do not restate the theme mechanically in every post; carry it in the "
+            "product name and the through-line.\n")
+    return out
 
 
 def _occasion_context(occasion: dict | None = None, playbook: dict | None = None,
@@ -421,7 +690,8 @@ def _occasion_context(occasion: dict | None = None, playbook: dict | None = None
 
 def write_caption(email: str, product: dict, pillar_id: str,
                   angle: str = "", occasion: dict | None = None,
-                  playbook: dict | None = None, beat: dict | None = None) -> dict:
+                  playbook: dict | None = None, beat: dict | None = None,
+                  story: str = "", slot: dict | None = None) -> dict:
     s = get_settings(email)
     pillar = PILLAR_BY_ID.get(pillar_id) or PILLARS[0]
     facts = {k: product.get(k) for k in
@@ -429,6 +699,7 @@ def write_caption(email: str, product: dict, pillar_id: str,
              if product.get(k)}
     occ = _occasion_context(occasion, playbook, beat)
     user = (f"Pillar: {pillar['name']} ({pillar['type']}).\n"
+            f"{story}"
             f"{occ}"
             f"Angle: {angle or pillar['prompts'][0]}\n"
             f"Seller city: {s.get('city') or 'India'}\n"
@@ -436,7 +707,7 @@ def write_caption(email: str, product: dict, pillar_id: str,
             f"Product facts (use only these):\n"
             + "\n".join(f"- {k}: {v}" for k, v in facts.items()))
 
-    fb = _fallback_caption(product, pillar, s, playbook, beat)
+    fb = _fallback_caption(product, pillar, s, playbook, beat, slot)
     res = aiprovider.generate(_caption_system(s), user, sensitivity="public",
                               max_tokens=400, temperature=0.8,
                               fallback="")
@@ -522,12 +793,91 @@ def _fallback_script(product: dict, occasion: dict | None = None) -> dict:
     return {"beats": beats, "voiceover": "", "caption_hint": "", "generated_by": "template"}
 
 
+def build_video_prompt(script: dict, product: dict, settings: dict,
+                       occasion: dict | None = None, shot_type: str = "",
+                       aesthetic: str = "", theme: str = "") -> str:
+    """The reel script as ONE block a seller can paste straight into a video AI.
+
+    WHY THIS SHAPE: the shot list is what you use if you are filming it
+    yourself, and it stays. But most sellers asking for a reel now hand it to
+    Gemini/Veo, Sora or Kling, and those want a single self-contained
+    paragraph-and-spec prompt, not a table of beats. Pasting our old output
+    produced a confused clip, so the seller concluded the feature was broken.
+    This composes the prompt deterministically from the beats we already have,
+    which means it also works when no model is reachable.
+
+    The field order follows what video models actually condition on: subject,
+    action, camera, lighting and style, then the hard specs (duration, aspect,
+    audio, on-screen text) last."""
+    name = product.get("name") or "the product"
+    cat = product.get("category") or settings.get("category") or "product"
+    seconds = FORMATS["reel"]["target_seconds"]
+    beats = script.get("beats") or []
+
+    look = aesthetic.strip() or ("clean, natural daylight, uncluttered "
+                                 "background, shallow depth of field")
+    subject = f"{name}, a {cat}"
+    if product.get("fabric"):
+        subject += f" in {product['fabric']}"
+    if product.get("description"):
+        subject += f". {str(product['description'])[:180]}"
+
+    lines = [
+        "Create a vertical short-form video ad for Instagram Reels.",
+        "",
+        f"SUBJECT: {subject}",
+    ]
+    if theme:
+        lines.append(f"STORY: {theme}")
+    if occasion and occasion.get("name"):
+        lines.append(f"OCCASION: {occasion['name']} — the styling and colours "
+                     f"should read as {occasion['name']} without any text saying so.")
+    if shot_type:
+        lines.append(f"TREATMENT: {shot_type.replace('_', ' ')}")
+
+    lines += ["", "SHOT SEQUENCE:"]
+    for i, b in enumerate(beats, 1):
+        sec = (b.get("sec") or "").strip()
+        shot = (b.get("shot") or "").strip()
+        ost = (b.get("on_screen_text") or "").strip()
+        seg = f"{i}. " + (f"({sec}) " if sec else "") + shot
+        if ost:
+            seg += f'  [on-screen text: "{ost}"]'
+        lines.append(seg)
+
+    vo = (script.get("voiceover") or "").strip()
+    lines += [
+        "",
+        f"CAMERA: handheld phone, eye level, slow deliberate moves; one clean "
+        f"cut between shots, no whip pans or zoom effects.",
+        f"LIGHTING AND STYLE: {look}",
+        f"DURATION: about {seconds} seconds total.",
+        "ASPECT RATIO: 9:16 vertical, subject in the middle third, headroom at "
+        "top and bottom for Instagram's own UI.",
+        f"AUDIO: {'voiceover — ' + vo if vo else 'no voiceover; ambient sound and a calm music bed'}.",
+        "ON-SCREEN TEXT: exactly the lines given above, nothing else, large "
+        "enough to read on a phone, kept clear of the bottom third.",
+        "",
+        "DO NOT: change the product's shape, colour, material or any brand name, "
+        "logo or lettering on it; add captions, watermarks, logos or text beyond "
+        "the lines above; invent a price, a discount or a delivery promise.",
+    ]
+    return "\n".join(lines).strip()
+
+
 def write_reel_script(email: str, product: dict, pillar_id: str,
                       angle: str = "", occasion: dict | None = None,
-                      playbook: dict | None = None, beat: dict | None = None) -> dict:
+                      playbook: dict | None = None, beat: dict | None = None,
+                      story: str = "", shot_type: str = "",
+                      theme: str = "") -> dict:
     """The one thing a seller presses for a reel slot instead of an image
     button. Uses the same festival facts as write_caption (_occasion_context)
-    so the reel and its caption are never telling two different stories."""
+    so the reel and its caption are never telling two different stories.
+
+    Returns BOTH the shot list (to film yourself) and `ai_prompt` — a single
+    paste-ready block for Gemini/Veo, Sora or Kling. The prompt is composed
+    from the beats rather than asked for separately, so the two can never
+    describe different videos."""
     s = get_settings(email)
     pillar = PILLAR_BY_ID.get(pillar_id) or PILLARS[0]
     seconds = FORMATS["reel"]["target_seconds"]
@@ -536,22 +886,37 @@ def write_reel_script(email: str, product: dict, pillar_id: str,
              ("name", "price", "description", "fabric", "sizes", "care", "stock", "category")
              if product.get(k)}
     user = (f"Pillar: {pillar['name']} ({pillar['type']}).\n"
+            f"{story}"
             f"{occ}"
             f"Angle: {angle or pillar['prompts'][0]}\n"
             f"Target length: about {seconds} seconds.\n"
             f"Product facts (use only these):\n"
             + "\n".join(f"- {k}: {v}" for k, v in facts.items()))
 
+    # The seller's own visual language, so the pasted prompt produces something
+    # in their look rather than generic stock-video gloss.
+    aesthetic = ""
+    try:
+        from backend.core import studio
+        brand = studio.get_brand(email)
+        shots = brand.get("aesthetic_shots") or {}
+        aesthetic = (shots.get(shot_type) or brand.get("aesthetic") or "")[:600]
+    except Exception:  # noqa: BLE001 — the prompt is still useful without it
+        aesthetic = ""
+
     fb = _fallback_script(product, occasion)
     res = aiprovider.generate(_script_system(s), user, sensitivity="public",
                               max_tokens=500, temperature=0.8, fallback="")
-    if not res["text"]:
-        return {**fb, "provider": "template", "free": True, "error": res.get("error", "")}
-    parsed = _parse_script(res["text"])
-    if not parsed["beats"]:
-        return {**fb, "provider": "template", "free": True,
-                "error": "model did not return the expected shape"}
-    return {**parsed, "provider": res["provider"], "free": res["free"], "error": ""}
+    parsed = _parse_script(res["text"]) if res["text"] else {}
+    if not res["text"] or not parsed.get("beats"):
+        out = {**fb, "provider": "template", "free": True,
+               "error": res.get("error", "") if not res["text"]
+                        else "model did not return the expected shape"}
+    else:
+        out = {**parsed, "provider": res["provider"], "free": res["free"], "error": ""}
+    out["ai_prompt"] = build_video_prompt(out, product, s, occasion, shot_type,
+                                          aesthetic, theme)
+    return out
 
 
 def assemble(caption: dict) -> str:
@@ -724,9 +1089,27 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
             keep.append(p)
         rows = keep
 
-    made = []
+    # The week runs on ONE theme, not N unrelated posts. The theme is the
+    # product the arc is about, and every beat refers back to it -- that single
+    # repeated noun is most of what makes a feed read as planned rather than
+    # accumulated.
+    lead_occasion = occasion_for(start + timedelta(days=3), s.get("category") or "")
+    shape = slate_shape(s.get("cadence") or "standard", lead_occasion)
+    hero = _pick_product(pool, 0, lead_occasion, len(shape))
+    theme = week_theme(hero, lead_occasion)
+
+    # The slate is an ARC, so it has to run in calendar order: the tease must
+    # go out before the reveal, and the reveal before the proof. The weekday
+    # table is ranked by REACH, not by date — slot 0 wants Wednesday and slot 2
+    # wants Monday — so assigning beats to it directly scattered the story
+    # (a week planned on a Monday published its tease two days after its
+    # reveal). Take the best N weekdays, then sort them into date order and
+    # hand them to the beats in sequence: the same strong slots, in a sequence
+    # that reads.
+    n_slots = len(shape)
+    times = []
     now = datetime.now()
-    for i, slot in enumerate(shape):
+    for i in range(n_slots):
         offset = (best_weekdays[i % len(best_weekdays)] - start.weekday()) % 7
         when = datetime.combine(start + timedelta(days=offset),
                                 datetime.min.time()).replace(
@@ -738,18 +1121,34 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
         # rather than being born overdue.
         if when < now:
             when += timedelta(days=1)
+        times.append(when)
+    times.sort()
+
+    made = []
+    prev = None                      # the beat before this one, for the callback
+    for i, slot in enumerate(shape):
+        when = times[i]
         when_day = when.date()
         occasion = occasion_for(when_day, s.get("category") or "")
-        product = _pick_product(pool, i, occasion, len(shape))
+        # The SETUP of the arc (tease, reveal, prove) is about one piece —
+        # that is what makes the week a story instead of a list. The PAYOFF
+        # (place it in a life, close) widens to the rest of the range, so a
+        # seller with a real catalogue never gets a week that is literally one
+        # product five times. With a single product the hero simply carries all
+        # of it, which is correct: there is nothing else to show.
+        product = (hero if slot["beat"] in ("tease", "reveal", "prove") or len(pool) == 1
+                   else _pick_product(pool, i, occasion, len(shape)))
+        story = _story_context(theme, slot, prev)
         cap = write_caption(email, product, slot["pillar"],
-                            angle=(f"tie it to {occasion['name']}" if occasion else ""),
-                            occasion=occasion)
+                            angle=slot["job"], occasion=occasion, story=story,
+                            slot=slot)
         # A reel gets a shot list instead of an image button -- there's no
         # single photograph that IS the video, so generating one at plan time
         # (like the caption) is what a seller filming later actually needs.
         script = (write_reel_script(email, product, slot["pillar"],
-                                    angle=(f"tie it to {occasion['name']}" if occasion else ""),
-                                    occasion=occasion)
+                                    angle=slot["job"], occasion=occasion,
+                                    story=story, shot_type=slot["shot_type"],
+                                    theme=theme["note"])
                  if slot["format"] == "reel" else None)
         post = {
             "id": secrets.token_hex(6),
@@ -759,6 +1158,18 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
             "pillar": slot["pillar"],
             "pillar_name": PILLAR_BY_ID[slot["pillar"]]["name"],
             "format": slot["format"],
+            # Where this post sits in the week's story, and what kind of
+            # photograph it is. The editor shows both, and /api/studio/image
+            # uses shot_type to shoot it like the seller's own reference for
+            # that kind of picture rather than like their brand average.
+            "beat": slot["beat"],
+            "beat_job": slot["beat_job"],
+            "archetype": slot["archetype"],
+            "archetype_label": slot["archetype_label"],
+            "shot_type": slot["shot_type"],
+            "earns": slot["earns"],
+            "theme": theme["name"],
+            "theme_note": theme["note"],
             "occasion": (occasion or {}).get("name", ""),
             "occasion_days": (occasion or {}).get("days_away"),
             # The festival's slug in playbook.FESTIVALS, e.g. "ganesh_chaturthi"
@@ -781,6 +1192,7 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
         }
         made.append(post)
         rows.append(post)
+        prev = slot
 
     _save_posts(email, rows)
     return made
@@ -927,9 +1339,23 @@ def update_post(email: str, post_id: str, patch: dict) -> dict:
                           "on_screen_text": str(b.get("on_screen_text", ""))[:120]}
                          for b in (sc.get("beats") or [])
                          if b.get("shot") or b.get("on_screen_text")][:8]
-                p["script"] = {"beats": beats,
-                               "voiceover": str(sc.get("voiceover", ""))[:600],
-                               "caption_hint": str(sc.get("caption_hint", ""))[:200]}
+                script = {"beats": beats,
+                          "voiceover": str(sc.get("voiceover", ""))[:600],
+                          "caption_hint": str(sc.get("caption_hint", ""))[:200]}
+                # The paste-into-Gemini block is REBUILT from the edited beats
+                # rather than taken from the client. A seller who rewrites a
+                # shot and then copies a prompt still describing the old one
+                # would rightly call that broken.
+                script["ai_prompt"] = build_video_prompt(
+                    script,
+                    {"name": p.get("product_name") or "",
+                     "category": s.get("category") or ""},
+                    s,
+                    ({"name": p["occasion"], "days_away": p.get("occasion_days") or 0}
+                     if p.get("occasion") else None),
+                    p.get("shot_type") or "",
+                    "", p.get("theme_note") or "")
+                p["script"] = script
             _save_posts(email, rows)
             return p
     return {"error": "not found"}
@@ -1069,7 +1495,10 @@ def start_campaign(email: str, festival_key: str, catalogue: list[dict],
         cap = write_caption(email, product, _beat_pillar(beat["key"]),
                             angle=angle, occasion=occ, playbook=pb, beat=beat)
         script = (write_reel_script(email, product, _beat_pillar(beat["key"]),
-                                    angle=angle, occasion=occ, playbook=pb, beat=beat)
+                                    angle=angle, occasion=occ, playbook=pb, beat=beat,
+                                    shot_type=_BEAT_SHOT.get(beat["key"], ""),
+                                    theme=f"{pb['festival']} campaign — this post's "
+                                          f"job is: {beat['job']}")
                  if beat["format"] == "reel" else None)
         when = datetime.combine(date.fromisoformat(beat["date"]),
                                 datetime.min.time()).replace(hour=18)
@@ -1085,6 +1514,11 @@ def start_campaign(email: str, festival_key: str, catalogue: list[dict],
             "campaign": festival_key,
             "beat": beat["key"], "beat_label": beat["label"],
             "job": beat["job"], "beat_why": beat["why"],
+            # Same shot-type threading as the weekly plan, so a campaign's
+            # photos vary too and /api/studio/image can shoot each beat
+            # against the seller's own reference for that kind of picture.
+            "shot_type": _BEAT_SHOT.get(beat["key"], ""),
+            "theme_note": f"{pb['festival']} campaign — {beat['job']}",
             "caption": cap, "text": assemble(cap),
             "checks": caption_check(cap, s),
             "script": script,
@@ -1108,6 +1542,11 @@ def start_campaign(email: str, festival_key: str, catalogue: list[dict],
     _save_campaigns(email, camps)
     return {**prev, "posts": made, "created": len(made)}
 
+
+# Which kind of photograph each campaign beat wants, so a festival campaign
+# varies its shots the same way a planned week now does.
+_BEAT_SHOT = {"tease": "detail", "reveal": "product_only", "useful": "detail",
+              "proof": "in_use", "deadline": "packaging", "day": "held"}
 
 _BEAT_PILLAR = {"tease": "new", "reveal": "new", "useful": "detail",
                 "proof": "proof", "deadline": "detail", "day": "founder"}

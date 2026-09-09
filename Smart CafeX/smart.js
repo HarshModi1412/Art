@@ -1114,6 +1114,54 @@ function failed(message, retry) {
     </div>`;
 }
 
+/* Not enough data yet, shown as the shape of what is coming.
+   ------------------------------------------------------------------
+   A bare "Not enough data." sentence tells a seller nothing about what they
+   are working towards, and an empty screen reads as a broken module. This
+   draws the LAYOUT they will get — KPI tiles, a trend line, category bars —
+   blurred out, with the reason on top.
+
+   The bars are deliberately drawn in CSS rather than shipped as an image: it
+   theme-switches for free, needs no asset, and cannot be mistaken for real
+   figures. Nothing in here carries a number, precisely so it can never be
+   read as the seller's own data. */
+/* Below this many rows, a trend line and a forecast are noise wearing the
+   costume of an insight. Same spirit as the cancellations module's
+   MIN_DENOMINATOR: say so plainly instead of drawing a confident chart of
+   nothing. */
+const THIN_DATA_ROWS = 30;
+
+function thinData(rows, need, what) {
+  const bars = [38, 62, 45, 80, 55, 71, 48, 66, 90, 58, 74, 63];
+  return `
+    <div class="thin-wrap">
+      <div class="thin-ghost" aria-hidden="true">
+        <div class="thin-kpis">${[0, 1, 2, 3].map(() => `
+          <div class="thin-kpi"><i></i><b></b></div>`).join("")}</div>
+        <div class="thin-card">
+          <div class="thin-line">
+            <svg viewBox="0 0 300 90" preserveAspectRatio="none">
+              <polyline points="0,70 30,58 60,63 90,42 120,48 150,30 180,36 210,20 240,26 270,12 300,16"
+                fill="none" stroke="currentColor" stroke-width="3" />
+            </svg>
+          </div>
+        </div>
+        <div class="thin-card">
+          <div class="thin-bars">${bars.map((h) => `<i style="height:${h}%"></i>`).join("")}</div>
+        </div>
+      </div>
+      <div class="thin-over">
+        ${sic("chart")}
+        <b>Not enough data yet</b>
+        <p>As we collect more data, ${esc(what)} will be visible here.</p>
+        ${rows != null && need ? `
+          <div class="thin-meter"><i style="width:${Math.max(4, Math.min(100, rows / need * 100))}%"></i></div>
+          <p class="thin-count">${fmt(rows)} of about ${fmt(need)} orders needed for
+             the trends to mean anything.</p>` : ""}
+      </div>
+    </div>`;
+}
+
 function moduleShell(name, bodyHtml) {
   setCrumb(name); showRail(false);
   setView(`
@@ -2742,6 +2790,16 @@ async function openSales() {
       api("/api/cancellations").catch(() => null),
     ]);
     const k = d.kpis;
+    // Too few orders for a trend, a weekday pattern or a 30-day forecast to be
+    // anything but noise. Show the shape of what is coming instead of drawing
+    // a confident line through four points.
+    const rowCount = (state.data && state.data.sales && state.data.sales.rows) || 0;
+    if (rowCount && rowCount < THIN_DATA_ROWS) {
+      moduleShell("Sales Analytics",
+        thinData(rowCount, THIN_DATA_ROWS,
+                 "your revenue trend, weekday pattern and 30-day forecast"));
+      return;
+    }
     let html = `
       <div class="kpis">
         <div class="kpi"><div class="label">Revenue</div><div class="value">₹${fmt(k.revenue)}</div></div>
@@ -2887,7 +2945,12 @@ async function openSubcategory() {
   try {
     await api("/api/smart/state");
     const d = await api("/api/subcategory?lang=en");
-    if (!d.available) { moduleShell("Sub-Category Analysis", `<div class="card">${esc(d.reason || "Not enough data.")}</div>`); return; }
+    if (!d.available) {
+      moduleShell("Sub-Category Analysis",
+        thinData((state.data && state.data.sales && state.data.sales.rows) || 0,
+                 THIN_DATA_ROWS, "which categories and sub-categories drive your revenue"));
+      return;
+    }
     const label = d.field === "subcategory" ? "sub-categories" : "categories";
     let html = `
       <div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
@@ -5333,7 +5396,7 @@ async function decidePost(id, newState) {
 // image-generation buttons -- it gets a shot list to film from instead.
 // This holds the script being edited for whichever reel post is currently
 // open, mirroring the _wbRows pattern used for the win-back table.
-let _smScript = { beats: [], voiceover: "", caption_hint: "" };
+let _smScript = { beats: [], voiceover: "", caption_hint: "", ai_prompt: "" };
 
 function openSocialEditor(post) {
   const c = post.caption || {};
@@ -5342,19 +5405,38 @@ function openSocialEditor(post) {
     beats: (post.script.beats || []).map((b) => ({ ...b })),
     voiceover: post.script.voiceover || "",
     caption_hint: post.script.caption_hint || "",
-  } : { beats: [], voiceover: "", caption_hint: "" };
+    ai_prompt: post.script.ai_prompt || "",
+  } : { beats: [], voiceover: "", caption_hint: "", ai_prompt: "" };
+
+  /* Where this post sits in the week's story. Without it the seller sees six
+     posts and no reason why they are different from each other — which was
+     the whole complaint. The beat, the archetype and what it earns are the
+     three things that make a slot feel deliberate. */
+  const storyBar = post.beat ? `
+    <div class="sm-story">
+      <div class="sm-story-line">
+        <span class="sm-beat">${esc(post.beat)}</span>
+        <b>${esc(post.archetype_label || "")}</b>
+        ${post.occasion ? `<span class="sm-occ">${esc(post.occasion)}</span>` : ""}
+      </div>
+      ${post.beat_job ? `<p class="sm-hint" style="margin:6px 0 0;">${esc(post.beat_job)}</p>` : ""}
+      ${post.earns ? `<p class="sm-hint" style="margin:2px 0 0;"><b>Earns:</b> ${esc(post.earns)}</p>` : ""}
+      ${post.theme ? `<p class="sm-hint" style="margin:2px 0 0;"><b>This week:</b> ${esc(post.theme)}</p>` : ""}
+    </div>` : "";
 
   const topHtml = isReel ? `
+    ${storyBar}
     <div class="sm-ed-script-block">
       <div class="sm-ed-meta">
         <div><b>${esc(post.pillar_name || "")}</b> · Reel
           ${post.occasion ? `<span class="sm-occ">${esc(post.occasion)}</span>` : ""}</div>
       </div>
-      <p class="sm-hint" style="margin:8px 0 12px;">A reel is filmed, not generated —
-        this is the shot list to film from: a few seconds each, what the camera does,
-        what's on screen.</p>
+      <p class="sm-hint" style="margin:8px 0 12px;">A reel is filmed, not generated.
+        Below is the shot list to film it yourself — or copy the prompt and paste it
+        into Gemini, Veo or Sora to have it generated.</p>
       <div id="smEdScript"></div>
     </div>` : `
+    ${storyBar}
     <div class="sm-ed-top">
       <div class="sm-ed-shot" id="smEdShot">
         ${post.image_url
@@ -5489,7 +5571,22 @@ function renderScriptSection(post) {
     <button class="btn ghost sm" id="smAddBeat">${sic("plus")}Add beat</button>
     <label class="fld" style="margin-top:12px;"><span>Voiceover <em>optional</em></span>
       <textarea id="smVoiceover" rows="2">${esc(_smScript.voiceover || "")}</textarea></label>
-    <div style="margin-top:6px;">
+
+    ${_smScript.ai_prompt ? `
+    <div class="sm-prompt">
+      <div class="sm-prompt-head">
+        <div>
+          <b>Prompt for a video AI</b>
+          <p class="sm-hint" style="margin:2px 0 0;">Paste this straight into Gemini,
+            Veo, Sora or Kling. It already carries your product, your look and this
+            week's story.</p>
+        </div>
+        <button class="btn ghost tiny" id="smCopyPrompt">${sic("layers")}Copy</button>
+      </div>
+      <pre class="sm-prompt-body" id="smPromptBody">${esc(_smScript.ai_prompt)}</pre>
+    </div>` : ""}
+
+    <div style="margin-top:10px;">
       <button class="btn ghost sm" id="smRegenScript">${sic("spark")}Regenerate script</button>
     </div>` : `
     <div class="sm-ed-noimg" style="height:auto;padding:22px 10px;">
@@ -5505,6 +5602,22 @@ function renderScriptSection(post) {
     };
     $("smVoiceover").onchange = (e) => { _smScript.voiceover = e.target.value; };
     $("smRegenScript").onclick = () => generateScript(post, $("smRegenScript"));
+    if ($("smCopyPrompt")) $("smCopyPrompt").onclick = async () => {
+      const b = $("smCopyPrompt"), was = b.innerHTML;
+      try {
+        await navigator.clipboard.writeText(_smScript.ai_prompt || "");
+        b.innerHTML = sic("check") + "Copied";
+      } catch (e) {
+        // Clipboard is blocked in some embedded webviews — select the text so
+        // the seller can still copy it by hand rather than hitting a dead button.
+        const r = document.createRange();
+        r.selectNodeContents($("smPromptBody"));
+        const sel = window.getSelection();
+        sel.removeAllRanges(); sel.addRange(r);
+        b.innerHTML = sic("check") + "Selected — press Ctrl+C";
+      }
+      setTimeout(() => { b.innerHTML = was; }, 2500);
+    };
   } else {
     $("smGenScript").onclick = () => generateScript(post, $("smGenScript"));
   }
@@ -5539,6 +5652,7 @@ async function generateScript(post, btn) {
     _smScript = {
       beats: (sc.beats || []).map((b) => ({ ...b })),
       voiceover: sc.voiceover || "", caption_hint: sc.caption_hint || "",
+      ai_prompt: sc.ai_prompt || "",
     };
     renderScriptSection(post);
     toast("Script written.");

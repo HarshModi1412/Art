@@ -33,6 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi.testclient import TestClient  # noqa: E402
 from backend.main import app  # noqa: E402
+import pandas as pd  # noqa: E402
 from backend.core import studio, social, playbook  # noqa: E402
 
 PASS = FAIL = 0
@@ -97,7 +98,41 @@ check("unknown occasion_key does not crash and adds no festival",
       "festival" not in g_bad, g_bad)
 
 # =========================================================================
-print("\n== 2. _stamp_brand(): deterministic brand visibility ==")
+print("\n== 1b. a re-shoot must PRESERVE the product's own brand marking ==")
+# =========================================================================
+# The reference photo of the Women Wallet carries the maker's name embossed on
+# it. A blanket "no text, no logo" told the model to wipe it, so the re-shoot
+# came back as an unbranded wallet -- the seller's own product looking like a
+# generic copy of itself.
+p_ref = studio.image_prompt(brief, g, has_reference=True)
+p_new = studio.image_prompt(brief, g, has_reference=False)
+
+check("a re-shoot is told to keep the product's own markings",
+      "exactly as it is in the reference" in p_ref, p_ref[-320:])
+check("and it names brand name, logo and lettering specifically",
+      all(w in p_ref for w in ("brand name", "logo", "lettering")), p_ref[-320:])
+check("and it asks for the same spelling and placement",
+      "same spelling" in p_ref and "same placement" in p_ref, p_ref[-320:])
+check("a re-shoot NEVER carries the blanket 'no logo' instruction again",
+      "No text, no logo" not in p_ref, p_ref[-320:])
+check("but a re-shoot still refuses to ADD text of its own",
+      "not add any new text, logo or watermark" in p_ref, p_ref[-320:])
+check("an invented picture keeps the blanket no-logo rule (nothing to preserve)",
+      "No text, no logo, no watermark" in p_new, p_new[-200:])
+check("the two paths genuinely differ", p_ref != p_new)
+
+_gen_src = __import__("inspect").getsource(studio.generate_image)
+check("generate_image passes has_reference through from the reference argument",
+      "has_reference=bool(reference)" in _gen_src)
+check("the Cloudflare negative prompt no longer suppresses text/watermark outright",
+      "extra items, text, " not in _gen_src, _gen_src[_gen_src.find("negative="):][:200])
+check("it negates the brand being LOST instead",
+      all(w in _gen_src for w in ("missing brand name", "erased logo", "altered lettering")))
+check("the corner stamp is skipped on a re-shoot (brand would show twice)",
+      "if not from_ref:" in _gen_src and "_stamp_brand(content" in _gen_src)
+
+# =========================================================================
+print("\n== 2. _stamp_brand(): deterministic brand visibility (invented shots) ==")
 # =========================================================================
 from PIL import Image  # noqa: E402
 
@@ -339,5 +374,184 @@ check("beat rows have their own CSS", ".sm-beat-row" in _css)
 check("beat rows collapse to one column on a phone (mobile regression guard)",
       ".sm-beat-row { grid-template-columns: 1fr; }" in _css)
 
+
+# =========================================================================
+print("\n== 10. the week is a STORY, not six interchangeable slots ==")
+# =========================================================================
+# The complaint this guards: a planned week used to be N independent slots, so
+# every post looked and read the same and the seller got no help at all.
+_e = f"story{int(time.time() * 1000)}@t.co"
+_tok = c.post("/api/register", json={"email": _e, "password": "Test12345!"}).json()["token"]
+_H = {"Authorization": "Bearer " + _tok, "X-Session-Id": "story"}
+c.post("/api/products/item", json={"name": "Women Wallet", "category": "Accessories",
+                                   "price": 2499, "stock": 10}, headers=_H)
+c.post("/api/social/settings", json={"patch": {"category": "clothing", "cadence": "growth"}},
+       headers=_H)
+c.post("/api/social/week", json={"weeks": 1}, headers=_H)
+_ps = social.week(_e)
+
+check("a week gets planned", len(_ps) >= 4, len(_ps))
+check("every post knows its beat in the arc", all(p.get("beat") for p in _ps),
+      [p.get("beat") for p in _ps])
+check("every post knows what KIND of photograph it is",
+      all(p.get("archetype") and p.get("shot_type") for p in _ps),
+      [(p.get("archetype"), p.get("shot_type")) for p in _ps])
+check("every post carries the week's named theme",
+      all(p.get("theme") for p in _ps), [p.get("theme") for p in _ps])
+check("the whole week shares ONE theme",
+      len({p["theme"] for p in _ps}) == 1, {p.get("theme") for p in _ps})
+
+_ARC = ["tease", "reveal", "prove", "place", "close"]
+_rank = [_ARC.index(p["beat"]) for p in _ps]
+check("the arc runs in calendar order — tease really does go out first",
+      _rank == sorted(_rank), [p["beat"] for p in _ps])
+
+_arch = [p["archetype"] for p in _ps]
+check("no two consecutive posts share an archetype",
+      all(_arch[i] != _arch[i + 1] for i in range(len(_arch) - 1)), _arch)
+check("the week uses several different kinds of photograph",
+      len({p["shot_type"] for p in _ps}) >= 3, {p["shot_type"] for p in _ps})
+
+_hooks = [p["caption"]["hook"] for p in _ps]
+check("every hook in the week is different — even with NO AI reachable",
+      len(set(_hooks)) == len(_hooks), _hooks)
+_bodies = [p["caption"]["body"] for p in _ps]
+check("and the bodies differ too", len(set(_bodies)) == len(_bodies), _bodies)
+check("the tease does not give away the price",
+      not any("Rs" in p["caption"]["hook"] for p in _ps if p["archetype"] == "tease"),
+      [p["caption"]["hook"] for p in _ps if p["archetype"] == "tease"])
+
+# =========================================================================
+print("\n== 11. reel scripts are paste-ready AI prompts ==")
+# =========================================================================
+_reels = [p for p in _ps if p["format"] == "reel"]
+check("the week contains reels", len(_reels) > 0, len(_reels))
+if _reels:
+    _sc = _reels[0]["script"]
+    _pr = _sc.get("ai_prompt", "")
+    check("a reel carries a paste-ready prompt", bool(_pr), list(_sc))
+    for _needle in ("SUBJECT:", "SHOT SEQUENCE:", "CAMERA:", "DURATION:",
+                    "ASPECT RATIO:", "ON-SCREEN TEXT:", "DO NOT:"):
+        check(f"the prompt has a {_needle.rstrip(':')} section", _needle in _pr, _pr[:160])
+    check("the prompt names the actual product", "Women Wallet" in _pr, _pr[:200])
+    check("the prompt carries the week's story", "STORY:" in _pr, _pr[:300])
+    check("the prompt forbids changing the brand marking",
+          "brand name" in _pr and "logo" in _pr, _pr[-260:])
+    check("the prompt asks for 9:16 vertical", "9:16" in _pr, _pr[-400:])
+    check("every filmed beat reaches the prompt",
+          all((b.get("shot") or "")[:18] in _pr for b in _sc.get("beats", [])),
+          _pr[:400])
+
+    # Editing a beat must rewrite the prompt, not leave a stale one behind.
+    _rid = _reels[0]["id"]
+    social.update_post(_e, _rid, {"script": {
+        "beats": [{"sec": "0-4", "shot": "Slide the wallet out of a coat pocket",
+                   "on_screen_text": "Pocket sized"}],
+        "voiceover": "", "caption_hint": ""}})
+    _after = social.get_post(_e, _rid)["script"]["ai_prompt"]
+    check("editing a beat rebuilds the prompt", "coat pocket" in _after, _after[:300])
+    check("and the old beat is gone from it",
+          "Turn it slowly to show the material" not in _after, _after[:300])
+
+# =========================================================================
+print("\n== 12. per-shot-type aesthetics, not one averaged paragraph ==")
+# =========================================================================
+check("studio knows a set of shot types", len(studio.SHOT_TYPES) >= 5,
+      list(studio.SHOT_TYPES))
+check("every archetype maps to a real shot type",
+      all(a["shot_type"] in studio.SHOT_TYPES for a in social.ARCHETYPES.values()),
+      [(k, a["shot_type"]) for k, a in social.ARCHETYPES.items()
+       if a["shot_type"] not in studio.SHOT_TYPES])
+
+_r = studio._parse_reading(
+    "SHOT: packaging\nLIGHT: soft overcast from the left\n"
+    "COLOUR: kraft brown and deep maroon\nSETTING: pale oak table\n"
+    "COMPOSITION: overhead flat lay, box half open\nMOOD: unhurried\n"
+    "SIGNATURE: tissue always caught mid-fold")
+check("a reading is parsed into fields", _r["shot"] == "packaging", _r)
+check("and turned back into a shootable sentence",
+      "mid-fold" in studio._reading_prose(_r), studio._reading_prose(_r))
+check("a label answer still resolves to a shot id",
+      studio._parse_reading("SHOT: Packaging and unboxing")["shot"] == "packaging")
+check("an unknown shot degrades instead of vanishing",
+      studio._parse_reading("SHOT: banana")["shot"] in studio.SHOT_TYPES)
+
+_brief = studio.build_brief(
+    {"name": "Marusche", "look": "luxe", "aesthetic": "Signature: low warm light.",
+     "aesthetic_shots": {"packaging": "kraft brown, box half open, tissue mid-fold"}},
+    {"name": "Women Wallet", "category": "accessories"}, {})
+_p_pack = studio.image_prompt(_brief, studio.guidance_for("new", "carousel", "", "luxe",
+                                                          shot_type="packaging"))
+_p_use = studio.image_prompt(_brief, studio.guidance_for("new", "carousel", "", "luxe",
+                                                         shot_type="in_use"))
+check("a packaging beat is shot against the seller's OWN packaging reference",
+      "tissue mid-fold" in _p_pack, _p_pack[:300])
+check("a shot type they never uploaded still gets sensible direction",
+      "Worn or carried by a person" in _p_use, _p_use[:300])
+check("two shot types produce genuinely different prompts", _p_pack != _p_use)
+
+# =========================================================================
+print("\n== 13. platform exports map correctly ==")
+# =========================================================================
+from backend.core import mapper  # noqa: E402
+
+_shop = pd.DataFrame([
+    {"Name": "#1001", "Created at": "2026-09-01", "Billing Name": "Asha Rao",
+     "Email": "a@x.com", "Lineitem name": "Silk Saree", "Lineitem quantity": 2,
+     "Lineitem price": 2500, "Total": 5000}] * 6)
+_m = mapper.suggest_mapping(_shop)
+check("a Shopify export is recognised by name",
+      _m.get("_preset") == "shopify", _m.get("_preset"))
+check("order_id is the order number, NOT the customer's name",
+      _m.get("order_id") == "Name", _m.get("order_id"))
+check("the customer's name lands in customer_name",
+      _m.get("customer_name") == "Billing Name", _m.get("customer_name"))
+_tx, _ = mapper.build_transactions(_shop, _m)
+check("a per-unit price is multiplied up to the line total",
+      _tx["amount"].sum() == 2500 * 2 * 6, _tx["amount"].sum())
+
+_messy = pd.DataFrame([
+    {"Order Date": "2026-09-01", "Invoice No": "INV-1", "Customer Name": "Asha",
+     "Item Name": "Saree", "Product Category": "Clothing", "Qty": 1,
+     "Total Amount (INR)": 2500}] * 6)
+_m2 = mapper.suggest_mapping(_messy)
+check("a hand-made Indian sheet is still scored, not forced into a preset",
+      not _m2.get("_preset"), _m2.get("_preset"))
+check("and it still maps every column correctly",
+      (_m2["date"], _m2["order_id"], _m2["customer_name"], _m2["amount"]) ==
+      ("Order Date", "Invoice No", "Customer Name", "Total Amount (INR)"), _m2)
+_tx2, _ = mapper.build_transactions(_messy, _m2)
+check("its revenue is NOT multiplied (already a line total)",
+      _tx2["amount"].sum() == 2500 * 6, _tx2["amount"].sum())
+
+# =========================================================================
+print("\n== 14. frontend: story bar, prompt block, thin-data blur ==")
+# =========================================================================
+_js2 = pathlib.Path("Smart CafeX/smart.js").read_text(encoding="utf-8")
+_css2 = pathlib.Path("Smart CafeX/smart.css").read_text(encoding="utf-8")
+_store = pathlib.Path("Smart CafeX/storefront/store.js").read_text(encoding="utf-8")
+
+check("the editor shows where the post sits in the week", "sm-story" in _js2)
+check("it names the archetype", "archetype_label" in _js2)
+check("it says what the post earns", "post.earns" in _js2)
+check("the reel editor offers the paste-ready prompt", "sm-prompt" in _js2)
+check("with a copy button", "smCopyPrompt" in _js2)
+check("and a fallback when the clipboard is blocked",
+      "Ctrl+C" in _js2 and "getSelection" in _js2)
+check("thin data renders a blurred preview", "function thinData" in _js2)
+check("Sales Analytics uses it", "your revenue trend, weekday pattern" in _js2)
+check("Sub-Category Analysis uses it", "drive your revenue" in _js2)
+check("the blur is real CSS blur", "filter: blur(" in _css2)
+check("the placeholder carries NO numbers a seller could misread",
+      "thin-count" in _css2 and "orders needed for" in _js2)
+
+check("the storefront cancel dialog uses the real scrim class",
+      'class="modal-s" id="cxScrim"' in _store)
+check("and no longer appends an unstyled div to the body",
+      'className = "modal-back"' not in _store)
+check("it closes through the shared layer helper",
+      "closeLayer()" in _store.split("function askCancel")[1][:1400])
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
+

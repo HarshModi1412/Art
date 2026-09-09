@@ -17,7 +17,12 @@ import pandas as pd
 ROLE_KEYWORDS = {
     "date": ["date", "orderdate", "invoicedate", "billdate", "time", "timestamp", "day"],
     "customer_id": ["customerid", "custid", "clientid", "memberid", "userid", "buyerid", "phone", "mobile", "contact", "customer", "cust", "client", "member", "buyer"],
-    "customer_name": ["customername", "clientname", "buyername", "patronname", "membername", "guestname", "fullname"],
+    # "billingname" / "shippingname" sit ahead of the generic words because on
+    # every real platform export they ARE the customer's name — and because
+    # leaving them out let "bill" claim them for order_id instead.
+    "customer_name": ["customername", "billingname", "shippingname", "billingfirstname",
+                      "clientname", "buyername", "patronname", "membername",
+                      "guestname", "fullname"],
     "order_id": ["orderid", "invoiceno", "invoicenumber", "billno", "billnumber", "receiptno", "kotno", "order", "invoice", "transaction", "bill", "receipt", "txn", "ticket"],
     "product": ["itemname", "productname", "product", "item", "dish", "menuitem", "sku", "description", "name"],
     "category": ["category", "itemcategory", "maincategory", "cat", "department", "menucategory", "group", "type"],
@@ -33,6 +38,96 @@ ROLE_KEYWORDS = {
 REQUIRED = ["date", "amount"]
 
 
+def _norm(c) -> str:
+    return (str(c).lower().replace(" ", "").replace("_", "")
+            .replace("-", "").replace(".", ""))
+
+
+# Known platform exports, matched on their signature columns.
+#
+# BUG THIS FIXES: keyword scoring is good on hand-made Indian spreadsheets and
+# quietly wrong on the big platform exports, because those reuse words the
+# scorer treats as strong signals. A Shopify orders CSV has a "Billing Name"
+# column: it normalises to "billingname", which contains "bill", which is an
+# order_id keyword -- so the CUSTOMER'S NAME was being stored as the order
+# number, while customer_name was left empty and the real order column
+# ("Name") went unused. Order counts and average order value were then computed
+# off a name column, and every win-back message opened with "Hi there". The
+# seller was shown the suggestion and could fix it, but the default was wrong
+# and wrong silently, which is worse than asking.
+#
+# A recognised export is mapped as a whole, by people who know the format,
+# rather than column by column by a scorer that cannot see the shape.
+PRESETS = [
+    {
+        "id": "shopify",
+        "name": "Shopify orders export",
+        # "lineitemname" alone is enough to identify it; "name" + "createdat"
+        # guard against a look-alike.
+        "signature": ["lineitemname", "createdat"],
+        "map": {
+            "date": "createdat",
+            "order_id": "name",
+            "customer_name": "billingname",
+            "customer_id": "email",
+            "product": "lineitemname",
+            "quantity": "lineitemquantity",
+            "amount": "lineitemprice",
+        },
+        # Shopify gives a PER-UNIT price on each line row and puts the order
+        # total only on the first row of a multi-line order. Taking the unit
+        # price as revenue undercounts every order of more than one item, so
+        # the line total is reconstructed as price x quantity.
+        "amount_is_unit": True,
+    },
+    {
+        "id": "woocommerce",
+        "name": "WooCommerce order export",
+        "signature": ["orderdate", "itemname"],
+        "map": {
+            "date": "orderdate",
+            "order_id": "ordernumber",
+            "customer_name": "billingfirstname",
+            "customer_id": "billingemail",
+            "product": "itemname",
+            "quantity": "quantity",
+            "amount": "itemcost",
+        },
+    },
+    {
+        "id": "amazon_mtr",
+        "name": "Amazon MTR / transaction report",
+        "signature": ["orderid", "asin"],
+        "map": {
+            "date": "orderdate",
+            "order_id": "orderid",
+            "product": "productname",
+            "category": "productcategory",
+            "quantity": "quantity",
+            "amount": "invoiceamount",
+        },
+    },
+]
+
+
+def detect_preset(df: pd.DataFrame) -> dict | None:
+    """Which known platform export this is, if any.
+
+    Returns the preset with its `resolved` mapping (role -> the actual column
+    name as it appears in this file), or None when nothing matches well
+    enough. A preset only applies when it can fill both required roles --
+    a half-matched preset is worse than the scorer."""
+    have = {_norm(c): str(c) for c in df.columns}
+    for preset in PRESETS:
+        if not all(sig in have for sig in preset["signature"]):
+            continue
+        resolved = {role: have[key] for role, key in preset["map"].items()
+                    if key in have}
+        if all(resolved.get(r) for r in REQUIRED):
+            return {**preset, "resolved": resolved}
+    return None
+
+
 def suggest_mapping(df: pd.DataFrame) -> dict:
     """Guess a role -> column mapping from column names + dtypes.
 
@@ -42,12 +137,22 @@ def suggest_mapping(df: pd.DataFrame) -> dict:
     match, and a longer/earlier keyword like 'invoiceno' beats a generic
     'order'. Roles are resolved strongest-match-first so a column isn't stolen
     by a weaker role."""
+    # A recognised platform export is mapped as a whole. The scorer never sees
+    # it, because on these files the scorer is confidently wrong (see PRESETS).
+    preset = detect_preset(df)
+    if preset:
+        out: dict = {role: None for role in ROLE_KEYWORDS}
+        out.update(preset["resolved"])
+        out["_preset"] = preset["id"]
+        out["_preset_name"] = preset["name"]
+        if preset.get("amount_is_unit"):
+            out["_amount_is_unit"] = True
+        return out
+
     suggestion: dict[str, str | None] = {role: None for role in ROLE_KEYWORDS}
     cols = list(df.columns)
     used = set()
-
-    def norm(c):
-        return str(c).lower().replace(" ", "").replace("_", "").replace("-", "").replace(".", "")
+    norm = _norm
 
     # collect all (role, col, rank) candidate matches
     candidates = []
@@ -110,6 +215,14 @@ def build_transactions(df: pd.DataFrame, mapping: dict) -> tuple[pd.DataFrame, d
     out["amount"] = _clean_numeric(out["amount"])
     if "quantity" in out.columns:
         out["quantity"] = _clean_numeric(out["quantity"])
+
+    # Some exports (Shopify) give a PER-UNIT price on each line rather than the
+    # line total. Taking that as revenue undercounts every order of more than
+    # one item, so the line total is reconstructed here. Only ever applied when
+    # the mapping explicitly says so — never guessed.
+    if mapping.get("_amount_is_unit") and "quantity" in out.columns:
+        qty = out["quantity"].fillna(1).replace(0, 1)
+        out["amount"] = out["amount"] * qty
 
     bad_date = out["date"].isna().sum()
     bad_amount = out["amount"].isna().sum()

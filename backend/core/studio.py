@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid
 
 from backend.core import media, products, user_store
@@ -129,18 +130,62 @@ def remove_ref(email: str, url: str) -> dict:
     return b
 
 
+# The kinds of photograph a seller's reference set actually contains.
+#
+# WHY THIS EXISTS: read_aesthetic used to collapse every reference into ONE
+# 100-150 word paragraph describing "what is common to all of them". A seller
+# who uploads a packshot, a wearing-it-on-the-street shot, a flat lay and a
+# hands-holding-it shot has told you FOUR different things, and averaging them
+# produces a description so general it fits any brand — which is why generated
+# images came back looking nothing like the references. The differences ARE
+# the brand. So each reference is now classified and described in its own
+# right, and the generator picks the reading that matches the shot it is
+# being asked for.
+SHOT_TYPES = {
+    "product_only": {
+        "label": "Product on its own",
+        "hint": "packshot, hero, still life — the product is the whole subject, no person",
+    },
+    "in_use": {
+        "label": "Worn or carried by a person",
+        "hint": "someone actually wearing, carrying or using it, in a real setting",
+    },
+    "held": {
+        "label": "Held in hands",
+        "hint": "hands presenting or holding the product, face usually out of frame",
+    },
+    "lifestyle": {
+        "label": "Lying in a scene",
+        "hint": "placed on a surface among props — table, bed, chair — nobody in frame",
+    },
+    "packaging": {
+        "label": "Packaging and unboxing",
+        "hint": "box, pouch, tissue, tags; often half-open mid-reveal",
+    },
+    "detail": {
+        "label": "Close detail",
+        "hint": "macro crop on stitching, clasp, weave, hardware, stone or texture",
+    },
+}
+SHOT_TYPE_IDS = list(SHOT_TYPES)
+
 AESTHETIC_SYSTEM = (
     "You are an art director writing a brief for a photographer. You are shown "
-    "reference images that a brand has chosen to represent its taste. Describe "
-    "the VISUAL LANGUAGE they share, not the objects in them.\n\n"
-    "Cover, concretely: lighting (hard or soft, direction, warmth); colour "
-    "palette in plain colour words; surfaces and materials; composition and "
-    "negative space; depth of field; mood; and any styling habits such as props, "
-    "hands, fabric folds, shadows.\n\n"
-    "Write 90-140 words of plain prose a photographer could shoot from. No "
-    "bullet points, no headings, no praise, no marketing adjectives like "
-    "'stunning' or 'elevated'. If the references disagree with each other, say "
-    "so plainly and describe the dominant one."
+    "ONE reference image that a brand has chosen to represent its taste. "
+    "Describe its VISUAL LANGUAGE, not the object in it.\n\n"
+    "Return exactly these lines and nothing else:\n"
+    "SHOT: <one of: " + ", ".join(SHOT_TYPE_IDS) + ">\n"
+    "LIGHT: <hard or soft, direction, warmth, shadow behaviour>\n"
+    "COLOUR: <palette in plain colour words, including the background>\n"
+    "SETTING: <surface, place, props actually visible>\n"
+    "COMPOSITION: <framing, crop, angle, negative space, depth of field>\n"
+    "MOOD: <the feeling, in plain words>\n"
+    "SIGNATURE: <the one habit that would let someone recognise this brand's "
+    "photographs in a stranger's feed>\n\n"
+    "Be concrete and specific to THIS picture — 'low winter sun from the left "
+    "throwing a long hard shadow across raw concrete' beats 'nice natural "
+    "light'. No praise, no marketing adjectives like 'stunning' or 'elevated'. "
+    "Each line one sentence, no bullets, no headings."
 )
 
 PRODUCT_SYSTEM = (
@@ -157,15 +202,52 @@ PRODUCT_SYSTEM = (
 )
 
 
-def read_aesthetic(email: str) -> dict:
-    """Turn the reference images into a written aesthetic.
+def _parse_reading(text: str) -> dict:
+    """One reference image's reading, as fields rather than a paragraph."""
+    out = {}
+    for raw in (text or "").splitlines():
+        m = re.match(r"^\s*(SHOT|LIGHT|COLOUR|COLOR|SETTING|COMPOSITION|MOOD|"
+                     r"SIGNATURE)\s*:\s*(.+)$", raw.strip(), re.I)
+        if m:
+            key = m.group(1).lower()
+            out["colour" if key == "color" else key] = m.group(2).strip()[:400]
+    shot = (out.get("shot") or "").lower().strip()
+    # Models like to answer with the label rather than the id; accept both, and
+    # fall back to the safest bucket rather than dropping the reading.
+    if shot not in SHOT_TYPES:
+        shot = next((k for k in SHOT_TYPES
+                     if k in shot or SHOT_TYPES[k]["label"].lower() in shot),
+                    "product_only")
+    out["shot"] = shot
+    return out
 
-    Reads up to four references. More than that costs tokens without sharpening
-    the answer, and a brand whose taste needs more than four pictures to
-    describe does not have a consistent one yet."""
+
+def _reading_prose(r: dict) -> str:
+    """The shootable sentence for one reading, without its SHOT label."""
+    order = ("light", "colour", "setting", "composition", "mood", "signature")
+    return " ".join(r[k] for k in order if r.get(k)).strip()
+
+
+def read_aesthetic(email: str) -> dict:
+    """Turn the reference images into a written aesthetic — by SHOT TYPE.
+
+    WHAT CHANGED AND WHY: this used to read at most four references and merge
+    them into one paragraph of "what they have in common". That was the wrong
+    shape twice over. It threw away most of what a seller uploaded, and the
+    merge step actively deleted the differences: a brand that shoots crisp
+    packshots AND grainy street photographs came back as "clean, natural
+    light", which describes neither and generates neither. Sellers noticed —
+    the generated image looked nothing like the pictures they had given it.
+
+    Now every reference is read on its own and filed under the kind of
+    photograph it is. The brand keeps a SIGNATURE (what genuinely holds across
+    all of them, which is what makes a feed look like one brand) and a
+    per-shot-type reading (what makes an unboxing shot different from a
+    packshot, which is what makes each post look different from the last).
+    image_prompt then asks for the slice it needs."""
     from backend.core import aiprovider, media
     b = get_brand(email)
-    refs = [r for r in (b.get("refs") or []) if r][:4]
+    refs = [r for r in (b.get("refs") or []) if r][:12]
     if not refs:
         return {"ok": False, "reason": "No reference images uploaded yet."}
     if not aiprovider.vision_ready():
@@ -181,34 +263,56 @@ def read_aesthetic(email: str) -> dict:
         data, ctype = got
         r = aiprovider.describe_image(
             data, ctype, system=AESTHETIC_SYSTEM,
-            user="Describe the visual language of this reference image.",
-            sensitivity="public", max_tokens=320)
+            user="Read this reference image and return the labelled lines.",
+            sensitivity="public", max_tokens=400)
         if r["text"]:
-            readings.append(r["text"])
+            parsed = _parse_reading(r["text"])
+            if _reading_prose(parsed):
+                readings.append(parsed)
+            else:
+                # Unparseable but non-empty — keep the prose rather than lose
+                # a picture the seller paid attention to.
+                readings.append({"shot": "product_only", "signature": r["text"].strip()[:400]})
         else:
             failed += 1
 
     if not readings:
         return {"ok": False, "reason": "Could not read any of the reference images."}
 
+    # One reading per shot type, so a brand that uploaded five packshots does
+    # not get five near-identical paragraphs stored.
+    by_shot: dict[str, list[str]] = {}
+    for r in readings:
+        by_shot.setdefault(r["shot"], []).append(_reading_prose(r))
+    shots = {k: max(v, key=len)[:900] for k, v in by_shot.items() if any(v)}
+
+    signature = ""
+    sig_lines = [r.get("signature", "") for r in readings if r.get("signature")]
     if len(readings) == 1:
-        summary = readings[0]
+        signature = _reading_prose(readings[0])
     else:
         merged = aiprovider.generate(
-            "You are an art director. You are given several separate readings of "
-            "reference images from one brand. Write ONE brief describing the "
-            "visual language they share. Lead with what is common to all of them. "
-            "Name any real disagreement in a final sentence rather than averaging "
-            "it away. 100-150 words, plain prose, no headings.",
-            "\n\n---\n\n".join(readings),
-            sensitivity="public", max_tokens=400, fallback=readings[0])
-        summary = merged["text"] or readings[0]
+            "You are an art director. Below are separate readings of reference "
+            "images from ONE brand. Write the brand's visual signature: only "
+            "what genuinely holds across most of them — the light, the palette, "
+            "the habits a stranger could use to recognise their photographs. "
+            "Do NOT average away differences in SETTING or SUBJECT; those are "
+            "handled elsewhere. If the references genuinely disagree on look, "
+            "say so in one final sentence. 90-130 words, plain prose, no "
+            "headings, no marketing adjectives.",
+            "\n\n---\n\n".join(_reading_prose(r) for r in readings),
+            sensitivity="public", max_tokens=400, fallback="")
+        signature = (merged["text"] or " ".join(sig_lines) or
+                     _reading_prose(readings[0]))
 
-    b["aesthetic"] = summary.strip()[:2000]
+    b["aesthetic"] = signature.strip()[:2000]          # the shared signature
+    b["aesthetic_shots"] = shots                        # per shot type
     b["aesthetic_from"] = len(readings)
     user_store.set_key(email, BRAND_KEY, b)
-    return {"ok": True, "aesthetic": b["aesthetic"], "read": len(readings),
-            "failed": failed, "brand": b}
+    return {"ok": True, "aesthetic": b["aesthetic"], "shots": shots,
+            "shot_labels": {k: SHOT_TYPES[k]["label"] for k in shots
+                            if k in SHOT_TYPES},
+            "read": len(readings), "failed": failed, "brand": b}
 
 
 def read_product_shots(email: str, product_id: str, limit: int = 3) -> dict:
@@ -369,6 +473,10 @@ def build_brief(brand: dict, product: dict, material: dict, angle: str = "") -> 
         # it outranks the preset look, because a seller's own five pictures
         # describe their taste far better than one of five dropdown options.
         "aesthetic": brand.get("aesthetic") or "",
+        # And the per-shot-type readings, so a post asking for an unboxing
+        # shot is shot like their unboxing references rather than like the
+        # average of everything they uploaded.
+        "aesthetic_shots": brand.get("aesthetic_shots") or {},
         # What the AI actually saw in this product's photographs.
         "seen": material.get("seen") or "",
         "about": brand.get("about") or "",
@@ -385,7 +493,8 @@ def build_brief(brand: dict, product: dict, material: dict, angle: str = "") -> 
     }
 
 
-def image_prompt(brief: dict, guidance: dict | None = None) -> str:
+def image_prompt(brief: dict, guidance: dict | None = None,
+                 has_reference: bool = False) -> str:
     """The instruction the image model gets.
 
     Three sources stack, in decreasing authority:
@@ -401,7 +510,15 @@ def image_prompt(brief: dict, guidance: dict | None = None) -> str:
          scenes" reel cover are not the same photograph.
 
     The preset `look` is the FALLBACK, used only when no references have been
-    read. It is a reasonable default, not the goal."""
+    read. It is a reasonable default, not the goal.
+
+    `has_reference` says whether the seller's own photograph is the starting
+    point. It changes exactly one thing, and it matters: a blanket "no text, no
+    logo" told the model to WIPE the brand name that is embossed, printed or
+    stitched onto the product itself. A wallet whose reference photo carries
+    the maker's name came back blank, which reads as a counterfeit of the
+    seller's own product. Re-shooting keeps whatever is physically on the item
+    exactly as it is; only ADDED text and watermarks are refused."""
     g = guidance or {}
     bits = [f"Instagram-ready photograph for a product: {brief['product_name']}."]
 
@@ -418,6 +535,21 @@ def image_prompt(brief: dict, guidance: dict | None = None) -> str:
         bits.append(f"Style: {brief['look_prompt']}.")
         if brief.get("palette"):
             bits.append(f"Colour palette: {brief['palette']}.")
+
+    # The seller's own reference for THIS kind of photograph, when they have
+    # one. This is what stops every post in a week looking like the same
+    # picture: an unboxing beat is shot like their unboxing references, a
+    # worn-in-the-street beat like their street references.
+    shot_type = g.get("shot_type") or ""
+    ref_shots = brief.get("aesthetic_shots") or {}
+    if shot_type and ref_shots.get(shot_type):
+        spec = SHOT_TYPES.get(shot_type, {})
+        bits.append(f"This is a {spec.get('label', shot_type)} shot "
+                    f"({spec.get('hint', '')}). Their own reference for this kind "
+                    f"of photograph reads: {ref_shots[shot_type]}")
+    elif shot_type and shot_type in SHOT_TYPES:
+        spec = SHOT_TYPES[shot_type]
+        bits.append(f"This is a {spec['label']} shot: {spec['hint']}.")
 
     if g.get("shot"):
         bits.append(f"This particular shot: {g['shot']}")
@@ -441,8 +573,19 @@ def image_prompt(brief: dict, guidance: dict | None = None) -> str:
     if brief.get("avoid"):
         bits.append(f"Avoid: {brief['avoid']}.")
 
-    bits.append("Photorealistic, sharp, well-composed. No text, no logo, no "
-                "watermark, no hands unless they look natural.")
+    if has_reference:
+        # The product's OWN branding is part of the product. Erasing it was the
+        # bug; the model is told to reproduce it rather than to invent one.
+        bits.append("Keep the product itself exactly as it is in the reference, "
+                    "including any brand name, logo, monogram, stitching or "
+                    "lettering on it — reproduce those markings exactly where "
+                    "and as they appear, same spelling, same placement. Do not "
+                    "add any new text, logo or watermark of your own.")
+        bits.append("Photorealistic, sharp, well-composed. No hands unless they "
+                    "look natural.")
+    else:
+        bits.append("Photorealistic, sharp, well-composed. No text, no logo, no "
+                    "watermark, no hands unless they look natural.")
     return " ".join(bits)
 
 
@@ -489,15 +632,20 @@ ASPECT_FOR_FORMAT = {
 
 
 def guidance_for(pillar: str = "", fmt: str = "", occasion_key: str = "",
-                 brand_look: str = "") -> dict:
+                 brand_look: str = "", shot_type: str = "") -> dict:
     """Translate a Social Media Manager slot into camera direction.
 
     occasion_key is the festival's slug in playbook.FESTIVALS (e.g.
     "ganesh_chaturthi"), the same table Social already writes captions from --
     so a post's photo and its caption agree on which festival's colours and
-    motifs they mean, instead of the caption knowing and the photo not."""
+    motifs they mean, instead of the caption knowing and the photo not.
+
+    shot_type is the archetype this beat of the week is (see SHOT_TYPES) --
+    an unboxing, a worn-in-use shot, a macro detail. It is what stops seven
+    posts in a week from being seven versions of the same photograph."""
     g = {"shot": SHOT_FOR_PILLAR.get(pillar or "", ""),
          "aspect": ASPECT_FOR_FORMAT.get(fmt or "", ""),
+         "shot_type": shot_type or "",
          "pillar": pillar or "", "format": fmt or ""}
     if occasion_key:
         from backend.core import playbook
@@ -680,7 +828,7 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     per-image cost) instead of going dead until the next day.
     """
     from backend.core import aiprovider
-    prompt = image_prompt(brief, guidance)
+    prompt = image_prompt(brief, guidance, has_reference=bool(reference))
     eng = image_engine()
     content = None
     from_ref = False
@@ -691,8 +839,14 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
             if reference:
                 content = aiprovider.restyle_image(
                     reference[0], prompt, strength,
-                    negative="different product, changed pattern, extra items, text, "
-                             "watermark, distorted proportions")
+                    # "text" and "watermark" used to sit in this list, which is
+                    # the other half of why the wallet came back blank: it told
+                    # the model to suppress the brand name embossed on the item
+                    # itself. What we actually want negated is the brand being
+                    # LOST or rewritten, not the brand existing.
+                    negative="different product, changed pattern, extra items, "
+                             "missing brand name, erased logo, altered lettering, "
+                             "misspelled brand, added watermark, distorted proportions")
             else:
                 content = aiprovider.generate_image(prompt)
         except Exception as e:  # noqa: BLE001 — aiprovider already logs; fall through below
@@ -734,7 +888,12 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
         raise RuntimeError("No image engine is connected on this server, so "
                            "images cannot be generated. Your own photos still work.")
 
-    content = _stamp_brand(content, brief.get("brand_name") or "")
+    # The corner tag is for INVENTED pictures only. A re-shoot starts from the
+    # seller's own photograph, so the product already carries its real brand
+    # marking and the prompt above now preserves it — stamping a second name
+    # into the corner would show the brand twice, once real and once pasted on.
+    if not from_ref:
+        content = _stamp_brand(content, brief.get("brand_name") or "")
     saved = media.save(f"{uuid.uuid4().hex}.png", content, email)
     return {"url": saved["url"], "durable": saved["durable"], "generated": True,
             "prompt": prompt, "engine": used_engine, "free": used_free,
@@ -812,7 +971,7 @@ def generate_image_only(email: str, product_id: str, pillar: str = "",
                         fmt: str = "", angle: str = "",
                         use_reference: bool = True,
                         strength: float | None = None,
-                        occasion_key: str = "") -> dict:
+                        occasion_key: str = "", shot_type: str = "") -> dict:
     """Make a picture and nothing else.
 
     Separate from make_post because the two are wanted at different moments: a
@@ -835,7 +994,7 @@ def generate_image_only(email: str, product_id: str, pillar: str = "",
     material = get_material(email, product_id)
     brief = build_brief(brand, product, material, angle)
     ref = _reference_shot(email, product, material) if use_reference else None
-    guidance = guidance_for(pillar, fmt, occasion_key, brand.get("look"))
+    guidance = guidance_for(pillar, fmt, occasion_key, brand.get("look"), shot_type)
     img = generate_image(email, brief, guidance, ref, strength)
     return {**img, "product_id": product_id,
             "product_name": product.get("name"),
@@ -843,6 +1002,11 @@ def generate_image_only(email: str, product_id: str, pillar: str = "",
             "had_reference": bool(ref),
             "used_aesthetic": bool(brief.get("aesthetic")),
             "used_seen": bool(brief.get("seen")),
+            "shot_type": shot_type or "",
+            # True when the picture was shot against the seller's OWN reference
+            # for this kind of photograph, rather than the brand average.
+            "used_shot_reference": bool(shot_type and
+                                        (brief.get("aesthetic_shots") or {}).get(shot_type)),
             "festival": guidance.get("festival", "")}
 
 

@@ -399,6 +399,9 @@ class StudioImageOnlyBody(BaseModel):
     post_id: str | None = ""
     use_reference: bool = True
     strength: float | None = None
+    # Which archetype of photograph this beat wants (studio.SHOT_TYPES). Sent
+    # by the editor; also resolved from the post when a post_id is given.
+    shot_type: str | None = ""
 
 
 class SocialAttachBody(BaseModel):
@@ -2171,6 +2174,10 @@ async def smart_upload(kind: str, files: list[UploadFile] = File(...),
                 "columns": [str(c) for c in combined.columns],
                 "roles": list(mapper.ROLE_KEYWORDS), "required": ["date", "amount"],
                 "suggested_mapping": suggested, "existing_rows": existing_rows,
+                # Named when we recognised the export outright, so the mapping
+                # screen can say "this is a Shopify export, here is the whole
+                # mapping" instead of showing column-by-column guesses.
+                "preset": suggested.get("_preset_name", ""),
                 "preview": combined.head(6).astype(str).values.tolist()}
     else:
         combined = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else dfs[0]
@@ -4038,7 +4045,9 @@ def social_regenerate_script(body: SocialCloneBody,
     occasion = ({"name": post["occasion"], "days_away": post.get("occasion_days") or 0}
                if post.get("occasion") else None)
     script = social.write_reel_script(email, product, post.get("pillar") or "detail",
-                                      occasion=occasion)
+                                      occasion=occasion,
+                                      shot_type=post.get("shot_type") or "",
+                                      theme=post.get("theme_note") or "")
     return social.update_post(email, body.post_id, {"script": script})
 
 
@@ -4132,17 +4141,22 @@ def studio_image_only(body: StudioImageOnlyBody,
     to know it was a Ganesh Chaturthi post at all; only the caption did."""
     email = require_user(authorization)
     occasion_key = ""
+    shot_type = body.shot_type or ""
     if body.post_id:
         post = social.get_post(email, body.post_id)
         if post:
             occasion_key = post.get("occasion_key") or ""
+            # The beat already knows what kind of photograph it is; an explicit
+            # shot_type on the request still wins, so the editor can override.
+            shot_type = shot_type or post.get("shot_type") or ""
     try:
         img = studio.generate_image_only(email, body.product_id,
                                          body.pillar or "", body.format or "",
                                          body.angle or "",
                                          use_reference=body.use_reference,
                                          strength=body.strength,
-                                         occasion_key=occasion_key)
+                                         occasion_key=occasion_key,
+                                         shot_type=shot_type)
     except (RuntimeError, ValueError) as e:
         raise HTTPException(400, str(e))
     if body.post_id:
