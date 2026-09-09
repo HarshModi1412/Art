@@ -5329,9 +5329,32 @@ async function decidePost(id, newState) {
   } catch (e) { toast(e.message); }
 }
 
+// A reel has no single photograph that IS the video, so it never gets the
+// image-generation buttons -- it gets a shot list to film from instead.
+// This holds the script being edited for whichever reel post is currently
+// open, mirroring the _wbRows pattern used for the win-back table.
+let _smScript = { beats: [], voiceover: "", caption_hint: "" };
+
 function openSocialEditor(post) {
   const c = post.caption || {};
-  openModal(`${esc(shortWhen(post.scheduled_at))} — ${esc(post.product_name || "")}`, `
+  const isReel = post.format === "reel";
+  _smScript = post.script ? {
+    beats: (post.script.beats || []).map((b) => ({ ...b })),
+    voiceover: post.script.voiceover || "",
+    caption_hint: post.script.caption_hint || "",
+  } : { beats: [], voiceover: "", caption_hint: "" };
+
+  const topHtml = isReel ? `
+    <div class="sm-ed-script-block">
+      <div class="sm-ed-meta">
+        <div><b>${esc(post.pillar_name || "")}</b> · Reel
+          ${post.occasion ? `<span class="sm-occ">${esc(post.occasion)}</span>` : ""}</div>
+      </div>
+      <p class="sm-hint" style="margin:8px 0 12px;">A reel is filmed, not generated —
+        this is the shot list to film from: a few seconds each, what the camera does,
+        what's on screen.</p>
+      <div id="smEdScript"></div>
+    </div>` : `
     <div class="sm-ed-top">
       <div class="sm-ed-shot" id="smEdShot">
         ${post.image_url
@@ -5351,7 +5374,10 @@ function openSocialEditor(post) {
           <b>Invent</b> draws from the description instead: fine for a backdrop,
           not for showing a customer what they are buying.</p>
       </div>
-    </div>
+    </div>`;
+
+  openModal(`${esc(shortWhen(post.scheduled_at))} — ${esc(post.product_name || "")}`, `
+    ${topHtml}
     <label class="fld"><span>Hook <em id="smHookCount">${(c.hook || "").length} / 125</em></span>
       <textarea id="smHook" rows="2">${esc(c.hook || "")}</textarea></label>
     <p class="sm-hint">Instagram cuts the caption at 125 characters. Everything past
@@ -5383,6 +5409,8 @@ function openSocialEditor(post) {
       <button class="btn approve" id="smApprove">Approve</button>
       <button class="btn primary" id="smSave">Save</button>
     </div>`);
+
+  if (isReel) renderScriptSection(post);
 
   const gen = async (useRef) => {
     const btns = [$("smGenRef"), $("smGenNew")].filter(Boolean);
@@ -5430,14 +5458,95 @@ function openSocialEditor(post) {
   };
   $("smSave").onclick = async () => {
     const tags = ($("smTags").value || "").split(/\s+/).filter(Boolean).slice(0, 5);
+    const patch = {
+      hook: $("smHook").value, body: $("smBody").value, question: $("smQ").value,
+      cta: $("smCta").value, tags, scheduled_at: $("smWhen").value,
+    };
+    if (isReel) {
+      patch.script = {
+        beats: _smScript.beats.filter((b) => (b.shot || "").trim() || (b.on_screen_text || "").trim()),
+        voiceover: _smScript.voiceover, caption_hint: _smScript.caption_hint,
+      };
+    }
     try {
-      await api("/api/social/post", { method: "POST", json: { post_id: post.id, patch: {
-        hook: $("smHook").value, body: $("smBody").value, question: $("smQ").value,
-        cta: $("smCta").value, tags, scheduled_at: $("smWhen").value } } });
+      await api("/api/social/post", { method: "POST", json: { post_id: post.id, patch } });
       closeModal();
       await afterEdit();
     } catch (e) { toast(e.message); }
   };
+}
+
+/* The reel shot-list editor: an empty/generate state for reels planned
+   before scripts existed, and an editable beat list once one is written --
+   same shape as the win-back table (_wbRows / renderWinbackTable), just
+   scoped to _smScript instead. */
+function renderScriptSection(post) {
+  const el = $("smEdScript");
+  if (!el) return;
+  const has = _smScript.beats.length > 0;
+  el.innerHTML = has ? `
+    <div class="sm-script-rows" id="smBeats"></div>
+    <button class="btn ghost sm" id="smAddBeat">${sic("plus")}Add beat</button>
+    <label class="fld" style="margin-top:12px;"><span>Voiceover <em>optional</em></span>
+      <textarea id="smVoiceover" rows="2">${esc(_smScript.voiceover || "")}</textarea></label>
+    <div style="margin-top:6px;">
+      <button class="btn ghost sm" id="smRegenScript">${sic("spark")}Regenerate script</button>
+    </div>` : `
+    <div class="sm-ed-noimg" style="height:auto;padding:22px 10px;">
+      ${sic("spark")}<span>No shot list yet — this reel was planned before scripts existed.</span>
+    </div>
+    <button class="btn primary sm" id="smGenScript" style="margin-top:10px;">${sic("spark")}Generate script</button>`;
+
+  if (has) {
+    renderBeatRows();
+    $("smAddBeat").onclick = () => {
+      _smScript.beats.push({ sec: "", shot: "", on_screen_text: "" });
+      renderBeatRows();
+    };
+    $("smVoiceover").onchange = (e) => { _smScript.voiceover = e.target.value; };
+    $("smRegenScript").onclick = () => generateScript(post, $("smRegenScript"));
+  } else {
+    $("smGenScript").onclick = () => generateScript(post, $("smGenScript"));
+  }
+}
+
+function renderBeatRows() {
+  const el = $("smBeats");
+  if (!el) return;
+  el.innerHTML = _smScript.beats.map((b, i) => `
+    <div class="sm-beat-row" data-r="${i}">
+      <input class="sm-beat-sec" data-k="sec" value="${esc(b.sec || "")}" placeholder="0-3s" />
+      <input class="sm-beat-shot" data-k="shot" value="${esc(b.shot || "")}" placeholder="Camera / shot" />
+      <input class="sm-beat-osd" data-k="on_screen_text" value="${esc(b.on_screen_text || "")}" placeholder="On-screen text" />
+      <button class="btn ghost tiny" data-del="${i}" title="Remove beat">${sic("close")}</button>
+    </div>`).join("") || `<p class="muted" style="margin:6px 0;">No beats yet — add one below.</p>`;
+  el.querySelectorAll("input").forEach((inp) => inp.onchange = (e) => {
+    const row = e.target.closest("[data-r]");
+    _smScript.beats[+row.dataset.r][e.target.dataset.k] = e.target.value;
+  });
+  el.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => {
+    _smScript.beats.splice(+b.dataset.del, 1);
+    renderBeatRows();
+  });
+}
+
+async function generateScript(post, btn) {
+  const was = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = sic("spark") + "Writing…";
+  try {
+    const updated = await api("/api/social/regenerate-script", { method: "POST", json: { post_id: post.id } });
+    const sc = updated.script || {};
+    _smScript = {
+      beats: (sc.beats || []).map((b) => ({ ...b })),
+      voiceover: sc.voiceover || "", caption_hint: sc.caption_hint || "",
+    };
+    renderScriptSection(post);
+    toast("Script written.");
+    _socialData = await api("/api/social");
+  } catch (e) {
+    toast(e.message, 6000);
+    btn.disabled = false; btn.innerHTML = was;
+  }
 }
 
 async function openShootList() {

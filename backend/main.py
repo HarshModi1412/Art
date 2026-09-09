@@ -4020,6 +4020,28 @@ def social_regenerate(body: SocialCloneBody,
         "tags": cap.get("tags")})
 
 
+@app.post("/api/social/regenerate-script")
+def social_regenerate_script(body: SocialCloneBody,
+                             authorization: str | None = Header(default=None)):
+    """Rewrite one reel's shot list without touching the rest of the week.
+
+    Also the way a reel planned before scripts existed gets one: the editor
+    offers this same action whenever a reel post's script is empty."""
+    email = require_user(authorization)
+    post = next((p for p in social.week(email) if p.get("id") == body.post_id), None)
+    if not post:
+        raise HTTPException(404, "Post not found")
+    if post.get("format") != "reel":
+        raise HTTPException(400, "Only reel-format posts get a script.")
+    cat = {p["id"]: p for p in _social_catalogue(email)}
+    product = cat.get(post.get("product_id")) or {"name": post.get("product_name")}
+    occasion = ({"name": post["occasion"], "days_away": post.get("occasion_days") or 0}
+               if post.get("occasion") else None)
+    script = social.write_reel_script(email, product, post.get("pillar") or "detail",
+                                      occasion=occasion)
+    return social.update_post(email, body.post_id, {"script": script})
+
+
 @app.post("/api/social/clone")
 def social_clone(body: SocialCloneBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
@@ -4104,14 +4126,23 @@ def studio_image_only(body: StudioImageOnlyBody,
     """Generate a picture and nothing else — no caption rewritten over the top.
 
     When `post_id` is given the image is attached to that planned post, so it
-    shows up in the Social Media Manager's week."""
+    shows up in the Social Media Manager's week -- and, if the post is tied
+    to a festival, that festival's colours and motifs are worked into the
+    photo too (see studio.guidance_for). Without this the picture had no way
+    to know it was a Ganesh Chaturthi post at all; only the caption did."""
     email = require_user(authorization)
+    occasion_key = ""
+    if body.post_id:
+        post = social.get_post(email, body.post_id)
+        if post:
+            occasion_key = post.get("occasion_key") or ""
     try:
         img = studio.generate_image_only(email, body.product_id,
                                          body.pillar or "", body.format or "",
                                          body.angle or "",
                                          use_reference=body.use_reference,
-                                         strength=body.strength)
+                                         strength=body.strength,
+                                         occasion_key=occasion_key)
     except (RuntimeError, ValueError) as e:
         raise HTTPException(400, str(e))
     if body.post_id:

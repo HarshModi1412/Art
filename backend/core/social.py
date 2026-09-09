@@ -386,20 +386,18 @@ def _fallback_caption(product: dict, pillar: dict, settings: dict,
             "generated_by": "template"}
 
 
-def write_caption(email: str, product: dict, pillar_id: str,
-                  angle: str = "", occasion: dict | None = None,
-                  playbook: dict | None = None, beat: dict | None = None) -> dict:
-    s = get_settings(email)
-    pillar = PILLAR_BY_ID.get(pillar_id) or PILLARS[0]
-    facts = {k: product.get(k) for k in
-             ("name", "price", "description", "fabric", "sizes", "care", "stock", "category")
-             if product.get(k)}
+def _occasion_context(occasion: dict | None = None, playbook: dict | None = None,
+                      beat: dict | None = None) -> str:
+    """The festival facts, handed to the model as FACTS rather than left for it
+    to invent. Shared by captions, reel scripts and (via studio.guidance_for)
+    photos, so a post's picture, caption and script all agree on which
+    festival they mean and say it the same way -- rather than, say, a caption
+    that knows it's for Ganesh Chaturthi and a photo that has no idea."""
     occ = ""
     if playbook:
-        # The festival knowledge is handed over as FACTS, not left to the model
-        # to remember. A model asked to "write a Diwali post" produces a diya and
-        # the words "festival of lights"; a model told what people actually buy,
-        # who they are buying for, and what not to say produces something a
+        # A model asked to "write a Diwali post" produces a diya and the words
+        # "festival of lights"; a model told what people actually buy, who
+        # they are buying for, and what not to say produces something a
         # seller can post.
         occ += (f"FESTIVAL: {playbook['festival']}. {playbook['core']}\n"
                 f"WHO IS BUYING: {playbook['grammar']}\n"
@@ -418,6 +416,18 @@ def write_caption(email: str, product: dict, pillar_id: str,
                f"Write it as a {occasion['name']} post — mention the occasion "
                f"naturally, and give a reason to buy NOW rather than later. "
                f"Do not invent a discount.\n")
+    return occ
+
+
+def write_caption(email: str, product: dict, pillar_id: str,
+                  angle: str = "", occasion: dict | None = None,
+                  playbook: dict | None = None, beat: dict | None = None) -> dict:
+    s = get_settings(email)
+    pillar = PILLAR_BY_ID.get(pillar_id) or PILLARS[0]
+    facts = {k: product.get(k) for k in
+             ("name", "price", "description", "fabric", "sizes", "care", "stock", "category")
+             if product.get(k)}
+    occ = _occasion_context(occasion, playbook, beat)
     user = (f"Pillar: {pillar['name']} ({pillar['type']}).\n"
             f"{occ}"
             f"Angle: {angle or pillar['prompts'][0]}\n"
@@ -434,6 +444,111 @@ def write_caption(email: str, product: dict, pillar_id: str,
         return {**fb, "provider": "template", "free": True, "error": res.get("error", "")}
     parsed = _parse_caption(res["text"])
     if not parsed["hook"]:
+        return {**fb, "provider": "template", "free": True,
+                "error": "model did not return the expected shape"}
+    return {**parsed, "provider": res["provider"], "free": res["free"], "error": ""}
+
+
+# --------------------------------------------------------------- reel scripts
+#
+# A reel is the one format Studio cannot generate an image for -- there is no
+# single photograph that IS a 30-second video. Offering "Invent a picture" on
+# a reel slot used to hand the seller a still image with nowhere to go. What
+# a seller filming on their own phone actually needs instead is a short shot
+# list: what to film, in what order, with what text on screen -- something
+# they can act on directly with no crew and no edit rig.
+
+def _script_system(settings: dict) -> str:
+    lang = LANGUAGES.get(settings.get("language") or "hinglish")
+    return f"""You write Instagram Reel scripts for a small Indian D2C seller who films on their own phone -- no crew, no studio lights, no editor.
+
+Write on-screen text and voiceover in {lang}.
+
+A script is 4 to 6 beats. Each beat is ONE camera instruction a seller can actually do alone -- pick the product up, turn it, hold it next to something, walk somewhere. Never call for a second person, a tripod rig, or a shot that needs more than a phone in one hand.
+
+Hard rules:
+- Every beat names the ACTION, not the mood: "Turn the wallet over to show the stitching" beats "show the craftsmanship".
+- On-screen text is short -- 3 to 6 words a beat, not a caption pasted onto the screen.
+- Voiceover is optional. Leave it blank if text-and-music carries the reel better -- most reels under 5K followers do.
+- Never invent a discount, a price, a delivery time or a material you were not given.
+- The last beat is always the one clear thing to do (DM, link, visit).
+
+Return exactly this, nothing else, one beat per line:
+BEAT: <seconds e.g. 0-3> | <camera instruction> | <on-screen text>
+BEAT: <seconds> | <camera instruction> | <on-screen text>
+VOICEOVER: <optional narration, or leave blank>
+CAPTION HINT: <one line the caption for this reel should mention>"""
+
+
+def _parse_script(text: str) -> dict:
+    beats, voiceover, hint = [], "", ""
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        m = re.match(r"^BEAT\s*:\s*(.*)$", line, re.I)
+        if m:
+            parts = [p.strip() for p in m.group(1).split("|")]
+            if len(parts) >= 2:
+                beats.append({"sec": parts[0] if len(parts) > 0 else "",
+                              "shot": parts[1] if len(parts) > 1 else "",
+                              "on_screen_text": parts[2] if len(parts) > 2 else ""})
+            continue
+        m = re.match(r"^VOICEOVER\s*:\s*(.*)$", line, re.I)
+        if m:
+            voiceover = m.group(1).strip()
+            continue
+        m = re.match(r"^CAPTION\s*HINT\s*:\s*(.*)$", line, re.I)
+        if m:
+            hint = m.group(1).strip()
+    return {"beats": beats[:6], "voiceover": voiceover, "caption_hint": hint}
+
+
+def _fallback_script(product: dict, occasion: dict | None = None) -> dict:
+    """No AI configured, or every provider down -- still a filmable script,
+    not an error message. Festival-aware when there's an occasion in hand, the
+    same way _fallback_caption is."""
+    name = product.get("name") or "this piece"
+    fest = (occasion or {}).get("name")
+    beats = [
+        {"sec": "0-2", "shot": f"Hold {name} up straight to camera, good light",
+         "on_screen_text": f"{name}" + (f" for {fest}" if fest else "")},
+        {"sec": "2-5", "shot": "Turn it slowly to show the material and finish",
+         "on_screen_text": "Look closer"},
+        {"sec": "5-8", "shot": "Show it in use / worn / carried, an ordinary setting",
+         "on_screen_text": f"Ready for {fest}" if fest else "Everyday, made well"},
+        {"sec": "8-10", "shot": "Hold it back up to camera to close", "on_screen_text": "DM to order"},
+    ]
+    return {"beats": beats, "voiceover": "", "caption_hint": "", "generated_by": "template"}
+
+
+def write_reel_script(email: str, product: dict, pillar_id: str,
+                      angle: str = "", occasion: dict | None = None,
+                      playbook: dict | None = None, beat: dict | None = None) -> dict:
+    """The one thing a seller presses for a reel slot instead of an image
+    button. Uses the same festival facts as write_caption (_occasion_context)
+    so the reel and its caption are never telling two different stories."""
+    s = get_settings(email)
+    pillar = PILLAR_BY_ID.get(pillar_id) or PILLARS[0]
+    seconds = FORMATS["reel"]["target_seconds"]
+    occ = _occasion_context(occasion, playbook, beat)
+    facts = {k: product.get(k) for k in
+             ("name", "price", "description", "fabric", "sizes", "care", "stock", "category")
+             if product.get(k)}
+    user = (f"Pillar: {pillar['name']} ({pillar['type']}).\n"
+            f"{occ}"
+            f"Angle: {angle or pillar['prompts'][0]}\n"
+            f"Target length: about {seconds} seconds.\n"
+            f"Product facts (use only these):\n"
+            + "\n".join(f"- {k}: {v}" for k, v in facts.items()))
+
+    fb = _fallback_script(product, occasion)
+    res = aiprovider.generate(_script_system(s), user, sensitivity="public",
+                              max_tokens=500, temperature=0.8, fallback="")
+    if not res["text"]:
+        return {**fb, "provider": "template", "free": True, "error": res.get("error", "")}
+    parsed = _parse_script(res["text"])
+    if not parsed["beats"]:
         return {**fb, "provider": "template", "free": True,
                 "error": "model did not return the expected shape"}
     return {**parsed, "provider": res["provider"], "free": res["free"], "error": ""}
@@ -576,9 +691,22 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
 
     # Best slots from 9.6M posts: Wed and Thu strongest, evenings 6-11pm,
     # Fri/Sat weakest. Local time — no India-specific adjustment needed.
+    #
+    # Which WEEKDAY each slot wants, strongest first (Python's weekday(): Monday
+    # is 0), so: Wed, Thu, Mon, Fri, Tue, Sat.
+    #
+    # BUG THIS FIXES: these used to be fixed day-offsets from the planning date
+    # — [2, 3, 0, 4, 1, 5] — which produced the intended pattern ONLY if the
+    # seller happened to press "Plan my week" on a Monday. Plan on a Wednesday
+    # and offset 2 put the strongest slot on Friday, one of the two weakest days
+    # of the week; the whole table silently rotated by however far the planning
+    # day was from Monday. The reach data is about weekdays, so the weekday is
+    # what this anchors to now: each slot claims the next occurrence of its
+    # weekday on or after the planning date. That is always 0-6 days out, so
+    # every post still lands inside the week being planned.
+    best_weekdays = [2, 3, 0, 4, 1, 5]
     best_hours = [18, 12, 19, 9, 20, 18]
-    day_offsets = [2, 3, 0, 4, 1, 5]
-    window_end = start + timedelta(days=max(day_offsets[:len(shape)] or [6]) + 1)
+    window_end = start + timedelta(days=6)
 
     if replace:
         keep = []
@@ -597,15 +725,32 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
         rows = keep
 
     made = []
+    now = datetime.now()
     for i, slot in enumerate(shape):
-        when_day = start + timedelta(days=day_offsets[i % len(day_offsets)])
+        offset = (best_weekdays[i % len(best_weekdays)] - start.weekday()) % 7
+        when = datetime.combine(start + timedelta(days=offset),
+                                datetime.min.time()).replace(
+            hour=best_hours[i % len(best_hours)])
+        # Planning at 9pm on a Wednesday should not hand the seller a post that
+        # was already due at 6pm. Only the slot whose weekday IS the planning
+        # day can fall in the past (every other offset is at least a full day
+        # out), so nudging that one to tomorrow keeps it inside the planned week
+        # rather than being born overdue.
+        if when < now:
+            when += timedelta(days=1)
+        when_day = when.date()
         occasion = occasion_for(when_day, s.get("category") or "")
         product = _pick_product(pool, i, occasion, len(shape))
         cap = write_caption(email, product, slot["pillar"],
                             angle=(f"tie it to {occasion['name']}" if occasion else ""),
                             occasion=occasion)
-        when = datetime.combine(when_day, datetime.min.time()).replace(
-            hour=best_hours[i % len(best_hours)])
+        # A reel gets a shot list instead of an image button -- there's no
+        # single photograph that IS the video, so generating one at plan time
+        # (like the caption) is what a seller filming later actually needs.
+        script = (write_reel_script(email, product, slot["pillar"],
+                                    angle=(f"tie it to {occasion['name']}" if occasion else ""),
+                                    occasion=occasion)
+                 if slot["format"] == "reel" else None)
         post = {
             "id": secrets.token_hex(6),
             "created_at": _now(),
@@ -616,9 +761,14 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
             "format": slot["format"],
             "occasion": (occasion or {}).get("name", ""),
             "occasion_days": (occasion or {}).get("days_away"),
+            # The festival's slug in playbook.FESTIVALS, e.g. "ganesh_chaturthi"
+            # -- lets a generated image pull the same festival's colours and
+            # motifs the caption already uses (see studio.guidance_for).
+            "occasion_key": (occasion or {}).get("key", ""),
             "caption": cap,
             "text": assemble(cap),
             "checks": caption_check(cap, s),
+            "script": script,
             "scheduled_at": when.isoformat(timespec="minutes"),
             "state": "draft",
             "provider": cap.get("provider", "template"),
@@ -770,6 +920,16 @@ def update_post(email: str, post_id: str, patch: dict) -> dict:
                 p["scheduled_at"] = str(patch["scheduled_at"])[:20]
             if "format" in (patch or {}) and patch["format"] in FORMATS:
                 p["format"] = patch["format"]
+            if "script" in (patch or {}):
+                sc = patch["script"] or {}
+                beats = [{"sec": str(b.get("sec", ""))[:20],
+                          "shot": str(b.get("shot", ""))[:200],
+                          "on_screen_text": str(b.get("on_screen_text", ""))[:120]}
+                         for b in (sc.get("beats") or [])
+                         if b.get("shot") or b.get("on_screen_text")][:8]
+                p["script"] = {"beats": beats,
+                               "voiceover": str(sc.get("voiceover", ""))[:600],
+                               "caption_hint": str(sc.get("caption_hint", ""))[:200]}
             _save_posts(email, rows)
             return p
     return {"error": "not found"}
@@ -905,11 +1065,12 @@ def start_campaign(email: str, festival_key: str, catalogue: list[dict],
             continue                       # do not schedule a post into the past
         product = pool[i % len(pool)]
         angle = pb["angles"][i % len(pb["angles"])]
+        occ = {"name": pb["festival"], "days_away": beat["days_before"]}
         cap = write_caption(email, product, _beat_pillar(beat["key"]),
-                            angle=angle,
-                            occasion={"name": pb["festival"],
-                                      "days_away": beat["days_before"]},
-                            playbook=pb, beat=beat)
+                            angle=angle, occasion=occ, playbook=pb, beat=beat)
+        script = (write_reel_script(email, product, _beat_pillar(beat["key"]),
+                                    angle=angle, occasion=occ, playbook=pb, beat=beat)
+                 if beat["format"] == "reel" else None)
         when = datetime.combine(date.fromisoformat(beat["date"]),
                                 datetime.min.time()).replace(hour=18)
         post = {
@@ -920,11 +1081,13 @@ def start_campaign(email: str, festival_key: str, catalogue: list[dict],
             "pillar_name": PILLAR_BY_ID[_beat_pillar(beat["key"])]["name"],
             "format": beat["format"],
             "occasion": pb["festival"],
+            "occasion_key": festival_key,
             "campaign": festival_key,
             "beat": beat["key"], "beat_label": beat["label"],
             "job": beat["job"], "beat_why": beat["why"],
             "caption": cap, "text": assemble(cap),
             "checks": caption_check(cap, s),
+            "script": script,
             "scheduled_at": when.isoformat(timespec="minutes"),
             "state": "draft", "provider": cap.get("provider", "template"),
             "image_url": "", "image_generated": False, "image_prompt": "",

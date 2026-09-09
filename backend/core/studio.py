@@ -424,6 +424,15 @@ def image_prompt(brief: dict, guidance: dict | None = None) -> str:
     elif brief.get("angle"):
         bits.append(f"This shot should show: {brief['angle']}.")
 
+    if g.get("festival"):
+        colours = ", ".join(g.get("festival_colours") or [])
+        motifs = ", ".join(g.get("festival_motifs") or [])
+        bits.append(f"This is for {g['festival']}: {g.get('festive_intensity', '')}."
+                    + (f" Work in these colours where they fit naturally: {colours}."
+                       if colours else "")
+                    + (f" A motif from this festival may appear, if it fits without "
+                       f"crowding the product: {motifs}." if motifs else ""))
+
     if g.get("aspect"):
         bits.append(f"Composition: {g['aspect']}.")
     else:
@@ -435,6 +444,25 @@ def image_prompt(brief: dict, guidance: dict | None = None) -> str:
     bits.append("Photorealistic, sharp, well-composed. No text, no logo, no "
                 "watermark, no hands unless they look natural.")
     return " ".join(bits)
+
+
+# How hard a generated photo should lean into a festival, by brand LOOK.
+#
+# The bug this exists to fix: image_prompt() had no idea a post was for
+# Ganesh Chaturthi at all -- guidance_for() only ever carried pillar and
+# format, never the occasion, so every "festive" post got exactly the same
+# picture a plain product post would have. Threading the festival through is
+# only half the fix, though -- a "Dark & luxurious" wallet brand and a
+# "Bright & playful" jewellery brand should not get the same DOSE of diyas
+# and marigold for the same festival. This is the dial: a subtler brand gets
+# one tasteful detail, a bolder one gets the full colour-and-motif treatment.
+FESTIVE_INTENSITY = {
+    "clean":     "one small, tasteful festive detail near the product -- not a themed backdrop",
+    "warm":      "a few natural festive touches in frame -- warm light, a motif placed casually, nothing staged",
+    "luxe":      "restrained festive luxury -- gold light and a single motif, never busy or bright",
+    "bright":    "the product fully styled into the festival's colours and motifs",
+    "editorial": "a styled festival set, shot like a magazine feature rather than a greeting card",
+}
 
 
 # What each social pillar and format wants out of a picture. The Social Media
@@ -460,11 +488,27 @@ ASPECT_FOR_FORMAT = {
 }
 
 
-def guidance_for(pillar: str = "", fmt: str = "") -> dict:
-    """Translate a Social Media Manager slot into camera direction."""
-    return {"shot": SHOT_FOR_PILLAR.get(pillar or "", ""),
-            "aspect": ASPECT_FOR_FORMAT.get(fmt or "", ""),
-            "pillar": pillar or "", "format": fmt or ""}
+def guidance_for(pillar: str = "", fmt: str = "", occasion_key: str = "",
+                 brand_look: str = "") -> dict:
+    """Translate a Social Media Manager slot into camera direction.
+
+    occasion_key is the festival's slug in playbook.FESTIVALS (e.g.
+    "ganesh_chaturthi"), the same table Social already writes captions from --
+    so a post's photo and its caption agree on which festival's colours and
+    motifs they mean, instead of the caption knowing and the photo not."""
+    g = {"shot": SHOT_FOR_PILLAR.get(pillar or "", ""),
+         "aspect": ASPECT_FOR_FORMAT.get(fmt or "", ""),
+         "pillar": pillar or "", "format": fmt or ""}
+    if occasion_key:
+        from backend.core import playbook
+        fest = playbook.FESTIVALS.get(occasion_key)
+        if fest:
+            g["festival"] = fest["name"]
+            g["festival_colours"] = fest.get("colours", [])[:4]
+            g["festival_motifs"] = fest.get("motifs", [])[:4]
+            g["festive_intensity"] = FESTIVE_INTENSITY.get(
+                brand_look or "clean", FESTIVE_INTENSITY["clean"])
+    return g
 
 
 def caption_prompt(brief: dict) -> str:
@@ -690,6 +734,7 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
         raise RuntimeError("No image engine is connected on this server, so "
                            "images cannot be generated. Your own photos still work.")
 
+    content = _stamp_brand(content, brief.get("brand_name") or "")
     saved = media.save(f"{uuid.uuid4().hex}.png", content, email)
     return {"url": saved["url"], "durable": saved["durable"], "generated": True,
             "prompt": prompt, "engine": used_engine, "free": used_free,
@@ -698,10 +743,76 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
                         if from_ref else None}
 
 
+def _stamp_brand(image_bytes: bytes, brand_name: str) -> bytes:
+    """A small, legible brand tag in the corner of a generated photo.
+
+    BUG THIS FIXES: image_prompt() tells the model "no text, no logo, no
+    watermark" -- deliberately, because asking a diffusion or even GPT-image
+    model to render a specific brand's logo is unreliable; it garbles small
+    text often enough that banning it was the safer call. The side effect was
+    that every AI-generated photo came back completely brandless, which a
+    seller notices immediately: their generated posts don't look like their
+    feed. This composites the brand's name as a small, tasteful plate
+    instead -- legible on every engine, every time, since it never touches
+    the model at all.
+
+    Uses matplotlib's bundled DejaVu Sans Bold (matplotlib is already a hard
+    dependency for the PDF report) so no extra font asset has to ship; falls
+    back to Pillow's built-in font if that path is ever missing. Never lets a
+    cosmetic failure break image generation -- worst case, the photo comes
+    back unstamped."""
+    if not brand_name.strip():
+        return image_bytes
+    try:
+        import io
+        from PIL import Image, ImageDraw, ImageFont
+
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
+        w, h = img.size
+        size = max(16, min(34, w // 22))
+
+        font = None
+        try:
+            import matplotlib
+            font_path = os.path.join(os.path.dirname(matplotlib.__file__),
+                                     "mpl-data", "fonts", "ttf", "DejaVuSans-Bold.ttf")
+            if os.path.exists(font_path):
+                font = ImageFont.truetype(font_path, size)
+        except Exception:  # noqa: BLE001
+            font = None
+        if font is None:
+            font = ImageFont.load_default(size=size)
+
+        text = brand_name.strip().upper()[:40]
+        draw = ImageDraw.Draw(img)
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        pad_x, pad_y = size * 0.7, size * 0.45
+        margin = max(14, w // 40)
+        plate_w, plate_h = tw + pad_x * 2, th + pad_y * 2
+        x0, y0 = w - margin - plate_w, h - margin - plate_h
+
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        odraw = ImageDraw.Draw(overlay)
+        odraw.rounded_rectangle([x0, y0, x0 + plate_w, y0 + plate_h],
+                                radius=plate_h * 0.22, fill=(15, 15, 15, 150))
+        odraw.text((x0 + pad_x - bbox[0], y0 + pad_y - bbox[1]), text,
+                   font=font, fill=(255, 255, 255, 235))
+
+        out = Image.alpha_composite(img, overlay).convert("RGB")
+        buf = io.BytesIO()
+        out.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception as e:  # noqa: BLE001 -- a cosmetic stamp must never break generation
+        log.warning("brand stamp failed, returning unstamped image: %s", e)
+        return image_bytes
+
+
 def generate_image_only(email: str, product_id: str, pillar: str = "",
                         fmt: str = "", angle: str = "",
                         use_reference: bool = True,
-                        strength: float | None = None) -> dict:
+                        strength: float | None = None,
+                        occasion_key: str = "") -> dict:
     """Make a picture and nothing else.
 
     Separate from make_post because the two are wanted at different moments: a
@@ -711,7 +822,12 @@ def generate_image_only(email: str, product_id: str, pillar: str = "",
 
     `use_reference` defaults to True — the seller's own photo is the starting
     point unless they deliberately ask for an invented image. That default is
-    the difference between a catalogue and a fiction."""
+    the difference between a catalogue and a fiction.
+
+    `occasion_key` is the festival slug (e.g. "ganesh_chaturthi") from the
+    calling post, when there is one — this is what makes a festival post's
+    photo actually look like the festival, instead of an ordinary product
+    shot with a festival name in the caption next to it."""
     brand = get_brand(email)
     product = next((p for p in products.get_products(email) if p["id"] == product_id), None)
     if not product:
@@ -719,13 +835,15 @@ def generate_image_only(email: str, product_id: str, pillar: str = "",
     material = get_material(email, product_id)
     brief = build_brief(brand, product, material, angle)
     ref = _reference_shot(email, product, material) if use_reference else None
-    img = generate_image(email, brief, guidance_for(pillar, fmt), ref, strength)
+    guidance = guidance_for(pillar, fmt, occasion_key, brand.get("look"))
+    img = generate_image(email, brief, guidance, ref, strength)
     return {**img, "product_id": product_id,
             "product_name": product.get("name"),
             "pillar": pillar, "format": fmt,
             "had_reference": bool(ref),
             "used_aesthetic": bool(brief.get("aesthetic")),
-            "used_seen": bool(brief.get("seen"))}
+            "used_seen": bool(brief.get("seen")),
+            "festival": guidance.get("festival", "")}
 
 
 def make_post(email: str, product_id: str, angle: str = "",

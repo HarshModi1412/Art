@@ -69,5 +69,65 @@ cal2 = c.get("/api/social/month", headers=H, params={"year": 2026, "month": 9}).
 posts2 = [p for day in cal2.get("days", []) for p in day.get("posts", [])]
 check("no posts remain after clear", len(posts2) == 0, len(posts2))
 
+# =========================================================================
+print("\n== slots land on their intended WEEKDAY, whatever day you plan on ==")
+# =========================================================================
+# The slot table encodes reach data about weekdays -- Wed and Thu strongest,
+# Fri and Sat weakest. It used to be expressed as fixed day-offsets from the
+# planning date, which only produced that pattern if the seller pressed the
+# button on a Monday: planning on a Wednesday shifted everything two days, so
+# the STRONGEST slot landed on Friday and one post landed on Sunday, a day the
+# table never intended to use at all.
+import datetime as _dt  # noqa: E402
+import inspect as _inspect  # noqa: E402
+
+from backend.core import social as _social  # noqa: E402
+
+_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+_WANT = [2, 3, 0, 4, 1, 5]      # Wed, Thu, Mon, Fri, Tue, Sat -- strongest first
+_MONDAY = _dt.date(2026, 9, 14)
+check("the reference date used by this test really is a Monday", _MONDAY.weekday() == 0)
+
+_bad_weekday, _bad_window, _collisions = [], [], []
+for _d in range(7):
+    _start = _MONDAY + _dt.timedelta(days=_d)
+    _offsets = []
+    for _i in range(6):
+        _off = (_WANT[_i] - _start.weekday()) % 7
+        _offsets.append(_off)
+        _landed = (_start + _dt.timedelta(days=_off)).weekday()
+        if _landed != _WANT[_i]:
+            _bad_weekday.append((_WEEK[_start.weekday()], _i, _WEEK[_landed]))
+        if not 0 <= _off <= 6:
+            _bad_window.append((_WEEK[_start.weekday()], _i, _off))
+    if len(set(_offsets)) != len(_offsets):
+        _collisions.append(_WEEK[_start.weekday()])
+
+check("every slot lands on its intended weekday from any planning day",
+      not _bad_weekday, _bad_weekday[:4])
+check("every post stays inside the 7-day window being planned",
+      not _bad_window, _bad_window[:4])
+check("no two slots ever collide on the same day", not _collisions, _collisions)
+
+_src = _inspect.getsource(_social.build_week)
+check("build_week anchors to weekdays, not to offsets from the planning date",
+      "best_weekdays" in _src and "start.weekday()" in _src)
+check("the old fixed-offset table is gone", "day_offsets" not in _src)
+check("a slot due today at an hour already past is not born overdue",
+      "if when < now:" in _src)
+
+# End to end: plan on a Wednesday and confirm nothing lands on a Sunday, which
+# is exactly what the old fixed offsets produced.
+_wed = f"sched{int(time.time()*1000)}@t.co"
+c.post("/api/register", json={"email": _wed, "password": "Test12345!"})
+_made = _social.build_week(_wed, [{"id": "p1", "name": "Silk Saree", "category": "Clothing"}],
+                           start=_MONDAY + _dt.timedelta(days=2))   # a Wednesday
+_days = [_dt.datetime.fromisoformat(p["scheduled_at"]).weekday() for p in _made]
+check("planning on a Wednesday produces posts", len(_made) > 0, len(_made))
+check("and none of them land on a Sunday (the old bug's signature)",
+      6 not in _days, [_WEEK[d] for d in _days])
+check("and every one lands on a weekday the reach table actually chose",
+      all(d in _WANT for d in _days), [_WEEK[d] for d in _days])
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

@@ -1673,6 +1673,16 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .sm-ed-meta { flex: 1; min-width: 0; font-size: 12.5px; }
 .sm-ed-imgacts { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
 
+/* the post editor's reel shot-list block — replaces .sm-ed-top entirely for
+   format: "reel" posts, since there is no picture to generate */
+.sm-ed-script-block { margin-bottom: 16px; }
+.sm-script-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.sm-beat-row { display: grid; grid-template-columns: 64px 1fr 1fr auto;
+  gap: 6px; align-items: center; }
+.sm-beat-row input { font-size: 12px; padding: 6px 8px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+.sm-beat-sec { text-align: center; }
+
 /* home: the next few days */
 .up-strip { border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface); padding: 14px; margin: 16px 0; }
@@ -1843,6 +1853,8 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
   .sm-head-actions, .cmp-cards, .gst-top, .po-sup { width: 100%; }
   .sm-ed-top { flex-direction: column; }
   .sm-ed-shot { width: 100%; height: 200px; }
+  .sm-beat-row { grid-template-columns: 1fr; }
+  .sm-beat-sec { text-align: left; }
   .st-imgonly { flex-direction: column; }
   .st-imgonly img { width: 100%; }
   .cr-row, .sm-dec { flex-wrap: wrap; }
