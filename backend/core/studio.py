@@ -617,10 +617,39 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
         import base64
         from openai import OpenAI
         client = OpenAI()
-        r = client.images.generate(
-            model=eng["model"], prompt=prompt, size="1024x1024", n=1)
+        # BUG THIS FIXES: this branch used to call images.generate() no matter
+        # what, even when the seller pressed "Re-shoot my photo" and a
+        # reference was passed in. images.generate() is text-to-image only —
+        # it has no argument for a source image — so the reference was
+        # silently thrown away and "Re-shoot" behaved exactly like "Invent a
+        # picture": a plausible-looking product that was not the seller's
+        # product. from_ref was even hardcoded False, so nothing downstream
+        # could tell the two apart either.
+        #
+        # images.edit() is the actual image-to-image call: it takes the
+        # source image (no mask needed for a full re-render, mask is only for
+        # inpainting one region) and re-renders it against the prompt.
+        # input_fidelity="high" asks the model to hold onto the source's
+        # actual features rather than loosely reinterpreting them — the
+        # entire point of a re-shoot is that the item in the photo is the
+        # item that ships.
+        if reference:
+            ref_bytes, ref_mime = reference
+            ext = "png" if "png" in (ref_mime or "") else "jpg"
+            try:
+                r = client.images.edit(
+                    model=eng["model"], image=(f"reference.{ext}", ref_bytes, ref_mime or "image/jpeg"),
+                    prompt=prompt, size="1024x1024", input_fidelity="high", n=1)
+            except Exception as e:  # noqa: BLE001 — surfaced as the same clear message as the Cloudflare path
+                raise RuntimeError(
+                    "Could not re-shoot your photo. Try again in a moment, or "
+                    "use 'Invent a picture' if you only need a backdrop.") from e
+            from_ref = True
+        else:
+            r = client.images.generate(
+                model=eng["model"], prompt=prompt, size="1024x1024", n=1)
+            from_ref = False
         item = r.data[0]
-        from_ref = False
         if getattr(item, "b64_json", None):
             content = base64.b64decode(item.b64_json)
         elif getattr(item, "url", None):

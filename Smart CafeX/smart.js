@@ -215,9 +215,25 @@ $("logoutBtn").onclick = async () => {
 function showShell() {
   $("loginView").hidden = true; $("appShell").hidden = false;
   $("tbUser").textContent = state.email || "";
-  goHome();
+  const deep = deepLinkModule();
+  if (deep) openModule(deep);
+  else goHome();
 }
 $("homeBtn").onclick = goHome;
+
+/* Not a general router -- just enough to reach a module that isn't on the
+   Home grid by URL, e.g. #/module/sales for Sales Analytics while it's off
+   the grid pending the storefront-data rework. Anyone can still type the
+   hash; the module itself is what decides whether there's anything to show
+   (openSales()/openSubcategory() already handle "no data yet" on their own). */
+function deepLinkModule() {
+  const m = /^#\/module\/([a-z]+)$/.exec(location.hash);
+  return m ? m[1] : null;
+}
+window.addEventListener("hashchange", () => {
+  const deep = deepLinkModule();
+  if (deep && state.token && !$("appShell").hidden) openModule(deep);
+});
 
 // ---------- view helpers ----------
 function setView(html) { $("view").innerHTML = html; }
@@ -304,9 +320,16 @@ function redrawCharts() {
 }
 
 // ---------- HOME ----------
+// Sales Analytics and Sub-Category Analysis are deliberately NOT in this
+// list — they're being reworked against the storefront-native data model and
+// aren't ready for sellers to rely on. The routes are still fully wired
+// (openModule("sales") / openModule("subcategory") both work) so they stay
+// reachable directly at #/module/sales and #/module/subcategory while that
+// work continues -- see the hash-route handler near DOMContentLoaded.
+//
+// Content Creator and Instagram (the "in build" placeholder) were removed
+// outright, not just hidden: nothing routes to them from anywhere.
 const MODULES = [
-  { id: "sales",      name: "Sales Analytics",        sub: "KPIs, revenue trends and a 30-day forecast from your order data.",             ico: "chart", cls: "tile-sales",     needs: "sales",  tag: "SALES" },
-  { id: "subcategory",name: "Sub-Category Analysis",  sub: "Which categories & sub-categories drive revenue — trends and drill-downs.",   ico: "layers", cls: "tile-sub",       needs: "sales",  tag: "SALES" },
   { id: "inventory",  name: "Inventory Management",   sub: "What you hold, what each sold product uses up, and what gets wasted. Stock falls automatically as orders come in.", ico: "package", cls: "tile-supply",   needs: null,     tag: "STOCK" },
   { id: "supply",     name: "Suppliers & Purchase Orders", sub: "Who you buy from, when to reorder, and a purchase order PDF you can send them.", ico: "truck", cls: "tile-supply",   needs: null,     tag: "SUPPLY" },
   { id: "studio",     name: "Product Studio",         sub: "Your photos, clips and the words behind each product — turned into Instagram posts that look like your brand, not a template.", ico: "spark", cls: "tile-content",  needs: null,     tag: "STUDIO" },
@@ -318,8 +341,6 @@ const MODULES = [
   { id: "review",     name: "Review Analytics",       sub: "Your brand positioning from your own reviews — what customers come to you for.", ico: "star", cls: "tile-review",    needs: "review", tag: "BRAND" },
   { id: "complaints", name: "Complaint Analysis",     sub: "The fix-first plan for the complaint themes hurting your brand right now.",    ico: "flame", cls: "tile-complaint", needs: "review", tag: "BRAND" },
   { id: "strategy",   name: "Position Strategy + AI", sub: "A levelled checklist to strengthen or reposition your brand, plus the AI Analyst.", ico: "compass", cls: "tile-strategy", needs: "review", tag: "STRATEGY" },
-  { id: "content",    name: "Content Creator",        sub: "AI-generated posts (caption, hashtags, image) — edit, then save to your device.", ico: "spark", cls: "tile-content",   needs: null,     tag: "CONTENT" },
-  { id: "instagram",  name: "Instagram",              sub: "Your Instagram content manager — plan, generate and schedule posts, then auto-publish. In build.",                                   ico: "instagram", cls: "tile-ig",        needs: null,     tag: "CONNECT", upcoming: true },
   { id: "ads",        name: "Ad Analytics",           sub: "Connect Google, Meta, Instagram and other ad accounts to see your spend.",    ico: "trend", cls: "tile-ads",       needs: null,     tag: "ADS" },
 ];
 
@@ -853,7 +874,19 @@ function openDetailsModule(id) {
   // Win-back details opens the editable table popup (approve is a direct download now).
   if (id === "winback") return openWinbackEditor();
   if (id && id.startsWith("content_")) return openContentEditor(id);
+  if (id && id.startsWith("post_")) return openSocialPostDetails(id.slice("post_".length));
   return openModule("sales");
+}
+
+// Reached from the Approval panel's "Details" button for a post more than
+// 7 days out (inside the window it already gets a one-tap card there; this
+// is the same editor the calendar opens, just fetched by id instead of found
+// in an already-loaded month).
+async function openSocialPostDetails(postId) {
+  try {
+    const p = await api(`/api/social/post/${encodeURIComponent(postId)}`);
+    openSocialEditor(p);
+  } catch (e) { toast(e.message); }
 }
 
 // ---------- upload + mapping ----------
@@ -1128,8 +1161,6 @@ async function openModule(id) {
   if (id === "review") return openReview();
   if (id === "complaints") return openComplaints();
   if (id === "strategy") return openStrategy();
-  if (id === "content") return openContentModule();
-  if (id === "instagram") return openInstagramModule();
   if (id === "social") return openSocial();
   if (id === "gst") return openGst();
   if (id === "ads") return openAdsModule();
@@ -3236,9 +3267,15 @@ function askWinbackSent(rows) {
   };
 }
 
-$("refreshApprovals").onclick = async () => {
-  try { const s = await api("/api/smart/state"); state.lastState = s; renderApprovals(s.insights); toast("Refreshed"); } catch (e) { toast(e.message); }
-};
+async function refreshApprovals(silent) {
+  try {
+    const s = await api("/api/smart/state");
+    state.lastState = s;
+    renderApprovals(s.insights);
+    if (!silent) toast("Refreshed");
+  } catch (e) { if (!silent) toast(e.message); }
+}
+$("refreshApprovals").onclick = () => refreshApprovals();
 
 // ---------- MODULE: Instagram connection ----------
 async function openInstagramModule() {
@@ -5022,37 +5059,16 @@ async function renderSocial() {
     ? `<span class="sm-ok">${sic("check")}Writing with ${esc(ai.active)} — free tier</span>`
     : `<span class="sm-warn">${sic("alert")}No AI connected — captions come from a template.</span>`;
 
-  // --- the decisions strip: everything still waiting on the seller
+  // Decisions for these posts live in the Approval panel now (the next-7-days
+  // ones get a one-tap card there automatically) -- this page used to have
+  // its own separate approve/skip strip here, which meant a seller could be
+  // asked to decide the same post in two different places. Any post, near or
+  // far, can still be decided by opening it below: the editor has its own
+  // Approve/Skip.
   const undecided = [];
   (cal.days || []).forEach((day) => (day.posts || []).forEach((p) => {
     if (p.state === "draft") undecided.push(p);
   }));
-
-  const decisions = undecided.length ? `
-    <div class="sm-decide">
-      <div class="sm-decide-h">
-        <b>${undecided.length} post${undecided.length === 1 ? "" : "s"} waiting on you this month</b>
-        <button class="btn primary sm" id="smApproveAll">${sic("check")}Approve all</button>
-      </div>
-      <div class="sm-decide-list">
-        ${undecided.slice(0, 6).map((p) => `
-          <div class="sm-dec" data-id="${esc(p.id)}">
-            <span class="sm-dec-when">${esc(shortWhen(p.scheduled_at))}</span>
-            <span class="sm-dec-body">
-              <b>${esc(p.product_name || "—")}</b>
-              ${p.occasion ? `<em class="sm-occ">${esc(p.occasion)}</em>` : ""}
-              <span>${esc(((p.caption || {}).hook || "").slice(0, 70))}</span>
-            </span>
-            <span class="sm-dec-acts">
-              <button class="btn ghost xs" data-open="${esc(p.id)}">Open</button>
-              <button class="btn ghost xs" data-ok="${esc(p.id)}">Approve</button>
-              <button class="btn ghost xs danger" data-no="${esc(p.id)}">Skip</button>
-            </span>
-          </div>`).join("")}
-        ${undecided.length > 6 ? `<div class="muted tiny" style="padding:6px 2px;">
-          +${undecided.length - 6} more on the calendar below.</div>` : ""}
-      </div>
-    </div>` : "";
 
   // --- the month grid
   const pad = cal.starts_on;                       // Monday = 0
@@ -5081,16 +5097,17 @@ async function renderSocial() {
 
   moduleShell("Social Media Manager", `
     <div class="sm-head">
-      <div>${aiLine}</div>
+      <div>${aiLine}
+        ${undecided.length ? `<div class="muted tiny sm-pending-note">${sic("bell")}${undecided.length} post${undecided.length === 1 ? "" : "s"} still need a decision — the next 7 days' worth are in the Approval panel; open any post below to decide it directly.</div>` : ""}
+      </div>
       <div class="sm-head-actions">
         <button class="btn primary" id="smBuild">${sic("spark")}Plan this week</button>
         <button class="btn ghost sm" id="smBuild4">${sic("spark")}Plan 4 weeks</button>
         <button class="btn ghost sm" id="smShoot">${sic("camera")}Shoot list</button>
         <button class="btn ghost sm" id="smSettings">${sic("settings")}Setup</button>
+        <button class="btn ghost sm danger" id="smClearPlan" title="Delete every planned post and campaign">${sic("close")}Clear plan</button>
       </div>
     </div>
-
-    ${decisions}
 
     <div id="smCampaigns"></div>
 
@@ -5157,13 +5174,18 @@ async function renderSocial() {
   $("smBuild4").onclick = () => build(4);
   $("smShoot").onclick = openShootList;
   $("smSettings").onclick = openSocialSetup;
-
-  if ($("smApproveAll")) $("smApproveAll").onclick = async () => {
+  $("smClearPlan").onclick = async () => {
+    // Same destructive-action pattern as productDelete(): a native confirm()
+    // up front, since wiping every planned post has no undo-toast-sized
+    // amount of state to hold onto (unlike a single deleted product).
+    if (!confirm("Delete every planned and scheduled post, and the current "
+      + "campaign? This can't be undone.")) return;
     try {
-      const r = await api("/api/social/approve-all", { method: "POST" });
-      toast(`${r.scheduled} scheduled.`);
+      await api("/api/social/clear", { method: "POST" });
+      toast("Plan cleared.");
       _socialData = await api("/api/social");
       await renderSocial();
+      refreshApprovals(true);
     } catch (e) { toast(e.message); }
   };
 
@@ -5174,8 +5196,39 @@ async function renderSocial() {
   };
   document.querySelectorAll("[data-open]").forEach((b) =>
     b.onclick = () => { const p = findPost(b.dataset.open); if (p) openSocialEditor(p); });
-  document.querySelectorAll("[data-ok]").forEach((b) => b.onclick = () => decidePost(b.dataset.ok, "scheduled"));
-  document.querySelectorAll("[data-no]").forEach((b) => b.onclick = () => decidePost(b.dataset.no, "failed"));
+
+  // Drag a post onto another day to reschedule it. Only the date changes --
+  // the time of day carries over, since sellers plan by morning/evening slot
+  // as much as by day and a drag across the grid shouldn't quietly reset that.
+  document.querySelectorAll(".cal-post").forEach((b) => {
+    b.draggable = true;
+    b.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", b.dataset.open);
+      e.dataTransfer.effectAllowed = "move";
+    });
+  });
+  document.querySelectorAll(".cal-cell:not(.is-pad)").forEach((cell) => {
+    cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("cal-drop-over"); });
+    cell.addEventListener("dragleave", () => cell.classList.remove("cal-drop-over"));
+    cell.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      cell.classList.remove("cal-drop-over");
+      const id = e.dataTransfer.getData("text/plain");
+      const post = id && findPost(id);
+      const newDay = cell.dataset.day;
+      if (!post || !newDay) return;
+      const oldDay = (post.scheduled_at || "").slice(0, 10);
+      if (newDay === oldDay) return;
+      const time = (post.scheduled_at || "").slice(10) || "T09:00";
+      try {
+        await api("/api/social/post", { method: "POST",
+          json: { post_id: id, patch: { scheduled_at: newDay + time } } });
+        _socialData = await api("/api/social");
+        await renderSocial();
+        toast(`Moved to ${Number(newDay.slice(-2))} ${esc(cal.label.split(" ")[0])}.`);
+      } catch (e2) { toast(e2.message); }
+    });
+  });
 }
 
 let _socialCal = null;
@@ -5187,11 +5240,14 @@ function shortWhen(iso) {
        + " · " + d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
 }
 
-async function decidePost(id, state) {
+async function decidePost(id, newState) {
   try {
-    await api("/api/social/state", { method: "POST", json: { post_id: id, state } });
-    _socialData = await api("/api/social");
-    await renderSocial();
+    await api("/api/social/state", { method: "POST", json: { post_id: id, state: newState } });
+    if (_currentModule === "social" && _socialData) {
+      _socialData = await api("/api/social");
+      await renderSocial();
+    }
+    refreshApprovals(true);   // the side panel is always on screen, whatever module this is
   } catch (e) { toast(e.message); }
 }
 
@@ -5245,6 +5301,8 @@ function openSocialEditor(post) {
 
     <div class="modal-actions">
       <button class="btn ghost" data-mclose2>Cancel</button>
+      <button class="btn reject" id="smSkip">Skip</button>
+      <button class="btn approve" id="smApprove">Approve</button>
       <button class="btn primary" id="smSave">Save</button>
     </div>`);
 
@@ -5275,13 +5333,31 @@ function openSocialEditor(post) {
     cnt.classList.toggle("over", h.value.length > 125);
   };
   document.querySelector("[data-mclose2]").onclick = closeModal;
+  const afterEdit = async () => {
+    if (_currentModule === "social" && _socialData) {
+      _socialData = await api("/api/social");
+      await renderSocial();
+    }
+    refreshApprovals(true);
+  };
+  $("smApprove").onclick = async () => {
+    await decidePost(post.id, "scheduled");
+    closeModal();
+    toast("Approved — scheduled.");
+  };
+  $("smSkip").onclick = async () => {
+    await decidePost(post.id, "failed");
+    closeModal();
+    toast("Skipped.");
+  };
   $("smSave").onclick = async () => {
     const tags = ($("smTags").value || "").split(/\s+/).filter(Boolean).slice(0, 5);
     try {
       await api("/api/social/post", { method: "POST", json: { post_id: post.id, patch: {
         hook: $("smHook").value, body: $("smBody").value, question: $("smQ").value,
         cta: $("smCta").value, tags, scheduled_at: $("smWhen").value } } });
-      closeModal(); await openSocial();
+      closeModal();
+      await afterEdit();
     } catch (e) { toast(e.message); }
   };
 }

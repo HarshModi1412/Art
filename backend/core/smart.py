@@ -331,6 +331,18 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
     if not include_decided:
         out.extend(_content_suggestion_insights(email))
 
+    # 6) real, already-written posts waiting on a decision. These used to
+    # have their own separate approve/skip strip on the Social Media
+    # Manager page; now they're cards here like everything else, so there is
+    # exactly one place a seller decides anything. Not scoped by
+    # include_decided the same way as the others -- pending_insight_cards()
+    # only ever returns posts still in "draft", so a post that was already
+    # approved or skipped naturally stops appearing on its own, no bookkeeping
+    # in smart_decisions needed (the post's own state IS the decision).
+    if not include_decided:
+        from backend.core import social as _social_mod
+        out.extend(_social_mod.pending_insight_cards(email))
+
     # attach each card's decision; hide decided ones from the active panel
     # unless the caller explicitly asked for the full list.
     visible = []

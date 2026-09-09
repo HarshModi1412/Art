@@ -198,10 +198,10 @@ must(r.status_code == 200 and "order_no" in r.text, "CSV export")
 print("\n== 9. listed platforms ==")
 r = c.get("/api/channels", headers=H)
 ch = {x["id"]: x for x in r.json()["channels"]}
-must(set(ch) == {"site", "shopify", "amazon", "flipkart", "myntra"}, f"5 channels (got {sorted(ch)})")
+# Flipkart/Myntra "yet to come" rows were removed -- they weren't offering the
+# seller anything to act on. Re-add cases here once those channels are real.
+must(set(ch) == {"site", "shopify", "amazon"}, f"3 channels (got {sorted(ch)})")
 must(ch["site"]["status"] == "live" and ch["site"]["enabled"], "my site is live and counted")
-must(ch["flipkart"]["status"] == "soon" and ch["myntra"]["status"] == "soon", "Flipkart + Myntra say yet to come")
-must(ch["flipkart"]["detail"] == "Yet to come", "'Yet to come' copy present")
 r = c.post("/api/channels/toggle", headers=H, json={"channel": "site", "enabled": False})
 must(r.status_code == 200, "toggle my site off")
 r = c.get("/api/smart/state", headers=H)
@@ -210,8 +210,6 @@ must(not r.json()["data"]["sales"]["ready"] or r.json()["data"]["sales"]["rows"]
 c.post("/api/channels/toggle", headers=H, json={"channel": "site", "enabled": True})
 r = c.get("/api/smart/state", headers=H)
 must(r.json()["data"]["sales"]["rows"] == 2, "toggling back restores the sales")
-r = c.post("/api/channels/toggle", headers=H, json={"channel": "flipkart", "enabled": True})
-must(r.status_code == 400, "cannot toggle a marketplace that isn't live")
 
 print("\n== 10. pages render ==")
 for path in [f"/s/{HANDLE}", "/smart", "/app", "/"]:

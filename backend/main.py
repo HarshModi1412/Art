@@ -2605,6 +2605,26 @@ class SmartDecisionBody(BaseModel):
 def smart_decision(insight_id: str, body: SmartDecisionBody,
                    authorization: str | None = Header(default=None)):
     email = require_user(authorization)
+    # Social posts are decided here too (one Approval panel, not two), but
+    # their state lives in social.py's own post store, not smart_decisions --
+    # the post's state field IS the decision, so there's nothing to snapshot
+    # into History and no "insight" bookkeeping to do. Both branches return
+    # early with the same shape the normal path returns.
+    if str(insight_id).startswith("post_"):
+        post_id = insight_id[len("post_"):]
+        if body.decision == "approve":
+            p = social.set_state(email, post_id, "scheduled")
+        elif body.decision == "disapprove":
+            p = social.set_state(email, post_id, "failed")
+        else:
+            return {"ok": True, "insights": smart.build_insights(email),
+                    "history": smart.build_history(email)}
+        if p.get("error"):
+            raise HTTPException(404, p["error"])
+        return {"ok": True, "download": False, "download_url": None,
+                "insights": smart.build_insights(email),
+                "history": smart.build_history(email),
+                "tasks": smart.get_tasks(email)}
     if body.decision == "approve":
         # Capture the title BEFORE flipping the state, because after set_decision
         # this insight is no longer in the active list.
@@ -3196,20 +3216,15 @@ def channels_state(authorization: str | None = Header(default=None)):
             "enabled": storefront.channel_enabled(email, cid),
             "toggleable": bool(connected.get(cid)), "orders": None,
         })
-    for cid, label, icon in (("flipkart", "Flipkart", "🛒"), ("myntra", "Myntra", "👜")):
-        rows.append({
-            "id": cid, "label": label, "icon": icon, "kind": "marketplace",
-            "status": "soon", "detail": "Yet to come", "enabled": False,
-            "toggleable": False, "orders": None,
-        })
+    # Flipkart / Myntra rows removed -- "yet to come" placeholders were
+    # taking up space without anything a seller could act on. Re-add them
+    # here (same shape as the shopify/amazon loop above) once they're real.
     return {"channels": rows}
 
 
 @app.post("/api/channels/toggle")
 def channels_toggle(body: ChannelBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
-    if body.channel in ("flipkart", "myntra"):
-        raise HTTPException(400, "That marketplace is not live yet.")
     cache.clear(email)
     storefront.set_channel(email, body.channel, body.enabled)
     return channels_state(authorization)
@@ -3944,6 +3959,28 @@ def social_week(body: SocialWeekBody, authorization: str | None = Header(default
 def social_approve(authorization: str | None = Header(default=None)):
     email = require_user(authorization)
     return {**social.approve_all(email), "week": social.week(email)}
+
+
+@app.get("/api/social/post/{post_id}")
+def social_post_get(post_id: str, authorization: str | None = Header(default=None)):
+    """One post by id -- lets the Approval panel's 'Details' open the editor
+    for a post that isn't necessarily in the currently-loaded calendar month
+    (the panel only shows the next 7 days; the post itself can be further out)."""
+    email = require_user(authorization)
+    p = social.get_post(email, post_id)
+    if not p:
+        raise HTTPException(404, "That post no longer exists.")
+    return p
+
+
+@app.post("/api/social/clear")
+def social_clear(authorization: str | None = Header(default=None)):
+    """The full reset: every planned post and tracked campaign, gone. For
+    walking away from a plan entirely rather than deciding it post by post."""
+    email = require_user(authorization)
+    n = social.clear_plan(email)
+    cache.clear(email)
+    return {"cleared": n}
 
 
 @app.post("/api/social/post")

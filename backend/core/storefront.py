@@ -605,7 +605,13 @@ def site_sales_frame(seller: str) -> pd.DataFrame:
                 "customer_name": o.get("customer_name") or "",
                 "product": it.get("name") or "",
                 "category": it.get("category") or "",
-                "subcategory": "",
+                # None, not "" -- the catalogue has no sub-category concept at
+                # all, and analytics._dimension_col() only falls back to
+                # "category" when the sub-category column is genuinely empty
+                # (pandas .notna()). A blank STRING still counts as "present",
+                # so it used to win the fallback and Sub-Category Analysis
+                # grouped every storefront sale under one nameless bucket.
+                "subcategory": None,
                 "quantity": int(it.get("qty") or 0),
                 "amount": _money(it.get("line_total")),
                 "channel": "site",

@@ -679,6 +679,78 @@ def approve_all(email: str) -> dict:
     return {"scheduled": n}
 
 
+def get_post(email: str, post_id: str) -> dict | None:
+    """One post by id, regardless of which week it falls in -- the calendar
+    only ever has the current month loaded, so this is what lets the
+    Approval panel (or anything else) open a specific post's editor without
+    first fetching the whole plan."""
+    for p in _posts(email):
+        if p.get("id") == post_id:
+            return p
+    return None
+
+
+PENDING_WINDOW_DAYS = 7
+
+
+def pending_insight_cards(email: str) -> list[dict]:
+    """Drafts due soon, shaped as Approval-panel cards.
+
+    Window, not the whole plan: "Plan 4 weeks" can leave ~28 drafts sitting,
+    and dumping all of them into the panel alongside win-back/reorder/etc.
+    would drown everything else out. Same 7-day horizon the Home page teaser
+    already uses (/api/social/upcoming), so a seller sees one consistent
+    "what's coming up" window everywhere, not two different ones.
+
+    Overdue drafts (scheduled_at already in the past) are included too --
+    those are MORE urgent than a fresh one, not less; they just never got a
+    decision. Posts further out than the window are not orphaned: they're
+    still fully approvable by opening them from the calendar, which is what
+    "explain me complete logic" below documents."""
+    from datetime import datetime, timedelta
+    horizon = datetime.now() + timedelta(days=PENDING_WINDOW_DAYS)
+    cards = []
+    for p in _posts(email):
+        if p.get("state") != "draft":
+            continue
+        when_raw = p.get("scheduled_at") or ""
+        try:
+            when = datetime.fromisoformat(when_raw)
+        except ValueError:
+            continue
+        if when > horizon:
+            continue
+        cap = p.get("caption") or {}
+        cards.append({
+            "id": f"post_{p['id']}",
+            "module": "social",
+            "title": p.get("product_name") or "A post is ready",
+            "detail": cap.get("hook") or "",
+            "product_name": p.get("product_name") or "",
+            "occasion": p.get("occasion") or "",
+            "scheduled_at": when_raw,
+            "hook": cap.get("hook") or "",
+            "when_label": when.strftime("%a %d %b, %I:%M %p").replace(" 0", " "),
+            "overdue": when < datetime.now(),
+        })
+    cards.sort(key=lambda c: c["scheduled_at"])
+    return cards
+
+
+def clear_plan(email: str) -> int:
+    """Wipe every planned post and every tracked campaign for this account --
+    the full reset button. Returns how many posts were removed.
+
+    Deliberately total: a partial clear ("just the drafts") leaves scheduled
+    posts from a plan the seller is trying to walk away from, which is a
+    worse outcome than losing a scheduled post that genuinely should have
+    gone out -- they can always re-plan the week in one tap."""
+    n = len(_posts(email))
+    _save_posts(email, [])
+    user_store.set_key((email or "").lower(), CAMPAIGN_KEY, [])
+    return n
+
+
 def update_post(email: str, post_id: str, patch: dict) -> dict:
     rows = _posts(email)
     s = get_settings(email)

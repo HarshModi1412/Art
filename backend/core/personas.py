@@ -269,11 +269,40 @@ def _social(card: dict) -> dict:
     }
 
 
+def _social_post(card: dict) -> dict:
+    """A real, already-written scheduled post waiting on a decision -- not
+    the one-off 'here's an idea' card _social() writes. This is what fills
+    the Approval panel for the Social Media Manager's calendar now that
+    decisions live there instead of in a second panel on the page itself."""
+    product = card.get("product_name") or "a product"
+    occ = card.get("occasion")
+    when = card.get("when_label") or ""
+    hook = (card.get("hook") or "").strip()
+    overdue = bool(card.get("overdue"))
+    headline = (f"Overdue: {occ} post for {product}" if overdue and occ
+                else f"Overdue post for {product}" if overdue
+                else f"{occ} post — {when}" if occ and when
+                else f"Post ready — {when}" if when
+                else "A post is ready to check")
+    body = hook if hook else f"Drafted around {product}. Caption, question and hashtags done."
+    if len(body) > 140:
+        body = body[:137] + "…"
+    why = (f"Scheduled for {when or 'this week'}, built around {product}"
+           + (f" for {occ}" if occ else "") + "."
+           + (f' The hook: "{hook}"' if hook else "")
+           + (" This one is already overdue — it stayed a draft past its own"
+              " posting time." if overdue else ""))
+    return {"headline": headline, "body": body, "why": why, "cta": "Approve → schedule"}
+
+
 WRITERS = {
     "winback": _winback, "festival": _festival, "reorder": _reorder,
     "overstock": _overstock, "supplier_risk": _supplier_risk,
     "reputation": _reputation, "complaints": _complaints,
 }
+# Dynamic ids (one per social post, e.g. "post_a1b2c3") can't live in WRITERS
+# by exact match, so they're matched by prefix instead, checked in dress().
+PREFIX_WRITERS = [("post_", _social_post), ("content_", _social)]
 
 
 def dress(card: dict) -> dict:
@@ -287,7 +316,12 @@ def dress(card: dict) -> dict:
     cid = str(card.get("id") or "")
 
     writer = WRITERS.get(cid)
-    if writer is None and (cid.startswith("content_") or who == "social"):
+    if writer is None:
+        for prefix, w in PREFIX_WRITERS:
+            if cid.startswith(prefix):
+                writer = w
+                break
+    if writer is None and who == "social":
         writer = _social
 
     if writer:

@@ -340,10 +340,19 @@ def _dimension_col(df: pd.DataFrame) -> str | None:
     """Pick the drill-down dimension. Prefer sub-category ONLY when it's
     actually populated — a mapped-but-mostly-empty column (e.g. PetPooja's
     'Variation', filled on <1% of rows) must fall back to category, or the
-    whole drill-down silently breaks."""
+    whole drill-down silently breaks.
+
+    A blank string counts as empty here, not just NaN/None. The storefront's
+    own orders (the default sales source now, not just an upload) have no
+    sub-category concept and used to fill the column with "" — which
+    .notna() reports as "present" — so this used to pick "subcategory" and
+    group every sale under one nameless bucket instead of falling back."""
     for col in ("subcategory", "category"):
-        if col in df.columns and df[col].notna().mean() >= 0.3:
-            return col
+        if col in df.columns:
+            filled = df[col].astype(str).str.strip()
+            populated = (df[col].notna() & filled.ne("") & filled.ne("nan")).mean()
+            if populated >= 0.3:
+                return col
     # last resort: category even if sparse, else nothing
     return "category" if "category" in df.columns else None
 
