@@ -1369,7 +1369,12 @@ must(_aip.restyle_image(b"", "x") is None, "no source image yields nothing, not 
 must(hasattr(_st, "_reference_shot"), "Studio can find a product's own photograph")
 import inspect as _ins
 _src = _ins.getsource(_st.generate_image)
-must("from_ref = True" in _src, "the result records whether a reference was used")
+# from_ref itself is set inside the OpenAI call helper (shared by the direct
+# OpenAI path and the Cloudflare-fails-so-fall-back-to-OpenAI path) rather
+# than generate_image() directly now, so both sources together are the real
+# guard that a reference is actually tracked end to end.
+_src_all = _src + _ins.getsource(_st._openai_image)
+must("from_ref = True" in _src_all, "the result records whether a reference was used")
 must("raise RuntimeError" in _src and "Could not re-shoot" in _src,
      "and a failed re-shoot RAISES rather than silently inventing a product — "
      "falling back to invention is the worst possible failure here")

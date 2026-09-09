@@ -573,6 +573,45 @@ def _reference_shot(email: str, product: dict, material: dict) -> tuple[bytes, s
     return None
 
 
+def _openai_image(prompt: str, reference: tuple[bytes, str] | None) -> tuple[bytes, bool]:
+    """The OpenAI/ChatGPT image call. Returns (bytes, from_reference).
+
+    Two different endpoints, and the difference matters more than anything
+    else here: images.edit() is the actual image-to-image call — it takes
+    the source image (no mask needed for a full re-render, a mask is only
+    for inpainting one region) and re-renders it against the prompt.
+    input_fidelity="high" asks the model to hold onto the source's actual
+    features rather than loosely reinterpreting them, which is the entire
+    point of a re-shoot: the item in the photo has to be the item that ships.
+    images.generate() is plain text-to-image and has no argument for a
+    source image at all — calling it for a re-shoot would silently throw
+    the seller's own photo away, which is the bug this split exists to
+    prevent."""
+    import base64
+    from openai import OpenAI
+    client = OpenAI()
+    model = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1")
+    if reference:
+        ref_bytes, ref_mime = reference
+        ext = "png" if "png" in (ref_mime or "") else "jpg"
+        r = client.images.edit(
+            model=model, image=(f"reference.{ext}", ref_bytes, ref_mime or "image/jpeg"),
+            prompt=prompt, size="1024x1024", input_fidelity="high", n=1)
+        from_ref = True
+    else:
+        r = client.images.generate(model=model, prompt=prompt, size="1024x1024", n=1)
+        from_ref = False
+    item = r.data[0]
+    if getattr(item, "b64_json", None):
+        content = base64.b64decode(item.b64_json)
+    elif getattr(item, "url", None):
+        import requests
+        content = requests.get(item.url, timeout=45).content
+    else:
+        raise RuntimeError("The image service returned nothing usable.")
+    return content, from_ref
+
+
 def generate_image(email: str, brief: dict, guidance: dict | None = None,
                    reference: tuple[bytes, str] | None = None,
                    strength: float | None = None) -> dict:
@@ -588,82 +627,72 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
         because it is not their kurta.
 
     The result says which path ran, so the UI can tell the seller plainly.
+
+    Cloudflare is tried first when it's configured (it is ~90x cheaper), but
+    it fails silently by design (see aiprovider._cf_run) — a bad request looks
+    identical to an exhausted daily quota from here. Rather than hand the
+    seller an error either way, a configured OpenAI/ChatGPT key is used as an
+    automatic backup, so "Re-shoot" and "Invent" keep working (at OpenAI's
+    per-image cost) instead of going dead until the next day.
     """
     from backend.core import aiprovider
     prompt = image_prompt(brief, guidance)
     eng = image_engine()
+    content = None
+    from_ref = False
+    used_engine, used_free = eng["engine"], eng["free"]
 
     if eng["engine"] == "cloudflare":
-        if reference:
-            content = aiprovider.restyle_image(
-                reference[0], prompt, strength,
-                negative="different product, changed pattern, extra items, text, "
-                         "watermark, distorted proportions")
-            from_ref = True
-            if not content:
-                # Falling back silently to invention would be the worst
-                # possible failure here: the seller asked for THEIR product.
+        try:
+            if reference:
+                content = aiprovider.restyle_image(
+                    reference[0], prompt, strength,
+                    negative="different product, changed pattern, extra items, text, "
+                             "watermark, distorted proportions")
+            else:
+                content = aiprovider.generate_image(prompt)
+        except Exception as e:  # noqa: BLE001 — aiprovider already logs; fall through below
+            log.warning("cloudflare image path raised: %s", e)
+            content = None
+        from_ref = bool(reference)
+
+        if not content and openai_ready():
+            try:
+                content, from_ref = _openai_image(prompt, reference)
+                used_engine, used_free = "openai", False
+            except Exception as e:  # noqa: BLE001
+                content = None
+                log.warning("openai fallback after cloudflare failure also failed: %s", e)
+
+        if not content:
+            if reference:
                 raise RuntimeError(
                     "Could not re-shoot your photo. This is usually the daily "
-                    "free allowance being spent. Try again tomorrow, or use "
-                    "'Invent a picture' if you only need a backdrop.")
-        else:
-            content = aiprovider.generate_image(prompt)
-            from_ref = False
-            if not content:
-                raise RuntimeError("Cloudflare did not return an image. This is "
-                                   "usually the daily free allowance being spent.")
+                    "free allowance being spent" + (" (the OpenAI backup didn't "
+                    "work either)" if openai_ready() else "") + ". Try again "
+                    "tomorrow, or use 'Invent a picture' if you only need a "
+                    "backdrop.")
+            raise RuntimeError("Cloudflare did not return an image. This is "
+                               "usually the daily free allowance being spent"
+                               + (" (the OpenAI backup didn't work either)"
+                                  if openai_ready() else "") + ".")
+
     elif eng["engine"] == "openai":
-        import base64
-        from openai import OpenAI
-        client = OpenAI()
-        # BUG THIS FIXES: this branch used to call images.generate() no matter
-        # what, even when the seller pressed "Re-shoot my photo" and a
-        # reference was passed in. images.generate() is text-to-image only —
-        # it has no argument for a source image — so the reference was
-        # silently thrown away and "Re-shoot" behaved exactly like "Invent a
-        # picture": a plausible-looking product that was not the seller's
-        # product. from_ref was even hardcoded False, so nothing downstream
-        # could tell the two apart either.
-        #
-        # images.edit() is the actual image-to-image call: it takes the
-        # source image (no mask needed for a full re-render, mask is only for
-        # inpainting one region) and re-renders it against the prompt.
-        # input_fidelity="high" asks the model to hold onto the source's
-        # actual features rather than loosely reinterpreting them — the
-        # entire point of a re-shoot is that the item in the photo is the
-        # item that ships.
-        if reference:
-            ref_bytes, ref_mime = reference
-            ext = "png" if "png" in (ref_mime or "") else "jpg"
-            try:
-                r = client.images.edit(
-                    model=eng["model"], image=(f"reference.{ext}", ref_bytes, ref_mime or "image/jpeg"),
-                    prompt=prompt, size="1024x1024", input_fidelity="high", n=1)
-            except Exception as e:  # noqa: BLE001 — surfaced as the same clear message as the Cloudflare path
-                raise RuntimeError(
-                    "Could not re-shoot your photo. Try again in a moment, or "
-                    "use 'Invent a picture' if you only need a backdrop.") from e
-            from_ref = True
-        else:
-            r = client.images.generate(
-                model=eng["model"], prompt=prompt, size="1024x1024", n=1)
-            from_ref = False
-        item = r.data[0]
-        if getattr(item, "b64_json", None):
-            content = base64.b64decode(item.b64_json)
-        elif getattr(item, "url", None):
-            import requests
-            content = requests.get(item.url, timeout=45).content
-        else:
-            raise RuntimeError("The image service returned nothing usable.")
+        try:
+            content, from_ref = _openai_image(prompt, reference)
+        except Exception as e:  # noqa: BLE001 — surfaced as a clear message either path
+            raise RuntimeError(
+                "Could not re-shoot your photo. Try again in a moment, or "
+                "use 'Invent a picture' if you only need a backdrop." if reference
+                else "Could not generate the image. Try again in a moment.") from e
+
     else:
         raise RuntimeError("No image engine is connected on this server, so "
                            "images cannot be generated. Your own photos still work.")
 
     saved = media.save(f"{uuid.uuid4().hex}.png", content, email)
     return {"url": saved["url"], "durable": saved["durable"], "generated": True,
-            "prompt": prompt, "engine": eng["engine"], "free": eng["free"],
+            "prompt": prompt, "engine": used_engine, "free": used_free,
             "from_reference": from_ref,
             "strength": (aiprovider.STRENGTH_DEFAULT if strength is None else strength)
                         if from_ref else None}
