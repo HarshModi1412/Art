@@ -1260,8 +1260,17 @@ print("\n== 38. vision provider ==")
 must(hasattr(_aip, "describe_image"), "the provider chain can look at pictures")
 must(set(_aip.VISION_MODELS) <= {p["name"] for p in _aip.status()["providers"]},
      "vision models only name providers that exist")
-must("groq" not in _aip.VISION_MODELS,
-     "Groq is skipped rather than sent an image it cannot read")
+# This used to assert that Groq was SKIPPED, because its free tier had no
+# vision model worth calling. That is no longer true — the Qwen VL line is
+# available there now — so the check is inverted rather than deleted: what
+# matters is that the id is a current one, not one of the llama-3.2-*-vision
+# ids that older guides still show and that have since been removed.
+must("groq" in _aip.VISION_MODELS,
+     "Groq is used for vision now that its free tier has a usable model")
+must("llama-3.2" not in _aip.VISION_MODELS["groq"],
+     f"and not with a retired model id ({_aip.VISION_MODELS['groq']})")
+must(_aip.VISION_PREFERENCE[0] == "gemini",
+     "the model best at long descriptions is asked first for vision")
 _v = _aip.describe_image(b"", "image/png", system="s", user="u")
 must(_v["text"] == "" and _v["error"] == "no image",
      "an empty image returns an error instead of raising")

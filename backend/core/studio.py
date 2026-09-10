@@ -169,23 +169,64 @@ SHOT_TYPES = {
 }
 SHOT_TYPE_IDS = list(SHOT_TYPES)
 
+# WHY THIS PROMPT IS SO DEMANDING: the first version asked for one sentence
+# per field and got exactly that — a reading so thin it described any brand and
+# generated none. The output a seller saw ("soft diffused light, muted palette,
+# shallow depth of field, calm mood") is true of roughly every product
+# photograph ever taken, so it steered the image model nowhere.
+#
+# Three changes fix it, and all three are needed:
+#   * more FIELDS, so the model has to look at things it was skipping — lens,
+#     grade, props, the actual arrangement;
+#   * a WORD FLOOR per field, because a model asked for "a sentence" writes the
+#     shortest true sentence available, and the shortest true sentence about
+#     lighting is "soft natural light";
+#   * a demand for VALUES not adjectives — approximate hex, an f-stop guess, a
+#     focal length, a clock direction for the key light. A number cannot be
+#     vague, so asking for numbers is the cheapest way to force real looking.
 AESTHETIC_SYSTEM = (
-    "You are an art director writing a brief for a photographer. You are shown "
-    "ONE reference image that a brand has chosen to represent its taste. "
-    "Describe its VISUAL LANGUAGE, not the object in it.\n\n"
-    "Return exactly these lines and nothing else:\n"
+    "You are a photographer's art director. You are shown ONE reference image a "
+    "brand chose to represent its taste. Reverse-engineer HOW IT WAS SHOT, in "
+    "enough detail that another photographer could reproduce the look with a "
+    "different product and it would still belong in the same feed.\n\n"
+    "Return exactly these labelled lines, in this order, nothing before or "
+    "after:\n"
     "SHOT: <one of: " + ", ".join(SHOT_TYPE_IDS) + ">\n"
-    "LIGHT: <hard or soft, direction, warmth, shadow behaviour>\n"
-    "COLOUR: <palette in plain colour words, including the background>\n"
-    "SETTING: <surface, place, props actually visible>\n"
-    "COMPOSITION: <framing, crop, angle, negative space, depth of field>\n"
-    "MOOD: <the feeling, in plain words>\n"
-    "SIGNATURE: <the one habit that would let someone recognise this brand's "
-    "photographs in a stranger's feed>\n\n"
-    "Be concrete and specific to THIS picture — 'low winter sun from the left "
-    "throwing a long hard shadow across raw concrete' beats 'nice natural "
-    "light'. No praise, no marketing adjectives like 'stunning' or 'elevated'. "
-    "Each line one sentence, no bullets, no headings."
+    "LIGHT: <40+ words. Key light: hard or soft, its direction as a clock "
+    "position and rough height, apparent size and distance. Colour temperature. "
+    "Fill and how much. Where the shadows fall, how sharp their edges are, how "
+    "deep they go. Any rim, kicker or bounce. Named if you can see it — window "
+    "light, overcast, softbox, bare sun, ring light, practical lamp.>\n"
+    "PALETTE: <40+ words. The dominant colours with approximate hex values, the "
+    "background colour, the accents, and roughly what share of frame each takes. "
+    "Say whether it is saturated or desaturated and by how much.>\n"
+    "SURFACE: <25+ words. What the product rests on or against, its material and "
+    "texture, and how that surface reads — polished, raw, woven, worn.>\n"
+    "PROPS: <25+ words. Every object in frame besides the product, and how they "
+    "are arranged relative to it. Say 'nothing else in frame' if that is true.>\n"
+    "COMPOSITION: <35+ words. Crop and aspect, camera height and angle relative "
+    "to the product, where the subject sits in the frame, how much negative "
+    "space and where, symmetry or deliberate imbalance, leading lines.>\n"
+    "LENS: <25+ words. Apparent focal length, how compressed or wide the "
+    "perspective looks, subject distance, depth of field with an f-stop guess, "
+    "and what falls out of focus.>\n"
+    "GRADE: <25+ words. Contrast, whether blacks are lifted or crushed, "
+    "highlight rolloff, any colour cast in shadows or highlights, grain or "
+    "cleanliness, and how processed it looks.>\n"
+    "MOOD: <25+ words. What the picture feels like AND the specific choices "
+    "creating that feeling.>\n"
+    "SIGNATURE: <25+ words. The one habit that would let a stranger recognise "
+    "another photograph by this brand.>\n"
+    "REPEATABLE: <35+ words. A direct instruction another photographer could "
+    "follow to shoot a DIFFERENT product in this exact style.>\n\n"
+    "Rules. Be specific to THIS picture: 'low winter sun from camera-left at "
+    "about 20 degrees, throwing a hard shadow twice the length of the product "
+    "across raw grey concrete' is the standard; 'nice natural light' is a "
+    "failure. Give numbers wherever you can — hex, f-stop, focal length, clock "
+    "position, percentages of frame — and mark them as estimates. Never use "
+    "praise or marketing adjectives such as stunning, elevated, timeless, "
+    "premium or aesthetic. If something is genuinely not visible, say so "
+    "plainly instead of inventing it. No bullets, no headings, no preamble."
 )
 
 PRODUCT_SYSTEM = (
@@ -205,12 +246,24 @@ PRODUCT_SYSTEM = (
 def _parse_reading(text: str) -> dict:
     """One reference image's reading, as fields rather than a paragraph."""
     out = {}
+    cur = None
     for raw in (text or "").splitlines():
-        m = re.match(r"^\s*(SHOT|LIGHT|COLOUR|COLOR|SETTING|COMPOSITION|MOOD|"
-                     r"SIGNATURE)\s*:\s*(.+)$", raw.strip(), re.I)
+        line = raw.strip()
+        if not line:
+            continue
+        m = re.match(r"^\s*(SHOT|LIGHT|COLOUR|COLOR|PALETTE|SETTING|SURFACE|"
+                     r"PROPS|COMPOSITION|LENS|GRADE|MOOD|SIGNATURE|REPEATABLE)"
+                     r"\s*:\s*(.*)$", line, re.I)
         if m:
             key = m.group(1).lower()
-            out["colour" if key == "color" else key] = m.group(2).strip()[:400]
+            key = {"color": "palette", "colour": "palette",
+                   "setting": "surface"}.get(key, key)
+            out[key] = m.group(2).strip()[:1200]
+            cur = key
+        elif cur and cur != "shot":
+            # A model writing 40 words will wrap. Keeping the continuation is
+            # the difference between a full reading and its first line.
+            out[cur] = f"{out[cur]} {line}".strip()[:1200]
     shot = (out.get("shot") or "").lower().strip()
     # Models like to answer with the label rather than the id; accept both, and
     # fall back to the safest bucket rather than dropping the reading.
@@ -222,10 +275,20 @@ def _parse_reading(text: str) -> dict:
     return out
 
 
+# The order a photographer would want to read them in, and the order they are
+# handed to the image model.
+READING_FIELDS = ("light", "palette", "surface", "props", "composition",
+                  "lens", "grade", "mood", "signature", "repeatable")
+
+
 def _reading_prose(r: dict) -> str:
-    """The shootable sentence for one reading, without its SHOT label."""
-    order = ("light", "colour", "setting", "composition", "mood", "signature")
-    return " ".join(r[k] for k in order if r.get(k)).strip()
+    """One reading as a shootable brief, labels kept.
+
+    The labels stay in deliberately. This string is pasted into the image
+    prompt, and "LIGHT: ... PALETTE: ..." survives being embedded in a longer
+    instruction far better than a run-on paragraph, which models skim."""
+    return "\n".join(f"{k.upper()}: {r[k]}" for k in READING_FIELDS
+                     if r.get(k)).strip()
 
 
 def read_aesthetic(email: str) -> dict:
@@ -264,7 +327,11 @@ def read_aesthetic(email: str) -> dict:
         r = aiprovider.describe_image(
             data, ctype, system=AESTHETIC_SYSTEM,
             user="Read this reference image and return the labelled lines.",
-            sensitivity="public", max_tokens=400)
+            # 400 was the ceiling that made every reading two lines long. Ten
+            # fields with a 25-40 word floor each needs room to land; the free
+            # tiers all allow it, and Cloudflare in particular defaults to a
+            # very low cap unless it is told otherwise.
+            sensitivity="public", max_tokens=2000)
         if r["text"]:
             parsed = _parse_reading(r["text"])
             if _reading_prose(parsed):
@@ -272,7 +339,8 @@ def read_aesthetic(email: str) -> dict:
             else:
                 # Unparseable but non-empty — keep the prose rather than lose
                 # a picture the seller paid attention to.
-                readings.append({"shot": "product_only", "signature": r["text"].strip()[:400]})
+                readings.append({"shot": "product_only",
+                                 "signature": r["text"].strip()[:1200]})
         else:
             failed += 1
 
@@ -284,24 +352,54 @@ def read_aesthetic(email: str) -> dict:
     by_shot: dict[str, list[str]] = {}
     for r in readings:
         by_shot.setdefault(r["shot"], []).append(_reading_prose(r))
-    shots = {k: max(v, key=len)[:900] for k, v in by_shot.items() if any(v)}
+    shots = {k: max(v, key=len)[:2500] for k, v in by_shot.items() if any(v)}
 
     signature = ""
     sig_lines = [r.get("signature", "") for r in readings if r.get("signature")]
     if len(readings) == 1:
         signature = _reading_prose(readings[0])
     else:
+        # The old version of this asked for "90-130 words, plain prose" and got
+        # exactly that: one short paragraph that fit any brand. It also leaked
+        # its own instruction into the output ("If the references genuinely
+        # disagree on look, it's in..."), which is what a model does when the
+        # instruction is easier to restate than to follow. This asks for a
+        # working document instead, with named sections and rules a
+        # photographer could actually shoot from.
         merged = aiprovider.generate(
-            "You are an art director. Below are separate readings of reference "
-            "images from ONE brand. Write the brand's visual signature: only "
-            "what genuinely holds across most of them — the light, the palette, "
-            "the habits a stranger could use to recognise their photographs. "
-            "Do NOT average away differences in SETTING or SUBJECT; those are "
-            "handled elsewhere. If the references genuinely disagree on look, "
-            "say so in one final sentence. 90-130 words, plain prose, no "
-            "headings, no marketing adjectives.",
-            "\n\n---\n\n".join(_reading_prose(r) for r in readings),
-            sensitivity="public", max_tokens=400, fallback="")
+            "You are an art director building a brand's photography bible from "
+            "separate readings of their own reference images. Write the "
+            "STANDARD, not a summary — another photographer must be able to "
+            "shoot a new product from this alone and have it belong in the same "
+            "feed.\n\n"
+            "Use exactly these headings, each on its own line:\n"
+            "LIGHT — the lighting setup this brand repeats. Direction, quality, "
+            "colour temperature, shadow behaviour. Give the setup, not an "
+            "adjective.\n"
+            "PALETTE — the actual colours, with approximate hex. Say which "
+            "dominate, which are accents, and what the background usually is.\n"
+            "SURFACES AND PROPS — what they shoot on and what they put in "
+            "frame, and equally what never appears.\n"
+            "FRAMING — crop, camera height and angle, where the subject sits, "
+            "how much negative space and where.\n"
+            "LENS AND DEPTH — focal length and depth of field they favour, and "
+            "what they let fall out of focus.\n"
+            "GRADE — contrast, black level, highlight rolloff, colour cast, how "
+            "processed the files look.\n"
+            "RULES — five to eight numbered, specific, checkable instructions. "
+            "Each must be something a photographer could obey or break, e.g. "
+            "'key light always from camera-left, never frontal' or 'the product "
+            "never touches the frame edge'.\n"
+            "WHERE THEY VARY — the genuine differences between their images. "
+            "Name them; do not average them away.\n\n"
+            "Be concrete and quantitative wherever the readings support it. "
+            "Never use praise or marketing words such as stunning, elevated, "
+            "timeless, premium, curated or aesthetic. Do not restate these "
+            "instructions in your answer — follow them. 350-550 words.",
+            "\n\n=== NEXT REFERENCE ===\n\n".join(
+                f"[{SHOT_TYPES.get(r['shot'], {}).get('label', r['shot'])}]\n"
+                + _reading_prose(r) for r in readings),
+            sensitivity="public", max_tokens=2000, fallback="")
         signature = (merged["text"] or " ".join(sig_lines) or
                      _reading_prose(readings[0]))
 
@@ -313,11 +411,11 @@ def read_aesthetic(email: str) -> dict:
     #   aesthetic_reads  every INDIVIDUAL picture, kept so the seller can see
     #                    what was read out of each one and nothing is silently
     #                    averaged away.
-    b["aesthetic"] = signature.strip()[:2000]
+    b["aesthetic"] = signature.strip()[:6000]
     b["aesthetic_shots"] = shots
     b["aesthetic_reads"] = [{"shot": r["shot"], "shot_label":
                              SHOT_TYPES.get(r["shot"], {}).get("label", r["shot"]),
-                             "reading": _reading_prose(r)[:700]}
+                             "reading": _reading_prose(r)[:2500]}
                             for r in readings][:12]
     b["aesthetic_from"] = len(readings)
     user_store.set_key(email, BRAND_KEY, b)
@@ -773,7 +871,19 @@ def image_engine() -> dict:
     if aiprovider.image_ready():
         return {"engine": "cloudflare", "model": aiprovider.CF_IMAGE_MODEL,
                 "free": True,
-                "note": "Flux Schnell on Cloudflare — about 500 images a day free."}
+                "note": "Flux Schnell on Cloudflare — about 500 images a day free."
+                        + (" Re-shoots go through Gemini, which keeps your actual "
+                           "product." if aiprovider.gemini_image_ready() else "")}
+    # Gemini draws as well as reads, on the SAME key as the text provider. It
+    # comes before OpenAI because it is free-tier eligible and much better at
+    # keeping a real product intact when re-shooting from a reference — which
+    # is the entire difference between a picture a seller can post and one
+    # showing a wallet they do not sell.
+    if aiprovider.gemini_image_ready():
+        return {"engine": "gemini", "model": aiprovider.GEMINI_IMAGE_MODEL,
+                "free": True,
+                "note": "Gemini image — free tier, and the best of the free "
+                        "engines at keeping your actual product in a re-shoot."}
     if openai_ready():
         return {"engine": "openai",
                 "model": os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1"),
@@ -866,7 +976,27 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     from_ref = False
     used_engine, used_free = eng["engine"], eng["free"]
 
-    if eng["engine"] == "cloudflare":
+    # A RE-SHOOT goes to Gemini first whenever that key exists, whatever the
+    # nominal engine is. Cloudflare's only image-to-image model is Stable
+    # Diffusion 1.5, and at any strength high enough to change the setting it
+    # also redraws the hardware, the stitching and any brand marking on the
+    # item — which is precisely what a re-shoot must not do. Gemini keeps the
+    # object, lettering included. Text-to-image stays on Cloudflare, where it
+    # is far cheaper and the quality difference does not matter.
+    if reference and aiprovider.gemini_image_ready():
+        try:
+            content = aiprovider.gemini_image(prompt, reference[0],
+                                              reference[1] or "image/jpeg")
+        except Exception as e:  # noqa: BLE001 — fall through to the normal chain
+            log.warning("gemini re-shoot raised: %s", e)
+            content = None
+        if content:
+            from_ref = True
+            used_engine, used_free = "gemini", True
+
+    if content:
+        pass                       # already drawn by Gemini above
+    elif eng["engine"] == "cloudflare":
         try:
             if reference:
                 content = aiprovider.restyle_image(
@@ -906,6 +1036,25 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
                                "usually the daily free allowance being spent"
                                + (" (the OpenAI backup didn't work either)"
                                   if openai_ready() else "") + ".")
+
+    elif eng["engine"] == "gemini":
+        content = aiprovider.gemini_image(
+            prompt, reference[0] if reference else None,
+            (reference[1] if reference else "") or "image/jpeg")
+        from_ref = bool(reference and content)
+        if not content and openai_ready():
+            try:
+                content, from_ref = _openai_image(prompt, reference)
+                used_engine, used_free = "openai", False
+            except Exception as e:  # noqa: BLE001
+                content = None
+                log.warning("openai fallback after gemini failure also failed: %s", e)
+        if not content:
+            raise RuntimeError(
+                "Could not re-shoot your photo just now. Try again in a moment, "
+                "or use 'Invent a picture' if you only need a backdrop."
+                if reference else
+                "Could not generate the image just now. Try again in a moment.")
 
     elif eng["engine"] == "openai":
         try:

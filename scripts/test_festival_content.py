@@ -634,6 +634,107 @@ check("but it is a warning, never a block — Approve stays enabled",
 check("the calendar marks which posts already have a clip",
       "cal-has-vid" in _js3 and ".cal-has-vid" in _css3)
 
+
+# =========================================================================
+print("\n== 16. the aesthetic reading is deep enough to be worth having ==")
+# =========================================================================
+# The reading a seller was shown described any brand and generated none:
+# "soft diffused light, muted palette, shallow depth of field, calm mood".
+# Three causes: a one-sentence-per-field prompt, a 400-token ceiling, and a
+# 90-130 word merge that also leaked its own instruction into the answer.
+from backend.core import aiprovider  # noqa: E402
+
+_sys = studio.AESTHETIC_SYSTEM
+for _f in ("LIGHT", "PALETTE", "SURFACE", "PROPS", "COMPOSITION", "LENS",
+           "GRADE", "MOOD", "SIGNATURE", "REPEATABLE"):
+    check(f"the reading asks for {_f}", f"{_f}:" in _sys)
+check("each field has a word floor, so 'soft natural light' is not an answer",
+      _sys.count("+ words") >= 8, _sys.count("+ words"))
+check("it demands numbers, which cannot be vague",
+      all(w in _sys for w in ("hex", "f-stop", "focal length", "clock")))
+check("it bans the marketing words that made the old output generic",
+      all(w in _sys for w in ("stunning", "elevated", "timeless", "premium")))
+
+_src = __import__("inspect").getsource(studio.read_aesthetic)
+check("the 400-token ceiling that truncated every reading is gone",
+      "max_tokens=400" not in _src, _src[_src.find("max_tokens"):][:60])
+check("readings now get real room", "max_tokens=2000" in _src)
+check("the merge asks for a photography bible, not a paragraph",
+      "350-550 words" in _src and "RULES —" in _src)
+check("and explicitly tells the model not to restate the instructions",
+      "Do not restate these" in _src)
+
+_rich = """SHOT: packaging
+LIGHT: Soft overcast window light from camera-left at roughly 10 o'clock, about
+one metre from the subject, near 5600K.
+PALETTE: Kraft brown (#A9835C) over about 45% of frame against off-white tissue
+(#F2EDE4), one deep maroon accent (#5C1F28).
+SURFACE: Pale oak table, open grain, lightly waxed.
+PROPS: Scissors and twine out of focus upper-right.
+COMPOSITION: Square crop, overhead at 90 degrees, box left of centre.
+LENS: Roughly 50mm equivalent, shallow at about f/2.8.
+GRADE: Gentle contrast, blacks lifted, warm highlight cast.
+MOOD: Unhurried and ceremonial.
+SIGNATURE: The tissue is always caught mid-fold, never flat.
+REPEATABLE: Shoot overhead on pale oak, key from camera-left, open the box to
+exactly half."""
+_r = studio._parse_reading(_rich)
+check("every field survives parsing",
+      all(_r.get(k) for k in studio.READING_FIELDS),
+      [k for k in studio.READING_FIELDS if not _r.get(k)])
+check("a wrapped line is kept, not truncated at the first newline",
+      "one metre from the subject" in _r["light"], _r["light"])
+check("hex values survive", "#A9835C" in _r["palette"])
+check("an f-stop survives", "f/2.8" in _r["lens"])
+check("the reading is substantial, not a caption",
+      len(studio._reading_prose(_r)) > 600, len(studio._reading_prose(_r)))
+check("labels are kept so a long prompt cannot skim past them",
+      "LIGHT:" in studio._reading_prose(_r) and "GRADE:" in studio._reading_prose(_r))
+
+# =========================================================================
+print("\n== 17. better free models for vision and for drawing ==")
+# =========================================================================
+check("vision has its own preference order, not the text chain's",
+      hasattr(aiprovider, "VISION_PREFERENCE"))
+check("the model best at long descriptions is asked first",
+      aiprovider.VISION_PREFERENCE[0] == "gemini", aiprovider.VISION_PREFERENCE)
+check("Groq vision is wired now that it has a usable model",
+      "groq" in aiprovider.VISION_MODELS)
+check("and not with the dead llama-vision id older guides still show",
+      "llama-3.2" not in aiprovider.VISION_MODELS["groq"],
+      aiprovider.VISION_MODELS["groq"])
+check("Hugging Face is available as a provider",
+      any(p.name == "huggingface" for p in aiprovider.PROVIDERS))
+_hf = next(p for p in aiprovider.PROVIDERS if p.name == "huggingface")
+check("but is labelled honestly as credit-metered, not free",
+      _hf.free is False and "credit" in _hf.note, (_hf.free, _hf.note))
+check("its vision model is a real VLM, not a one-line captioner",
+      "VL" in aiprovider.VISION_MODELS["huggingface"],
+      aiprovider.VISION_MODELS["huggingface"])
+check("every vision model is overridable by env, so a dead id is a config fix",
+      all(f"{n.upper()}_VISION_MODEL" in __import__("inspect").getsource(aiprovider)
+          for n in ("cf", "gemini", "groq", "hf")))
+
+check("private work keeps its own safety ordering",
+      "if sensitivity == \"private\":" in
+      __import__("inspect").getsource(aiprovider._vision_order))
+
+check("Gemini can draw, not just read", hasattr(aiprovider, "gemini_image"))
+check("and is offered as an engine", "gemini" in
+      __import__("inspect").getsource(studio.image_engine))
+_gen = __import__("inspect").getsource(studio.generate_image)
+check("a RE-SHOOT prefers Gemini whatever the nominal engine is",
+      "if reference and aiprovider.gemini_image_ready():" in _gen)
+check("because SD-1.5 img2img redraws the product it is meant to preserve",
+      "redraws the hardware" in _gen)
+check("text-to-image still stays on the cheap engine",
+      "Text-to-image stays on Cloudflare" in _gen)
+check("gemini_image never raises into the request",
+      "except Exception" in __import__("inspect").getsource(aiprovider.gemini_image))
+check("it accepts both spellings of the response field",
+      'part.get("inline_data") or part.get("inlineData")' in
+      __import__("inspect").getsource(aiprovider.gemini_image))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
 

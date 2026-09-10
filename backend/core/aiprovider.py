@@ -112,6 +112,15 @@ PROVIDERS: list[Provider] = [
     Provider("gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
              "GEMINI_API_KEY", "gemini-2.5-flash",
              trains=True, free=True, note="1,500 requests/day free — trains on free tier"),
+    # Hugging Face, via their OpenAI-compatible router. Worth being honest in
+    # the note: the old unlimited serverless Inference API is gone, and free
+    # accounts now get a small monthly credit allowance rather than a real free
+    # tier. It is wired up because it opens a very large model catalogue behind
+    # one key, not because it is a way to avoid paying.
+    Provider("huggingface", "https://router.huggingface.co/v1", "HF_API_TOKEN",
+             os.environ.get("HF_TEXT_MODEL") or "Qwen/Qwen2.5-7B-Instruct",
+             trains=False, free=False,
+             note="credit-metered — small monthly allowance, then paid"),
     Provider("openai", os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1",
              "OPENAI_API_KEY", os.environ.get("OPENAI_TEXT_MODEL") or "gpt-4.1-mini",
              trains=False, free=False, note="paid — no training on API data"),
@@ -190,16 +199,37 @@ def generate(system: str, user: str, *, sensitivity: str,
 # text-only model to look at a picture returns a confident description of
 # nothing, which is worse than an error because it looks like it worked.
 VISION_MODELS = {
-    "cloudflare": "@cf/meta/llama-3.2-11b-vision-instruct",
-    "gemini": "gemini-2.5-flash",
+    "cloudflare": os.environ.get("CF_VISION_MODEL")
+                  or "@cf/meta/llama-3.2-11b-vision-instruct",
+    "gemini": os.environ.get("GEMINI_VISION_MODEL") or "gemini-2.5-flash",
+    # Groq does have usable vision on the free tier now (the older
+    # llama-3.2-*-vision ids are dead; the Qwen VL line replaced them). It is
+    # the fastest of the free options, so it earns a place in the chain.
+    "groq": os.environ.get("GROQ_VISION_MODEL") or "qwen/qwen3.6-27b",
+    "huggingface": os.environ.get("HF_VISION_MODEL") or "Qwen/Qwen2.5-VL-7B-Instruct",
     "openai": "gpt-4.1-mini",
-    # Groq's free tier has no vision model we can rely on, so it is skipped
-    # rather than sent a request it will refuse.
 }
+
+# Which provider to ASK FIRST for a picture, regardless of the text order.
+#
+# Vision is not text: the job here is a long, structured, art-direction reading,
+# and the providers differ far more at that than they do at writing a caption.
+# Gemini will write six hundred words of real detail; the smaller free vision
+# models tend to stop after two lines however hard the prompt pushes, which is
+# exactly the "reading is too shallow" problem. So vision gets its own order
+# rather than inheriting the text chain's.
+VISION_PREFERENCE = ["gemini", "groq", "openai", "cloudflare", "huggingface"]
 
 
 def _vision_order(sensitivity: str) -> list[Provider]:
-    return [p for p in _order(sensitivity) if p.name in VISION_MODELS]
+    usable = [p for p in _order(sensitivity) if p.name in VISION_MODELS]
+    # Private work keeps _order's own ranking: it has already dropped every
+    # provider that trains on its input and put the paid one first, and a
+    # preference for prettier prose is not a reason to disturb that.
+    if sensitivity == "private":
+        return usable
+    rank = {n: i for i, n in enumerate(VISION_PREFERENCE)}
+    return sorted(usable, key=lambda p: rank.get(p.name, 99))
 
 
 def describe_image(image_bytes: bytes, content_type: str, *, system: str,
@@ -364,3 +394,65 @@ def restyle_image(source: bytes, prompt: str, strength: float | None = None,
     if negative:
         payload["negative_prompt"] = negative[:500]
     return _image_bytes(_cf_run(CF_IMG2IMG_MODEL, payload))
+
+
+# --------------------------------------------------------- Gemini imagery
+#
+# WHY THIS IS HERE: the whole value of "Re-shoot my photo" is that the wallet in
+# the output is the wallet that ships. Stable Diffusion 1.5 img2img — the only
+# image-to-image model on the Cloudflare free tier — is a 2022 model, and at any
+# strength high enough to change the setting it also redraws the hardware, the
+# stitching and any brand marking. Gemini's image models were built for exactly
+# this: hand them the reference and they keep the object's identity, including
+# lettering, while changing everything around it.
+#
+# It also takes the SAME key as the text provider, so a seller who has already
+# set GEMINI_API_KEY gets the better path with no extra setup.
+GEMINI_IMAGE_MODEL = (os.environ.get("GEMINI_IMAGE_MODEL")
+                      or "gemini-2.5-flash-image")
+_GEMINI_IMAGE_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+
+
+def gemini_image_ready() -> bool:
+    return bool((os.environ.get("GEMINI_API_KEY") or "").strip())
+
+
+def gemini_image(prompt: str, reference: bytes | None = None,
+                 content_type: str = "image/jpeg") -> bytes | None:
+    """One picture from Gemini — text-to-image, or reference-preserving edit.
+
+    Passing `reference` is what makes this an edit rather than an invention:
+    the image goes in alongside the prompt and the model is asked to keep the
+    product and change the setting. Returns raw image bytes, or None so the
+    caller can fall through to the next engine exactly as it already does.
+    Never raises — an image failure must not break the request that asked for
+    it."""
+    key = (os.environ.get("GEMINI_API_KEY") or "").strip()
+    if not key or not prompt:
+        return None
+    import base64
+    parts: list[dict] = [{"text": prompt[:4000]}]
+    if reference:
+        parts.append({"inline_data": {
+            "mime_type": content_type or "image/jpeg",
+            "data": base64.b64encode(reference).decode()}})
+    body = json.dumps({"contents": [{"parts": parts}]}).encode()
+    url = f"{_GEMINI_IMAGE_BASE}/{GEMINI_IMAGE_MODEL}:generateContent?key={key}"
+    req = urllib.request.Request(
+        url, data=body, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            payload = json.loads(r.read().decode())
+        for cand in payload.get("candidates") or []:
+            for part in (cand.get("content") or {}).get("parts") or []:
+                # The API has used both spellings over its life; accept either
+                # rather than silently returning None on a working response.
+                blob = part.get("inline_data") or part.get("inlineData")
+                if blob and blob.get("data"):
+                    _STATS.setdefault("gemini", {"ok": 0, "err": 0})["ok"] += 1
+                    return base64.b64decode(blob["data"])
+        log.warning("gemini image returned no image part")
+    except Exception as e:  # noqa: BLE001 — caller falls through to the next engine
+        _STATS.setdefault("gemini", {"ok": 0, "err": 0})["err"] += 1
+        log.warning("gemini image failed: %s", e)
+    return None
