@@ -198,6 +198,8 @@ def generate(system: str, user: str, *, sensitivity: str,
 # Vision models per provider. These are NOT the text models — asking a
 # text-only model to look at a picture returns a confident description of
 # nothing, which is worse than an error because it looks like it worked.
+HF_VISION_DEFAULT = "Qwen/Qwen3-VL-30B-A3B-Instruct"
+
 VISION_MODELS = {
     "cloudflare": os.environ.get("CF_VISION_MODEL")
                   or "@cf/meta/llama-3.2-11b-vision-instruct",
@@ -206,7 +208,7 @@ VISION_MODELS = {
     # llama-3.2-*-vision ids are dead; the Qwen VL line replaced them). It is
     # the fastest of the free options, so it earns a place in the chain.
     "groq": os.environ.get("GROQ_VISION_MODEL") or "qwen/qwen3.6-27b",
-    "huggingface": os.environ.get("HF_VISION_MODEL") or "Qwen/Qwen2.5-VL-7B-Instruct",
+    "huggingface": os.environ.get("HF_VISION_MODEL") or HF_VISION_DEFAULT,
     "openai": "gpt-4.1-mini",
 }
 
@@ -218,7 +220,11 @@ VISION_MODELS = {
 # models tend to stop after two lines however hard the prompt pushes, which is
 # exactly the "reading is too shallow" problem. So vision gets its own order
 # rather than inheriting the text chain's.
-VISION_PREFERENCE = ["gemini", "groq", "openai", "cloudflare", "huggingface"]
+# Hugging Face first, by the seller's explicit choice — one account, one key,
+# and the largest catalogue of the options. The rest stay in the chain purely
+# as fallbacks for when its credit allowance runs out, so a read still
+# succeeds rather than failing outright.
+VISION_PREFERENCE = ["huggingface", "groq", "gemini", "openai", "cloudflare"]
 
 
 def _vision_order(sensitivity: str) -> list[Provider]:
@@ -394,6 +400,140 @@ def restyle_image(source: bytes, prompt: str, strength: float | None = None,
     if negative:
         payload["negative_prompt"] = negative[:500]
     return _image_bytes(_cf_run(CF_IMG2IMG_MODEL, payload))
+
+
+# ----------------------------------------------------- Hugging Face imagery
+#
+# The seller asked for Hugging Face and nothing else, so this is the primary
+# path for drawing and for video. Three things about it are worth knowing
+# before reading the code, because they shaped it:
+#
+#   1. There is NO `/v1/images/generations` on the HF router. Its OpenAI-shaped
+#      surface is chat-only. Images and video are routed per-provider, and the
+#      provider's own model slug is not the Hub repo id — the mapping lives in
+#      HF's API. Hand-rolling those URLs breaks whenever HF re-routes a model,
+#      so this goes through huggingface_hub's InferenceClient, which resolves
+#      the provider, submits the job and polls it.
+#
+#   2. Video is a QUEUE job on fal-ai, not a request. It takes around a minute,
+#      which is longer than a web request should ever block for — so the caller
+#      runs it in the background and the seller is told to come back.
+#
+#   3. It is NOT free, and the code says so out loud rather than letting a
+#      seller discover it. See HF_COSTS below.
+HF_IMAGE_MODEL = (os.environ.get("HF_IMAGE_MODEL")
+                  or "black-forest-labs/FLUX.1-schnell")
+# Instruction-edit models condition on the source image instead of redrawing
+# it, which is the whole requirement for a re-shoot: the wallet has to stay
+# the wallet. Qwen-Image-Edit holds identity best of the served set.
+HF_EDIT_MODEL = (os.environ.get("HF_EDIT_MODEL")
+                 or "Qwen/Qwen-Image-Edit-2511")
+HF_VIDEO_MODEL = (os.environ.get("HF_VIDEO_MODEL")
+                  or "Wan-AI/Wan2.2-I2V-A14B")
+
+# Roughly what each call costs, so the app can warn honestly instead of
+# letting a seller find out from a bill. Figures are provider pass-through
+# rates; HF adds no markup. A free account gets about $0.10 of credit a month
+# and PRO about $2.00 — which is why video is gated behind an explicit opt-in.
+HF_COSTS = {"vision": 0.002, "image": 0.003, "edit": 0.025, "video": 0.20}
+
+
+def hf_ready() -> bool:
+    return bool((os.environ.get("HF_API_TOKEN") or "").strip())
+
+
+def _hf_client():
+    """An InferenceClient, or None when the token or the library is missing.
+
+    huggingface_hub is imported lazily: it is only needed by sellers who have
+    actually connected Hugging Face, and a missing optional dependency must
+    degrade one feature rather than stop the app importing."""
+    token = (os.environ.get("HF_API_TOKEN") or "").strip()
+    if not token:
+        return None
+    try:
+        from huggingface_hub import InferenceClient
+        return InferenceClient(api_key=token)
+    except Exception as e:  # noqa: BLE001
+        log.warning("huggingface_hub unavailable: %s", e)
+        return None
+
+
+def hf_image(prompt: str, reference: bytes | None = None) -> bytes | None:
+    """One picture from Hugging Face — drawn, or the seller's own photo edited.
+
+    With a reference this is an instruction EDIT, not a generation: the source
+    image conditions the model, so the product in the output is the product in
+    the input. Without one it is plain text-to-image on a cheaper model.
+
+    Returns raw image bytes, or None so the caller falls through to whatever
+    engine is next. Never raises."""
+    client = _hf_client()
+    if not client or not prompt:
+        return None
+    try:
+        if reference:
+            img = client.image_to_image(reference, prompt=prompt[:2000],
+                                        model=HF_EDIT_MODEL)
+        else:
+            img = client.text_to_image(prompt[:2000], model=HF_IMAGE_MODEL)
+        out = _pil_to_png(img)
+        if out:
+            _STATS.setdefault("huggingface", {"ok": 0, "err": 0})["ok"] += 1
+        return out
+    except Exception as e:  # noqa: BLE001 — caller falls through
+        _STATS.setdefault("huggingface", {"ok": 0, "err": 0})["err"] += 1
+        log.warning("hf image failed (%s): %s",
+                    HF_EDIT_MODEL if reference else HF_IMAGE_MODEL, e)
+        return None
+
+
+def hf_video(image: bytes, prompt: str = "", frames: int = 81) -> bytes | None:
+    """A short clip from the seller's own product photo.
+
+    Image-to-video, not text-to-video, and deliberately so: the point is that
+    the thing moving on screen is the thing that ships. About a minute per
+    call, roughly five seconds of 480p out.
+
+    Honest about its limits, because they matter to whoever ships this: the
+    model animates the input frame, so identity holds for the first couple of
+    seconds and then texture and any lettering start to drift. It is right for
+    a slow push-in or a fabric ripple, and wrong for anything with real
+    motion.
+
+    Returns MP4 bytes, or None. Never raises."""
+    client = _hf_client()
+    if not client or not image:
+        return None
+    try:
+        video = client.image_to_video(
+            image, model=HF_VIDEO_MODEL,
+            prompt=(prompt or "slow gentle push-in, steady shot, soft light")[:1000])
+        data = video if isinstance(video, (bytes, bytearray)) else None
+        if data:
+            _STATS.setdefault("huggingface", {"ok": 0, "err": 0})["ok"] += 1
+            return bytes(data)
+        log.warning("hf video returned no bytes (%s)", type(video).__name__)
+    except Exception as e:  # noqa: BLE001
+        _STATS.setdefault("huggingface", {"ok": 0, "err": 0})["err"] += 1
+        log.warning("hf video failed (%s): %s", HF_VIDEO_MODEL, e)
+    return None
+
+
+def _pil_to_png(img) -> bytes | None:
+    """InferenceClient hands back a PIL image; media.save wants bytes."""
+    if img is None:
+        return None
+    if isinstance(img, (bytes, bytearray)):
+        return bytes(img)
+    try:
+        import io as _io
+        buf = _io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception as e:  # noqa: BLE001
+        log.warning("could not encode the returned image: %s", e)
+        return None
 
 
 # --------------------------------------------------------- Gemini imagery

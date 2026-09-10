@@ -1269,8 +1269,8 @@ must("groq" in _aip.VISION_MODELS,
      "Groq is used for vision now that its free tier has a usable model")
 must("llama-3.2" not in _aip.VISION_MODELS["groq"],
      f"and not with a retired model id ({_aip.VISION_MODELS['groq']})")
-must(_aip.VISION_PREFERENCE[0] == "gemini",
-     "the model best at long descriptions is asked first for vision")
+must(_aip.VISION_PREFERENCE[0] == "huggingface",
+     "Hugging Face is asked first for vision, as the seller chose")
 _v = _aip.describe_image(b"", "image/png", system="s", user="u")
 must(_v["text"] == "" and _v["error"] == "no image",
      "an empty image returns an error instead of raising")

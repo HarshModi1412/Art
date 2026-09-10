@@ -868,12 +868,22 @@ def image_engine() -> dict:
     seller generating 200 images a month costs Rs 740 of a Rs 999 subscription
     on OpenAI, and Rs 8 on Flux."""
     from backend.core import aiprovider
+    # Hugging Face first, by the seller's explicit choice. Its edit model
+    # conditions on the source photograph rather than redrawing it, which is
+    # what a re-shoot needs. It is NOT free, and the note says so — a free HF
+    # account carries about $0.10 of credit a month, which is roughly four
+    # edits.
+    if aiprovider.hf_ready():
+        return {"engine": "huggingface", "model": aiprovider.HF_EDIT_MODEL,
+                "free": False,
+                "note": "Hugging Face. Re-shoots use an edit model that keeps "
+                        "your actual product. Around $0.03 an edit and $0.003 a "
+                        "drawn picture — a free HF account's monthly credit "
+                        "covers only a handful, so connect PRO or pay-as-you-go."}
     if aiprovider.image_ready():
         return {"engine": "cloudflare", "model": aiprovider.CF_IMAGE_MODEL,
                 "free": True,
-                "note": "Flux Schnell on Cloudflare — about 500 images a day free."
-                        + (" Re-shoots go through Gemini, which keeps your actual "
-                           "product." if aiprovider.gemini_image_ready() else "")}
+                "note": "Flux Schnell on Cloudflare — about 500 images a day free."}
     # Gemini draws as well as reads, on the SAME key as the text provider. It
     # comes before OpenAI because it is free-tier eligible and much better at
     # keeping a real product intact when re-shooting from a reference — which
@@ -976,26 +986,45 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     from_ref = False
     used_engine, used_free = eng["engine"], eng["free"]
 
-    # A RE-SHOOT goes to Gemini first whenever that key exists, whatever the
-    # nominal engine is. Cloudflare's only image-to-image model is Stable
-    # Diffusion 1.5, and at any strength high enough to change the setting it
-    # also redraws the hardware, the stitching and any brand marking on the
-    # item — which is precisely what a re-shoot must not do. Gemini keeps the
-    # object, lettering included. Text-to-image stays on Cloudflare, where it
-    # is far cheaper and the quality difference does not matter.
-    if reference and aiprovider.gemini_image_ready():
+    # A RE-SHOOT goes to Hugging Face's edit model first whenever that token
+    # exists, whatever the nominal engine is. Cloudflare's only image-to-image
+    # model is Stable Diffusion 1.5, and at any strength high enough to change
+    # the setting it also redraws the hardware, the stitching and any brand
+    # marking on the item — precisely what a re-shoot must not do. An
+    # instruction-edit model conditions on the source instead, so the wallet
+    # stays the wallet. Text-to-image can still fall to Cloudflare, which is
+    # ~10x cheaper and good enough when nothing is being preserved.
+    if reference and aiprovider.hf_ready():
         try:
-            content = aiprovider.gemini_image(prompt, reference[0],
-                                              reference[1] or "image/jpeg")
+            content = aiprovider.hf_image(prompt, reference[0])
         except Exception as e:  # noqa: BLE001 — fall through to the normal chain
-            log.warning("gemini re-shoot raised: %s", e)
+            log.warning("hugging face re-shoot raised: %s", e)
             content = None
         if content:
             from_ref = True
-            used_engine, used_free = "gemini", True
+            used_engine, used_free = "huggingface", False
 
     if content:
-        pass                       # already drawn by Gemini above
+        pass                       # already drawn above
+    elif eng["engine"] == "huggingface":
+        content = aiprovider.hf_image(prompt, reference[0] if reference else None)
+        from_ref = bool(reference and content)
+        if not content and aiprovider.image_ready() and not reference:
+            # Only text-to-image may fall back to Cloudflare. Falling back for a
+            # RE-SHOOT would quietly hand the seller a picture of a product they
+            # do not sell, which is worse than an error.
+            content = aiprovider.generate_image(prompt)
+            if content:
+                used_engine, used_free = "cloudflare", True
+        if not content:
+            raise RuntimeError(
+                "Could not re-shoot your photo just now. This is usually the "
+                "Hugging Face credit allowance being spent — check your usage, "
+                "or use 'Invent a picture' if you only need a backdrop."
+                if reference else
+                "Could not generate the image just now. This is usually the "
+                "Hugging Face credit allowance being spent.")
+
     elif eng["engine"] == "cloudflare":
         try:
             if reference:
@@ -1146,6 +1175,69 @@ def _stamp_brand(image_bytes: bytes, brand_name: str) -> bytes:
     except Exception as e:  # noqa: BLE001 -- a cosmetic stamp must never break generation
         log.warning("brand stamp failed, returning unstamped image: %s", e)
         return image_bytes
+
+
+def video_engine() -> dict:
+    """Whether a clip can be generated, and what it honestly costs.
+
+    Deliberately blunt about the money. Image-to-video on Hugging Face routes
+    to fal-ai at roughly $0.20 for five seconds at 480p. A free HF account
+    carries about $0.10 of credit a month and PRO about $2.00 — so free buys
+    nothing at all, and PRO buys about ten clips a month in total, shared with
+    everything else on the account. A seller should learn that here, not from
+    a bill."""
+    from backend.core import aiprovider
+    if not aiprovider.hf_ready():
+        return {"engine": "", "model": "", "free": False, "ready": False,
+                "note": "No Hugging Face token connected, so clips cannot be "
+                        "generated. You can still upload your own."}
+    return {"engine": "huggingface", "model": aiprovider.HF_VIDEO_MODEL,
+            "free": False, "ready": True,
+            "cost_usd": aiprovider.HF_COSTS["video"],
+            "note": "About $0.20 for a 5-second 480p clip, and roughly a minute "
+                    "to make. A free Hugging Face account's monthly credit does "
+                    "not cover one; PRO covers about ten. It animates your own "
+                    "photo, so the product holds for the first couple of seconds "
+                    "before detail starts to drift — best for a slow push-in, "
+                    "not for real movement."}
+
+
+def generate_video(email: str, product_id: str, prompt: str = "") -> dict:
+    """A short clip made FROM the seller's own product photograph.
+
+    Image-to-video on purpose. Text-to-video would invent a product, and a
+    video of a wallet the seller does not sell is worse than no video — the
+    same rule that separates Re-shoot from Invent for stills.
+
+    Takes about a minute, so callers keep it off the request path."""
+    from backend.core import aiprovider, media
+    eng = video_engine()
+    if not eng["ready"]:
+        raise RuntimeError(eng["note"])
+    product = next((p for p in products.get_products(email)
+                    if p["id"] == product_id), None)
+    if not product:
+        raise ValueError("That product no longer exists.")
+    material = get_material(email, product_id)
+    ref = _reference_shot(email, product, material)
+    if not ref:
+        raise RuntimeError(
+            "A clip is made FROM one of your own photographs, and this product "
+            "has none yet. Add a photo in Product Studio first.")
+    brand = get_brand(email)
+    motion = (prompt or "").strip() or (
+        "slow gentle push-in on the product, steady shot, "
+        + (brand.get("aesthetic") or "")[:300]).strip()
+    data = aiprovider.hf_video(ref[0], motion)
+    if not data:
+        raise RuntimeError(
+            "Could not generate the clip. This is usually the Hugging Face "
+            "credit allowance being spent — check your usage there.")
+    saved = media.save(f"{uuid.uuid4().hex}.mp4", data, email)
+    return {"url": saved["url"], "durable": saved["durable"], "generated": True,
+            "product_id": product_id, "prompt": motion,
+            "engine": eng["engine"], "model": eng["model"],
+            "cost_usd": eng.get("cost_usd"), "free": False}
 
 
 def generate_image_only(email: str, product_id: str, pillar: str = "",

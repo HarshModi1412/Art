@@ -4200,6 +4200,110 @@ def social_attach(body: SocialAttachBody,
     return p
 
 
+class SocialReadyBody(BaseModel):
+    post_id: str
+    # A reel is filmed or generated, never drawn — so "make the media for me"
+    # means different things per format and the caller says which it wants.
+    generate: bool = True
+
+
+@app.post("/api/social/approve-ready")
+def social_approve_ready(body: SocialReadyBody,
+                         authorization: str | None = Header(default=None)):
+    """Approve a post AND give it the media it needs, in one action.
+
+    WHY: the Approval panel's Approve button scheduled a post that had no
+    picture on it. The seller then had to find that post again in the calendar,
+    open it, generate a picture and save — three steps later, for something
+    they had already said yes to. Approving now means "yes, and make it ready".
+
+    The two formats need different things and get them:
+      * an IMAGE post has its picture generated here and is then scheduled;
+      * a REEL cannot be — there is no single photograph that is a video — so
+        its shot list and paste-ready prompt are returned instead, and it is
+        scheduled as ready-to-film rather than pretending it is finished.
+
+    A generation failure does NOT block the approval. The seller's decision is
+    the valuable part and it is honoured either way; the reason is reported so
+    the panel can say what still needs doing."""
+    email = require_user(authorization)
+    post = social.get_post(email, body.post_id)
+    if not post:
+        raise HTTPException(404, "Post not found")
+
+    is_reel = post.get("format") == "reel"
+    made, media_error, script = None, "", None
+
+    if is_reel:
+        # Nothing to draw. Hand back what the seller actually needs to produce
+        # the clip: the beats to film, and the prompt to paste into a video AI.
+        script = post.get("script") or None
+        if not script or not (script.get("beats") or []):
+            cat = {p["id"]: p for p in _social_catalogue(email)}
+            product = cat.get(post.get("product_id")) or {"name": post.get("product_name")}
+            occasion = ({"name": post["occasion"],
+                         "days_away": post.get("occasion_days") or 0}
+                        if post.get("occasion") else None)
+            script = social.write_reel_script(
+                email, product, post.get("pillar") or "detail", occasion=occasion,
+                shot_type=post.get("shot_type") or "",
+                theme=post.get("theme_note") or "")
+            social.update_post(email, body.post_id, {"script": script})
+    elif body.generate and not post.get("image_url"):
+        try:
+            made = studio.generate_image_only(
+                email, post.get("product_id") or "",
+                post.get("pillar") or "", post.get("format") or "",
+                use_reference=True,
+                occasion_key=post.get("occasion_key") or "",
+                shot_type=post.get("shot_type") or "")
+            social.attach_image(email, body.post_id, made["url"], True,
+                               made.get("prompt", ""))
+        except (RuntimeError, ValueError) as e:
+            media_error = str(e)
+
+    p = social.set_state(email, body.post_id, "scheduled")
+    if p.get("error"):
+        raise HTTPException(400, p["error"])
+    cache.clear(email)
+    return {"post": social.get_post(email, body.post_id),
+            "image": made, "script": script, "is_reel": is_reel,
+            "media_error": media_error,
+            "ready": social.post_ready(social.get_post(email, body.post_id) or {})}
+
+
+@app.get("/api/studio/video-engine")
+def studio_video_engine(authorization: str | None = Header(default=None)):
+    """Whether clips can be generated, and what one costs — asked before the
+    button is offered, so a seller is never surprised by the price."""
+    require_user(authorization)
+    return studio.video_engine()
+
+
+class StudioVideoBody(BaseModel):
+    product_id: str
+    post_id: str | None = ""
+    prompt: str | None = ""
+
+
+@app.post("/api/studio/video")
+def studio_video(body: StudioVideoBody,
+                 authorization: str | None = Header(default=None)):
+    """Generate a short clip from the seller's own product photograph.
+
+    Slow — around a minute — and it costs real money per call, so the UI
+    confirms the price first and warns that the tab can be left alone."""
+    email = require_user(authorization)
+    try:
+        vid = studio.generate_video(email, body.product_id, body.prompt or "")
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(400, str(e))
+    if body.post_id:
+        social.attach_video(email, body.post_id, vid["url"])
+    cache.clear(email)
+    return vid
+
+
 @app.post("/api/social/attach-video")
 def social_attach_video(body: SocialAttachBody,
                         authorization: str | None = Header(default=None)):

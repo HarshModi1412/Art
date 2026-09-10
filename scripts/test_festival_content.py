@@ -696,8 +696,14 @@ print("\n== 17. better free models for vision and for drawing ==")
 # =========================================================================
 check("vision has its own preference order, not the text chain's",
       hasattr(aiprovider, "VISION_PREFERENCE"))
-check("the model best at long descriptions is asked first",
-      aiprovider.VISION_PREFERENCE[0] == "gemini", aiprovider.VISION_PREFERENCE)
+# This asserted "gemini" until the seller asked for Hugging Face and nothing
+# else. The others stay in the chain as fallbacks rather than being removed,
+# so a read still succeeds once the HF credit allowance is spent.
+check("Hugging Face is asked first, as chosen",
+      aiprovider.VISION_PREFERENCE[0] == "huggingface", aiprovider.VISION_PREFERENCE)
+check("and the rest remain as fallbacks for when its credit runs out",
+      set(aiprovider.VISION_PREFERENCE) >= {"groq", "cloudflare", "openai"},
+      aiprovider.VISION_PREFERENCE)
 check("Groq vision is wired now that it has a usable model",
       "groq" in aiprovider.VISION_MODELS)
 check("and not with the dead llama-vision id older guides still show",
@@ -719,21 +725,124 @@ check("private work keeps its own safety ordering",
       "if sensitivity == \"private\":" in
       __import__("inspect").getsource(aiprovider._vision_order))
 
-check("Gemini can draw, not just read", hasattr(aiprovider, "gemini_image"))
-check("and is offered as an engine", "gemini" in
-      __import__("inspect").getsource(studio.image_engine))
+# Gemini image support stays in the codebase for anyone who already has that
+# key, but it is no longer the preferred path.
+check("Gemini image support survives as a fallback",
+      hasattr(aiprovider, "gemini_image"))
 _gen = __import__("inspect").getsource(studio.generate_image)
-check("a RE-SHOOT prefers Gemini whatever the nominal engine is",
-      "if reference and aiprovider.gemini_image_ready():" in _gen)
+check("a RE-SHOOT prefers the HF edit model whatever the nominal engine is",
+      "if reference and aiprovider.hf_ready():" in _gen)
 check("because SD-1.5 img2img redraws the product it is meant to preserve",
       "redraws the hardware" in _gen)
-check("text-to-image still stays on the cheap engine",
-      "Text-to-image stays on Cloudflare" in _gen)
-check("gemini_image never raises into the request",
-      "except Exception" in __import__("inspect").getsource(aiprovider.gemini_image))
-check("it accepts both spellings of the response field",
-      'part.get("inline_data") or part.get("inlineData")' in
-      __import__("inspect").getsource(aiprovider.gemini_image))
+check("text-to-image may still fall to the cheaper engine",
+      "cheaper and good enough" in _gen)
+check("no image path can raise into the request",
+      all("except Exception" in __import__("inspect").getsource(f)
+          for f in (aiprovider.gemini_image, aiprovider.hf_image, aiprovider.hf_video)))
+
+
+# =========================================================================
+print("\n== 18. Approve means approve AND make it ready ==")
+# =========================================================================
+_ae = f"appr{int(time.time() * 1000)}@t.co"
+_atok = c.post("/api/register", json={"email": _ae, "password": "Test12345!"}).json()["token"]
+_AH = {"Authorization": "Bearer " + _atok, "X-Session-Id": "appr"}
+c.post("/api/products/item", json={"name": "Women Wallet", "category": "Accessories",
+                                   "price": 2499, "stock": 5}, headers=_AH)
+c.post("/api/social/settings", json={"patch": {"category": "clothing",
+                                               "cadence": "standard"}}, headers=_AH)
+c.post("/api/social/week", json={"weeks": 1}, headers=_AH)
+_aps = social.week(_ae)
+_aimg = next((p for p in _aps if p["format"] != "reel"), None)
+_areel = next((p for p in _aps if p["format"] == "reel"), None)
+
+_r = c.post("/api/social/approve-ready", headers=_AH, json={"post_id": _aimg["id"]})
+check("approving an image post succeeds", _r.status_code == 200, _r.text[:200])
+_d = _r.json()
+check("it is scheduled", _d["post"]["state"] == "scheduled", _d["post"]["state"])
+check("a failed generation does NOT lose the seller's decision",
+      _d["post"]["state"] == "scheduled" and bool(_d["media_error"]),
+      _d["media_error"][:80])
+check("and the reason is reported so the panel can say what is left",
+      "image engine" in _d["media_error"].lower(), _d["media_error"][:90])
+
+_r2 = c.post("/api/social/approve-ready", headers=_AH, json={"post_id": _areel["id"]})
+_d2 = _r2.json()
+check("approving a reel succeeds", _r2.status_code == 200, _r2.text[:200])
+check("it is scheduled too", _d2["post"]["state"] == "scheduled")
+check("a reel is recognised as a reel", _d2["is_reel"] is True)
+check("no picture is drawn for it — there is no photograph that IS a video",
+      _d2.get("image") is None)
+check("it hands back the shot list instead",
+      bool((_d2.get("script") or {}).get("beats")), _d2.get("script"))
+check("and the paste-ready video prompt",
+      bool((_d2.get("script") or {}).get("ai_prompt")))
+check("a reel with no clip is still reported as not ready",
+      _d2["ready"] is False)
+check("approving an unknown post 404s",
+      c.post("/api/social/approve-ready", headers=_AH,
+             json={"post_id": "nope"}).status_code == 404)
+
+# =========================================================================
+print("\n== 19. Hugging Face only, and honest about what it costs ==")
+# =========================================================================
+check("Hugging Face is asked first for vision",
+      aiprovider.VISION_PREFERENCE[0] == "huggingface", aiprovider.VISION_PREFERENCE)
+check("with a real VLM, not a captioner",
+      "VL" in aiprovider.VISION_MODELS["huggingface"],
+      aiprovider.VISION_MODELS["huggingface"])
+check("HF can draw", hasattr(aiprovider, "hf_image"))
+check("HF can make video", hasattr(aiprovider, "hf_video"))
+check("a re-shoot uses an EDIT model that conditions on the source photo",
+      "Edit" in aiprovider.HF_EDIT_MODEL, aiprovider.HF_EDIT_MODEL)
+check("and text-to-image uses a cheaper plain model",
+      aiprovider.HF_IMAGE_MODEL != aiprovider.HF_EDIT_MODEL)
+check("video is image-to-video, so the product stays the seller's",
+      "I2V" in aiprovider.HF_VIDEO_MODEL, aiprovider.HF_VIDEO_MODEL)
+check("every HF model id is env-overridable",
+      all(k in __import__("inspect").getsource(aiprovider)
+          for k in ("HF_IMAGE_MODEL", "HF_EDIT_MODEL", "HF_VIDEO_MODEL",
+                    "HF_VISION_MODEL")))
+
+_eng_src = __import__("inspect").getsource(studio.image_engine)
+check("HF is the preferred image engine", "aiprovider.hf_ready()" in _eng_src)
+check("and its note says plainly that it is not free",
+      "not free" in _eng_src.lower() or "free HF account" in _eng_src, _eng_src[:200])
+
+_gsrc = __import__("inspect").getsource(studio.generate_image)
+check("a re-shoot prefers the HF edit model",
+      "if reference and aiprovider.hf_ready():" in _gsrc)
+check("a failed RE-SHOOT never silently falls back to inventing a product",
+      "not reference" in _gsrc.split("elif eng[\"engine\"] == \"huggingface\":")[1][:700],
+      "guard missing")
+
+_v = studio.video_engine()
+check("video engine reports not-ready without a token", _v["ready"] is False)
+check("and says you can still upload your own", "upload your own" in _v["note"])
+_vsrc = __import__("inspect").getsource(studio.video_engine)
+check("the cost is stated up front, not discovered from a bill",
+      "$0.20" in _vsrc and "PRO covers about ten" in _vsrc)
+check("and the fidelity limit is stated honestly",
+      "drift" in _vsrc)
+_gvsrc = __import__("inspect").getsource(studio.generate_video)
+check("video is generated FROM the seller's own photo, never invented",
+      "_reference_shot" in _gvsrc)
+check("and refuses clearly when there is no photo to work from",
+      "has none yet" in _gvsrc)
+
+_js4 = pathlib.Path("Smart CafeX/smart.js").read_text(encoding="utf-8")
+check("the panel routes post approvals through the new flow",
+      'id.startsWith("post_") && decision === "approve"' in _js4)
+check("a reel gets its prompt handed over on approval",
+      "function openReelPrompt" in _js4)
+check("with a copy button", "rpCopy" in _js4)
+check("and a route into the editor to upload the clip", "rpOpen" in _js4)
+check("the editor offers to generate a clip", "smVidGen" in _js4)
+check("but confirms the price BEFORE spending anything",
+      "/api/studio/video-engine" in _js4 and "confirm(" in
+      _js4.split('vidGen.onclick')[1][:600])
+check("and warns that generated clips drift",
+      "then detail can drift" in _js4)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

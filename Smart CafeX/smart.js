@@ -945,11 +945,114 @@ function renderApprovals(insights) {
   if ($("apNone")) $("apNone").onclick = () => runAll("disapprove", "Dismissing");
 }
 
+/* Approve, and make the post actually postable.
+   ------------------------------------------------------------------
+   An image post gets its picture drawn and is then scheduled. A reel cannot —
+   there is no single photograph that IS a video — so it gets its shot list and
+   the paste-ready prompt instead, and is scheduled as ready-to-film with the
+   clip still to come.
+
+   A generation failure never blocks the approval: the seller's decision is the
+   valuable part and the server honours it either way. The panel just says what
+   is still outstanding. */
+async function approvePostReady(postId) {
+  const post = findPost ? findPost(postId) : null;
+  const isReel = post && post.format === "reel";
+  try {
+    const r = await withBusy(
+      isReel ? "Approving and writing the shot list…" : "Approving and drawing the picture…",
+      isReel
+        ? "A reel is filmed, so this gets you the beats and a prompt for a video AI."
+        : "Generating the image for this post, then putting it on the calendar.",
+      () => api("/api/social/approve-ready", { method: "POST", json: { post_id: postId } }));
+
+    refreshApprovals(true);
+    if (_currentModule === "social" && _socialData) {
+      _socialData = await api("/api/social");
+      await renderSocial();
+    }
+
+    if (r.is_reel) {
+      // Hand the prompt over immediately — it is the thing they need next, and
+      // making them hunt for it in the editor is the friction this removes.
+      openReelPrompt(r.post, r.script || {});
+    } else if (r.media_error) {
+      toast("Approved and scheduled — but the picture could not be made: "
+            + r.media_error, 8000);
+    } else if (r.image) {
+      toast("Approved, picture made, scheduled.");
+    } else {
+      toast("Approved and scheduled.");
+    }
+  } catch (e) { toast(e.message, 6000); }
+}
+
+/* What a reel needs the moment it is approved: the beats to film, and a prompt
+   that can be pasted straight into a video AI. Shown here rather than buried
+   in the editor because this is the moment the seller is thinking about it. */
+function openReelPrompt(post, script) {
+  const beats = script.beats || [];
+  openModal(`Ready to film — ${esc((post && post.product_name) || "your reel")}`, `
+    <p class="sm-hint" style="margin-top:0;">Scheduled. A reel is filmed, not
+      drawn — so here is what to shoot. Film it yourself, or paste the prompt
+      into Gemini, Veo, Sora or Kling and upload the clip to this post.</p>
+
+    ${beats.length ? `<div class="sm-script-rows">
+      ${beats.map((b) => `
+        <div class="sm-beat-row" style="grid-template-columns:64px 1fr 1fr;">
+          <input value="${esc(b.sec || "")}" readonly />
+          <input value="${esc(b.shot || "")}" readonly />
+          <input value="${esc(b.on_screen_text || "")}" readonly />
+        </div>`).join("")}
+    </div>` : ""}
+
+    ${script.ai_prompt ? `
+      <div class="sm-prompt">
+        <div class="sm-prompt-head">
+          <div><b>Prompt for a video AI</b></div>
+          <button class="btn ghost tiny" id="rpCopy">${sic("layers")}Copy</button>
+        </div>
+        <pre class="sm-prompt-body" id="rpBody">${esc(script.ai_prompt)}</pre>
+      </div>` : ""}
+
+    <div class="modal-actions">
+      <button class="btn ghost" data-rpx>Close</button>
+      <button class="btn primary" id="rpOpen">Open the post to upload the clip</button>
+    </div>`, { wide: true });
+
+  document.querySelector("[data-rpx]").onclick = closeModal;
+  if ($("rpCopy")) $("rpCopy").onclick = async () => {
+    const b = $("rpCopy"), was = b.innerHTML;
+    try {
+      await navigator.clipboard.writeText(script.ai_prompt || "");
+      b.innerHTML = sic("check") + "Copied";
+    } catch (e) {
+      const rg = document.createRange();
+      rg.selectNodeContents($("rpBody"));
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+      b.innerHTML = sic("check") + "Selected — press Ctrl+C";
+    }
+    setTimeout(() => { b.innerHTML = was; }, 2500);
+  };
+  $("rpOpen").onclick = async () => {
+    closeModal();
+    const fresh = (post && post.id) ? await api(`/api/social/post/${post.id}`).catch(() => post) : post;
+    if (fresh) openSocialEditor(fresh);
+  };
+}
+
 async function decide(id, decision) {
   // Content-post insights have their own detail popup; the panel actions
   // still go through the normal approve/dismiss flow below except the
   // content case which we route to its dedicated poster.
   if (id && id.startsWith("content_") && decision === "approve") return saveContentToDevice(id);
+  // Approving a planned post means "yes, and make it ready" — not just "set a
+  // flag". It used to schedule a post with no picture on it, leaving the
+  // seller to find that post again in the calendar, open it, generate the
+  // image and save: three steps after they had already said yes.
+  if (id && id.startsWith("post_") && decision === "approve") {
+    return approvePostReady(id.slice(5));
+  }
   try {
     const r = await api(`/api/smart/insight/${id}/decision`, { method: "POST", json: { decision } });
     if (state.lastState) {
@@ -5727,6 +5830,7 @@ function openSocialEditor(post) {
       <div class="sm-vid-acts">
         <button class="btn ${post.video_url ? "ghost" : "primary"} sm" id="smVidPick">
           ${sic("arrow-up-right")}${post.video_url ? "Replace clip" : "Upload clip"}</button>
+        <button class="btn ghost sm" id="smVidGen">${sic("spark")}Generate a clip</button>
         ${post.video_url
           ? `<button class="btn ghost sm danger" id="smVidClear">${sic("close")}Remove</button>`
           : ""}
@@ -5864,6 +5968,34 @@ function openSocialEditor(post) {
       vidFile.value = "";       // so picking the same file again still fires
     };
   }
+  /* Generating a clip costs real money per call and takes about a minute, so
+     the price is confirmed BEFORE anything is spent — never after. */
+  const vidGen = $("smVidGen");
+  if (vidGen) vidGen.onclick = async () => {
+    let eng;
+    try { eng = await api("/api/studio/video-engine"); }
+    catch (e) { return toast(e.message, 6000); }
+    if (!eng.ready) return toast(eng.note, 8000);
+    if (!confirm(`Generate a clip from your own photo of this product?\n\n${eng.note}\n\n`
+                 + "Continue?")) return;
+    try {
+      const vid = await withBusy("Making your clip…",
+        "This takes about a minute. It animates your own photograph, so the "
+        + "product stays yours. You can carry on using the app.",
+        () => api("/api/studio/video", { method: "POST", json: {
+          product_id: post.product_id, post_id: post.id } }));
+      post.video_url = vid.url;
+      const slot = $("smVidSlot");
+      if (slot) {
+        slot.innerHTML = `<video src="${esc(vid.url)}" controls playsinline preload="metadata"></video>`;
+        if (vidPick) { vidPick.innerHTML = sic("arrow-up-right") + "Replace clip"; vidPick.className = "btn ghost sm"; }
+      }
+      _socialData = await api("/api/social");
+      toast("Clip made and attached. Check it before you schedule — the product "
+            + "holds for the first couple of seconds, then detail can drift.", 9000);
+    } catch (e) { toast(e.message, 8000); }
+  };
+
   const vidClear = $("smVidClear");
   if (vidClear) vidClear.onclick = async () => {
     try {

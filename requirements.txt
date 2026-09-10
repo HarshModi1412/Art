@@ -13,3 +13,4 @@ Pillow
 requests
 cryptography>=41
 supabase>=2.0,<3
+huggingface_hub>=0.34
