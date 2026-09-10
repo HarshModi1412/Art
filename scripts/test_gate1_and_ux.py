@@ -177,8 +177,10 @@ check("support can mint a link for a real account",
       hasattr(password_reset, "admin_reset_link"))
 _main = pathlib.Path("backend/main.py").read_text(encoding="utf-8")
 check("that path is gated on an admin token", "ADMIN_TOKEN" in _main)
-check("and refuses everyone when no token is configured",
-      "Admin recovery is not enabled" in _main)
+check("and refuses everyone when no token is configured, rather than defaulting open",
+      "Admin endpoints are not enabled" in _main)
+check("via one shared gate, so a new operator endpoint cannot forget it",
+      "def _require_admin(" in _main and _main.count("_require_admin(x_admin_token)") >= 4)
 check("compared in constant time, not with ==", "secrets.compare_digest" in _main)
 if _was:
     os.environ["SMTP_HOST"] = _was

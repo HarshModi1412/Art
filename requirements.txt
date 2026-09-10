@@ -14,3 +14,6 @@ requests
 cryptography>=41
 supabase>=2.0,<3
 huggingface_hub>=0.34
+# Optional: only imported when SENTRY_DSN is set. The built-in
+# error log in backend/core/errors.py works without it.
+# sentry-sdk>=2.0

@@ -1198,18 +1198,27 @@ function openReelPrompt(post, script) {
       </div>` : ""}
 
     <div class="rp-next">
-      <b>What happens next</b>
+      <b>Three ways to get the clip. Pick one.</b>
       <ol>
-        <li>Film it on your phone using the shots above — 15 to 30 seconds is plenty.</li>
-        <li>Or paste the prompt into a video AI and use what it gives you.</li>
-        <li>Upload the clip here. Until a clip is on it, this reel will not go out.</li>
+        <li><b>Film it yourself</b> on your phone from the shots above. 15 to 30
+          seconds. This usually beats anything an AI makes.</li>
+        <li><b>Let Google Flow make it free</b> — we copy the prompt and open it
+          for you. About five clips a day cost nothing there, and you see the
+          result before you commit to anything.</li>
+        <li><b>Have us make it</b> if you would rather not leave. This one costs
+          money per clip and you pay before you see it.</li>
       </ol>
+      <p class="muted tiny" style="margin:8px 0 0;">Whichever you choose, the clip
+        comes back here. Until one is on it, this reel will not go out.</p>
     </div>
+
+    <div id="rpTools"></div>
 
     <div class="modal-actions">
       <button class="btn ghost" data-rpx>I will do it later</button>
-      <button class="btn ghost" id="rpMake">Have an AI make it</button>
-      <button class="btn primary" id="rpUpload">${sic("arrow-up-right")}Upload the clip now</button>
+      <button class="btn ghost" id="rpMake">Have us make it (paid)</button>
+      <button class="btn primary" id="rpFlow">${sic("arrow-up-right")}Copy prompt &amp; open Google Flow</button>
+      <button class="btn primary" id="rpUpload">${sic("arrow-up-right")}Upload the clip</button>
     </div>
     <input type="file" id="rpFile" accept="video/mp4,video/webm,video/quicktime" hidden />`,
     { wide: true });
@@ -1260,6 +1269,69 @@ function openReelPrompt(post, script) {
     } catch (e) { toast(e.message, 7000); }
   };
   $("rpMake").onclick = async () => { closeModal(); await reopen(); };
+
+  /* The Google Flow handoff.
+     Flow publishes no URL parameter that pre-fills a prompt, and shipping an
+     undocumented ?prompt= that silently does nothing would look broken. So the
+     prompt goes to the clipboard at the moment of the click — one paste on the
+     other side — and the steps that matter (Video → Frames → add YOUR photo as
+     the start frame) are spelled out here, because that is the step that makes
+     the clip show the seller's real product rather than a plausible invention. */
+  $("rpFlow").onclick = async () => {
+    const text = script.ai_prompt || "";
+    let copied = false;
+    try { await navigator.clipboard.writeText(text); copied = true; } catch (e) { copied = false; }
+    await showVideoTools(text, copied);
+  };
+}
+
+/* Today's remaining generations, rendered quietly next to the engine picker. */
+let _aiLeft = null;
+async function showAiLeft(force) {
+  const box = $("smEngineNote");
+  if (!box) return;
+  try {
+    if (!_aiLeft || force) _aiLeft = await api("/api/studio/ai-usage");
+    const img = (_aiLeft.kinds || {}).image || {};
+    if (!img.cap) return;
+    const tail = ` · ${img.left} of ${img.cap} pictures left today`;
+    if (!box.textContent.includes("left today")) box.textContent += tail;
+  } catch (e) { /* a missing count is not worth an error */ }
+}
+
+let _vidTools = null;
+async function showVideoTools(promptText, copied) {
+  const box = $("rpTools");
+  if (!_vidTools) {
+    try { _vidTools = await api("/api/studio/video-tools"); }
+    catch (e) { toast(e.message); return; }
+  }
+  const d = _vidTools;
+  const card = (t) => `
+    <div class="vt-card ${t.primary ? "on" : ""}">
+      <div class="vt-head">
+        <div><b>${esc(t.name)}</b>${t.primary ? ` <span class="vt-pick">start here</span>` : ""}
+          <div class="muted tiny">${esc(t.best_for)}</div></div>
+        <a class="btn ${t.primary ? "primary" : "ghost"} sm" target="_blank" rel="noopener"
+           href="${esc(t.url)}">Open</a>
+      </div>
+      <div class="vt-free">${esc(t.free)}</div>
+      ${t.primary ? `<ol class="vt-steps">${t.how.map((h) => `<li>${esc(h)}</li>`).join("")}</ol>` : ""}
+      ${(t.watch_out || []).length ? `<details class="vt-warn"><summary>Things to know</summary>
+        <ul>${t.watch_out.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></details>` : ""}
+    </div>`;
+  box.innerHTML = `
+    <div class="vt-wrap">
+      <div class="vt-top">
+        ${copied
+          ? `<b>${sic("check")}Prompt copied.</b> Open Google Flow below and paste it in.`
+          : `<b>Copy the prompt first</b> — your browser blocked the automatic copy,
+             so use the Copy button above, then open Flow.`}
+      </div>
+      ${d.tools.map(card).join("")}
+      <p class="muted tiny" style="margin:10px 0 0;">${esc(d.note)}</p>
+    </div>`;
+  box.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 async function decide(id, decision) {
@@ -6136,12 +6208,14 @@ function openSocialEditor(post) {
       <div class="sm-vid-acts">
         <button class="btn ${post.video_url ? "ghost" : "primary"} sm" id="smVidPick">
           ${sic("arrow-up-right")}${post.video_url ? "Replace clip" : "Upload clip"}</button>
-        <button class="btn ghost sm" id="smVidGen">${sic("spark")}Generate a clip</button>
+        <button class="btn ghost sm" id="smVidFlow">${sic("arrow-up-right")}Make it free in Google Flow</button>
+        <button class="btn ghost sm" id="smVidGen">${sic("spark")}Make it here (paid)</button>
         ${post.video_url
           ? `<button class="btn ghost sm danger" id="smVidClear">${sic("close")}Remove</button>`
           : ""}
         <input type="file" id="smVidFile" accept="video/mp4,video/webm,video/quicktime" hidden />
       </div>
+      <div id="rpTools"></div>
     </div>`;
 
   /* Warned about, never blocked. The app's rule everywhere else (caption
@@ -6266,6 +6340,7 @@ function openSocialEditor(post) {
       const showNote = () => {
         const e = _engines.find((x) => x.id === sel.value);
         if (note) note.textContent = e ? `${e.cost}. ${e.note}` : "";
+        showAiLeft();          // re-append the remaining count after a repaint
       };
       sel.onchange = showNote;
       showNote();
@@ -6274,6 +6349,9 @@ function openSocialEditor(post) {
     }
   }
   if ($("smEngine")) loadEngines(true);
+  // What is left of today's allowance, shown before they press anything. A cap
+  // discovered by hitting it feels like a fault; a cap you can see is a budget.
+  showAiLeft();
 
   /* "It ignored my brand" and "it was never told about my brand" look identical
      from outside. This shows which one happened, before anything is spent. */
@@ -6344,6 +6422,21 @@ function openSocialEditor(post) {
   }
   /* Generating a clip costs real money per call and takes about a minute, so
      the price is confirmed BEFORE anything is spent — never after. */
+  /* Offered BEFORE the paid button, and labelled as free, because it is the
+     better answer for almost every seller: Flow gives them about five clips a
+     day for nothing and shows them the result before they commit, where our own
+     generator charges roughly a hundred rupees a clip sight unseen. */
+  const vidFlow = $("smVidFlow");
+  if (vidFlow) vidFlow.onclick = async () => {
+    const text = ((post.script || {}).ai_prompt || post.video_prompt
+                  || (post.caption || {}).hook || "").trim();
+    let copied = false;
+    if (text) {
+      try { await navigator.clipboard.writeText(text); copied = true; } catch (e) { copied = false; }
+    }
+    await showVideoTools(text, copied && !!text);
+  };
+
   const vidGen = $("smVidGen");
   if (vidGen) vidGen.onclick = async () => {
     let eng;
@@ -6365,6 +6458,7 @@ function openSocialEditor(post) {
           product_id: post.product_id, post_id: post.id,
           engine: picked.id || "" } }));
       post.video_url = vid.url;
+      showAiLeft(true);
       const slot = $("smVidSlot");
       if (slot) {
         slot.innerHTML = `<video src="${esc(vid.url)}" controls playsinline preload="metadata"></video>`;
@@ -6406,6 +6500,7 @@ function openSocialEditor(post) {
       // The editor may have been closed while this was drawing — the picture is
       // saved to the post either way, so there is nothing to recover, only a
       // missing element to not write into.
+      showAiLeft(true);
       const shotEl = $("smEdShot");
       if (shotEl) shotEl.innerHTML = `<img src="${esc(img.url)}" alt="" /><span class="sm-gen">AI</span>`;
       else toast("Your picture is ready — reopen the post to see it.", 6000);

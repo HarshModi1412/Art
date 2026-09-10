@@ -43,6 +43,10 @@ from backend.core import store_payments
 from backend.core import campaigns
 from backend.core import brandname
 from backend.core import setup_steps
+from backend.core import videotools
+from backend.core import errors
+from backend.core import health
+from backend.core import aicaps
 from backend.core import studio
 from backend.core import aiprovider
 from backend.core import gst, invoices, invoice_pdf
@@ -116,6 +120,10 @@ class SafeJSONResponse(JSONResponse):
 app = FastAPI(title="Cafe_X Intelligence Platform",
               default_response_class=SafeJSONResponse)
 
+# Optional, and the app is fully instrumented without it — the on-disk error log
+# in backend/core/errors.py needs no account and no configuration.
+errors.init_sentry()
+
 # ---------------------------------------------------------------------------
 # Wire-level performance.
 #
@@ -162,12 +170,30 @@ async def _state_scope(request, call_next):
 # So: always JSON, always a sentence, and the traceback goes to the Render log
 # with the path attached so the cause is findable.
 # ---------------------------------------------------------------------------
+# It also, now, tells SOMEBODY. Before this, a 500 on the live server produced a
+# traceback in a Render log nobody reads and no notification anywhere — the
+# seller closed the tab and the only evidence was a signup that went quiet. See
+# backend/core/errors.py for the three layers and why the on-disk one is always
+# on rather than depending on a Sentry account existing.
 @app.exception_handler(Exception)
 async def _unhandled(request: Request, exc: Exception):
     log.exception("unhandled error on %s %s", request.method, request.url.path)
+    ref = ""
+    try:
+        who = optional_user(request.headers.get("authorization")) or ""
+    except Exception:  # noqa: BLE001
+        who = ""
+    try:
+        ref = (errors.record(exc, where=f"{request.method} {request.url.path}",
+                             email=who) or {}).get("fingerprint", "")
+    except Exception:  # noqa: BLE001 — reporting must not break the response
+        ref = ""
     return JSONResponse(
         status_code=500,
-        content={"detail": "Something went wrong on our side. Try that again in a moment."},
+        content={"detail": "Something went wrong on our side. Try that again in a "
+                           "moment — and it has been reported, so we will see it "
+                           "even if you do not tell us."
+                           + (f" (reference {ref})" if ref else "")},
     )
 
 
@@ -507,15 +533,74 @@ def admin_reset_link(body: ForgotBody, request: Request,
     Gated on ADMIN_TOKEN, which must be set in the environment — with no token
     configured this endpoint refuses everyone rather than defaulting open.
     """
-    want = (os.environ.get("ADMIN_TOKEN") or "").strip()
-    if not want:
-        raise HTTPException(503, "Admin recovery is not enabled on this server.")
-    if not secrets.compare_digest((x_admin_token or "").strip(), want):
-        raise HTTPException(403, "Not allowed.")
+    _require_admin(x_admin_token)
     try:
         return password_reset.admin_reset_link(body.email, _public_base_url(request))
     except password_reset.ResetError as e:
         raise HTTPException(404, str(e))
+
+
+@app.exception_handler(aicaps.CapReached)
+async def _cap_reached(request: Request, exc: aicaps.CapReached):
+    """429, and worded as a ceiling rather than a paywall.
+
+    The seller has done nothing wrong: they have used a lot of an expensive thing
+    today and it resets tomorrow. Routing this through one handler means every
+    generation endpoint says the same thing in the same words, and none of them
+    can accidentally turn it into a 500.
+    """
+    return JSONResponse(status_code=429, content={"detail": str(exc), "code": "daily_cap"})
+
+
+def _require_admin(x_admin_token: str | None) -> None:
+    """Shared gate for the operator-only endpoints.
+
+    Refuses everyone when ADMIN_TOKEN is unset rather than defaulting open, and
+    compares in constant time so the token cannot be guessed a character at a
+    time from response timings.
+    """
+    want = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    if not want:
+        raise HTTPException(503, "Admin endpoints are not enabled on this server. "
+                                 "Set ADMIN_TOKEN to turn them on.")
+    if not secrets.compare_digest((x_admin_token or "").strip(), want):
+        raise HTTPException(403, "Not allowed.")
+
+
+@app.get("/api/admin/errors")
+def admin_errors(limit: int = 50, detail: bool = False,
+                 x_admin_token: str | None = Header(default=None)):
+    """Every failure the app has hit, newest first, grouped by cause.
+
+    This is the answer to "how would I know?". `detail=true` returns the raw
+    entries with tracebacks; the default returns groups, which is what you
+    actually want to look at — fifty occurrences of one bug is one line, not
+    fifty.
+    """
+    _require_admin(x_admin_token)
+    if detail:
+        return {"errors": errors.recent(limit)}
+    return errors.summary(limit)
+
+
+@app.post("/api/admin/errors/clear")
+def admin_errors_clear(x_admin_token: str | None = Header(default=None)):
+    _require_admin(x_admin_token)
+    return {"cleared": errors.clear()}
+
+
+@app.get("/api/admin/health")
+def admin_health(x_admin_token: str | None = Header(default=None)):
+    """Is this deployment actually wired up, or quietly running on fallbacks?
+
+    A deploy that is missing a Supabase table or a storage bucket does not fail
+    loudly — it falls back to local files, works perfectly in testing, and then
+    loses everything on the next redeploy because Render rebuilds the disk. That
+    class of problem has bitten this app twice. This endpoint makes it visible in
+    one request instead of being discovered a week later.
+    """
+    _require_admin(x_admin_token)
+    return health.report()
 
 
 @app.post("/api/reset")
@@ -4294,6 +4379,8 @@ def studio_image_only(body: StudioImageOnlyBody,
                                          occasion_key=occasion_key,
                                          shot_type=shot_type,
                                          engine=body.engine or "")
+    except aicaps.CapReached:
+        raise            # 429 via the handler, not a 400
     except (RuntimeError, ValueError) as e:
         raise HTTPException(400, str(e))
     if body.post_id:
@@ -4322,6 +4409,8 @@ def studio_prompt_preview(body: StudioImageOnlyBody,
                                      body.format or "", body.angle or "",
                                      use_reference=body.use_reference,
                                      occasion_key=occasion_key, shot_type=shot_type)
+    except aicaps.CapReached:
+        raise            # 429 via the handler, not a 400
     except (RuntimeError, ValueError) as e:
         raise HTTPException(400, str(e))
 
@@ -4396,6 +4485,11 @@ def social_approve_ready(body: SocialReadyBody,
                 shot_type=post.get("shot_type") or "")
             social.attach_image(email, body.post_id, made["url"], True,
                                made.get("prompt", ""))
+        except aicaps.CapReached as e:
+            # Not fatal here: the post is still approved and scheduled, it just
+            # has no picture yet. Reported as the media_error so the panel says
+            # what is missing instead of failing the whole approval.
+            media_error = str(e)
         except (RuntimeError, ValueError) as e:
             media_error = str(e)
 
@@ -4416,6 +4510,25 @@ def studio_video_engine(authorization: str | None = Header(default=None)):
     price is never a surprise."""
     require_user(authorization)
     return {**studio.video_engine(), "engines": studio.video_engines()}
+
+
+@app.get("/api/studio/ai-usage")
+def studio_ai_usage(authorization: str | None = Header(default=None)):
+    """What is left of today's generation allowance, so nothing is a surprise."""
+    return aicaps.status(require_user(authorization))
+
+
+@app.get("/api/studio/video-tools")
+def studio_video_tools(authorization: str | None = Header(default=None)):
+    """Where to go to make the clip yourself, and what it costs there.
+
+    Offered ahead of our own generator on purpose: Google Flow's free tier gives
+    a seller about five clips a day for nothing and lets them look at the result
+    before committing, where our Veo call bills their card about a hundred rupees
+    a clip sight unseen. See backend/core/videotools.py.
+    """
+    require_user(authorization)
+    return videotools.tools()
 
 
 @app.get("/api/studio/image-engines")
@@ -4450,6 +4563,8 @@ def studio_video(body: StudioVideoBody,
     try:
         vid = studio.generate_video(email, body.product_id, body.prompt or "",
                                     engine=body.engine or "")
+    except aicaps.CapReached:
+        raise            # 429 via the handler, not a 400
     except (RuntimeError, ValueError) as e:
         raise HTTPException(400, str(e))
     if body.post_id:

@@ -308,6 +308,8 @@ def read_aesthetic(email: str) -> dict:
     per-shot-type reading (what makes an unboxing shot different from a
     packshot, which is what makes each post look different from the last).
     image_prompt then asks for the slice it needs."""
+    from backend.core import aicaps
+    aicaps.check(email, "vision")
     from backend.core import aiprovider, media
     b = get_brand(email)
     refs = [r for r in (b.get("refs") or []) if r][:12]
@@ -433,6 +435,9 @@ def read_aesthetic(email: str) -> dict:
                             for r in readings][:12]
     b["aesthetic_from"] = len(readings)
     user_store.set_key(email, BRAND_KEY, b)
+    # One read is one charge against the vision budget however many references it
+    # looked at — the seller asked for one thing.
+    aicaps.consume(email, "vision")
     return {"ok": True, "aesthetic": b["aesthetic"], "shots": shots,
             "reads": b["aesthetic_reads"],
             "shot_labels": {k: SHOT_TYPES[k]["label"] for k in shots
@@ -1191,7 +1196,12 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     default", which is ChatGPT. There is no cross-vendor fallback: see the
     comment on the dispatch below for why.
     """
-    from backend.core import aiprovider
+    from backend.core import aiprovider, aicaps
+    # A ceiling on our own spend, checked before anything is called and counted
+    # only after it succeeds. See backend/core/aicaps.py — this sits underneath
+    # billing and applies on every plan, including in launch mode, because the
+    # cost here is real money per call rather than a feature flag.
+    aicaps.check(email, "image")
     # Make sure the brand's essay has been compressed for the camera before we
     # build the prompt. Cached against the essay, so this is one call the first
     # time after a re-read and free afterwards.
@@ -1244,6 +1254,8 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     # seller's own photograph, so the product already carries its real brand
     # marking and the prompt above now preserves it — stamping a second name
     # into the corner would show the brand twice, once real and once pasted on.
+    aicaps.consume(email, "image")
+
     if not from_ref:
         content = _stamp_brand(content, brief.get("brand_name") or "")
     saved = media.save(f"{uuid.uuid4().hex}.png", content, email)
@@ -1396,7 +1408,11 @@ def generate_video(email: str, product_id: str, prompt: str = "",
     same rule that separates Re-shoot from Invent for stills.
 
     Takes about a minute, so callers keep it off the request path."""
-    from backend.core import aiprovider, media
+    from backend.core import aiprovider, media, aicaps
+    # Clips are 30x the price of an image, so they get their own much tighter
+    # ceiling — and the message when it is reached points at Google Flow, which
+    # is free, rather than at an upgrade page.
+    aicaps.check(email, "video")
     eng = video_engine(engine)          # raises on an unusable named pick
     if not eng["ready"]:
         raise RuntimeError(eng["note"])
@@ -1435,6 +1451,7 @@ def generate_video(email: str, product_id: str, prompt: str = "",
                 "Google Veo instead.")
     if not data:
         raise RuntimeError(fail)
+    aicaps.consume(email, "video")
     saved = media.save(f"{uuid.uuid4().hex}.mp4", data, email)
     return {"url": saved["url"], "durable": saved["durable"], "generated": True,
             "product_id": product_id, "prompt": motion,

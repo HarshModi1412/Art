@@ -11,6 +11,7 @@ services:
     plan: starter                # $7/mo — no spin-down, unlike free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+
     envVars:
       - key: OPENAI_API_KEY
         sync: false               # set manually in the dashboard — never store secrets in git
@@ -31,10 +32,27 @@ services:
         sync: false               # only needed once LAUNCH_MODE=false — use rzp_test_... keys first
       - key: RAZORPAY_KEY_SECRET
         sync: false
+      # PIN THE PYTHON VERSION. This is not housekeeping.
+      #
+      # Render installs the newest Python when nothing pins it. On 10 September
+      # 2026 the live service was running 3.14.3 — this line was in the blueprint
+      # but the service had been created by hand, so it never took effect — and on
+      # 3.14 httpcore's synchronous HTTP/2 backend failed reading from Supabase
+      # with "[Errno 11] Resource temporarily unavailable". /api/smart/state and
+      # /api/product-type returned 500: the home screen of the live app was
+      # broken, and nothing anywhere said so.
+      #
+      # .python-version in the repo root pins it as well, because that travels
+      # with the repo and applies even to a service configured by hand.
       - key: PYTHON_VERSION
-        value: 3.11.9
+        value: 3.12.11
     disk:
       name: cafex-data
+      # THIS PATH AND CAFEX_DATA_DIR ABOVE MUST BE THE SAME STRING.
+      # If they drift apart the app writes to an ordinary folder that every
+      # deploy rebuilds from git: it works perfectly in testing and the seller's
+      # uploads vanish at the next push. GET /api/admin/health checks for exactly
+      # this and refuses to call the deployment safe when it is wrong.
       mountPath: /var/data        # local cache + the file fallback. NOTE: uploaded images and
                                   # videos are only durable when Supabase Storage is configured
                                   # (or this disk is genuinely attached and writable) — without
