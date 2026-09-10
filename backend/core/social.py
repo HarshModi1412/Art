@@ -1393,6 +1393,13 @@ def pending_insight_cards(email: str) -> list[dict]:
     from datetime import datetime, timedelta
     horizon = datetime.now() + timedelta(days=PENDING_WINDOW_DAYS)
     cards = []
+    # Asked once for the whole list rather than per card: it is a server
+    # capability, not a per-post one.
+    try:
+        from backend.core import studio
+        can_draw = bool(studio.image_engines())
+    except Exception:  # noqa: BLE001
+        can_draw = False
     for p in _posts(email):
         if p.get("state") != "draft":
             continue
@@ -1415,9 +1422,60 @@ def pending_insight_cards(email: str) -> list[dict]:
             "hook": cap.get("hook") or "",
             "when_label": when.strftime("%a %d %b, %I:%M %p").replace(" 0", " "),
             "overdue": when < datetime.now(),
+            # WHAT KIND OF POST THIS IS, said plainly on the card.
+            #
+            # A photo post and a reel need completely different things from the
+            # seller — one we can draw for them, the other they have to film —
+            # and the panel showed neither, so both cards said "Approve" and did
+            # two different things. A seller who taps Approve expecting a picture
+            # and gets a shot list has been surprised by their own tool.
+            "format": p.get("format") or "",
+            **_card_kind(p, can_draw),
         })
     cards.sort(key=lambda c: c["scheduled_at"])
     return cards
+
+
+def _card_kind(post: dict, can_draw: bool) -> dict:
+    """What kind of post this is, and — crucially — what we can actually deliver.
+
+    Two separate mistakes this fixes.
+
+    The first: the panel used one button, "Approve → schedule", for both a photo
+    post and a reel. Tapping it did two completely different things. A seller
+    expecting a picture got a shot list to go and film; a seller who wanted the
+    shot list got a picture. Both were surprised by their own tool.
+
+    The second is worse, and only shows up on a deployment with no image AI
+    connected: the card promised "we draw it" and then could not. Promising
+    something the server cannot do is the exact failure that ends a trial — it is
+    not a missing feature, it is a lie the product told. So the promise is
+    conditional on the capability, and when there is no engine the card says what
+    the seller can do instead, which is upload their own photo. That still gets
+    the post out.
+    """
+    is_reel = (post.get("format") or "") == "reel"
+    if is_reel:
+        return {"kind": "reel",
+                "kind_label": "REEL · you film it",
+                "cta": "Approve & get the shot list",
+                "needs_from_you": "Film a short clip, or have an AI make one, then upload it."}
+    if can_draw:
+        return {"kind": "photo",
+                "kind_label": "PHOTO POST · we draw it",
+                "cta": "Approve & make the picture",
+                "needs_from_you": "Nothing — the picture is made and scheduled for you."}
+    if post.get("image_url"):
+        return {"kind": "photo",
+                "kind_label": "PHOTO POST · picture ready",
+                "cta": "Approve & schedule",
+                "needs_from_you": "Nothing — this one already has its picture."}
+    return {"kind": "photo",
+            "kind_label": "PHOTO POST · add a photo",
+            "cta": "Approve & schedule",
+            "needs_from_you": "Add one of your own photos to this post before it goes out. "
+                              "No image AI is connected on this server, so we will not "
+                              "pretend we can draw one."}
 
 
 def clear_plan(email: str) -> int:

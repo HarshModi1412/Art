@@ -292,7 +292,16 @@ def _social_post(card: dict) -> dict:
            + (f' The hook: "{hook}"' if hook else "")
            + (" This one is already overdue — it stayed a draft past its own"
               " posting time." if overdue else ""))
-    return {"headline": headline, "body": body, "why": why, "cta": "Approve → schedule"}
+    # A reel and a photo post are two different asks, and the button has to say
+    # which. "Approve → schedule" was the same word for both, so a seller who
+    # tapped it expecting a picture got a shot list to go and film, and a seller
+    # who wanted a shot list got a picture. social.py has already worked out
+    # which this is and what we can actually deliver; use its words.
+    return {"headline": headline, "body": body, "why": why,
+            "cta": card.get("cta") or "Approve → schedule",
+            "kind": card.get("kind") or "",
+            "kind_label": card.get("kind_label") or "",
+            "needs_from_you": card.get("needs_from_you") or ""}
 
 
 WRITERS = {

@@ -164,27 +164,51 @@ def send(email: str, rows: list[dict], brand: str, template: str = "",
         results.append(entry)
 
     stamp = pd.Timestamp.now().isoformat(timespec="seconds")
-    rows_log = _log(email)
-    rows_log.append({
-        "at": stamp, "brand": brand, "recipients": len(results),
-        "email_sent": sent_email, "whatsapp_sent": sent_wa,
-        "wa_links": links, "skipped": skipped,
-        "channels": list(channels), "whatsapp_live": wa_live,
-    })
-    _save_log(email, rows_log)
 
-    # The proof loop measures from here, so marking it sent is automatic.
-    contacted = [r for r in results if r["email_sent"] or r["whatsapp_sent"] or r["wa_link"]]
-    campaign = None
-    if contacted:
+    # GATE 1 BLOCKER #3: "sent" has to mean sent.
+    #
+    # Three genuinely different outcomes were being written to history as one:
+    #   delivered  -- a mail server or WhatsApp provider accepted the message
+    #   prepared   -- a tap-to-send WhatsApp link exists; nobody has tapped it
+    #   skipped    -- the customer has no email and no phone
+    # Rolling all three into one "campaign sent" row is what let the app tell a
+    # seller "42 customers contacted" on a day nothing left the building.
+    delivered = [r for r in results if r["email_sent"] or r["whatsapp_sent"]]
+    prepared = [r for r in results if r["wa_link"] and not (r["email_sent"] or r["whatsapp_sent"])]
+
+    # Nothing happened at all -> nothing is written. An empty history is honest;
+    # a history full of campaigns that never went out is not.
+    if delivered or prepared:
+        rows_log = _log(email)
+        rows_log.append({
+            "at": stamp, "brand": brand, "recipients": len(results),
+            "delivered": len(delivered), "prepared": len(prepared),
+            "email_sent": sent_email, "whatsapp_sent": sent_wa,
+            "wa_links": links, "skipped": skipped,
+            "channels": list(channels), "whatsapp_live": wa_live,
+            "state": "sent" if delivered else "pending",
+        })
+        _save_log(email, rows_log)
+
+    by_id = {str(r.get("customer_id") or ""): r for r in (rows or [])}
+    campaign = pending_campaign = None
+    if delivered:
         try:
             campaign = winback_proof.mark_sent(
                 email,
-                [r for r in (rows or [])
-                 if str(r.get("customer_id") or "") in {c["customer_id"] for c in contacted}],
-                channel="whatsapp" if (sent_wa or links) else "email")
+                [by_id[c["customer_id"]] for c in delivered if c["customer_id"] in by_id],
+                channel="whatsapp" if sent_wa else "email", state="sent")
         except Exception as e:  # noqa: BLE001
             log.warning("could not record the campaign for measurement: %s", e)
+    if prepared:
+        try:
+            pending_campaign = winback_proof.mark_sent(
+                email,
+                [by_id[c["customer_id"]] for c in prepared if c["customer_id"] in by_id],
+                channel="whatsapp", state="pending",
+                note="tap-to-send links — waiting for the seller to confirm")
+        except Exception as e:  # noqa: BLE001
+            log.warning("could not record the prepared campaign: %s", e)
 
     return {
         "sent_at": stamp,
@@ -196,7 +220,10 @@ def send(email: str, rows: list[dict], brand: str, template: str = "",
         "whatsapp_live": wa_live,
         "email_ready": messaging.smtp_configured(),
         "results": results,
+        "delivered": len(delivered),
+        "prepared": len(prepared),
         "campaign_id": (campaign or {}).get("id"),
+        "pending_campaign_id": (pending_campaign or {}).get("id"),
         "summary": _summary(len(results), sent_email, sent_wa, links, skipped, wa_live),
     }
 
@@ -208,11 +235,17 @@ def _summary(n, mail, wa, links, skipped, wa_live) -> str:
     if wa:
         bits.append(f"{wa} WhatsApp message{'s' if wa != 1 else ''} sent")
     if links:
-        bits.append(f"{links} WhatsApp message{'s' if links != 1 else ''} ready to tap send")
+        bits.append(f"{links} WhatsApp message{'s' if links != 1 else ''} ready for you to tap send "
+                    f"(not counted as sent until you confirm)")
     if skipped:
         bits.append(f"{skipped} skipped — no email or phone on file")
+    # Said before anything else, because "1 skipped — no email or phone on file"
+    # is technically true and reads as though something else went out.
+    if not (mail or wa or links):
+        return ("Nothing went out. None of these customers have an email or a phone "
+                "number on file, so there was nobody to send to.")
     if not bits:
-        return "Nothing went out. None of these customers have an email or a phone number."
+        return "Nothing went out."
     tail = ("" if wa_live or not links else
             " Connect a WhatsApp provider and these will send themselves.")
     return " · ".join(bits) + "." + tail

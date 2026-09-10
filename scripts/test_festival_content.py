@@ -539,8 +539,17 @@ check("with a copy button", "smCopyPrompt" in _js2)
 check("and a fallback when the clipboard is blocked",
       "Ctrl+C" in _js2 and "getSelection" in _js2)
 check("thin data renders a blurred preview", "function thinData" in _js2)
-check("Sales Analytics uses it", "your revenue trend, weekday pattern" in _js2)
-check("Sub-Category Analysis uses it", "drive your revenue" in _js2)
+# The wording changed when the headline cards stopped being hidden behind the
+# thin-data screen: only the INFERENCES (trend, weekday pattern, forecast) wait
+# for volume now, and the message says so in plainer words.
+check("Sales Analytics uses it, for the inferences only",
+      "your revenue trend, your best days of the week" in _js2)
+check("and the headline cards are shown at ANY volume — they are sums, not guesses",
+      "const cards = `" in _js2 and "if (thin) {" in _js2)
+check("Sub-Category Analysis uses it the same way",
+      "trending month to month" in _js2)
+check("and it too shows its cards first",
+      'const cards = (d.cards || []).length' in _js2)
 check("the blur is real CSS blur", "filter: blur(" in _css2)
 check("the placeholder carries NO numbers a seller could misread",
       "thin-count" in _css2 and "orders needed for" in _js2)
@@ -821,12 +830,15 @@ check("a re-shoot on HF uses the edit model, not the invent model",
 
 _v = studio.video_engine()
 check("video engine reports not-ready without a token", _v["ready"] is False)
-check("and says you can still upload your own", "upload your own" in _v["note"])
-_vsrc = __import__("inspect").getsource(studio.video_engine)
-check("the cost is stated up front, not discovered from a bill",
-      "$0.20" in _vsrc and "PRO covers about ten" in _vsrc)
-check("and the fidelity limit is stated honestly",
-      "drift" in _vsrc)
+check("and points at the thing that actually works — film it and upload it",
+      "upload it" in _v["note"] and "phone" in _v["note"], _v["note"])
+_vsrc = __import__("inspect").getsource(studio)
+check("the cost of each clip engine is stated up front, not discovered from a bill",
+      "$0.20" in _vsrc and "$1.20" in _vsrc)
+check("and the cheaper one's fidelity limit is stated honestly",
+      "detail drifts" in _vsrc)
+check("and Veo's real precondition is stated rather than discovered",
+      "PAID Gemini key" in _vsrc and "free key will be refused" in _vsrc)
 _gvsrc = __import__("inspect").getsource(studio.generate_video)
 check("video is generated FROM the seller's own photo, never invented",
       "_reference_shot" in _gvsrc)
@@ -839,11 +851,15 @@ check("the panel routes post approvals through the new flow",
 check("a reel gets its prompt handed over on approval",
       "function openReelPrompt" in _js4)
 check("with a copy button", "rpCopy" in _js4)
-check("and a route into the editor to upload the clip", "rpOpen" in _js4)
+check("and the upload is a button right there, not a route into an editor",
+      "rpUpload" in _js4 and 'rpFile").click()' in _js4)
+check("with the choice to have an AI make it instead", "rpMake" in _js4)
 check("the editor offers to generate a clip", "smVidGen" in _js4)
-check("but confirms the price BEFORE spending anything",
-      "/api/studio/video-engine" in _js4 and "confirm(" in
-      _js4.split('vidGen.onclick')[1][:600])
+check("but the seller picks the engine and sees the price BEFORE spending anything",
+      "/api/studio/video-engine" in _js4 and "pickVideoEngine(opts)" in
+      _js4.split('vidGen.onclick')[1][:900])
+check("and the picker shows every engine's cost",
+      "function pickVideoEngine" in _js4 and "eng-cost" in _js4)
 check("and warns that generated clips drift",
       "then detail can drift" in _js4)
 
@@ -904,11 +920,21 @@ check("generation dispatches to ONE engine, with no silent vendor swap",
 check("and names the engine that failed",
       "eng['label']" in _gsrc2 or 'eng["label"]' in _gsrc2)
 
-check("video engines are listed the same way",
-      [e["id"] for e in studio.video_engines()] == ["huggingface"],
+check("video engines are listed the same way, and Gemini is one of them",
+      [e["id"] for e in studio.video_engines()] == ["gemini", "huggingface"],
       studio.video_engines())
-check("video stays on Hugging Face, as asked",
-      studio.video_engine()["engine"] == "huggingface")
+check("Veo leads because it holds the product for the whole clip",
+      studio.video_engine()["engine"] == "gemini")
+check("Hugging Face is still there for anyone who wants the cheap one",
+      studio.video_engine("huggingface")["engine"] == "huggingface")
+try:
+    studio.video_engine("sora")
+    check("an unknown clip engine is refused", False, "no error raised")
+except ValueError as _e:
+    check("an unknown clip engine is refused, never silently swapped",
+          "not a clip engine" in str(_e), str(_e)[:80])
+check("both clip engines animate the seller's own photo, never invent one",
+      all(e["reshoot"] for e in studio.VIDEO_ENGINES))
 
 # =========================================================================
 print("\n== 21. Gemini reads the brand aesthetic, and writes an essay ==")

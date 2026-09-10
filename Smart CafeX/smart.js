@@ -238,6 +238,24 @@ async function doLogin() {
     showShell();
   } catch (e) { err.textContent = e.message; err.hidden = false; }
 }
+// A seller locked out of their account is locked out of their whole catalogue,
+// so this has to either work or say honestly that it cannot. It used to do
+// neither: there was no link here at all, and the endpoint behind it promised
+// an email that a server without SMTP silently threw away.
+$("forgotLink").onclick = async (e) => {
+  e.preventDefault();
+  const err = $("loginErr"), note = $("loginNote");
+  err.hidden = true; note.hidden = true;
+  const addr = ($("email").value || "").trim();
+  if (!addr) { err.textContent = "Type your email above first."; err.hidden = false; $("email").focus(); return; }
+  try {
+    const r = await api("/api/forgot", { method: "POST", json: { email: addr } });
+    note.textContent = r.message || "Check your email.";
+    note.className = r.email_ready === false ? "err" : "ok-note";
+    note.hidden = false;
+  } catch (e2) { err.textContent = e2.message; err.hidden = false; }
+};
+
 $("logoutBtn").onclick = async () => {
   try { await api("/api/logout", { method: "POST" }); } catch {}
   state.token = null; state.email = null;
@@ -294,9 +312,27 @@ function _baseLayout() {
     yaxis: { gridcolor: gridColor, zeroline: false, automargin: true, separatethousands: true, griddash: "dot", tickfont: { color: axisColor } },
     hoverlabel: { bgcolor: surface, bordercolor: cssVar("--border", "#e0e4ea"), font: { color: text } },
     legend: { orientation: "h", y: -0.2, font: { color: axisColor } },
-    colorway: [cssVar("--primary", "#6d28d9"), "#0ea5e9", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"],
+    // Series colours come from the theme, not from hard-coded hexes. The old
+    // list was a light-mode palette used in both themes: on the dark ground
+    // those saturated blues and greens dropped to 2-3:1, and the mid-green sat
+    // close enough to the pink that a red-green colour-blind seller could not
+    // tell two lines apart. Both themes now define eight tokens whose lightness
+    // is staggered, so hue is never the only thing carrying the difference.
+    colorway: SERIES(),
   };
 }
+
+/* The theme's categorical series, in order. Read live so the toggle repaints. */
+/* A translucent wash under a line, taken from the accent so it works in both
+   themes. The old value was a hard-coded purple from a palette this app has not
+   used for months. */
+function softFill() { return cssVar("--primary-soft", "rgba(92,103,144,.10)"); }
+
+function SERIES() {
+  const fb = ["#3f6bb5", "#b5711f", "#2f7d54", "#b0577a", "#6b5aa6", "#2b7f8c", "#8a7a2c", "#a8663f"];
+  return fb.map((f, i) => cssVar(`--chart-${i + 1}`, f));
+}
+function series(i) { return SERIES()[i % 8]; }
 
 function plot(el, traces, layout = {}, title = "") {
   if (!window.Plotly) { el.innerHTML = "Charts failed to load."; return; }
@@ -363,22 +399,54 @@ function redrawCharts() {
 //
 // Content Creator and Instagram (the "in build" placeholder) were removed
 // outright, not just hidden: nothing routes to them from anywhere.
-const MODULES = [
-  { id: "sales",      name: "Sales Analytics",        sub: "KPIs, revenue trends and a 30-day forecast from your order data.",             ico: "chart", cls: "tile-sales",     needs: "sales",  tag: "SALES" },
-  { id: "subcategory",name: "Sub-Category Analysis",  sub: "Which categories & sub-categories drive revenue — trends and drill-downs.",   ico: "layers", cls: "tile-sub",       needs: "sales",  tag: "SALES" },
-  { id: "inventory",  name: "Inventory Management",   sub: "What you hold, what each sold product uses up, and what gets wasted. Stock falls automatically as orders come in.", ico: "package", cls: "tile-supply",   needs: null,     tag: "STOCK" },
-  { id: "supply",     name: "Suppliers & Purchase Orders", sub: "Who you buy from, when to reorder, and a purchase order PDF you can send them.", ico: "truck", cls: "tile-supply",   needs: null,     tag: "SUPPLY" },
-  { id: "studio",     name: "Product Studio",         sub: "Your photos, clips and the words behind each product — turned into Instagram posts that look like your brand, not a template.", ico: "spark", cls: "tile-content",  needs: null,     tag: "STUDIO" },
-  { id: "products",   name: "Product Management",     sub: "Your catalogue of products, each linked to the names it carries on Amazon, Shopify and other platforms — sales roll up to the product everywhere.", ico: "tag", cls: "tile-supply",   needs: null,     tag: "CATALOG" },
-  { id: "site",       name: "Website Builder",        sub: "Build your own selling website — pick a theme for your genre, set fonts, colours and images, then publish. Your listed products become its shop.", ico: "globe", cls: "tile-site",     needs: null,     tag: "SITE" },
-  { id: "orders",     name: "Orders",                 sub: "Every order placed on your website — status, customer, address and export. Delivered orders feed straight into your sales analytics.", ico: "bag", cls: "tile-orders",   needs: null,     tag: "ORDERS" },
-  { id: "social",     name: "Social Media Manager",    sub: "A week of posts planned, written and scheduled for you — built on what actually drives sales, not what drives likes.", ico: "spark", cls: "tile-content",  needs: null,     tag: "SOCIAL" },
-  { id: "marketing",  name: "Marketing",              sub: "Win-back campaigns for customers who've gone quiet, written and ready — plus what past campaigns actually recovered.", ico: "mail", cls: "tile-marketing", needs: null,     tag: "MARKETING" },
-  { id: "gst",        name: "Billing & GST",          sub: "Tax invoices, HSN codes, place of supply and a GSTR-1 export your accountant can file from.", ico: "receipt", cls: "tile-orders",   needs: null,     tag: "BILLING" },
-  { id: "review",     name: "Review Analytics",       sub: "Your brand positioning from your own reviews — what customers come to you for.", ico: "star", cls: "tile-review",    needs: "review", tag: "BRAND" },
-  { id: "complaints", name: "Complaint Analysis",     sub: "The fix-first plan for the complaint themes hurting your brand right now.",    ico: "flame", cls: "tile-complaint", needs: "review", tag: "BRAND" },
-  { id: "strategy",   name: "Position Strategy + AI", sub: "A levelled checklist to strengthen or reposition your brand, plus the AI Analyst.", ico: "compass", cls: "tile-strategy", needs: "review", tag: "STRATEGY" },
+/* The order here is the order on screen, and it follows the day rather than the
+   codebase: first what happened (numbers), then what to do about it today
+   (orders, stock), then how to bring more people in (content, website), then
+   the deeper reads that need review data.
+
+   `group` puts a plain-language heading above each run of tiles. Twelve
+   unlabelled squares is the thing that makes a first-time seller close the tab:
+   they cannot tell which one is for them right now. Four short headings turn the
+   same twelve into "oh, that section is where I look in the morning".
+
+   `offGrid` keeps a module off the home screen without unwiring it. Marketing
+   and Billing & GST are off-grid for now — both work, both are reachable
+   directly by URL (#/module/marketing and #/module/gst) — because a seller who
+   has not sent a single order does not need a GST filing tool competing for
+   attention with "look at your sales". */
+const MODULE_GROUPS = [
+  { id: "know",  title: "Know what is happening",
+    hint: "Straight from your order data. Start here." },
+  { id: "run",   title: "Run the day",
+    hint: "Orders to pack, stock to reorder, products to keep tidy." },
+  { id: "grow",  title: "Bring in more customers",
+    hint: "Your photos and words, turned into posts and your own shop." },
+  { id: "deep",  title: "Go deeper",
+    hint: "Needs your customer reviews. Optional." },
 ];
+
+const MODULES = [
+  // --- know what is happening ------------------------------------------------
+  { id: "sales",      name: "Sales Analytics",        sub: "What sold, what it earned you, and what next month looks like.", ico: "chart", cls: "tile-sales", needs: "sales", tag: "SALES", group: "know" },
+  { id: "subcategory",name: "Sub-Category Analysis",  sub: "Which kinds of products bring the money in, and which quietly do not.", ico: "layers", cls: "tile-sub", needs: "sales", tag: "SALES", group: "know" },
+  // --- run the day -----------------------------------------------------------
+  { id: "orders",     name: "Orders",                 sub: "Every order from your website — pack it, ship it, mark it done.", ico: "bag", cls: "tile-orders", needs: null, tag: "ORDERS", group: "run" },
+  { id: "products",   name: "Product Management",     sub: "Your product list, with the different names each one has on Amazon, Shopify and the rest.", ico: "tag", cls: "tile-supply", needs: null, tag: "CATALOG", group: "run" },
+  { id: "inventory",  name: "Inventory Management",   sub: "How much you have left. It goes down on its own as orders come in.", ico: "package", cls: "tile-supply", needs: null, tag: "STOCK", group: "run" },
+  { id: "supply",     name: "Suppliers & Orders to Send", sub: "Who you buy from, when to buy again, and a ready order form to send them.", ico: "truck", cls: "tile-supply", needs: null, tag: "SUPPLY", group: "run" },
+  // --- bring in more customers ----------------------------------------------
+  { id: "studio",     name: "Product Studio",         sub: "Upload your photos once. We learn your look and use it in everything we make.", ico: "spark", cls: "tile-content", needs: null, tag: "STUDIO", group: "grow" },
+  { id: "social",     name: "Social Media Manager",   sub: "A week of Instagram posts planned, written and scheduled for you.", ico: "spark", cls: "tile-content", needs: null, tag: "SOCIAL", group: "grow" },
+  { id: "site",       name: "Website Builder",        sub: "Your own selling website. Pick a look, publish, start taking orders.", ico: "globe", cls: "tile-site", needs: null, tag: "SITE", group: "grow" },
+  // --- go deeper -------------------------------------------------------------
+  { id: "review",     name: "Review Analytics",       sub: "What customers actually praise you for, in their words.", ico: "star", cls: "tile-review", needs: "review", tag: "BRAND", group: "deep" },
+  { id: "complaints", name: "Complaint Analysis",     sub: "The complaints costing you the most, in the order worth fixing.", ico: "flame", cls: "tile-complaint", needs: "review", tag: "BRAND", group: "deep" },
+  { id: "strategy",   name: "Position Strategy + AI", sub: "A step-by-step plan to stand for something, plus an AI you can ask anything.", ico: "compass", cls: "tile-strategy", needs: "review", tag: "STRATEGY", group: "deep" },
+  // --- off the grid, still reachable by URL ---------------------------------
+  { id: "marketing",  name: "Marketing",              sub: "Win-back messages for customers who have gone quiet, and what they brought back.", ico: "mail", cls: "tile-marketing", needs: null, tag: "MARKETING", group: "run", offGrid: true },
+  { id: "gst",        name: "Billing & GST",          sub: "Tax invoices, HSN codes and a GSTR-1 file your accountant can file from.", ico: "receipt", cls: "tile-orders", needs: null, tag: "BILLING", group: "run", offGrid: true },
+];
+
 
 /* ------------------------------------------------------- the warm cache ----
    THE PROBLEM: switch to another app and come back, and the browser has
@@ -668,7 +736,7 @@ function openDigest() {
     `<option value="${h}"${h === d.hour ? " selected" : ""}>${String(h).padStart(2, "0")}:00</option>`).join("");
   openModal("Morning digest", `
     <p class="muted" style="margin-top:0;">One message a day with the same rows you see under
-      <b>Today</b> — new orders, items below their reorder point, customers slipping away.
+      <b>Today</b> — new orders, things running low, customers slipping away.
       Nothing else.</p>
     <label class="fld"><span>Send it</span>
       <select id="dgOn">
@@ -712,18 +780,75 @@ function openDigest() {
   };
 }
 
-function renderHome(s) {
-  const tiles = MODULES.map((m) => {
-    const locked = m.needs && !(state.data[m.needs] && state.data[m.needs].ready);
-    const upcoming = !!m.upcoming;
-    return `<div class="app-tile ${m.cls} ${locked || upcoming ? "locked" : ""}" data-mod="${m.id}">
-        <div class="app-ico">${sic(m.ico)}</div>
-        <div class="name">${esc(m.name)}</div>
-        <div class="sub">${esc(m.sub)}</div>
-        <div class="meta">
-          <span class="badge">${upcoming ? "Planned" : (locked ? "Needs " + m.needs + " data" : m.tag)}</span>
-          <span class="go">${upcoming ? "Soon" : (locked ? "Locked" : "Open")}${sic("arrow-right")}</span>
+/* ONE next step, for a seller who has just signed up.
+   ------------------------------------------------------------------
+   The home screen is right for someone who already has data in it and wrong for
+   someone on their first morning: the thing they need to do (upload a sales
+   file) has exactly the same weight as "Position Strategy + AI". This leads with
+   the next step, keeps the rest of the screen available but quiet, and removes
+   itself the moment the last step is done. Nothing here blocks anything — a
+   seller who wants to go straight to the website builder still can. */
+function setupCard(setup) {
+  if (!setup || setup.complete || !setup.next) return "";
+  const n = setup.next;
+  const pct = Math.round(setup.done / setup.total * 100);
+  const rest = (setup.steps || []).filter((s) => !s.done && s.id !== n.id);
+  return `
+    <section class="setup-card">
+      <div class="setup-top">
+        <div>
+          <div class="setup-eyebrow">Next step ${setup.done + 1} of ${setup.total}</div>
+          <h3>${esc(n.title)}</h3>
+          <p>${esc(n.why)}</p>
         </div>
+        <div class="setup-ring" style="--pct:${pct}"><span>${setup.done}/${setup.total}</span></div>
+      </div>
+      <div class="setup-acts">
+        <button class="btn primary" data-setup="${esc(n.action)}">${esc(n.action_label)}</button>
+        <span class="muted tiny">about ${n.minutes} minute${n.minutes === 1 ? "" : "s"}</span>
+      </div>
+      ${rest.length ? `<details class="setup-rest">
+        <summary>${rest.length} more after that</summary>
+        <ul>${rest.map((r) => `<li><b>${esc(r.title)}</b> — ${esc(r.why)}</li>`).join("")}</ul>
+      </details>` : ""}
+    </section>`;
+}
+
+function wireSetupCard() {
+  document.querySelectorAll("[data-setup]").forEach((b) => b.onclick = () => {
+    const a = b.dataset.setup;
+    if (a === "upload_sales") return startUpload("sales");
+    if (a === "set_brand") return openModule("studio");
+    if (a === "open_products") return openModule("products");
+    if (a === "open_studio") return openModule("studio");
+    if (a === "open_site") return openModule("site");
+  });
+}
+
+function moduleTile(m) {
+  const locked = m.needs && !(state.data[m.needs] && state.data[m.needs].ready);
+  const upcoming = !!m.upcoming;
+  // "Needs sales data" beats "Locked": one tells you what to do, the other
+  // tells you off.
+  const why = m.needs === "review" ? "Add your reviews first" : "Add your sales file first";
+  return `<div class="app-tile ${m.cls} ${locked || upcoming ? "locked" : ""}" data-mod="${m.id}">
+      <div class="app-ico">${sic(m.ico)}</div>
+      <div class="name">${esc(m.name)}</div>
+      <div class="sub">${esc(m.sub)}</div>
+      <div class="meta">
+        <span class="badge">${upcoming ? "Planned" : (locked ? why : m.tag)}</span>
+        <span class="go">${upcoming ? "Soon" : (locked ? "" : "Open")}${locked ? "" : sic("arrow-right")}</span>
+      </div>
+    </div>`;
+}
+
+function renderHome(s) {
+  const tiles = MODULE_GROUPS.map((g) => {
+    const inGroup = MODULES.filter((m) => m.group === g.id && !m.offGrid);
+    if (!inGroup.length) return "";
+    return `<div class="app-group">
+        <div class="app-group-head"><h4>${esc(g.title)}</h4><span class="muted tiny">${esc(g.hint)}</span></div>
+        <div class="app-grid">${inGroup.map(moduleTile).join("")}</div>
       </div>`;
   }).join("");
 
@@ -760,6 +885,8 @@ function renderHome(s) {
 
     <section class="up-strip" id="upStrip" hidden></section>
 
+    ${setupCard(s.setup)}
+
     <div class="section-title">Your data
       <button class="btn ghost tiny pt-chip" id="ptChip" title="What you sell — drives keyword tracking">${sic("tag")}${productLabel(state.productType)}</button>
     </div>
@@ -768,22 +895,26 @@ function renderHome(s) {
       ${dataCard("review", "Review", sic("star"), "upload your reviews (Google / marketplace / Instagram)")}
     </div>
 
-    <div class="section-title">Listed platforms
-      <span class="muted tiny" style="font-weight:500;">— every place you sell. The toggle decides whether that channel's sales count in your insights.</span>
-    </div>
-    <div class="chan-strip" id="chanStrip"><div class="ap-empty">Loading platforms…</div></div>
-
-    <div class="section-title">Apps</div>
     <div class="apps-grid">${tiles}</div>
 
-    <div class="section-title">My tasks</div>
-    <div class="card">
-      <div class="task-add">
-        <input id="taskInput" placeholder="Add a task…" />
-        <button class="btn primary sm" id="taskAddBtn">Add</button>
+    <!-- Folded away on purpose. This matters to a seller running four channels
+         and means nothing to one running none, and it used to sit above the apps
+         competing for the same attention. -->
+    <details class="fold" id="chanFold">
+      <summary>Where you sell <span class="muted tiny">— choose which channels count in your numbers</span></summary>
+      <div class="chan-strip" id="chanStrip"><div class="ap-empty">Loading platforms…</div></div>
+    </details>
+
+    <details class="fold" ${tasks.length ? "open" : ""}>
+      <summary>My tasks ${tasks.filter((t) => !t.done).length ? `<span class="fold-count">${tasks.filter((t) => !t.done).length}</span>` : ""}</summary>
+      <div class="card">
+        <div class="task-add">
+          <input id="taskInput" placeholder="Add a task…" />
+          <button class="btn primary sm" id="taskAddBtn">Add</button>
+        </div>
+        <div id="taskList">${taskRows}</div>
       </div>
-      <div id="taskList">${taskRows}</div>
-    </div>
+    </details>
   `);
 
   document.querySelectorAll("[data-mod]").forEach((el) => el.onclick = () => {
@@ -796,7 +927,13 @@ function renderHome(s) {
   // the difference between one round-trip and three on a slow connection
   const rp = $("refreshPage");
   if (rp) rp.onclick = refreshCurrent;
-  renderChannels();
+  wireSetupCard();
+  // Inside a folded section now: fetched when it is opened, not on every home
+  // paint. One fewer round trip on the load that matters most.
+  const chanFold = $("chanFold");
+  if (chanFold) chanFold.addEventListener("toggle", () => {
+    if (chanFold.open && !chanFold.dataset.loaded) { chanFold.dataset.loaded = "1"; renderChannels(); }
+  }, { once: false });
   renderToday();
   renderUpcomingSocial();
   warmOnIntent();
@@ -910,10 +1047,17 @@ function renderApprovals(insights) {
            <span>${esc(i.manager_remit || "")}</span>
          </div>` : "";
     lastMgr = i.manager || lastMgr;
+    // A reel and a photo post ask completely different things of the seller, so
+    // the card says which it is BEFORE they tap, and the button says what will
+    // actually happen.
+    const kind = i.kind_label ? `<span class="ins-kind ${i.kind === "reel" ? "reel" : "photo"}">${esc(i.kind_label)}</span>` : "";
+    const need = i.needs_from_you ? `<div class="ins-need">${sic(i.kind === "reel" ? "play" : "image")}<span>${esc(i.needs_from_you)}</span></div>` : "";
     return head + `
     <div class="ins-card mgr-card" data-ins="${i.id}" style="--mgr:${esc(i.manager_colour || "#5c6790")}">
+      ${kind}
       <div class="ins-title"><span>${esc(i.headline || i.title)}</span></div>
       <div class="ins-detail">${esc(i.body || i.detail)}</div>
+      ${need}
       <div class="ins-actions">
         <button class="btn approve" data-approve="${i.id}">${esc(i.cta || "Approve")}</button>
         <button class="btn reject" data-reject="${i.id}">Not now</button>
@@ -955,6 +1099,44 @@ function renderApprovals(insights) {
    A generation failure never blocks the approval: the seller's decision is the
    valuable part and the server honours it either way. The panel just says what
    is still outstanding. */
+/* Which AI makes the clip, and what it costs, decided by the seller before
+   anything is spent. Rendered as cards rather than a confirm() because the two
+   engines differ by 6x in price and by a lot in quality, and that is a real
+   decision a confirm box cannot present. */
+function pickVideoEngine(opts) {
+  return new Promise((resolve) => {
+    if (!opts || !opts.length) { resolve(null); return; }
+    if (opts.length === 1) {
+      const o = opts[0];
+      resolve(confirm(`Make a clip with ${o.label}?\n\nCost: ${o.cost}\n\n${o.note}\n\nContinue?`)
+        ? o : null);
+      return;
+    }
+    const rows = opts.map((o, n) => `
+      <label class="eng-card">
+        <input type="radio" name="vengine" value="${esc(o.id)}" ${n === 0 ? "checked" : ""} />
+        <div><b>${esc(o.label)}</b> <span class="eng-cost">${esc(o.cost || "")}</span>
+          <div class="muted tiny">${esc(o.note || "")}</div></div>
+      </label>`).join("");
+    openModal("Which AI should make the clip?", `
+      <p class="muted">Both animate your own photograph, so the product in the clip
+        is the product you sell. You are charged by the AI you pick, so the price
+        is here before you choose.</p>
+      <div class="eng-list">${rows}</div>
+      <div class="row" style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+        <button class="btn ghost" id="vengCancel">Cancel</button>
+        <button class="btn primary" id="vengGo">Make the clip</button>
+      </div>`, { wide: true });
+    let done = false;
+    const finish = (v) => { if (done) return; done = true; closeModal(); resolve(v); };
+    $("vengCancel").onclick = () => finish(null);
+    $("vengGo").onclick = () => {
+      const sel = document.querySelector('input[name="vengine"]:checked');
+      finish(opts.find((o) => o.id === (sel || {}).value) || opts[0]);
+    };
+  });
+}
+
 async function approvePostReady(postId) {
   const post = findPost ? findPost(postId) : null;
   const isReel = post && post.format === "reel";
@@ -995,7 +1177,7 @@ function openReelPrompt(post, script) {
   openModal(`Ready to film — ${esc((post && post.product_name) || "your reel")}`, `
     <p class="sm-hint" style="margin-top:0;">Scheduled. A reel is filmed, not
       drawn — so here is what to shoot. Film it yourself, or paste the prompt
-      into Gemini, Veo, Sora or Kling and upload the clip to this post.</p>
+      into a video AI, or let us make it — then the clip goes on this post.</p>
 
     ${beats.length ? `<div class="sm-script-rows">
       ${beats.map((b) => `
@@ -1015,10 +1197,22 @@ function openReelPrompt(post, script) {
         <pre class="sm-prompt-body" id="rpBody">${esc(script.ai_prompt)}</pre>
       </div>` : ""}
 
+    <div class="rp-next">
+      <b>What happens next</b>
+      <ol>
+        <li>Film it on your phone using the shots above — 15 to 30 seconds is plenty.</li>
+        <li>Or paste the prompt into a video AI and use what it gives you.</li>
+        <li>Upload the clip here. Until a clip is on it, this reel will not go out.</li>
+      </ol>
+    </div>
+
     <div class="modal-actions">
-      <button class="btn ghost" data-rpx>Close</button>
-      <button class="btn primary" id="rpOpen">Open the post to upload the clip</button>
-    </div>`, { wide: true });
+      <button class="btn ghost" data-rpx>I will do it later</button>
+      <button class="btn ghost" id="rpMake">Have an AI make it</button>
+      <button class="btn primary" id="rpUpload">${sic("arrow-up-right")}Upload the clip now</button>
+    </div>
+    <input type="file" id="rpFile" accept="video/mp4,video/webm,video/quicktime" hidden />`,
+    { wide: true });
 
   document.querySelector("[data-rpx]").onclick = closeModal;
   if ($("rpCopy")) $("rpCopy").onclick = async () => {
@@ -1034,11 +1228,38 @@ function openReelPrompt(post, script) {
     }
     setTimeout(() => { b.innerHTML = was; }, 2500);
   };
-  $("rpOpen").onclick = async () => {
-    closeModal();
+  /* The clip is the ONE thing standing between this reel and going out, so the
+     upload is a button here rather than a route into an editor the seller then
+     has to read. Straight to the file picker. */
+  const reopen = async () => {
     const fresh = (post && post.id) ? await api(`/api/social/post/${post.id}`).catch(() => post) : post;
     if (fresh) openSocialEditor(fresh);
   };
+  $("rpUpload").onclick = () => $("rpFile").click();
+  $("rpFile").onchange = async () => {
+    const f = $("rpFile").files[0];
+    if (!f) return;
+    try {
+      if (f.size > 48 * 1024 * 1024) {
+        return toast("That clip is over 48MB. Export it at 1080p — a reel rarely "
+                     + "needs more.", 7000);
+      }
+      await withBusy("Uploading your clip",
+        "Large videos take a moment on a phone connection.", async () => {
+          const fd = new FormData(); fd.append("files", f);
+          const up = await api("/api/site/image", { method: "POST", body: fd });
+          const u = up.url || up.image_url;
+          if (!u) throw new Error("The upload did not come back with a file.");
+          await api("/api/social/attach-video", { method: "POST",
+            json: { post_id: post.id, url: u } });
+        });
+      closeModal();
+      if (_currentModule === "social") { _socialData = await api("/api/social"); await renderSocial(); }
+      refreshApprovals(true);
+      toast("Clip attached. This reel is ready to go out.");
+    } catch (e) { toast(e.message, 7000); }
+  };
+  $("rpMake").onclick = async () => { closeModal(); await reopen(); };
 }
 
 async function decide(id, decision) {
@@ -1207,15 +1428,27 @@ function openMapModal(d) {
   _mapCtx = d;
   $("mapTitle").textContent = d.kind === "review" ? "Map your Review columns"
     : (d.kind === "supply_sales" ? "Map your previous-sales columns (for Supply)" : "Map your Sales columns");
+  // If we recognised the export outright, say so and stop asking. If we had to
+  // guess Date or Amount from the numbers rather than the headers, say THAT —
+  // a wrong guess presented confidently is how a seller ends up trusting a
+  // dashboard built on the wrong two columns.
+  const confirm = (d.suggested_mapping || {})._needs_confirmation || [];
   $("mapHint").textContent = d.kind === "review"
     ? "Which column holds the review text? (required). Rating and Date are optional but sharpen the analysis."
-    : "Tell us which column is which. Date and Amount are required.";
+    : d.preset
+      ? `This looks like a ${d.preset}. We have filled it in — have a quick look and press Continue.`
+      : confirm.length
+        ? "We could not tell which columns these are from their names, so please check the "
+          + "highlighted ones against the preview below. Getting these two right is what "
+          + "makes every number afterwards correct."
+        : "Tell us which column is which. Date and Amount are required.";
   const labelFor = { date: "Date", amount: "Amount", customer_id: "Customer ID", customer_name: "Customer Name",
     order_id: "Order ID", product: "Product", category: "Category", subcategory: "Sub-category", quantity: "Quantity",
     review: "Review text", rating: "Rating" };
   const opts = (sel) => `<option value="">—</option>` + d.columns.map((c) => `<option ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
   $("mapGrid").innerHTML = d.roles.map((r) => `
-    <label>${labelFor[r] || r}${d.required.includes(r) ? " *" : ""}
+    <label class="${confirm.includes(r) ? "map-check" : ""}">${labelFor[r] || r}${d.required.includes(r) ? " *" : ""}
+      ${confirm.includes(r) ? `<span class="map-flag">please check</span>` : ""}
       <select data-role="${r}">${opts(d.suggested_mapping[r])}</select>
     </label>`).join("");
   $("mapPreview").innerHTML = `<table><thead><tr>${d.columns.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
@@ -1469,13 +1702,13 @@ async function withBusy(title, detail, fn) {
    nothing. */
 const THIN_DATA_ROWS = 30;
 
-function thinData(rows, need, what) {
+function thinData(rows, need, what, withKpis = true) {
   const bars = [38, 62, 45, 80, 55, 71, 48, 66, 90, 58, 74, 63];
   return `
     <div class="thin-wrap">
       <div class="thin-ghost" aria-hidden="true">
-        <div class="thin-kpis">${[0, 1, 2, 3].map(() => `
-          <div class="thin-kpi"><i></i><b></b></div>`).join("")}</div>
+        ${withKpis ? `<div class="thin-kpis">${[0, 1, 2, 3].map(() => `
+          <div class="thin-kpi"><i></i><b></b></div>`).join("")}</div>` : ""}
         <div class="thin-card">
           <div class="thin-line">
             <svg viewBox="0 0 300 90" preserveAspectRatio="none">
@@ -2586,19 +2819,21 @@ async function openSupply() {
 
 function _supBadge(it) {
   return it.below_reorder
-    ? `<span class="sup-badge low">● Reorder</span>`
-    : `<span class="sup-badge ok">● OK</span>`;
+    ? `<span class="sup-badge low">● Buy now</span>`
+    : `<span class="sup-badge ok">● Fine</span>`;
 }
 
 function _sugCard(it) {
+  // Plain words only. A seller who has never heard "EOQ" or "reorder point"
+  // still knows exactly what "you have 8 left", "you sell 3 a day" and "buy 60"
+  // mean — and those are the same three numbers.
   const chips = [
-    ["Stock", fmt(it.current_stock) + " " + esc(it.unit_label || "")],
-    ["Avg/day", it.avg_daily_sales ?? 0],
-    ["Reorder pt", fmt(it.reorder_point)],
-    ["EOQ", it.eoq == null ? "—" : fmt(it.eoq)],
-    ["MOQ", fmt(it.moq)],
-    ["Suggested", `<b>${fmt(it.suggested_qty)}</b>`],
-    ["Est. cost", it.est_line_cost == null ? "—" : _rupee(it.est_line_cost)],
+    ["You have left", fmt(it.current_stock) + " " + esc(it.unit_label || "")],
+    ["Selling per day", it.avg_daily_sales ?? 0],
+    ["Buy again at", fmt(it.reorder_point)],
+    ["Supplier minimum", fmt(it.moq)],
+    ["Buy this many", `<b>${fmt(it.suggested_qty)}</b>`],
+    ["Will cost about", it.est_line_cost == null ? "—" : _rupee(it.est_line_cost)],
   ].map(([k, v]) => `<span class="sug-chip"><i>${k}</i>${v}</span>`).join("");
   const sup = it.supplier_name
     ? `${esc(it.supplier_name)}${it.supplier_phone ? " · " + esc(it.supplier_phone) : ""}${it.supplier_email ? " · " + esc(it.supplier_email) : ""}`
@@ -2606,9 +2841,9 @@ function _sugCard(it) {
   return `
     <div class="sug-card">
       <div class="sug-head">
-        <div><b>${esc(it.name)}</b>${it.moq_applied ? ` <span class="sup-badge moq">MOQ applied</span>` : ""}
+        <div><b>${esc(it.name)}</b>${it.moq_applied ? ` <span class="sup-badge moq">raised to supplier minimum</span>` : ""}
           <div class="muted tiny">${sup}</div></div>
-        <button class="btn approve sm" data-openpo="${it.id}">📄 Open → PO (PDF)</button>
+        <button class="btn approve sm" data-openpo="${it.id}">Make the order form</button>
       </div>
       <div class="sug-reason">${esc(it.reason || "")}</div>
       <div class="sug-metrics">${chips}</div>
@@ -2625,16 +2860,16 @@ function renderSupply(d) {
   const waste = d.waste || [];
 
   const salesNote = meta.has_sales
-    ? `These calculations run only on the previous-sales history you upload here for Supply (${meta.days_span} day${meta.days_span === 1 ? "" : "s"} loaded) — a separate set from your main Sales Data. Daily usage → product links → reorder point (daily usage × lead time + safety stock); suggested order = EOQ, raised to the supplier MOQ.`
-    : `No previous-sales history uploaded for Supply yet. Use “Upload previous sales” to add and map your past sales — the supply-chain math (usage, reorder point, EOQ, safety stock) runs only on that, separate from your main Sales Data. You can still track stock, suppliers, EOQ inputs and MOQ manually meanwhile.`;
+    ? `Worked out from the ${meta.days_span} day${meta.days_span === 1 ? "" : "s"} of past sales you uploaded here. In plain terms: we look at how fast each item sells, how long your supplier takes, and a little spare on top — and tell you when to buy again and how many. You can change any of it.`
+    : `Upload your past sales here once and we will tell you when to buy again and how much. Until then you can still track what you hold and who you buy it from — nothing is blocked, and we have filled in sensible starting numbers for you.`;
 
   const sugSection = suggestions.length ? `
-    <div class="section-title" style="margin-top:8px;">🔔 Restock suggestions <span class="muted tiny">(${suggestions.length}, one per item)</span></div>
+    <div class="section-title" style="margin-top:8px;">Time to buy more <span class="muted tiny">(${suggestions.length} item${suggestions.length === 1 ? "" : "s"} running low)</span></div>
     <div class="sug-grid">${suggestions.map(_sugCard).join("")}</div>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px;">
-      <button class="btn approve sm" id="supGenPo">📦 Generate PO for all ${belowN} item${belowN === 1 ? "" : "s"}</button>
+      <button class="btn approve sm" id="supGenPo">Make order forms for all ${belowN} item${belowN === 1 ? "" : "s"}</button>
     </div>` : `
-    <div class="action-card ok" style="margin:10px 0;"><div class="do">✓ Everything is above its reorder point</div><div class="why">No restock needed right now. Add items or links, and suggestions will appear here per item.</div></div>`;
+    <div class="action-card ok" style="margin:10px 0;"><div class="do">Nothing is running low</div><div class="why">You have enough of everything for now. When something gets close to running out it will appear here with a ready order form for that supplier.</div></div>`;
 
   const rows = items.length ? items.map((it) => `
       <tr class="${it.below_reorder ? "sup-below" : ""}">
@@ -2711,9 +2946,9 @@ function renderSupply(d) {
     <div class="table-scroll">
       <table class="sup-table">
         <thead><tr>
-          <th>Item</th><th>Supplier</th><th class="num">Stock</th><th class="num">Avg/day</th>
-          <th class="num">Lead (d)</th><th class="num">Safety</th><th class="num">MOQ</th>
-          <th class="num">Unit cost</th><th class="num">Reorder pt</th><th>Status</th><th></th>
+          <th>Item</th><th>Supplier</th><th class="num">Left</th><th class="num">Sells/day</th>
+          <th class="num">Supplier takes</th><th class="num">Spare kept</th><th class="num">Their minimum</th>
+          <th class="num">Cost each</th><th class="num">Buy again at</th><th>Status</th><th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -2892,7 +3127,7 @@ function openSupplyForm(id) {
           <label>Supplier name<input id="sfSupN" value="${esc(v("supplier_name"))}" placeholder="Sharma Textiles" /></label>
           <label>Phone<input id="sfSupP" value="${esc(v("supplier_phone"))}" placeholder="+91 …" inputmode="tel" /></label>
           <label>Email<input id="sfSupE" type="email" value="${esc(v("supplier_email"))}" placeholder="sales@supplier.com" /></label>
-          <label>Minimum they will sell <span class="muted tiny">MOQ — leave 0 if there is none</span>
+          <label>Smallest quantity they will sell <span class="muted tiny">leave 0 if there is no minimum</span>
             <input id="sfMoq" type="number" min="0" step="any" value="${v("moq", 0)}" /></label>
           <label>How many days they take <span class="muted tiny">blank = we assume 7</span>
             <input id="sfLead" type="number" min="0" step="any" placeholder="auto (7)"
@@ -2901,12 +3136,12 @@ function openSupplyForm(id) {
       </div>
 
       <div class="pf-panel" data-sf="reorder">
-        <div class="nudge">${sic("spark")}<div><b>You can leave all of this blank.</b>
+        <div class="nudge">${sic("spark")}<div><b>You can leave all of this blank — we have already filled it in.</b>
           Once there is enough sales history the app works these out from what you actually
           sell, shows them marked “auto”, and offers to write them in. Fill them only if you
           already know your own numbers.</div></div>
         <div class="sup-form-grid">
-          <label>Buffer stock to keep <span class="muted tiny">safety stock — blank = auto from your sales variability</span>
+          <label>Spare to always keep <span class="muted tiny">leave blank and we work it out from how much your sales move around</span>
             <input id="sfSafe" type="number" min="0" step="any" placeholder="auto"
                    value="${it && it.safety_stock > 0 ? it.safety_stock : ''}" /></label>
           <label>Cost of placing one order ₹ <span class="muted tiny">blank = auto (₹200)</span>
@@ -2915,8 +3150,8 @@ function openSupplyForm(id) {
           <label>Cost of holding one unit for a year ₹ <span class="muted tiny">blank = auto (20% of unit cost)</span>
             <input id="sfHold" type="number" min="0" step="any" placeholder="auto"
                    value="${it && it.holding_cost != null ? it.holding_cost : ""}" /></label>
-          <label>Always order this many <span class="muted tiny">blank = we work out the most economical quantity</span>
-            <input id="sfQty" type="number" min="0" step="any" placeholder="auto (EOQ)"
+          <label>Always order this many <span class="muted tiny">leave blank and we work out the cheapest quantity to order</span>
+            <input id="sfQty" type="number" min="0" step="any" placeholder="we decide"
                    value="${it && it.reorder_qty != null ? it.reorder_qty : ""}" /></label>
         </div>
       </div>
@@ -3068,7 +3303,7 @@ function _renderLinks() {
   p.innerHTML = `
     <div class="card sup-form">
       <h4 style="margin:0 0 4px;">🔗 Product links <span class="muted tiny">— how much inventory each product needs</span></h4>
-      <p class="muted tiny">For every unit of a product sold, set how many units of each inventory item it consumes. Usage &amp; reorder points then follow your real sales.</p>
+      <p class="muted tiny">When you sell one of a product, how many of this item does it use up? Set that here and we can tell when you are about to run out — based on what you actually sell, not guesswork.</p>
       ${!items.length ? `<p class="muted tiny">Add inventory items first, then link them here.</p>` : `<div class="link-list">${prodBlocks}</div>`}
       <div class="modal-actions"><button class="btn ghost" id="lkClose">Close</button></div>
     </div>`;
@@ -3115,12 +3350,57 @@ async function supplyOpenPo(itemIds) {
 }
 
 async function supplyGeneratePo() {
+  // One order form per supplier, because an order form listing four items from
+  // three suppliers cannot be sent to anybody. The seller gets one sheet per
+  // person they buy from, and a WhatsApp/email button for each.
   try {
-    const d = await api("/api/supply/reorder/generate", { method: "POST" });
-    if (d.download_url) await download(d.download_url, `${d.po_number}.pdf`);
+    const d = await withBusy("Working out what to order",
+      "Checking what is running low, then making one order form per supplier.",
+      () => api("/api/supply/reorder/generate", { method: "POST" }));
     _supAfter(d);
-    toast(`✅ ${d.po_number} generated — PDF saved to your device.`);
-  } catch (e) { toast(e.message); }
+    const orders = d.orders || (d.po_number ? [{ po_number: d.po_number, supplier_name: "",
+      download_url: d.download_url, excel_url: d.excel_url }] : []);
+    if (!orders.length) { toast("Nothing to order right now."); return; }
+    showSupplierOrders(orders);
+  } catch (e) { toast(e.message, 7000); }
+}
+
+/* The panel that turns "we made you 3 order forms" into 3 things you can
+   actually do — open, WhatsApp, email — with the supplier's name on each, so
+   nobody has to work out which sheet goes where. */
+function showSupplierOrders(orders) {
+  const rows = orders.map((o) => {
+    const who = o.unassigned_supplier
+      ? `<b>No supplier set</b><div class="muted tiny">Add a supplier to these items and we can send it for you.</div>`
+      : `<b>${esc(o.supplier_name || "Supplier")}</b><div class="muted tiny">${esc(o.supplier_phone || "")}${o.supplier_phone && o.supplier_email ? " · " : ""}${esc(o.supplier_email || "")}</div>`;
+    const msg = encodeURIComponent(
+      `Hello${o.supplier_name ? " " + o.supplier_name : ""}, I would like to place an order. `
+      + `Reference ${o.po_number} — ${o.n_items || 0} item${(o.n_items || 0) === 1 ? "" : "s"}. `
+      + `Sending the details now.`);
+    const wa = o.supplier_phone
+      ? `<a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/${String(o.supplier_phone).replace(/[^0-9]/g, "")}?text=${msg}">WhatsApp them</a>` : "";
+    const mail = o.supplier_email
+      ? `<a class="btn ghost sm" href="mailto:${esc(o.supplier_email)}?subject=${encodeURIComponent("Order " + o.po_number)}&body=${msg}">Email them</a>` : "";
+    return `<div class="po-row">
+        <div class="po-who">${who}</div>
+        <div class="po-facts muted tiny">${fmt(o.total_qty || 0)} units${o.total_amount != null ? " · about " + _rupee(o.total_amount) : ""}</div>
+        <div class="po-acts">
+          <button class="btn primary sm" data-podl="${esc(o.po_number)}">Open the form</button>
+          ${wa}${mail}
+        </div>
+      </div>`;
+  }).join("");
+
+  openModal("Order forms ready", `
+    <p class="muted">One form per supplier, with the quantities already worked out.
+      Open it, check it, send it.</p>
+    <div class="po-list">${rows}</div>
+    <div class="row" style="display:flex;justify-content:flex-end;margin-top:14px;">
+      <button class="btn primary" data-mclose>Done</button>
+    </div>`, { wide: true });
+  document.querySelectorAll("[data-podl]").forEach((b) => b.onclick = () =>
+    download(`/api/supply/po/${encodeURIComponent(b.dataset.podl)}/pdf`, `${b.dataset.podl}.pdf`));
+  document.querySelectorAll(".modal-body [data-mclose]").forEach((b) => b.onclick = closeModal);
 }
 
 // ---------- MODULE: Sales Analytics ----------
@@ -3136,24 +3416,35 @@ async function openSales() {
       api("/api/cancellations").catch(() => null),
     ]);
     const k = d.kpis;
-    // Too few orders for a trend, a weekday pattern or a 30-day forecast to be
-    // anything but noise. Show the shape of what is coming instead of drawing
-    // a confident line through four points.
     const rowCount = (state.data && state.data.sales && state.data.sales.rows) || 0;
-    if (rowCount && rowCount < THIN_DATA_ROWS) {
-      moduleShell("Sales Analytics",
-        thinData(rowCount, THIN_DATA_ROWS,
-                 "your revenue trend, weekday pattern and 30-day forecast"));
-      return;
-    }
-    let html = `
+    const thin = rowCount > 0 && rowCount < THIN_DATA_ROWS;
+
+    // The headline cards are COUNTS AND SUMS of what the seller uploaded. They
+    // are exactly as true at 6 orders as at 6,000 — nothing is being inferred.
+    // Hiding them behind a "not enough data" screen (which is what used to
+    // happen) told a seller who had just finished their first upload that the
+    // app could not even add up their own sales. What genuinely needs volume is
+    // the *inference* — a trend line, a weekday pattern, a 30-day forecast —
+    // and that, and only that, is what gets held back now.
+    const cards = `
       <div class="kpis">
         <div class="kpi"><div class="label">Revenue</div><div class="value">₹${fmt(k.revenue)}</div></div>
         <div class="kpi"><div class="label">Orders</div><div class="value">${fmt(k.orders)}</div></div>
         <div class="kpi"><div class="label">Customers</div><div class="value">${fmt(k.customers)}</div></div>
-        <div class="kpi"><div class="label">Avg Order Value</div><div class="value">₹${fmt(k.avg_order_value)}</div></div>
+        <div class="kpi"><div class="label">Average order</div><div class="value">₹${fmt(k.avg_order_value)}</div></div>
         ${cancelKpi(cx)}
-      </div>
+      </div>`;
+
+    if (thin) {
+      moduleShell("Sales Analytics", cards + cancelPanel(cx) + renderActions(d.insights)
+        + thinData(rowCount, THIN_DATA_ROWS,
+                   "your revenue trend, your best days of the week and next month's forecast",
+                   false));
+      bindCancelPanel(cx);
+      return;
+    }
+
+    let html = cards + `
       ${cancelPanel(cx)}
       ${renderActions(d.insights)}
       <div class="chart-card"><h4>Monthly revenue</h4><div class="plot" id="cMonthly"></div></div>
@@ -3166,7 +3457,7 @@ async function openSales() {
     moduleShell("Sales Analytics", html);
     bindCancelPanel(cx);
     const primary = cssVar("--primary", "#6d28d9");
-    plot($("cMonthly"), [{ x: d.monthly_trend.x, y: d.monthly_trend.y, type: "scatter", mode: "lines+markers", line: { color: primary, width: 2.5, shape: "spline" }, fill: "tozeroy", fillcolor: "rgba(109,40,217,.10)" }], { yaxis: { tickprefix: "₹" } }, "Monthly revenue");
+    plot($("cMonthly"), [{ x: d.monthly_trend.x, y: d.monthly_trend.y, type: "scatter", mode: "lines+markers", line: { color: primary, width: 2.5, shape: "spline" }, fill: "tozeroy", fillcolor: softFill() }], { yaxis: { tickprefix: "₹" } }, "Monthly revenue");
     if (d.forecast) {
       const f = d.forecast;
       plot($("cFcst"), [
@@ -3175,8 +3466,8 @@ async function openSales() {
       ], { yaxis: { tickprefix: "₹" } }, "30-day forecast");
     }
     if (d.by_category) plot($("cCat"), [{ x: d.by_category.x, y: d.by_category.y, type: "bar", marker: { color: primary } }], { yaxis: { tickprefix: "₹" } }, "Revenue by category");
-    plot($("cWk"), [{ x: d.weekday_pattern.x, y: d.weekday_pattern.y, type: "bar", marker: { color: "#0ea5e9" } }], { yaxis: { tickprefix: "₹" } }, "Revenue by weekday");
-    if (d.top_products) plot($("cTop"), [{ x: d.top_products.x, y: d.top_products.y, type: "bar", orientation: "h", marker: { color: "#10b981" } }], { xaxis: { tickprefix: "₹" }, yaxis: { autorange: "reversed" }, margin: { l: 150, r: 20, t: 8, b: 40 } }, "Top products");
+    plot($("cWk"), [{ x: d.weekday_pattern.x, y: d.weekday_pattern.y, type: "bar", marker: { color: series(1) } }], { yaxis: { tickprefix: "₹" } }, "Revenue by weekday");
+    if (d.top_products) plot($("cTop"), [{ x: d.top_products.x, y: d.top_products.y, type: "bar", orientation: "h", marker: { color: series(2) } }], { xaxis: { tickprefix: "₹" }, yaxis: { autorange: "reversed" }, margin: { l: 150, r: 20, t: 8, b: 40 } }, "Top products");
   } catch (e) {
     moduleShell("Sales Analytics", failed(e.message, () => openModule(_currentModule)));
   }
@@ -3291,14 +3582,29 @@ async function openSubcategory() {
   try {
     await api("/api/smart/state");
     const d = await api("/api/subcategory?lang=en");
+    const rowCount = (state.data && state.data.sales && state.data.sales.rows) || 0;
+    // Same rule as Sales Analytics: the cards are sums of the seller's own rows
+    // and are always shown; only the trend charts wait for enough history.
+    const cards = (d.cards || []).length ? `
+      <div class="kpis">${d.cards.map((c) => `
+        <div class="kpi"><div class="label">${esc(c.label)}</div>
+          <div class="value">${esc(String(c.value))}</div>
+          ${c.note ? `<div class="muted tiny">${esc(c.note)}</div>` : ""}</div>`).join("")}
+      </div>` : "";
     if (!d.available) {
-      moduleShell("Sub-Category Analysis",
-        thinData((state.data && state.data.sales && state.data.sales.rows) || 0,
-                 THIN_DATA_ROWS, "which categories and sub-categories drive your revenue"));
+      moduleShell("Sub-Category Analysis", cards + `<div class="card">${esc(d.reason || "")}</div>`
+        + thinData(rowCount, THIN_DATA_ROWS,
+                   "which kinds of product bring the money in", !cards));
       return;
     }
     const label = d.field === "subcategory" ? "sub-categories" : "categories";
-    let html = `
+    if (rowCount > 0 && rowCount < THIN_DATA_ROWS) {
+      moduleShell("Sub-Category Analysis", cards + renderActions(d.insights)
+        + thinData(rowCount, THIN_DATA_ROWS,
+                   `how each of your ${label} is trending month to month`, false));
+      return;
+    }
+    let html = cards + `
       <div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
         <span class="muted">Drill into a ${d.field === "subcategory" ? "sub-category" : "category"}:</span>
         <select id="subSel" class="sub-select"><option value="">All (overview)</option>${d.all_values.map((v) => `<option>${esc(v)}</option>`).join("")}</select>
@@ -3338,9 +3644,9 @@ async function renderSubDetail(value) {
       </div>`;
     setView(`<div class="page-head"><h2>Sub-Category Analysis</h2><button class="btn ghost sm" id="backHome">← All apps</button></div>${html}`);
     $("backHome").onclick = goHome; $("subBack").onclick = openSubcategory;
-    plot($("cDT"), [{ x: d.monthly_trend.x, y: d.monthly_trend.y, type: "scatter", mode: "lines+markers", fill: "tozeroy", fillcolor: "rgba(109,40,217,.10)", line: { color: cssVar("--primary", "#6d28d9") } }], { yaxis: { tickprefix: "₹" } }, value + " monthly");
-    plot($("cDW"), [{ x: d.weekday_pattern.x, y: d.weekday_pattern.y, type: "bar", marker: { color: "#0ea5e9" } }], { yaxis: { tickprefix: "₹" } }, "Weekday");
-    if (d.top_products) plot($("cDP"), [{ x: d.top_products.x, y: d.top_products.y, type: "bar", orientation: "h", marker: { color: "#10b981" } }], { xaxis: { tickprefix: "₹" }, yaxis: { autorange: "reversed" }, margin: { l: 150, r: 20, t: 8, b: 40 } }, "Top items");
+    plot($("cDT"), [{ x: d.monthly_trend.x, y: d.monthly_trend.y, type: "scatter", mode: "lines+markers", fill: "tozeroy", fillcolor: softFill(), line: { color: cssVar("--primary", "#6d28d9") } }], { yaxis: { tickprefix: "₹" } }, value + " monthly");
+    plot($("cDW"), [{ x: d.weekday_pattern.x, y: d.weekday_pattern.y, type: "bar", marker: { color: series(1) } }], { yaxis: { tickprefix: "₹" } }, "Weekday");
+    if (d.top_products) plot($("cDP"), [{ x: d.top_products.x, y: d.top_products.y, type: "bar", orientation: "h", marker: { color: series(2) } }], { xaxis: { tickprefix: "₹" }, yaxis: { autorange: "reversed" }, margin: { l: 150, r: 20, t: 8, b: 40 } }, "Top items");
   } catch (e) { toast(e.message); }
 }
 
@@ -3365,7 +3671,7 @@ async function openReview() {
     moduleShell("Review Analytics", html);
     const primary = cssVar("--primary", "#6d28d9");
     plot($("cShare"), [{ x: d.share_chart.themes, y: d.share_chart.yours, type: "bar", marker: { color: primary } }], { margin: { l: 46, r: 16, t: 8, b: 120 }, xaxis: { tickangle: -35 } }, "What customers talk about");
-    plot($("cSent"), [{ x: d.sentiment_chart.themes, y: d.sentiment_chart.yours, type: "bar", marker: { color: "#0ea5e9" } }], { margin: { l: 46, r: 16, t: 8, b: 120 }, xaxis: { tickangle: -35 } }, "Sentiment by theme");
+    plot($("cSent"), [{ x: d.sentiment_chart.themes, y: d.sentiment_chart.yours, type: "bar", marker: { color: series(1) } }], { margin: { l: 46, r: 16, t: 8, b: 120 }, xaxis: { tickangle: -35 } }, "Sentiment by theme");
   } catch (e) { moduleShell("Review Analytics", failed(e.message, () => openModule(_currentModule))); }
 }
 
@@ -4367,7 +4673,7 @@ async function goStep(id) {
   // it has been saved once. Entering Design saves silently so the seller never
   // has to publish (step 5) just to see step 3.
   if (id === "editor" && (_siteDirty || !_siteMeta.site.handle)) {
-    if (!_site.brand) _site.brand = _site.brand || (state.email || "My store").split("@")[0];
+    if (!_site.brand) _site.brand = "My store";   // never the email handle (Gate 1)
     await saveSite({ quiet: true });
   }
   _step = id; _frameReady = false;
@@ -5852,9 +6158,10 @@ function openSocialEditor(post) {
           ${post.occasion ? `<span class="sm-occ">${esc(post.occasion)}</span>` : ""}</div>
       </div>
       ${videoBlock("No clip uploaded yet")}
-      <p class="sm-hint" style="margin:12px 0;">A reel is filmed, not generated.
-        Below is the shot list to film it yourself — or copy the prompt and paste it
-        into Gemini, Veo or Sora, then upload the clip above.</p>
+      <p class="sm-hint" style="margin:12px 0;"><b>This is a reel, so it needs a video.</b>
+        Film it on your phone from the shot list below — that usually looks better than
+        anything an AI makes — or press "Generate a clip" above and pick which AI does it.
+        Either way, the clip goes in the slot above.</p>
       <div id="smEdScript"></div>
     </div>` : `
     ${storyBar}
@@ -5876,6 +6183,10 @@ function openSocialEditor(post) {
           <select id="smEngine"><option value="">Loading…</option></select>
           <span class="ai-pick-note" id="smEngineNote"></span>
         </div>
+        <div class="row" style="margin-top:6px;">
+          <button class="btn ghost tiny" id="smShowPrompt">See exactly what we will ask for</button>
+        </div>
+        <div id="smPromptBox" hidden></div>
         <p class="sm-hint" style="margin:8px 0 0;">
           <b>Re-shoot</b> starts from your own photograph, so the item in the picture
           is the item you ship — only the light and setting change.
@@ -5964,6 +6275,34 @@ function openSocialEditor(post) {
   }
   if ($("smEngine")) loadEngines(true);
 
+  /* "It ignored my brand" and "it was never told about my brand" look identical
+     from outside. This shows which one happened, before anything is spent. */
+  if ($("smShowPrompt")) $("smShowPrompt").onclick = async () => {
+    const box = $("smPromptBox"), btn = $("smShowPrompt");
+    if (!box.hidden) { box.hidden = true; btn.textContent = "See exactly what we will ask for"; return; }
+    btn.disabled = true; btn.textContent = "Checking…";
+    try {
+      const d = await api("/api/studio/prompt-preview", { method: "POST", json: {
+        product_id: post.product_id, pillar: post.pillar || "", format: post.format || "",
+        post_id: post.id, use_reference: true, shot_type: post.shot_type || "" } });
+      const gaps = (d.sources || []).filter((x) => !x.have);
+      box.innerHTML = `
+        <div class="prompt-peek">
+          <div class="pp-head">What the AI is told <span class="muted tiny">${d.words} words${d.from_reference ? " · starting from your own photo" : " · no photo to start from"}</span></div>
+          <pre class="pp-text">${esc(d.prompt)}</pre>
+          <div class="pp-src">${(d.sources || []).map((x) => `
+            <div class="pp-row ${x.have ? "on" : "off"}"><i>${x.have ? "✓" : "—"}</i>
+              <b>${esc(x.part)}</b><span class="muted tiny">${esc(x.note)}</span></div>`).join("")}</div>
+          ${gaps.length ? `<p class="muted tiny" style="margin:8px 0 0;">
+            The greyed-out rows are what is missing. Filling those in is what makes the
+            next picture look more like yours.</p>` : ""}
+        </div>`;
+      box.hidden = false;
+      btn.textContent = "Hide";
+    } catch (e) { toast(e.message); btn.textContent = "See exactly what we will ask for"; }
+    btn.disabled = false;
+  };
+
   const vidPick = $("smVidPick"), vidFile = $("smVidFile");
   if (vidPick && vidFile) {
     vidPick.onclick = () => vidFile.click();
@@ -6012,21 +6351,19 @@ function openSocialEditor(post) {
     catch (e) { return toast(e.message, 6000); }
     if (!eng.ready) return toast(eng.note, 8000);
     const opts = eng.engines || [];
-    // One engine today, but the seller still gets told which one and what it
-    // costs before anything is spent — and the moment a second is connected
-    // this becomes a real choice with no code change.
-    const pickLine = opts.length > 1
-      ? `Available: ${opts.map((o) => `${o.label} (${o.cost})`).join(", ")}\n\n`
-      : "";
-    if (!confirm(`Generate a clip from your own photo of this product?\n\n`
-                 + `${pickLine}${eng.note}\n\nContinue?`)) return;
+    // The seller picks the engine and sees the price before a rupee moves. A
+    // clip is the most expensive thing in the app — six times the price
+    // difference between the two engines — so this is a real choice, not a
+    // confirmation dialog with the decision already made.
+    const picked = await pickVideoEngine(opts);
+    if (!picked) return;
     try {
-      const vid = await withBusy("Making your clip…",
-        "This takes about a minute. It animates your own photograph, so the "
-        + "product stays yours. You can carry on using the app.",
+      const vid = await withBusy(`Making your clip with ${picked.label}…`,
+        "One to three minutes. It animates your own photograph, so the product "
+        + "stays yours. You can go and do something else — it keeps going.",
         () => api("/api/studio/video", { method: "POST", json: {
           product_id: post.product_id, post_id: post.id,
-          engine: (opts[0] || {}).id || "" } }));
+          engine: picked.id || "" } }));
       post.video_url = vid.url;
       const slot = $("smVidSlot");
       if (slot) {

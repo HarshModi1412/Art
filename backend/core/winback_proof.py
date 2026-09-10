@@ -45,9 +45,28 @@ def _save(email: str, rows: list[dict]) -> None:
 
 
 def mark_sent(email: str, customers: list[dict], channel: str = "whatsapp",
-              note: str = "") -> dict:
-    """Record that this campaign went out. `customers` is what the generator
-    produced — we keep only the ids, the names and what they were worth."""
+              note: str = "", state: str = "sent") -> dict:
+    """Record a campaign. `customers` is what the generator produced — we keep
+    only the ids, the names and what they were worth.
+
+    GATE 1 BLOCKER #3. `state` is the whole point of this argument:
+
+      "sent"    -- a mail server or WhatsApp provider accepted these messages.
+                   Measurable: any repeat purchase in the window is evidence.
+      "pending" -- the app prepared tap-to-send WhatsApp links and has NO idea
+                   whether the seller tapped them. NOT measurable.
+
+    Before this existed, prepared links were logged as sent, so "₹18,400
+    recovered from win-back" could be counted from messages that were never
+    written, let alone delivered. That number is the single most important one
+    in the product — it is the reason a seller renews — and a number that
+    flatters itself is worse than no number, because the first time they check
+    it against reality they stop believing everything else too.
+
+    A pending campaign is promoted by confirm_sent() when the seller says they
+    actually sent it, and is excluded from every recovered-value total until
+    then.
+    """
     targets = []
     for c in (customers or []):
         cid = str(c.get("customer_id") or c.get("id") or "").strip()
@@ -67,6 +86,7 @@ def mark_sent(email: str, customers: list[dict], channel: str = "whatsapp",
         "channel": (channel or "whatsapp").strip()[:20],
         "note": str(note or "").strip()[:160],
         "window_days": DEFAULT_WINDOW_DAYS,
+        "state": "pending" if str(state).lower() == "pending" else "sent",
         "targets": targets,
         "n_targets": len(targets),
         "prior_value": round(sum(t["prior_value"] for t in targets), 2),
@@ -75,6 +95,26 @@ def mark_sent(email: str, customers: list[dict], channel: str = "whatsapp",
     rows.append(row)
     _save(email, rows)
     return row
+
+
+def confirm_sent(email: str, campaign_id: str) -> dict:
+    """The seller says they tapped through the WhatsApp links after all.
+
+    Only from here does a prepared campaign start counting toward recovered
+    value, and the clock starts NOW rather than when the links were made — the
+    window has to measure from when customers actually heard from them.
+    """
+    rows = _load(email)
+    for r in rows:
+        if r.get("id") == campaign_id:
+            if r.get("state") == "sent":
+                return r
+            r["state"] = "sent"
+            r["sent_at"] = _now_iso()
+            r["confirmed"] = True
+            _save(email, rows)
+            return r
+    raise ValueError("That campaign is no longer in your history.")
 
 
 def unmark(email: str, campaign_id: str) -> list[dict]:
@@ -132,10 +172,24 @@ def summary(email: str) -> dict:
     measured = [_measure(email, c, txns) for c in campaigns]
     measured.sort(key=lambda r: r.get("sent_at") or "", reverse=True)
 
-    contacted = sum(r["n_targets"] for r in measured)
-    returned = sum(r["returned"] for r in measured)
-    recovered = round(sum(r["recovered"] for r in measured), 2)
-    ready = [r for r in measured if r["measurable"]]
+    # GATE 1: a campaign whose messages were only PREPARED (tap-to-send links
+    # the app cannot know were tapped) is shown in history, but never counted
+    # toward "recovered". Counting it would let the headline number claim credit
+    # for messages nobody sent.
+    for r in measured:
+        r.setdefault("state", "sent")
+        r["counts_toward_total"] = r.get("state") != "pending"
+        if r["state"] == "pending":
+            r["measurable"] = False
+            r["note_state"] = ("Waiting for you to confirm you sent these — "
+                               "until then they are not counted.")
+    counted = [r for r in measured if r["counts_toward_total"]]
+    pending = [r for r in measured if not r["counts_toward_total"]]
+
+    contacted = sum(r["n_targets"] for r in counted)
+    returned = sum(r["returned"] for r in counted)
+    recovered = round(sum(r["recovered"] for r in counted), 2)
+    ready = [r for r in counted if r["measurable"]]
 
     headline = ""
     if recovered > 0:
@@ -148,15 +202,24 @@ def summary(email: str) -> dict:
         headline = (f"{contacted} customers contacted. None have come back yet — "
                     f"it is still early for {len(measured)} campaign"
                     f"{'s' if len(measured) != 1 else ''}.")
-    else:
+    elif contacted:
         headline = (f"{contacted} customers contacted. Upload fresher sales data "
                     f"and this will tell you how many came back.")
+    elif pending:
+        n = sum(r["n_targets"] for r in pending)
+        headline = (f"{n} message{'s' if n != 1 else ''} "
+                    f"{'is' if n == 1 else 'are'} ready to send on WhatsApp. "
+                    f"Send them, then mark them sent — that is when this starts counting.")
+    else:
+        headline = ""
 
     return {
         "campaigns": measured,
         "totals": {"campaigns": len(measured), "contacted": contacted,
                    "returned": returned, "recovered": recovered,
-                   "return_rate": round(returned / contacted * 100, 1) if contacted else 0.0},
+                   "return_rate": round(returned / contacted * 100, 1) if contacted else 0.0,
+                   "pending_campaigns": len(pending),
+                   "pending_customers": sum(r["n_targets"] for r in pending)},
         "headline": headline,
         "window_days": DEFAULT_WINDOW_DAYS,
         "method": "A customer counts as recovered if they bought within "

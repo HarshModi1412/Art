@@ -588,54 +588,40 @@ def _enrich(item: dict, product_daily: dict, piv, maps_by_item: dict, meta: dict
 def _reason_text(item, avg_daily, rop, current, eoq_raw, basis, order_qty, moq,
                  moq_applied, below, eff_lead, eff_safety, safety_is_auto,
                  lead_is_auto, holding_is_auto, ordering_is_auto, enough) -> str:
+    """The sentence the seller reads. Written for someone who has never taken a
+    supply-chain class, because that is who this is for.
+
+    The maths is unchanged — reorder point is still daily usage x lead time plus
+    safety stock, and the quantity is still EOQ bounded below by MOQ. What
+    changed is that none of those five words appear. "You sell about 3 a day,
+    your supplier takes 7 days, so buy again once you are down to 25" says the
+    same thing and can be checked by the person reading it, which is the whole
+    point of showing a reason at all.
+    """
     unit = item.get("unit_label") or "unit"
     if avg_daily <= 0:
-        return ("No sales usage detected yet, so demand is unknown. Link this item to "
-                "the products that use it, or load past sales — reorder point, safety "
-                "stock and EOQ fill in automatically once there's enough history.")
-    lead_txt = f"{int(eff_lead)}d lead{' (auto)' if lead_is_auto else ''}"
-    safe_txt = f"{int(eff_safety)} safety{' (auto)' if safety_is_auto else ''}"
-    base = (f"Uses about {round(avg_daily, 2)} {unit}/day. Reorder point {rop} = "
-            f"daily usage x {lead_txt} + {safe_txt}.")
-    autos = []
-    if safety_is_auto:
-        autos.append("safety stock")
-    if holding_is_auto:
-        autos.append("holding cost")
-    if ordering_is_auto:
-        autos.append("ordering cost")
-    if lead_is_auto:
-        autos.append("lead time")
+        return ("We do not know how fast this one sells yet. Tell us which products "
+                "use it, or upload your past sales, and we will work out when to buy "
+                "again and how many — you will not have to set anything.")
+    days = int(eff_lead)
+    base = (f"You use about {round(avg_daily, 2)} {unit} a day, and your supplier takes "
+            f"about {days} day{'s' if days != 1 else ''} to deliver. So buy again once "
+            f"you are down to {rop} — that covers the wait, with {int(eff_safety)} "
+            f"spare in case sales pick up.")
     if not below:
-        tail = f" Current stock {int(current)} is above the reorder point."
-        if autos:
-            tail += f" Suggested {', '.join(autos)} from your sales — apply to edit."
-        return base + tail
+        return base + f" You have {int(current)} right now, so there is no hurry."
     if basis == "eoq":
-        base += f" Economic order quantity is {int(round(eoq_raw))} {unit}."
+        base += (f" Buying {int(round(eoq_raw))} at a time works out cheapest — "
+                 f"big enough to be worth the trip, small enough that cash is not "
+                 f"sitting on a shelf.")
     elif basis == "manual":
-        base += " Using your manual reorder quantity."
+        base += " Using the quantity you set yourself."
     else:
-        base += " EOQ needs ordering & holding cost; using a lead-time cover estimate."
+        base += " Ordering enough to cover the wait comfortably."
     if moq_applied:
-        base += f" Raised to the supplier MOQ of {moq}."
-    base += f" Suggested order: {order_qty} {unit}."
-    if autos:
-        base += f" ({', '.join(autos)} auto-suggested from sales — apply to make them editable.)"
-    return base
+        base += f" Your supplier will not sell fewer than {moq}, so that is the number."
+    return base + f" Order {order_qty} {unit}."
 
-
-# ---------------------------------------------------------
-# compute
-# ---------------------------------------------------------
-# ---------------------------------------------------------------------------
-# suppliers
-# ---------------------------------------------------------------------------
-# Supplier details live on each inventory item, which is fine for storage and
-# terrible for working with: to change a phone number you had to open every
-# item that supplier stocks. These derive a supplier list from those fields and
-# write an edit back across all of them, so Suppliers can be its own screen
-# without a migration and without two places to keep in sync.
 def _disp(v) -> str:
     """Trim without destroying case — _norm() lowercases, which is right for
     matching and wrong for anything shown to a person."""
@@ -803,10 +789,11 @@ def build_reorder_insight(email: str) -> dict | None:
     plural = "s" if len(below) != 1 else ""
     return {
         "id": "reorder", "module": "supply", "page": "supply", "icon": "📦",
-        "title": f"Reorder {len(below)} item{plural} below reorder point",
-        "detail": (f"{names} {'are' if len(below) != 1 else 'is'} at or below the reorder point "
-                   "(daily usage x lead time + safety stock). Approve to generate purchase "
-                   "orders with EOQ / MOQ suggested quantities — saved to your account and "
+        "title": f"{len(below)} item{plural} running low — order more",
+        "detail": (f"{names} {'are' if len(below) != 1 else 'is'} down to the level where "
+                   "the next order should go out, going by how fast it sells and how long "
+                   "your supplier takes. Approve and we will make the order form for each "
+                   "supplier, with the quantity already worked out — saved to your account and "
                    "downloaded as a PDF."),
         "action_label": "Approve → generate purchase order",
         "count": len(below), "names": names,
@@ -1019,6 +1006,49 @@ def create_po(email: str, item_ids: list[str] | None = None,
     if not item_ids:
         mark_reorder_handled(email, "approved")
     return po
+
+
+def create_pos_by_supplier(email: str, insight_id: str | None = None) -> list[dict]:
+    """One purchase order per SUPPLIER for everything currently running low.
+
+    This is what the seller actually needs, and it is not what create_po() gave
+    them. One PO listing four items from three different suppliers cannot be
+    sent to anybody — the seller has to retype it three times, which is exactly
+    the manual work the app is supposed to remove. Worse, the approval path
+    called create_po(email, insight_id) with the insight id landing in the
+    item_ids argument, so approving "items running low" quietly produced no
+    purchase order at all.
+
+    So: group the low items by supplier, make one sendable order per supplier,
+    and give items with no supplier linked their own order marked as such — a
+    seller who has not filled in supplier details still gets a list to work
+    from rather than silence.
+    """
+    email = _email(email)
+    comp = compute_inventory(email)
+    low = comp.get("below") or []
+    if not low:
+        return []
+
+    groups: dict[str, list[dict]] = {}
+    for r in low:
+        key = (str(r.get("supplier_name") or "").strip().lower() or "__none__")
+        groups.setdefault(key, []).append(r)
+
+    made: list[dict] = []
+    # Deterministic order: named suppliers alphabetically, unassigned last, so
+    # the list does not reshuffle between refreshes.
+    for key in sorted(groups, key=lambda k: (k == "__none__", k)):
+        rows = groups[key]
+        po = create_po(email, item_ids=[r["id"] for r in rows], insight_id=insight_id)
+        if not po:
+            continue
+        po["supplier_name"] = (rows[0].get("supplier_name") or "").strip()
+        po["supplier_phone"] = (rows[0].get("supplier_phone") or "").strip()
+        po["supplier_email"] = (rows[0].get("supplier_email") or "").strip()
+        po["unassigned_supplier"] = key == "__none__"
+        made.append(po)
+    return made
 
 
 def create_manual_po(email: str, supplier: dict, lines: list[dict],

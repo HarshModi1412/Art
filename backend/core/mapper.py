@@ -147,6 +147,11 @@ def suggest_mapping(df: pd.DataFrame) -> dict:
         out["_preset_name"] = preset["name"]
         if preset.get("amount_is_unit"):
             out["_amount_is_unit"] = True
+        # A recognised export needs no confirmation — that is the whole point of
+        # having presets. Both keys are always present so callers never have to
+        # test for their absence.
+        out["_guessed"] = []
+        out["_needs_confirmation"] = []
         return out
 
     suggestion: dict[str, str | None] = {role: None for role in ROLE_KEYWORDS}
@@ -172,21 +177,81 @@ def suggest_mapping(df: pd.DataFrame) -> dict:
             suggestion[role] = col
             used.add(col)
 
-    # fall back: first parseable-date column, best numeric column for amount
+    # ---- fallbacks, and why they used to be actively harmful ---------------
+    #
+    # A seller uploaded a file whose headers we do not recognise — "Tarikh,
+    # Grahak, Saman, Rakam", or an export whose header row was one blank line
+    # too low so the columns arrived as Column1..Column4. What came back was
+    #
+    #     {"date": "Tarikh", "amount": "Tarikh"}
+    #
+    # the SAME column mapped to both roles, presented as a confident guess, and
+    # then build_transactions() reported zero dropped rows. The seller's first
+    # experience of the product was a dashboard full of numbers computed from
+    # nonsense, with nothing anywhere saying so. Wrong-and-confident is worse
+    # than "we could not tell, please pick" — the second costs them ten seconds,
+    # the first costs them their trust in every figure afterwards.
+    #
+    # Two separate causes:
+    #   * pandas parses bare small integers as nanosecond timestamps, so ANY
+    #     integer column "looks like" 100% valid dates. The date fallback has to
+    #     exclude numeric columns unless they genuinely look like date serials.
+    #   * the date fallback never added its pick to `used`, so the amount
+    #     fallback was free to take the same column.
+    guessed: set[str] = set()
+
     if suggestion["date"] is None:
         for col in cols:
+            if col in used:
+                continue
+            ser = df[col]
+            if pd.api.types.is_numeric_dtype(ser):
+                # Only an 8-digit YYYYMMDD or an Excel day serial is plausibly a
+                # date. A column of 1, 2, 3 is not, whatever to_datetime says.
+                nums = pd.to_numeric(ser, errors="coerce").dropna()
+                if nums.empty:
+                    continue
+                ymd = nums.between(19000101, 21001231).mean()
+                serial = nums.between(20000, 60000).mean()
+                if max(ymd, serial) <= 0.8:
+                    continue
             try:
-                if pd.to_datetime(df[col], errors="coerce").notna().mean() > 0.8:
+                if pd.to_datetime(ser, errors="coerce").notna().mean() > 0.8:
                     suggestion["date"] = col
+                    used.add(col)
+                    guessed.add("date")
                     break
             except Exception:
                 continue
+
     if suggestion["amount"] is None:
         numeric = [c for c in df.select_dtypes("number").columns if c not in used]
         if numeric:
             # prefer the numeric column with the largest sum (line totals > unit prices)
-            suggestion["amount"] = str(max(numeric, key=lambda c: pd.to_numeric(df[c], errors="coerce").sum()))
+            suggestion["amount"] = str(max(
+                numeric, key=lambda c: pd.to_numeric(df[c], errors="coerce").sum()))
+            used.add(suggestion["amount"])
+            guessed.add("amount")
 
+    # No column may hold two roles. If it somehow happens, the weaker role loses
+    # its value rather than both roles reading the same numbers.
+    seen: dict[str, str] = {}
+    for role in list(suggestion):
+        col = suggestion[role]
+        if not col:
+            continue
+        if col in seen:
+            suggestion[role] = None
+            guessed.discard(role)
+        else:
+            seen[col] = role
+
+    # What the mapping screen needs in order to ASK instead of pre-filling: which
+    # fields were guessed from data rather than recognised from a header, and
+    # whether the two that matter are present at all.
+    suggestion["_guessed"] = sorted(guessed)
+    suggestion["_needs_confirmation"] = sorted(
+        [r for r in ("date", "amount") if r in guessed or not suggestion.get(r)])
     return suggestion
 
 

@@ -361,7 +361,10 @@ def subcategory_trends(txns: pd.DataFrame) -> dict:
     df = txns.copy()
     col = _dimension_col(df)
     if col is None:
-        return {"available": False, "reason": "No category or sub-category column was mapped."}
+        return {"available": False, "cards": [],
+                "reason": "Your sales file does not have a category column, so there is "
+                          "nothing to group by yet. Re-upload and map one column to "
+                          "Category, and this page fills in."}
 
     df["month"] = df["date"].dt.to_period("M").dt.to_timestamp()
     totals_all = df.groupby(col)["amount"].sum().sort_values(ascending=False)
@@ -407,9 +410,24 @@ def subcategory_trends(txns: pd.DataFrame) -> dict:
             "highlight": top3_text,
         })
 
+    # Headline cards. These are counts and sums of rows the seller uploaded, so
+    # they are true at any volume and are shown whether or not there is enough
+    # history for the trend charts below them — see the note in openSubcategory.
+    grand = float(totals_all.sum())
+    leader = str(totals_all.index[0]) if len(totals_all) else ""
+    cards = [
+        {"label": "Kinds of product", "value": f"{len(totals_all):,}"},
+        {"label": "Biggest earner", "value": leader or "—",
+         "note": (f"₹{totals_all.iloc[0]:,.0f}" if len(totals_all) else "")},
+        {"label": "Its share of sales",
+         "value": (f"{totals_all.iloc[0] / grand * 100:.0f}%" if grand > 0 else "—")},
+        {"label": "Total sales", "value": f"₹{grand:,.0f}"},
+    ]
+
     return {
         "available": True,
         "field": col,
+        "cards": cards,
         "series": series,
         "totals": {"x": totals_all.head(12).index.astype(str).tolist(), "y": totals_all.head(12).round(2).tolist()},
         "all_values": totals_all.index.astype(str).tolist(),

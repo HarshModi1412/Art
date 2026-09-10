@@ -26,9 +26,18 @@
 
   --accent:       #5c6790;
   --accent-hover: #4b5578;
+  --accent-fill:  #5c6790;
+  --accent-fill-hover: #4b5578;
   --accent-soft:  rgba(92, 103, 144, 0.10);
   --accent-line:  rgba(92, 103, 144, 0.24);
   --on-accent:    #ffffff;
+  --focus:        #4b5578;
+  --surface-4:    #ffffff;
+  --border-2:     #d7dae1;
+  --disabled:     #a3a8b2;
+
+  --chart-1: #3f6bb5;  --chart-2: #b5711f;  --chart-3: #2f7d54;  --chart-4: #b0577a;
+  --chart-5: #6b5aa6;  --chart-6: #2b7f8c;  --chart-7: #8a7a2c;  --chart-8: #a8663f;
 
   --green:      #3f7d63;
   --green-soft: rgba(63, 125, 99, 0.12);
@@ -59,40 +68,56 @@
   --num-feat: tabular-nums;
 }
 
+/* Dark theme — same rebuilt palette as the Smart workspace, so switching
+   between Classic and Smart does not switch colour systems. Ratios against --bg
+   are computed: text 15.17:1, text-2 8.93:1, muted 6.50:1 (it was 4.4:1, below
+   AA, and muted is what every hint line in the app uses), inputs 3.98:1 to meet
+   WCAG 2.2 SC 1.4.11, focus ring 7.37:1. */
 [data-theme="dark"] {
-  --bg:          #101216;
-  --surface:       #191b21;
-  --surface-2:     #14161a;
-  --surface-3:     #1e2128;
-  --border:        #272a32;
-  --border-strong: #383c46;
-  --text:          #e3e5ea;
-  --text-2:        #bec2cb;
-  --muted:         #888d97;
+  --bg:            #12151c;
+  --surface:       #191d26;
+  --surface-2:     #0f131a;
+  --surface-3:     #21262f;
+  --surface-4:     #2a303b;
+  --border:        #242a36;
+  --border-2:      #333b4a;
+  --border-strong: #6b7688;
+  --text:          #e8eaef;
+  --text-2:        #adb6c4;
+  --muted:         #909bad;
+  --disabled:      #697382;
 
-  --accent:       #9aa4c8;
-  --accent-hover: #b3bbd8;
-  --accent-soft:  rgba(154, 164, 200, 0.15);
-  --accent-line:  rgba(154, 164, 200, 0.30);
-  --on-accent:    #14161a;
+  --accent:       #9ba6ee;
+  --accent-hover: #b4bcf5;
+  --accent-fill:  #4e5fc0;
+  --accent-fill-hover: #5c6dd1;
+  --accent-soft:  rgba(155, 166, 238, 0.16);
+  --accent-line:  rgba(155, 166, 238, 0.34);
+  --on-accent:    #ffffff;
+  --focus:        #8fa0f2;
 
-  --green:      #79bd9c;
-  --green-soft: rgba(121, 189, 156, 0.15);
-  --amber:      #d6ac6e;
-  --amber-soft: rgba(214, 172, 110, 0.15);
-  --red:        #dd8f8b;
-  --red-soft:   rgba(221, 143, 139, 0.15);
-  --blue:       #8aabd6;
-  --blue-soft:  rgba(138, 171, 214, 0.15);
+  --green:      #3fd48a;
+  --green-soft: rgba(63, 212, 138, 0.14);
+  --amber:      #f0b429;
+  --amber-soft: rgba(240, 180, 41, 0.14);
+  --red:        #ff7b72;
+  --red-soft:   rgba(255, 123, 114, 0.14);
+  --blue:       #6bb0f5;
+  --blue-soft:  rgba(107, 176, 245, 0.14);
 
-  --grid: #23262e;
-  --axis: #8d929c;
+  --chart-1: #5b8ff0;  --chart-2: #f5a93c;  --chart-3: #35b368;  --chart-4: #f09bb6;
+  --chart-5: #b49cf2;  --chart-6: #54d3de;  --chart-7: #eade90;  --chart-8: #f2c4a0;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .30);
-  --shadow-md: 0 1px 3px rgba(0, 0, 0, .40);
-  --shadow-lg: 0 10px 28px rgba(0, 0, 0, .45);
-  --shadow-pop: 0 24px 60px rgba(0, 0, 0, .60);
+  --grid: #242a36;
+  --axis: #909bad;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .34);
+  --shadow-md: 0 1px 3px rgba(0, 0, 0, .44);
+  --shadow-lg: 0 10px 28px rgba(0, 0, 0, .50);
+  --shadow-pop: 0 24px 60px rgba(0, 0, 0, .64);
 }
+
+
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
@@ -390,7 +415,7 @@ button:focus-visible, .nav-item:focus-visible, a:focus-visible {
 
 /* ---------- buttons ---------- */
 .primary-btn {
-  background: var(--accent); color: var(--on-accent);
+  background: var(--accent-fill); color: var(--on-accent);
   border: none; border-radius: 9px;
   padding: 10px 20px; font: inherit; font-weight: 650;
   cursor: pointer; box-shadow: var(--shadow-sm);
@@ -469,7 +494,7 @@ button:focus-visible, .nav-item:focus-visible, a:focus-visible {
   display: grid; place-items: center; margin-top: 2px;
 }
 /* dark theme's red is a light tint — dark glyph keeps the badge legible */
-[data-theme="dark"] .focus-rank { color: #14161a; }
+[data-theme="dark"] .focus-rank { color: #12151c; }
 .focus-action { margin-top: 6px; font-size: 13.5px; line-height: 1.5; color: var(--text); }
 .focus-badge { font-size: 10.5px; padding: 2px 8px; border-radius: 6px; margin-left: 6px; font-weight: 700; }
 .focus-watch { margin-top: 11px; padding-top: 11px; border-top: 1px dashed var(--border); font-size: 12.5px; color: var(--muted); }
@@ -493,7 +518,7 @@ button:focus-visible, .nav-item:focus-visible, a:focus-visible {
 }
 .chat-empty { margin: auto; text-align: center; max-width: 380px; }
 .msg { max-width: 78%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; font-size: 13.5px; }
-.msg.user { align-self: flex-end; background: var(--accent); color: var(--on-accent); }
+.msg.user { align-self: flex-end; background: var(--accent-fill); color: var(--on-accent); }
 .msg.assistant { align-self: flex-start; background: var(--surface-3); border: 1px solid var(--border); }
 .msg.thinking { color: var(--muted); font-style: italic; }
 .chat-input-row { display: flex; gap: 10px; margin-top: 12px; }

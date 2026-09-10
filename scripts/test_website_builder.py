@@ -388,15 +388,56 @@ must(after_cell == before_cell - 1, f"only that cell is decremented ({before_cel
 must(shirt["stock"] == 15, f"the roll-up follows (got {shirt['stock']})")
 
 print("\n== 19. password reset ==")
+# GATE 1 #4: with no SMTP host, this used to say "a reset link is on its way"
+# and throw the mail away, leaving a seller locked out of their whole catalogue
+# with no path back. Now it says so, and offers a real recovery route.
+_smtp_was = os.environ.pop("SMTP_HOST", None)
+r = c.post("/api/forgot", json={"email": SELLER})
+j = r.json()
+must(r.status_code == 200 and j["ok"] is False and j["email_ready"] is False,
+     "with no mail server, it does NOT claim a link is on its way")
+must("cannot send email" in j["message"] and j.get("support_email"),
+     "it says so plainly and gives a way to actually get back in")
+must("Nothing in your account is lost" in j["message"],
+     "and reassures them their data is safe")
+
+# Support's recovery path is real, and refuses without an admin token.
+r = c.post("/api/admin/reset-link", json={"email": SELLER})
+must(r.status_code == 503, "admin recovery is off until ADMIN_TOKEN is set")
+os.environ["ADMIN_TOKEN"] = "test-admin-token"
+r = c.post("/api/admin/reset-link", json={"email": SELLER})
+must(r.status_code == 403, "and refuses without the token even once enabled")
+r = c.post("/api/admin/reset-link", json={"email": SELLER},
+           headers={"X-Admin-Token": "test-admin-token"})
+must(r.status_code == 200 and "token=" in r.json()["reset_url"],
+     "with the token, support can mint a real reset link")
+r = c.post("/api/admin/reset-link", json={"email": "nobody@example.com"},
+           headers={"X-Admin-Token": "test-admin-token"})
+must(r.status_code == 404, "for an account that exists, and only that")
+os.environ.pop("ADMIN_TOKEN", None)
+
+# With a mail server present the old promise is kept — and now it is true.
+#
+# smtp_configured() is patched rather than SMTP_HOST being set for two reasons:
+# _send_email would then try to open a real socket, and the dev outbox is
+# deliberately unavailable once SMTP is configured. So the send is captured by a
+# spy on send_password_reset, which is exactly the call the branch makes.
+from backend.core import password_reset as _pr  # noqa: E402
+_real_smtp, _real_send = _pr.messaging.smtp_configured, _pr.messaging.send_password_reset
+_sent_links = []
+_pr.messaging.smtp_configured = lambda: True
+_pr.messaging.send_password_reset = (
+    lambda to_email, reset_url, **kw: _sent_links.append(reset_url) or {"delivered": True})
+
 r = c.post("/api/forgot", json={"email": "nobody-at-all@example.com"})
 must(r.status_code == 200 and r.json()["ok"], "an unknown address answers the same way")
+must(not _sent_links, "and no mail is generated for an address with no account")
 r = c.post("/api/forgot", json={"email": SELLER})
-must(r.status_code == 200, "reset requested for a real seller")
-ob = c.get("/api/dev/outbox").json()["outbox"]
-link = next((m for m in ob if "reset" in (m.get("body") or "")), None)
-must(link is not None, "a reset mail was produced")
+must(r.status_code == 200 and r.json()["email_ready"] is True,
+     "reset requested for a real seller, and it says the mail is on its way")
+must(len(_sent_links) == 1, "exactly one reset mail was produced")
 import re as _re
-tok = _re.search(r"token=([A-Za-z0-9_\-]+)", link["body"]).group(1)
+tok = _re.search(r"token=([A-Za-z0-9_\-]+)", _sent_links[0]).group(1)
 r = c.post("/api/reset", json={"email": SELLER, "token": "not-a-real-token", "password": "newpw123"})
 must(r.status_code == 400, "a bogus token is refused")
 r = c.post("/api/reset", json={"email": SELLER, "token": tok, "password": "newpw123"})
@@ -408,12 +449,25 @@ must(c.post("/api/login", json={"email": SELLER, "password": "newpw123"}).status
 tok_new = c.post("/api/login", json={"email": SELLER, "password": "newpw123"}).json()["token"]
 H["Authorization"] = "Bearer " + tok_new
 
+# A shopper on a store with no mail set up must be told the truth too — they
+# cannot be sent to our support, so they are pointed at the shop, and at guest
+# checkout which needs no account at all.
+_pr.messaging.smtp_configured = _real_smtp
+r = c.post(f"/api/shop/{HANDLE}/forgot", json={"email": BUYER})
+j = r.json()
+must(r.status_code == 200 and j["email_ready"] is False,
+     "a shopper is not promised an email the store cannot send")
+must("guest" in j["message"], "and is told the way to buy anyway")
+
+_pr.messaging.smtp_configured = lambda: True
+_sent_links.clear()
 r = c.post(f"/api/shop/{HANDLE}/forgot", json={"email": BUYER})
 must(r.status_code == 200, "a shopper can ask for a reset on the store")
-ob = c.get("/api/dev/outbox").json()["outbox"]
-stok_link = next((m for m in ob if "reset=" in (m.get("body") or "")), None)
-must(stok_link is not None, "the shopper reset mail speaks for the store")
-stoken = _re.search(r"reset=([A-Za-z0-9_\-]+)", stok_link["body"]).group(1)
+must(len(_sent_links) == 1, "the shopper reset mail was produced")
+stoken = _re.search(r"reset=([A-Za-z0-9_\-]+)", _sent_links[0]).group(1)
+# Put messaging back exactly as it was — later sections test the digest, and a
+# leaked patch here made them try to open a socket to a host that is not set.
+_pr.messaging.smtp_configured, _pr.messaging.send_password_reset = _real_smtp, _real_send
 r = c.post(f"/api/shop/{HANDLE}/reset", json={"token": stoken, "password": "shopnew1"})
 must(r.status_code == 200, f"shopper password changed ({r.status_code})", r.text[:200])
 must(c.post(f"/api/shop/{HANDLE}/login",
@@ -782,7 +836,39 @@ must(_res["wa_links"] == 2 or _res["whatsapp_sent"] == 2,
      "WhatsApp goes out, or comes back as tap-to-send links")
 must(all(x["wa_link"].startswith("https://wa.me/91") for x in _res["results"] if x["wa_link"]),
      "links carry the country code")
-must(_res["campaign_id"], "the send is recorded for measurement automatically")
+# GATE 1 #3. This used to assert campaign_id — that a campaign was recorded as
+# SENT. But with no WhatsApp provider connected, nothing was sent: the app made
+# two tap-to-send links and had no idea whether the seller tapped them. Recording
+# that as a send let "₹ recovered from win-backs" count money from messages
+# nobody wrote. Prepared and delivered are now two different things.
+must(_res["delivered"] == 0 and _res["prepared"] == 2,
+     "with no provider connected, messages are PREPARED, not sent")
+must(not _res["campaign_id"], "so no campaign is recorded as sent")
+must(_res["pending_campaign_id"], "it is recorded as pending instead")
+must("not counted as sent until you confirm" in _res["summary"],
+     "and the summary says so, in the seller's own words")
+
+_pf = c.get("/api/rfm/winback/proof", headers=H).json()
+must(_pf["totals"]["contacted"] == 0,
+     "the recovered-value total counts nobody it did not actually reach")
+must(_pf["totals"]["pending_customers"] == 2, "but the pending ones are visible")
+must("ready to send" in _pf["headline"], "and the headline asks for the missing step")
+
+r = c.post("/api/rfm/winback/confirm", headers=H,
+           json={"campaign_id": _res["pending_campaign_id"]})
+must(r.status_code == 200, "the seller can confirm they sent them")
+must(r.json()["totals"]["contacted"] == 2,
+     "and only THEN does it count toward recovered value")
+
+# A brand name is required before anything goes to a customer — an email handle
+# printed as the shop name is what this replaces.
+from backend.core import brandname as _bn  # noqa: E402
+_real_resolve = _bn.resolve
+_bn.resolve = lambda e: {"name": "", "source": "", "ready": False}
+r = c.post("/api/rfm/winback/send", headers=H, json={"rows": _rows})
+must(r.status_code == 400 and "shop name" in r.json()["detail"],
+     "with no shop name set, sending is refused rather than signed with a guess")
+_bn.resolve = _real_resolve
 must(c.get("/api/rfm/winback/sends", headers=H).json()["sends"], "and appears in the send log")
 _proof = c.get("/api/rfm/winback/proof", headers=H).json()
 must(_proof["totals"]["contacted"] >= 2, "the proof loop picked it up without being told")

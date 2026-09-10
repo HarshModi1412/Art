@@ -423,6 +423,9 @@ def read_aesthetic(email: str) -> dict:
     #                    what was read out of each one and nothing is silently
     #                    averaged away.
     b["aesthetic"] = signature.strip()[:9000]
+    # And the version the image model can actually use. See distil_aesthetic().
+    b["aesthetic_directive"] = ""
+    b["directive_from"] = ""
     b["aesthetic_shots"] = shots
     b["aesthetic_reads"] = [{"shot": r["shot"], "shot_label":
                              SHOT_TYPES.get(r["shot"], {}).get("label", r["shot"]),
@@ -435,6 +438,138 @@ def read_aesthetic(email: str) -> dict:
             "shot_labels": {k: SHOT_TYPES[k]["label"] for k in shots
                             if k in SHOT_TYPES},
             "read": len(readings), "failed": failed, "brand": b}
+
+
+# ---------------------------------------------------------------------------
+# From the essay to the camera
+# ---------------------------------------------------------------------------
+# THE BUG THIS FIXES, and it is the reason generated pictures barely looked like
+# the seller's brand even after the aesthetic reading got long and good:
+#
+# image_prompt() pasted the WHOLE essay in, verbatim. The essay is 650-900 words
+# by design — that is what makes it worth reading, and the seller asked for it.
+# But an image model does not read 900 words. gpt-image-1's edit call truncates a
+# long prompt; anything built on CLIP text encoding (Flux, SD) hard-stops at 77
+# TOKENS, which is about fifty words. So the model saw the LIGHT paragraph and a
+# sentence of PALETTE, and everything after it — surfaces, framing, lens, grade,
+# and the numbered RULES, which are the most shootable part of the whole document
+# — was silently discarded. The essay was not being ignored because it was bad.
+# It was being cut off because it was long.
+#
+# Two audiences need two artefacts, so there are two:
+#   `aesthetic`           the essay. For the seller to read and correct.
+#   `aesthetic_directive` 70-110 words of camera instructions, front-loaded with
+#                         the things that survive truncation. For the model.
+#
+# It is derived once per essay and cached against a fingerprint of that essay, so
+# it costs one extra call per re-read of the references, not one per image.
+DIRECTIVE_WORDS = (70, 110)
+
+
+def _fingerprint(text: str) -> str:
+    import hashlib
+    return hashlib.sha1((text or "").encode("utf-8", "ignore")).hexdigest()[:16]
+
+
+def distil_aesthetic(email: str, brand: dict | None = None) -> str:
+    """The essay, compressed into instructions a camera could follow.
+
+    Ordering inside the result is deliberate: light, then palette with hex, then
+    surface and background, then framing and lens, then grade, then the two or
+    three hardest rules. If a model truncates, it truncates the least important
+    end.
+    """
+    from backend.core import aiprovider
+
+    b = brand if brand is not None else get_brand(email)
+    essay = (b.get("aesthetic") or "").strip()
+    if not essay:
+        return ""
+    fp = _fingerprint(essay)
+    if b.get("aesthetic_directive") and b.get("directive_from") == fp:
+        return b["aesthetic_directive"]
+
+    lo, hi = DIRECTIVE_WORDS
+    out = aiprovider.generate(
+        "You are turning an art director's essay about a brand's photography "
+        "into the instruction line a photographer is handed on set. "
+        f"Write {lo}-{hi} words, one paragraph, no headings, no bullet points, "
+        "no preamble.\n\n"
+        "Include, in this order, only what the essay actually supports:\n"
+        "1. the lighting setup — direction, quality, colour temperature;\n"
+        "2. the palette, with hex values, saying which dominates and what the "
+        "background is;\n"
+        "3. what the product sits on or against;\n"
+        "4. framing and camera height, and the lens or depth of field;\n"
+        "5. the grade — contrast, black level, any colour cast;\n"
+        "6. end with the two or three strictest rules as short clauses, e.g. "
+        "'key from camera-left, never frontal; product never touches the frame "
+        "edge'.\n\n"
+        "Write it as instructions to a camera, not description of a mood. Every "
+        "clause must be something a photographer either did or did not do. Never "
+        "use praise or marketing words. Do not mention the essay, the brand's "
+        "name, or these instructions.",
+        essay[:7000], sensitivity="public", max_tokens=400, fallback="")
+
+    directive = (out.get("text") or "").strip()
+    if not directive:
+        # No AI available. Take the RULES section and the first sentence of each
+        # other section — worse than the model's version, far better than the
+        # first fifty words of the essay, which is what happened before.
+        directive = _directive_fallback(essay)
+    directive = " ".join(directive.split())[:1400]
+
+    b["aesthetic_directive"] = directive
+    b["directive_from"] = fp
+    user_store.set_key(email, BRAND_KEY, b)
+    return directive
+
+
+_DIRECTIVE_ORDER = ("LIGHT", "PALETTE", "SURFACES AND PROPS", "FRAMING",
+                    "LENS AND DEPTH", "GRADE", "RULES")
+
+
+def _directive_fallback(essay: str) -> str:
+    """Deterministic compression: first sentence per section, plus the rules.
+
+    Used when no text model is reachable. Keeps the same priority order as the
+    prompt above so the head of the string is still the useful part.
+    """
+    sections: dict[str, str] = {}
+    current = ""
+    # Longest heading first, so "LENS AND DEPTH" is not swallowed by a prefix
+    # match. The heading and its prose share a line, separated by an em dash,
+    # a hyphen or a colon depending on what the model felt like.
+    heads = sorted(_DIRECTIVE_ORDER, key=len, reverse=True)
+    for line in (essay or "").splitlines():
+        raw = line.strip()
+        head = raw.upper()
+        hit = next((h for h in heads
+                    if head.startswith(h)
+                    and (len(head) == len(h) or head[len(h)] in " \u2014-:\u2013")), None)
+        if hit:
+            current = hit
+            sections[current] = raw[len(hit):].lstrip(" \u2014\u2013-:")
+            continue
+        if current:
+            sections[current] = (sections.get(current, "") + " " + raw).strip()
+
+    parts = []
+    for h in _DIRECTIVE_ORDER:
+        body = " ".join((sections.get(h) or "").split())
+        if not body:
+            continue
+        if h == "RULES":
+            # The rules are the shootable part — keep up to three whole ones.
+            rules = re.split(r"(?:^|\s)\d+[.)]\s*", body)
+            keep = [r.strip(" .;") for r in rules if len(r.strip()) > 12][:3]
+            if keep:
+                parts.append("; ".join(keep) + ".")
+        else:
+            first = re.split(r"(?<=[.!?])\s+", body)[0]
+            if first:
+                parts.append(first if first.endswith((".", "!", "?")) else first + ".")
+    return " ".join(parts)
 
 
 def shootable_shot_types(email: str) -> list[str]:
@@ -614,6 +749,10 @@ def build_brief(brand: dict, product: dict, material: dict, angle: str = "") -> 
         # it outranks the preset look, because a seller's own five pictures
         # describe their taste far better than one of five dropdown options.
         "aesthetic": brand.get("aesthetic") or "",
+        # The camera-ready compression of that essay. This is what the image
+        # model is given; the essay is what the seller reads. See
+        # distil_aesthetic() for why they cannot be the same string.
+        "aesthetic_directive": brand.get("aesthetic_directive") or "",
         # And the per-shot-type readings, so a post asking for an unboxing
         # shot is shot like their unboxing references rather than like the
         # average of everything they uploaded.
@@ -670,8 +809,17 @@ def image_prompt(brief: dict, guidance: dict | None = None,
         if detail:
             bits.append(" ".join(detail) + ".")
 
-    if brief.get("aesthetic"):
-        bits.append(f"Shoot it in this visual language: {brief['aesthetic']}")
+    # ORDER MATTERS HERE. Everything below this line may be cut off by the
+    # model's prompt limit, so the brand's own look goes near the top rather
+    # than after the festival notes and the aspect ratio.
+    if brief.get("aesthetic_directive"):
+        bits.append(f"Shoot it exactly like this: {brief['aesthetic_directive']}")
+    elif brief.get("aesthetic"):
+        # No directive yet (references read before this existed). Take the head
+        # of the essay rather than all 900 words — the tail was being silently
+        # discarded anyway, and a shorter honest prompt beats a truncated one.
+        bits.append("Shoot it in this visual language: "
+                    + " ".join(brief["aesthetic"].split())[:900])
     else:
         bits.append(f"Style: {brief['look_prompt']}.")
         if brief.get("palette"):
@@ -685,9 +833,12 @@ def image_prompt(brief: dict, guidance: dict | None = None,
     ref_shots = brief.get("aesthetic_shots") or {}
     if shot_type and ref_shots.get(shot_type):
         spec = SHOT_TYPES.get(shot_type, {})
+        # Trimmed for the same reason as the essay: a full per-shot reading can
+        # run several hundred words and push the rest of the prompt off the end.
+        own = " ".join(str(ref_shots[shot_type]).split())[:700]
         bits.append(f"This is a {spec.get('label', shot_type)} shot "
                     f"({spec.get('hint', '')}). Their own reference for this kind "
-                    f"of photograph reads: {ref_shots[shot_type]}")
+                    f"of photograph reads: {own}")
     elif shot_type and shot_type in SHOT_TYPES:
         spec = SHOT_TYPES[shot_type]
         bits.append(f"This is a {spec['label']} shot: {spec['hint']}.")
@@ -1041,6 +1192,14 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     comment on the dispatch below for why.
     """
     from backend.core import aiprovider
+    # Make sure the brand's essay has been compressed for the camera before we
+    # build the prompt. Cached against the essay, so this is one call the first
+    # time after a re-read and free afterwards.
+    if brief.get("aesthetic") and not brief.get("aesthetic_directive"):
+        try:
+            brief = {**brief, "aesthetic_directive": distil_aesthetic(email)}
+        except Exception as e:  # noqa: BLE001 — never block a generation on this
+            log.warning("could not distil the aesthetic: %s", e)
     prompt = image_prompt(brief, guidance, has_reference=bool(reference))
     eng = image_engine(engine, for_reshoot=bool(reference))   # raises if unusable
     if not eng["engine"]:
@@ -1165,45 +1324,67 @@ def _stamp_brand(image_bytes: bytes, brand_name: str) -> bytes:
 # Engines that can turn a still into a short clip. Only Hugging Face for now,
 # by the seller's choice — but the list exists so the picker has the same shape
 # as the image one and a second engine is a data change, not a rewrite.
+# Both are image-to-video: the clip is animated FROM the seller's own product
+# photograph, never invented from text. Order is the default order, and the
+# seller can pick either per clip.
 VIDEO_ENGINES = [
+    {"id": "gemini", "label": "Google Veo (Gemini)",
+     "model_env": "GEMINI_VIDEO_MODEL", "model_default": "veo-3.0-fast-generate-preview",
+     "free": False, "reshoot": True, "cost_usd": 1.20,
+     "cost": "roughly $1.20 for an 8-second clip",
+     "note": "The better-looking of the two by a wide margin, and it holds the "
+             "product's shape for the whole clip rather than the first two "
+             "seconds. Takes one to three minutes. Needs a PAID Gemini key with "
+             "Veo access — a free key will be refused, and we will tell you so "
+             "plainly rather than charging you to find out."},
     {"id": "huggingface", "label": "Hugging Face (Wan I2V)",
      "model_env": "HF_VIDEO_MODEL", "model_default": "Wan-AI/Wan2.2-I2V-A14B",
-     "free": False, "reshoot": True, "cost": "about $0.20 for 5 seconds",
-     "note": "Animates your own photograph, so the product stays yours. About a "
-             "minute per clip. Identity holds for the first couple of seconds, "
-             "then detail starts to drift — best for a slow push-in."},
+     "free": False, "reshoot": True, "cost_usd": 0.20,
+     "cost": "about $0.20 for 5 seconds",
+     "note": "Six times cheaper, and it shows: identity holds for the first "
+             "couple of seconds and then detail drifts, so keep it to a slow "
+             "push-in. About a minute per clip."},
 ]
 
 
 def video_engines() -> list[dict]:
     """Every clip engine this server can offer. Configured ones only."""
-    return [{**_engine_row(s), "cost_usd": 0.20}
+    return [{**_engine_row(s), "cost_usd": s.get("cost_usd")}
             for s in VIDEO_ENGINES if _engine_ready(s["id"])]
 
 
-def video_engine() -> dict:
-    """Whether a clip can be generated, and what it honestly costs.
+def video_engine(preferred: str = "") -> dict:
+    """The clip engine that will run, honouring the seller's pick.
 
-    Deliberately blunt about the money. Image-to-video on Hugging Face routes
-    to fal-ai at roughly $0.20 for five seconds at 480p. A free HF account
-    carries about $0.10 of credit a month and PRO about $2.00 — so free buys
-    nothing at all, and PRO buys about ten clips a month in total, shared with
-    everything else on the account. A seller should learn that here, not from
-    a bill."""
-    from backend.core import aiprovider
-    if not aiprovider.hf_ready():
+    Same contract as image_engine(): a named engine that is not usable is an
+    error, never a quiet substitution with a different vendor at a different
+    price — a clip costs real money and a $1.20 charge nobody asked for is worse
+    than a refusal that explains itself.
+    """
+    rows = video_engines()
+    if preferred:
+        hit = next((r for r in rows if r["id"] == preferred), None)
+        if not hit:
+            known = {e["id"]: e["label"] for e in VIDEO_ENGINES}
+            label = known.get(preferred, preferred)
+            raise ValueError(
+                f"{label} is not connected on this server, so it cannot make a "
+                f"clip. Pick another, or add its key."
+                if preferred in known else
+                f"{preferred} is not a clip engine we know about.")
+        return {"engine": hit["id"], "model": hit["model"], "free": False,
+                "ready": True, "label": hit["label"],
+                "cost_usd": hit.get("cost_usd"), "note": hit["note"]}
+    if not rows:
         return {"engine": "", "model": "", "free": False, "ready": False,
-                "note": "No Hugging Face token connected, so clips cannot be "
-                        "generated. You can still upload your own."}
-    return {"engine": "huggingface", "model": aiprovider.HF_VIDEO_MODEL,
-            "free": False, "ready": True,
-            "cost_usd": aiprovider.HF_COSTS["video"],
-            "note": "About $0.20 for a 5-second 480p clip, and roughly a minute "
-                    "to make. A free Hugging Face account's monthly credit does "
-                    "not cover one; PRO covers about ten. It animates your own "
-                    "photo, so the product holds for the first couple of seconds "
-                    "before detail starts to drift — best for a slow push-in, "
-                    "not for real movement."}
+                "label": "", "note":
+                    "No clip engine is connected on this server, so a video "
+                    "cannot be generated here. You can still film one on your "
+                    "phone and upload it — which usually looks better anyway."}
+    first = rows[0]
+    return {"engine": first["id"], "model": first["model"], "free": False,
+            "ready": True, "label": first["label"],
+            "cost_usd": first.get("cost_usd"), "note": first["note"]}
 
 
 def generate_video(email: str, product_id: str, prompt: str = "",
@@ -1216,7 +1397,7 @@ def generate_video(email: str, product_id: str, prompt: str = "",
 
     Takes about a minute, so callers keep it off the request path."""
     from backend.core import aiprovider, media
-    eng = video_engine()
+    eng = video_engine(engine)          # raises on an unusable named pick
     if not eng["ready"]:
         raise RuntimeError(eng["note"])
     product = next((p for p in products.get_products(email)
@@ -1230,19 +1411,98 @@ def generate_video(email: str, product_id: str, prompt: str = "",
             "A clip is made FROM one of your own photographs, and this product "
             "has none yet. Add a photo in Product Studio first.")
     brand = get_brand(email)
+    # The brand's look reaches the clip the same way it reaches a still: through
+    # the short camera directive, not the 900-word essay. A video model has an
+    # even tighter prompt budget than an image one.
+    look = (brand.get("aesthetic_directive") or "").strip()
+    if not look and brand.get("aesthetic"):
+        try:
+            look = distil_aesthetic(email, brand)
+        except Exception:  # noqa: BLE001
+            look = " ".join((brand.get("aesthetic") or "").split())[:300]
     motion = (prompt or "").strip() or (
-        "slow gentle push-in on the product, steady shot, "
-        + (brand.get("aesthetic") or "")[:300]).strip()
-    data = aiprovider.hf_video(ref[0], motion)
+        "Slow gentle push-in on the product, steady shot, no cuts. " + look[:600]).strip()
+
+    if eng["engine"] == "gemini":
+        data = aiprovider.gemini_video(ref[0], motion, ref[1] or "image/jpeg")
+        fail = ("Veo would not make that clip. Almost always this is the Gemini "
+                "key not having Veo access — it needs a paid key, and free keys "
+                "are refused. Hugging Face is cheaper and works on any token.")
+    else:
+        data = aiprovider.hf_video(ref[0], motion)
+        fail = ("Could not generate the clip. This is usually the Hugging Face "
+                "credit allowance being spent — check your usage there, or try "
+                "Google Veo instead.")
     if not data:
-        raise RuntimeError(
-            "Could not generate the clip. This is usually the Hugging Face "
-            "credit allowance being spent — check your usage there.")
+        raise RuntimeError(fail)
     saved = media.save(f"{uuid.uuid4().hex}.mp4", data, email)
     return {"url": saved["url"], "durable": saved["durable"], "generated": True,
             "product_id": product_id, "prompt": motion,
-            "engine": eng["engine"], "model": eng["model"],
+            "engine": eng["engine"], "engine_label": eng.get("label", ""),
+            "model": eng["model"],
             "cost_usd": eng.get("cost_usd"), "free": False}
+
+
+def preview_prompt(email: str, product_id: str, pillar: str = "", fmt: str = "",
+                   angle: str = "", use_reference: bool = True,
+                   occasion_key: str = "", shot_type: str = "") -> dict:
+    """The exact instruction the image model will be sent, without sending it.
+
+    Worth having for its own sake: it is the only way for a seller to find out
+    WHY a picture came back wrong. "It ignored my brand" and "it was never told
+    about my brand" look identical from the outside, and until this existed the
+    seller could only guess which one had happened.
+
+    It also reports where each part came from, so an empty aesthetic reads as
+    "you have not uploaded reference images yet" rather than as a mystery.
+    """
+    brand = get_brand(email)
+    product = next((p for p in products.get_products(email) if p["id"] == product_id), None)
+    if not product:
+        raise ValueError("That product no longer exists.")
+    material = get_material(email, product_id)
+    brief = build_brief(brand, product, material, angle)
+    if brief.get("aesthetic") and not brief.get("aesthetic_directive"):
+        try:
+            brief = {**brief, "aesthetic_directive": distil_aesthetic(email, brand)}
+        except Exception:  # noqa: BLE001
+            pass
+    ref = _reference_shot(email, product, material) if use_reference else None
+    guidance = guidance_for(pillar, fmt, occasion_key, brand.get("look"), shot_type)
+    prompt = image_prompt(brief, guidance, has_reference=bool(ref))
+    return {
+        "prompt": prompt,
+        "words": len(prompt.split()),
+        "from_reference": bool(ref),
+        "sources": [
+            {"part": "Your brand's look",
+             "have": bool(brief.get("aesthetic_directive") or brief.get("aesthetic")),
+             "note": ("Read from the reference images you uploaded to Product Studio."
+                      if brief.get("aesthetic") else
+                      "Not set yet — upload a few reference images in Product Studio "
+                      "and every picture starts looking like your brand.")},
+            {"part": "What this product looks like",
+             "have": bool(brief.get("seen")),
+             "note": ("Read from this product's own photographs."
+                      if brief.get("seen") else
+                      "Not read yet — add a photo of this product.")},
+            {"part": "Your photo as the starting point",
+             "have": bool(ref),
+             "note": ("The picture is a re-shoot of your own photograph, so it is "
+                      "your actual product." if ref else
+                      "No usable photo for this product, so the picture will be "
+                      "invented rather than re-shot.")},
+            {"part": "This kind of shot",
+             "have": bool(shot_type and (brief.get("aesthetic_shots") or {}).get(shot_type)),
+             "note": (f"Shot like your own {SHOT_TYPES.get(shot_type, {}).get('label', shot_type)} references."
+                      if shot_type and (brief.get("aesthetic_shots") or {}).get(shot_type)
+                      else "No reference of this particular kind — using a general rule.")},
+            {"part": "Festival",
+             "have": bool(guidance.get("festival")),
+             "note": (f"Styled for {guidance['festival']}." if guidance.get("festival")
+                      else "Not a festival post.")},
+        ],
+    }
 
 
 def generate_image_only(email: str, product_id: str, pillar: str = "",

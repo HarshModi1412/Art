@@ -14,6 +14,7 @@ What replaced what:
 import hashlib
 import io
 import json
+import math
 import os
 import secrets
 
@@ -22,6 +23,7 @@ import logging
 
 from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import Response, FileResponse, JSONResponse
+from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
@@ -39,6 +41,8 @@ from backend.core import cache
 from backend.core import cancellations
 from backend.core import store_payments
 from backend.core import campaigns
+from backend.core import brandname
+from backend.core import setup_steps
 from backend.core import studio
 from backend.core import aiprovider
 from backend.core import gst, invoices, invoice_pdf
@@ -70,7 +74,47 @@ try:
 except Exception:
     pass
 
-app = FastAPI(title="Cafe_X Intelligence Platform")
+# ---------------------------------------------------------------------------
+# GATE 1 BLOCKER #1: a NaN anywhere in a response was a 500.
+#
+# The symptom a seller saw: Sales Analytics loads fine on Monday, and on
+# Tuesday — after uploading one file with a blank amount, or after a category
+# with no rows in the compare window — the whole page dies with "Server error".
+# Nothing they can do about it, nothing explaining it.
+#
+# The cause is one line inside Starlette: JSONResponse serialises with
+# allow_nan=False, so the moment any computed number is NaN or Infinity
+# (a mean over an empty group, a 0/0 growth rate, a blank cell that pandas
+# reads as NaN) json.dumps raises and FastAPI turns it into a 500.
+#
+# Patching the handful of places that produce a NaN is whack-a-mole: every new
+# division is a new outage. So it is fixed once, at the wire, for every
+# endpoint: NaN and Infinity become null, which every chart and card in the
+# frontend already handles as "no value". A missing number renders as "—".
+# An outage renders as nothing at all.
+class SafeJSONResponse(JSONResponse):
+    """JSONResponse that renders NaN/Infinity as null instead of 500ing."""
+
+    @staticmethod
+    def _clean(v):
+        if isinstance(v, float):
+            # NaN != NaN, and inf comparisons are cheap. math.isfinite covers both.
+            return v if math.isfinite(v) else None
+        if isinstance(v, dict):
+            return {k: SafeJSONResponse._clean(x) for k, x in v.items()}
+        if isinstance(v, (list, tuple)):
+            return [SafeJSONResponse._clean(x) for x in v]
+        return v
+
+    def render(self, content) -> bytes:
+        return json.dumps(
+            self._clean(jsonable_encoder(content)),
+            ensure_ascii=False, allow_nan=False, separators=(",", ":"),
+        ).encode("utf-8")
+
+
+app = FastAPI(title="Cafe_X Intelligence Platform",
+              default_response_class=SafeJSONResponse)
 
 # ---------------------------------------------------------------------------
 # Wire-level performance.
@@ -453,6 +497,25 @@ def forgot_password(body: ForgotBody, request: Request):
     """Always answers the same way, whether or not the address has an account —
     telling an attacker which emails exist is not a feature."""
     return password_reset.request_seller(body.email, _public_base_url(request))
+
+
+@app.post("/api/admin/reset-link")
+def admin_reset_link(body: ForgotBody, request: Request,
+                     x_admin_token: str | None = Header(default=None)):
+    """Support's recovery path for a locked-out seller while email is not set up.
+
+    Gated on ADMIN_TOKEN, which must be set in the environment — with no token
+    configured this endpoint refuses everyone rather than defaulting open.
+    """
+    want = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    if not want:
+        raise HTTPException(503, "Admin recovery is not enabled on this server.")
+    if not secrets.compare_digest((x_admin_token or "").strip(), want):
+        raise HTTPException(403, "Not allowed.")
+    try:
+        return password_reset.admin_reset_link(body.email, _public_base_url(request))
+    except password_reset.ResetError as e:
+        raise HTTPException(404, str(e))
 
 
 @app.post("/api/reset")
@@ -1716,8 +1779,11 @@ def winback_send(body: CampaignBody,
         rows = (cached.rows if cached else []) or []
     if not rows:
         raise HTTPException(400, "Generate the campaign first, then send it.")
-    site = sitebuilder.get_site(email) or {}
-    brand = str(site.get("brand") or email.split("@")[0]).strip()
+    # GATE 1: never sign a customer-facing message with an email handle.
+    try:
+        brand = brandname.require(email)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     cache.clear(email)
     return campaigns.send(email, rows, brand, body.template or "",
                           tuple(body.channels or ("email", "whatsapp")),
@@ -1727,13 +1793,20 @@ def winback_send(body: CampaignBody,
 @app.post("/api/rfm/winback/preview")
 def winback_preview(body: CampaignBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
-    site = sitebuilder.get_site(email) or {}
-    brand = str(site.get("brand") or email.split("@")[0]).strip()
+    # The PREVIEW is allowed to run without a brand name — that is how the
+    # seller discovers they need one — but it says so loudly and shows the gap
+    # rather than papering over it with their email handle.
+    resolved = brandname.resolve(email)
+    brand = resolved["name"] or "[your shop name]"
     return {"preview": campaigns.preview(body.rows or [], brand, body.template or ""),
             "template": body.template or campaigns.default_template(),
             "whatsapp_live": messaging.whatsapp_enabled(),
             "email_ready": messaging.smtp_configured(),
-            "brand": brand}
+            "brand": resolved["name"],
+            "brand_ready": resolved["ready"],
+            "brand_prompt": ("" if resolved["ready"] else
+                             "Add your shop name first — these messages go out signed with it. "
+                             "Set it in Product Studio → Brand, or Site Management.")}
 
 
 @app.get("/api/rfm/winback/sends")
@@ -1759,6 +1832,18 @@ def winback_mark_sent(body: WinbackSentBody,
         rows = (cached.rows if cached else []) or []
     try:
         winback_proof.mark_sent(email, rows, body.channel or "whatsapp", body.note or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return winback_proof.summary(email)
+
+
+@app.post("/api/rfm/winback/confirm")
+def winback_confirm(body: WinbackUnsentBody, authorization: str | None = Header(default=None)):
+    """"I have sent those WhatsApp messages" — promotes a prepared campaign to
+    a real one, and starts its measurement window from now."""
+    email = require_user(authorization)
+    try:
+        winback_proof.confirm_sent(email, body.campaign_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
     return winback_proof.summary(email)
@@ -2108,6 +2193,10 @@ def _smart_status_payload(email: str, sess) -> dict:
         "insights": smart.build_insights(email),
         "history": smart.build_history(email),
         "tasks": smart.get_tasks(email),
+        # What is still not set up, and the single next thing worth doing. The
+        # home screen leads with this for a seller who has just signed up, and
+        # hides it entirely once they are through it.
+        "setup": setup_steps.progress(email),
     }
 
 
@@ -2665,7 +2754,10 @@ def smart_decision(insight_id: str, body: SmartDecisionBody,
         # this insight is no longer in the active list.
         title = next((i["title"] for i in smart.build_insights(email) if i["id"] == insight_id), None)
         if insight_id == "reorder":
-            supply.create_po(email, insight_id)   # persist the PO + mark reorder handled
+            # One order form per supplier — see supply.create_pos_by_supplier.
+            # (This line used to be create_po(email, insight_id), which put the
+            # insight id in the item_ids slot and silently produced nothing.)
+            supply.create_pos_by_supplier(email, insight_id=insight_id)
         smart.set_decision(email, insight_id, "approved")
         if str(insight_id).startswith("content_"):
             smart.clear_content_suggestion(email)   # rotate a fresh suggestion in
@@ -2880,16 +2972,32 @@ def supply_map_delete(body: SupplyMapIdBody, authorization: str | None = Header(
 
 @app.post("/api/supply/reorder/generate")
 def supply_generate_po(authorization: str | None = Header(default=None)):
+    """One order form per supplier for everything running low, ready to send."""
     email = require_user(authorization)
-    po = supply.create_po(email)
-    if not po:
-        raise HTTPException(400, "No items are below their reorder point right now.")
+    pos = supply.create_pos_by_supplier(email)
+    if not pos:
+        raise HTTPException(400, "Nothing is running low right now, so there is "
+                                 "nothing to order.")
     smart.set_decision(email, "reorder", "approved")
-    smart.add_task(email, f"Execute: Purchase order {po['po_number']}")
+    for po in pos:
+        who = po.get("supplier_name") or "an unassigned supplier"
+        smart.add_task(email, f"Send order {po['po_number']} to {who}")
     payload = _supply_payload(email)
-    payload["po_number"] = po["po_number"]
-    payload["download_url"] = f"/api/supply/po/{po['po_number']}/pdf"
-    payload["excel_url"] = f"/api/supply/po/{po['po_number']}/download"
+    payload["orders"] = [{
+        "po_number": p["po_number"],
+        "supplier_name": p.get("supplier_name") or "",
+        "supplier_phone": p.get("supplier_phone") or "",
+        "supplier_email": p.get("supplier_email") or "",
+        "unassigned_supplier": bool(p.get("unassigned_supplier")),
+        "n_items": p["n_items"], "total_qty": p["total_qty"],
+        "total_amount": p.get("total_amount"),
+        "download_url": f"/api/supply/po/{p['po_number']}/pdf",
+        "excel_url": f"/api/supply/po/{p['po_number']}/download",
+    } for p in pos]
+    # kept for older clients
+    payload["po_number"] = pos[0]["po_number"]
+    payload["download_url"] = f"/api/supply/po/{pos[0]['po_number']}/pdf"
+    payload["excel_url"] = f"/api/supply/po/{pos[0]['po_number']}/download"
     return payload
 
 
@@ -4192,6 +4300,30 @@ def studio_image_only(body: StudioImageOnlyBody,
         social.attach_image(email, body.post_id, img["url"], True, img.get("prompt", ""))
     cache.clear(email)
     return img
+
+
+@app.post("/api/studio/prompt-preview")
+def studio_prompt_preview(body: StudioImageOnlyBody,
+                          authorization: str | None = Header(default=None)):
+    """Show the seller the exact instruction the image AI will be given.
+
+    No generation, no cost. This is how "it ignored my brand" becomes an
+    answerable question.
+    """
+    email = require_user(authorization)
+    occasion_key, shot_type = "", body.shot_type or ""
+    if body.post_id:
+        post = social.get_post(email, body.post_id)
+        if post:
+            occasion_key = post.get("occasion_key") or ""
+            shot_type = shot_type or post.get("shot_type") or ""
+    try:
+        return studio.preview_prompt(email, body.product_id, body.pillar or "",
+                                     body.format or "", body.angle or "",
+                                     use_reference=body.use_reference,
+                                     occasion_key=occasion_key, shot_type=shot_type)
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/api/social/attach-image")

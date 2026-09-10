@@ -557,6 +557,99 @@ GEMINI_IMAGE_MODEL = (os.environ.get("GEMINI_IMAGE_MODEL")
 _GEMINI_IMAGE_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
+# Veo, through the Gemini API. A different shape from every other call in this
+# file: it is a long-running operation, so you POST once, get an operation name
+# back, and poll until a file URI appears. Model id is env-overridable because
+# Google renames and retires these faster than anything else here.
+GEMINI_VIDEO_MODEL = (os.environ.get("GEMINI_VIDEO_MODEL")
+                      or "veo-3.0-fast-generate-preview")
+GEMINI_VIDEO_POLL_SECONDS = int(os.environ.get("GEMINI_VIDEO_POLL_SECONDS") or 240)
+_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
+
+
+def gemini_video_ready() -> bool:
+    """A key is present. NOT a promise that this key has Veo access.
+
+    Veo is gated to paid accounts and its availability varies by region and by
+    preview cohort, and there is no cheap way to ask in advance. So this is
+    optimistic on purpose, and generate_video() reports the refusal in the
+    seller's own words if the account cannot in fact use it — which is better
+    than hiding the option from someone whose key does work.
+    """
+    return bool((os.environ.get("GEMINI_API_KEY") or "").strip())
+
+
+def gemini_video(image: bytes, prompt: str,
+                 content_type: str = "image/jpeg") -> bytes | None:
+    """One short clip, animated FROM the seller's own photograph.
+
+    Image-to-video for the same reason the still path prefers a re-shoot: a
+    text-to-video model invents a product, and a clip of a wallet the seller
+    does not sell is worse than no clip.
+
+    Never raises. Returns raw mp4 bytes, or None with the reason logged.
+    """
+    key = (os.environ.get("GEMINI_API_KEY") or "").strip()
+    if not key or not image or not prompt:
+        return None
+    import base64
+    import time as _time
+
+    body = json.dumps({
+        "instances": [{
+            "prompt": prompt[:2000],
+            "image": {"bytesBase64Encoded": base64.b64encode(image).decode(),
+                      "mimeType": content_type or "image/jpeg"},
+        }],
+        "parameters": {"aspectRatio": "9:16"},
+    }).encode()
+    start = f"{_GEMINI_BASE}/models/{GEMINI_VIDEO_MODEL}:predictLongRunning?key={key}"
+    try:
+        req = urllib.request.Request(start, data=body,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=90) as r:
+            op = json.loads(r.read().decode())
+        name = op.get("name")
+        if not name:
+            log.warning("gemini video: no operation name in response")
+            return None
+
+        deadline = _time.time() + GEMINI_VIDEO_POLL_SECONDS
+        uri = ""
+        while _time.time() < deadline:
+            _time.sleep(10)
+            with urllib.request.urlopen(
+                    f"{_GEMINI_BASE}/{name}?key={key}", timeout=60) as r:
+                st = json.loads(r.read().decode())
+            if st.get("error"):
+                log.warning("gemini video failed: %s", st["error"])
+                return None
+            if not st.get("done"):
+                continue
+            resp = st.get("response") or {}
+            for vid in (resp.get("generatedVideos")
+                        or resp.get("generated_videos") or []):
+                v = vid.get("video") or {}
+                uri = v.get("uri") or v.get("fileUri") or ""
+                if uri:
+                    break
+            break
+        if not uri:
+            log.warning("gemini video: timed out or returned no file")
+            return None
+
+        sep = "&" if "?" in uri else "?"
+        with urllib.request.urlopen(f"{uri}{sep}key={key}", timeout=180) as r:
+            data = r.read()
+        if data:
+            _STATS.setdefault("gemini", {"ok": 0, "err": 0})["ok"] += 1
+            return data
+    except Exception as e:  # noqa: BLE001 — reported to the seller by the caller
+        _STATS.setdefault("gemini", {"ok": 0, "err": 0})["err"] += 1
+        log.warning("gemini video failed: %s", e)
+    return None
+
+
 def gemini_image_ready() -> bool:
     return bool((os.environ.get("GEMINI_API_KEY") or "").strip())
 

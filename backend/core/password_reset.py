@@ -21,6 +21,8 @@ the token hash so a lookup never has to scan.
 """
 from __future__ import annotations
 
+import os
+
 import hashlib
 import secrets
 import time
@@ -36,6 +38,11 @@ _MAX_LIVE = 40                 # per account; oldest are trimmed
 
 class ResetError(RuntimeError):
     pass
+
+
+# Where a locked-out seller is told to write. Overridable so a reseller or a
+# self-hosting seller can point it at their own inbox.
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL") or "support@onetapmanager.com"
 
 
 def _hash(token: str) -> str:
@@ -83,18 +90,55 @@ def _claim(owner: str, key: str, token: str) -> dict:
 # sellers
 # ---------------------------------------------------------------------------
 def request_seller(email: str, base_url: str) -> dict:
+    """GATE 1 BLOCKER #4: this used to lie.
+
+    With no SMTP_HOST configured, messaging.send() drops the mail into an
+    in-memory outbox and returns happily. The seller was told "a reset link is
+    on its way", waited, checked spam, and never got anything — locked out of
+    an account holding their entire catalogue, with no way back in and no idea
+    why. That is the worst failure in the product: not a feature that works
+    badly, a feature that is a dead end while claiming to work.
+
+    Whether this server can send email is a property of the SERVER, not of the
+    account, so saying it plainly leaks nothing about who has an account — the
+    answer is still identical whether or not the address exists.
+    """
     email = (email or "").strip().lower()
+    can_email = messaging.smtp_configured()
     users = auth.load_users() or {}
-    if email and email in users:
+    if can_email and email and email in users:
         token = _mint(email, SELLER_KEY, {"email": email})
         messaging.send_password_reset(
             to_email=email,
             reset_url=f"{base_url.rstrip('/')}/reset?token={token}&email={email}",
         )
-    # identical answer either way — never confirm whether an address exists
-    return {"ok": True,
-            "message": "If that email has an account, a reset link is on its way. "
-                       "It expires in an hour."}
+    if can_email:
+        # identical answer either way — never confirm whether an address exists
+        return {"ok": True, "email_ready": True,
+                "message": "If that email has an account, a reset link is on its way. "
+                           "It expires in an hour. Check your spam folder too."}
+    return {"ok": False, "email_ready": False,
+            "message": "This server cannot send email yet, so we cannot send you a "
+                       "link — and we would rather say so than leave you waiting "
+                       "for one that never arrives. Write to "
+                       f"{SUPPORT_EMAIL} from this address and we will reset it "
+                       "for you the same day. Nothing in your account is lost.",
+            "support_email": SUPPORT_EMAIL}
+
+
+def admin_reset_link(email: str, base_url: str) -> dict:
+    """Mint a reset link for a seller who is locked out, for support to hand over.
+
+    Gated behind ADMIN_TOKEN at the endpoint. This exists so that "we cannot
+    send email yet" is an inconvenience rather than a lost account: the recovery
+    path is real, someone runs it, and the seller is back in the same day.
+    """
+    email = (email or "").strip().lower()
+    if email not in (auth.load_users() or {}):
+        raise ResetError("No account with that email.")
+    token = _mint(email, SELLER_KEY, {"email": email})
+    return {"email": email, "expires_in_minutes": 60,
+            "reset_url": f"{base_url.rstrip('/')}/reset?token={token}&email={email}"}
 
 
 def reset_seller(email: str, token: str, password: str) -> dict:
@@ -117,7 +161,8 @@ def request_shopper(seller: str, email: str, base_url: str, handle: str,
     email = (email or "").strip().lower()
     cust = next((c for c in storefront._customers(seller)
                  if (c.get("email") or "").strip().lower() == email), None)
-    if cust:
+    can_email = messaging.smtp_configured()
+    if can_email and cust:
         token = _mint(seller, SHOPPER_KEY, {"customer_id": cust["id"], "email": email})
         messaging.send_password_reset(
             to_email=email,
@@ -126,9 +171,16 @@ def request_shopper(seller: str, email: str, base_url: str, handle: str,
             store_name=store_name or handle,
             phone=cust.get("phone") or "",
         )
-    return {"ok": True,
-            "message": "If that email has an account on this store, a reset link is "
-                       "on its way. It expires in an hour."}
+    if can_email:
+        return {"ok": True, "email_ready": True,
+                "message": "If that email has an account on this store, a reset link is "
+                           "on its way. It expires in an hour."}
+    # A shopper cannot be told to email our support — this is the seller's shop,
+    # so the seller is who can help, and they can see the customer in Orders.
+    return {"ok": False, "email_ready": False,
+            "message": f"{store_name or 'This store'} has not set up password emails yet. "
+                       "Message the shop directly and they will sort it out for you — "
+                       "or just check out as a guest, which needs no account."}
 
 
 def reset_shopper(seller: str, token: str, password: str) -> dict:

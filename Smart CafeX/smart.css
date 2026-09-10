@@ -14,11 +14,24 @@
   --text-2:        #454a54;
   --muted:         #6f747e;
 
+  /* --primary is the accent as TEXT, borders and icons; --primary-fill is the
+     accent as a solid button behind --on-primary text. They are separate tokens
+     because in dark mode one value cannot do both jobs: a colour light enough to
+     read as text on a dark page is too light to carry white button text, and a
+     colour dark enough to carry white text is unreadable as text. */
   --primary:       #5c6790;
   --primary-hover: #4b5578;
+  --primary-fill:  #5c6790;
+  --primary-fill-hover: #4b5578;
   --primary-soft:  rgba(92, 103, 144, 0.10);
   --primary-line:  rgba(92, 103, 144, 0.24);
   --on-primary:    #ffffff;
+  --focus:         #4b5578;
+
+  /* Categorical chart series. Lightness is staggered deliberately so hue is
+     never the only channel carrying the distinction. */
+  --chart-1: #3f6bb5;  --chart-2: #b5711f;  --chart-3: #2f7d54;  --chart-4: #b0577a;
+  --chart-5: #6b5aa6;  --chart-6: #2b7f8c;  --chart-7: #8a7a2c;  --chart-8: #a8663f;
 
   --green:      #3f7d63;
   --green-soft: rgba(63, 125, 99, 0.12);
@@ -28,6 +41,10 @@
   --red-soft:   rgba(168, 84, 80, 0.11);
   --blue:       #4d6d9e;
   --blue-soft:  rgba(77, 109, 158, 0.11);
+
+  --surface-4:     #ffffff;
+  --border-2:      #d7dae1;
+  --disabled:      #a3a8b2;
 
   --grid: #e8eaee;
   --axis: #767b85;
@@ -47,45 +64,91 @@
   --topbar-line: rgba(255,255,255,.30);
 }
 
+/* ---------------------------------------------------------------------------
+   DARK THEME — rebuilt for readability rather than for looking moody.
+
+   What was wrong with the old values, concretely: the page ground was #101216
+   with body text at #e3e5ea, secondary at #bec2cb and muted at #888d97. The
+   muted tone — used for every hint, timestamp, table caption and helper line in
+   the app — came out at about 4.4:1, i.e. below AA, and the helper text is
+   exactly what a first-time seller needs to read. Semantic colours were carried
+   over from the light theme at near-light-mode saturation, borders on inputs sat
+   around 1.5:1 (so you could not see where a field was), and there was no focus
+   ring at all.
+
+   The rules this now follows:
+     * Ground is a dark blue-grey, not black. Black kills shadow, so elevation
+       has to be faked entirely with lightness, and it pushes white text into the
+       18–21:1 range where glyph edges bloom — the "harsh dark mode" everyone
+       recognises but few can name.
+     * Body text lands at ~15:1, secondary ~9:1, muted ~6.5:1. All above AA,
+       none at maximum contrast.
+     * Elevation is a lightness ladder (base → card → raised → overlay), with a
+       visible 1px border on cards as well, because an 8% luminance step
+       disappears on a cheap screen in daylight — which is where this app is
+       used, on a phone, in a shop.
+     * Anything you can type in or click gets a border at 3:1 or better
+       (WCAG 2.2 SC 1.4.11), and everything focusable gets a real ring.
+     * Semantic colours are desaturated and lightened rather than reused from
+       light mode; red is a salmon rather than a signal red, because RTO and
+       failed-COD rows appear constantly and a screaming red makes an ordinary
+       Tuesday feel like an emergency.
+   Contrast ratios below are against --bg and were computed, not guessed.
+   --------------------------------------------------------------------------- */
 [data-theme="dark"] {
-  --bg:            #101216;
-  --surface:       #191b21;
-  --surface-2:     #14161a;
-  --surface-3:     #1e2128;
-  --border:        #272a32;
-  --border-strong: #383c46;
-  --text:          #e3e5ea;
-  --text-2:        #bec2cb;
-  --muted:         #888d97;
+  --bg:            #12151c;   /* ground */
+  --surface:       #191d26;   /* card                          1.08x base */
+  --surface-2:     #0f131a;   /* inset well, table gutter      0.95x base */
+  --surface-3:     #21262f;   /* raised: dropdown, popover     1.20x base */
+  --surface-4:     #2a303b;   /* overlay: modal, toast         1.38x base */
+  --border:        #242a36;   /* gridlines, card edge */
+  --border-2:      #333b4a;   /* section dividers, chips */
+  --border-strong: #6b7688;   /* inputs, selects        3.98:1 — SC 1.4.11 */
+  --text:          #e8eaef;   /* body, numbers         15.17:1 */
+  --text-2:        #adb6c4;   /* labels, headers        8.93:1 */
+  --muted:         #909bad;   /* hints, timestamps      6.50:1 (was 4.4:1) */
+  --disabled:      #697382;   /* disabled controls only 3.81:1 */
 
-  --primary:       #9aa4c8;
-  --primary-hover: #b3bbd8;
-  --primary-soft:  rgba(154, 164, 200, 0.15);
-  --primary-line:  rgba(154, 164, 200, 0.30);
-  --on-primary:    #14161a;
+  --primary:       #9ba6ee;   /* accent as text/border  7.90:1 */
+  --primary-hover: #b4bcf5;
+  --primary-fill:  #4e5fc0;   /* accent as a button fill */
+  --primary-fill-hover: #5c6dd1;
+  --on-primary:    #ffffff;   /* on --primary-fill      5.64:1 */
+  --primary-soft:  rgba(155, 166, 238, 0.16);
+  --primary-line:  rgba(155, 166, 238, 0.34);
+  --focus:         #8fa0f2;   /* focus ring             7.37:1 */
 
-  --green:      #79bd9c;
-  --green-soft: rgba(121, 189, 156, 0.15);
-  --amber:      #d6ac6e;
-  --amber-soft: rgba(214, 172, 110, 0.15);
-  --red:        #dd8f8b;
-  --red-soft:   rgba(221, 143, 139, 0.15);
-  --blue:       #8aabd6;
-  --blue-soft:  rgba(138, 171, 214, 0.15);
+  --green:      #3fd48a;      /* 9.56:1 */
+  --green-soft: rgba(63, 212, 138, 0.14);
+  --amber:      #f0b429;      /* 9.80:1 */
+  --amber-soft: rgba(240, 180, 41, 0.14);
+  --red:        #ff7b72;      /* 7.24:1 */
+  --red-soft:   rgba(255, 123, 114, 0.14);
+  --blue:       #6bb0f5;      /* 7.96:1 */
+  --blue-soft:  rgba(107, 176, 245, 0.14);
 
-  --grid: #23262e;
-  --axis: #8d929c;
+  /* Chart series: every one 5.8–13.4:1 on the ground, and checked under
+     deuteranopia and protanopia simulation — the naive blue/orange/green/red/
+     purple set puts mid-green next to mid-pink at a separation a red-green
+     colour-blind seller cannot resolve. */
+  --chart-1: #5b8ff0;  --chart-2: #f5a93c;  --chart-3: #35b368;  --chart-4: #f09bb6;
+  --chart-5: #b49cf2;  --chart-6: #54d3de;  --chart-7: #eade90;  --chart-8: #f2c4a0;
 
-  --shadow-sm:  0 1px 2px rgba(0,0,0,.30);
-  --shadow-md:  0 1px 3px rgba(0,0,0,.40);
-  --shadow-lg:  0 10px 28px rgba(0,0,0,.45);
-  --shadow-pop: 0 24px 60px rgba(0,0,0,.60);
+  --grid: #242a36;
+  --axis: #909bad;
 
-  --topbar:      linear-gradient(135deg, #15171d, #262b36);
+  --shadow-sm:  0 1px 2px rgba(0,0,0,.34);
+  --shadow-md:  0 1px 3px rgba(0,0,0,.44);
+  --shadow-lg:  0 10px 28px rgba(0,0,0,.50);
+  --shadow-pop: 0 24px 60px rgba(0,0,0,.64);
+
+  --topbar:      linear-gradient(135deg, #171b24, #262c38);
   --topbar-ink:  #eceef4;
-  --topbar-mute: rgba(236,238,244,.76);
-  --topbar-line: rgba(255,255,255,.22);
+  --topbar-mute: rgba(236,238,244,.80);
+  --topbar-line: rgba(255,255,255,.24);
 }
+
+
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -118,8 +181,8 @@ h1,h2,h3,h4 { margin: 0; color: var(--text); }
   background: var(--surface-2); color: var(--text);
 }
 .btn:active { transform: translateY(1px); }
-.btn.primary { background: var(--primary); color: var(--on-primary); }
-.btn.primary:hover { background: var(--primary-hover); }
+.btn.primary { background: var(--primary-fill); color: var(--on-primary); }
+.btn.primary:hover { background: var(--primary-fill-hover); }
 .btn.ghost { background: var(--surface); border-color: var(--border-strong); color: var(--text-2); }
 .btn.ghost:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
 .btn.sm { padding: 6px 11px; font-size: 12.5px; }
@@ -146,8 +209,14 @@ input, select {
   background: var(--surface); border: 1px solid var(--border-strong); color: var(--text);
   border-radius: 8px; padding: 9px 11px; font: inherit; font-size: 13.5px; width: 100%;
 }
-input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px var(--primary-soft); }
+/* Every focusable thing gets a visible ring. Removing this is the single most
+   common accessibility failure in a dark theme, and it is also what makes an
+   app impossible to use from a keyboard. */
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .err { color: var(--red); font-size: 12.5px; margin-top: 10px; background: var(--red-soft); padding: 8px 10px; border-radius: 8px; }
+.ok-note { color: var(--green); font-size: 12.5px; margin-top: 10px; background: var(--green-soft); padding: 8px 10px; border-radius: 8px; line-height: 1.5; }
 
 /* ---------- topbar ---------- */
 .topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
@@ -213,7 +282,12 @@ input:focus, select:focus { outline: none; border-color: var(--primary); box-sha
 .data-card .row { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ---------- app tiles (upgraded) ---------- */
-.apps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 22px; }
+.apps-grid { margin-bottom: 22px; }
+.app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.app-group { margin-bottom: 26px; }
+.app-group-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; }
+.app-group-head h4 { margin: 0; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2); }
+.app-group-head .tiny { font-weight: 500; }
 .app-tile {
   position: relative; overflow: hidden;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
@@ -309,7 +383,7 @@ input:focus, select:focus { outline: none; border-color: var(--primary); box-sha
 .level-block { margin-bottom: 14px; }
 .level-block.locked { opacity: .85; }
 .level-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; margin: 6px 0 8px; flex-wrap: wrap; }
-.level-badge { background: var(--primary); color: #fff; border-radius: 99px; padding: 2px 10px; font-size: 11.5px; }
+.level-badge { background: var(--primary-fill); color: var(--on-primary); border-radius: 99px; padding: 2px 10px; font-size: 11.5px; }
 .lock-note { color: var(--amber); font-size: 11.5px; font-weight: 600; }
 
 /* strategy target tiles */
@@ -418,7 +492,7 @@ td { color: var(--text-2); }
   .approvals { position: static; height: auto; border-left: none; border-top: 1px solid var(--border); }
 }
 @media (max-width: 720px) {
-  .apps-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+  .app-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
   .tb-brand span:not(.logo-chip) { display: none; }
   .tb-crumb { max-width: 40vw; }
 }
@@ -430,7 +504,8 @@ td { color: var(--text-2); }
   .mode-switch a span.mode-label { display: none; }
   .theme-switch button span.tlabel { display: none; }
   .main { padding: 16px 12px 48px; }
-  .apps-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .app-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .app-group { margin-bottom: 20px; }
   .app-tile { min-height: 132px; padding: 14px 14px 12px; }
   .drawer { width: 100vw; }
 }
@@ -2158,3 +2233,92 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
     min-height: 44px; display: flex; align-items: center; gap: 10px;
   }
 }
+
+/* ---------- one order form per supplier ---------- */
+.po-list { display: flex; flex-direction: column; gap: 10px; }
+.po-row { display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; align-items: center;
+  border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px 14px; background: var(--surface-2); }
+.po-row .po-facts { grid-column: 1; }
+.po-row .po-acts { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 640px) {
+  .po-row { grid-template-columns: 1fr; }
+  .po-row .po-acts { grid-column: 1; grid-row: auto; justify-content: flex-start; }
+}
+
+/* ---------- "show me the prompt" ---------- */
+.prompt-peek { margin-top: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
+.pp-head { padding: 8px 11px; border-bottom: 1px solid var(--border); font-size: 12.5px; font-weight: 600;
+  display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.pp-text { margin: 0; padding: 10px 11px; font-size: 11.5px; line-height: 1.6; white-space: pre-wrap;
+  word-break: break-word; max-height: 210px; overflow-y: auto; color: var(--text-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.pp-src { border-top: 1px solid var(--border); padding: 8px 11px; display: flex; flex-direction: column; gap: 5px; }
+.pp-row { display: grid; grid-template-columns: 16px auto 1fr; gap: 8px; align-items: baseline; font-size: 12px; }
+.pp-row i { font-style: normal; }
+.pp-row.on i { color: var(--green); }
+.pp-row.off { opacity: .62; }
+.pp-row.off i { color: var(--muted); }
+
+/* ---------- post vs reel, said on the card ---------- */
+.ins-kind { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  padding: 2px 8px; border-radius: 99px; margin-bottom: 7px; }
+.ins-kind.photo { background: var(--blue-soft); color: var(--blue); }
+.ins-kind.reel  { background: var(--amber-soft); color: var(--amber); }
+.ins-need { display: grid; grid-template-columns: 16px 1fr; gap: 7px; align-items: start;
+  margin-top: 8px; font-size: 12px; color: var(--text-2); }
+.ins-need svg { width: 14px; height: 14px; margin-top: 2px; opacity: .8; }
+
+/* ---------- pick which AI ---------- */
+.eng-list { display: flex; flex-direction: column; gap: 8px; }
+.eng-card { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 11px 13px; background: var(--surface-2); }
+.eng-card:hover { border-color: var(--primary); }
+.eng-card:has(input:checked) { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); background: var(--primary-soft); }
+.eng-card input { margin-top: 3px; accent-color: var(--primary); }
+.eng-cost { font-size: 11.5px; font-weight: 600; color: var(--amber); background: var(--amber-soft);
+  padding: 1px 7px; border-radius: 99px; margin-left: 4px; }
+
+/* ---------- "what happens next" on a reel handover ---------- */
+.rp-next { margin: 14px 0 4px; border: 1px solid var(--border); border-left: 3px solid var(--amber);
+  border-radius: var(--radius); background: var(--amber-soft); padding: 11px 14px; }
+.rp-next b { font-size: 12.5px; }
+.rp-next ol { margin: 6px 0 0; padding-left: 20px; font-size: 12.5px; line-height: 1.7; color: var(--text-2); }
+
+/* ---------- one next step ---------- */
+.setup-card { border: 1px solid var(--primary-line); border-radius: var(--radius-lg); background: var(--surface);
+  box-shadow: var(--shadow-md); padding: 18px 20px; margin-bottom: 22px; }
+.setup-top { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: start; }
+.setup-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--primary); }
+.setup-card h3 { margin: 4px 0 6px; font-size: 19px; }
+.setup-card p { margin: 0; color: var(--text-2); max-width: 62ch; line-height: 1.6; }
+.setup-acts { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.setup-ring { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: conic-gradient(var(--primary) calc(var(--pct) * 1%), var(--border) 0); }
+.setup-ring span { width: 42px; height: 42px; border-radius: 50%; background: var(--surface);
+  display: grid; place-items: center; font-size: 11.5px; font-weight: 700; color: var(--text-2); }
+.setup-rest { margin-top: 12px; }
+.setup-rest summary { cursor: pointer; font-size: 12.5px; color: var(--primary); }
+.setup-rest ul { margin: 8px 0 0; padding-left: 20px; font-size: 12.5px; line-height: 1.7; color: var(--text-2); }
+
+/* ---------- folded sections ---------- */
+.fold { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface);
+  padding: 0 14px; margin-bottom: 14px; }
+.fold > summary { cursor: pointer; padding: 13px 0; font-size: 13px; font-weight: 600; list-style: none;
+  display: flex; align-items: center; gap: 8px; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: "›"; display: inline-block; transition: transform .15s ease;
+  font-size: 17px; color: var(--muted); width: 12px; }
+.fold[open] > summary::before { transform: rotate(90deg); }
+.fold > summary + * { margin-bottom: 14px; }
+.fold-count { background: var(--primary-soft); color: var(--primary); border-radius: 99px;
+  padding: 1px 8px; font-size: 11px; font-weight: 700; }
+@media (max-width: 640px) {
+  .setup-top { grid-template-columns: 1fr; }
+  .setup-ring { order: -1; }
+}
+
+/* ---------- a mapping we had to guess says so ---------- */
+.map-check { position: relative; }
+.map-check > select { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+.map-flag { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--amber); background: var(--amber-soft); border-radius: 99px; padding: 1px 7px; margin-left: 6px; }

@@ -489,7 +489,12 @@ def _claim_handle(handle: str, email: str, previous: str = "") -> None:
 
 
 def suggest_handle(brand: str, email: str) -> str:
-    base = normalise_handle(brand) or normalise_handle((email or "").split("@")[0]) or "my-store"
+    # NOTE: deliberately no email fallback. The handle is the public web address
+    # of the shop (/s/<handle>), so falling back to the email local part put the
+    # seller's personal handle on every product URL they ever shared. A generic
+    # "my-store" that they rename is embarrassing for a minute; a URL carrying
+    # their email handle is permanent once customers have the link.
+    base = normalise_handle(brand) or "my-store"
     if len(base) < 3:
         base = f"{base}-store"
     if handle_available(base, email):
@@ -682,7 +687,7 @@ def save_site(email: str, patch: dict) -> dict:
     # ---- handle ----
     wanted = normalise_handle(site.get("handle") or "")
     if not wanted:
-        wanted = suggest_handle(site["brand"] or email.split("@")[0], email)
+        wanted = suggest_handle(site["brand"] or "my-store", email)
     if wanted != previous_handle and not handle_available(wanted, email):
         raise ValueError(f"The address “{wanted}” is already taken — try another.")
     if wanted in RESERVED_HANDLES or len(wanted) < 3:
@@ -1008,8 +1013,13 @@ def seed_from_catalogue(email: str, force: bool = False) -> dict:
 
     brand = (site.get("brand") or "").strip()
     if not brand:
-        brand = (email.split("@")[0] or "My store").replace(".", " ").replace("_", " ").title()
+        # GATE 1: this line used to build a brand out of the email local part and
+        # SAVE it, which is how "sunshine.creations1214" ended up printed on
+        # storefronts and in win-back emails. A neutral placeholder is used
+        # instead, and `brand_placeholder` tells the UI to ask for the real one.
+        brand = "My store"
         patch["brand"] = brand
+        patch["brand_placeholder"] = True
     if not (site.get("handle") or "").strip():
         patch["handle"] = suggest_handle(brand, email)
 

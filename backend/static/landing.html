@@ -121,7 +121,11 @@ section { padding: 72px 0; }
 .miss { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
 .miss-card { border-left: 3px solid var(--marigold); padding: 4px 0 4px 18px; }
 .miss-card h3 { font-size: 17px; margin: 0 0 6px; }
-.miss-card p { font-size: 14.5px; color: var(--ink-soft); margin: 0; }
+.miss-card p { font-size: 14.5px; color: var(--ink-soft); margin: 0 0 8px; }
+.miss-card p:last-child { margin-bottom: 0; }
+.miss-worth { font-size: 13.5px !important; border-top: 1px dashed var(--line);
+  padding-top: 8px; color: var(--ink) !important; }
+.tickets-label { font-size: 12px; color: var(--card-muted); margin: 0 0 10px; max-width: 46ch; line-height: 1.5; }
 
 /* features */
 .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
@@ -202,49 +206,101 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
 <header class="wrap hero">
   <div>
     <span class="eyebrow">For Indian sellers · कपड़े, गहने, परफ़्यूम</span>
-    <h1>Connect what you already sell on. <em>Get told what to fix.</em></h1>
-    <p class="lead">You already sell — on Amazon, on Shopify, on Instagram, over the counter. One Tap Manager reads those sales and answers the only question you open a dashboard with: <b>what should I do this morning?</b> Restock these four. Win back these twelve. Fix this complaint. Then it does most of it for you.</p>
+    <h1>Run your shop the way a big brand runs theirs. <em>On your own, before lunch.</em></h1>
+    <p class="lead">Big brands do not sell better products than you. They sell with a team:
+      someone reading the numbers, someone chasing the customers who stopped coming,
+      someone deciding what to reorder, someone shooting and posting every day.
+      <b>One Tap Manager is that team.</b> It reads your sales, tells you the three
+      things worth doing this morning, and then does most of them for you.</p>
     <div class="hero-ctas">
       <button class="btn btn-primary" onclick="openSignup('free')">Start free — no card needed</button>
-      <a class="btn btn-ghost" href="#pricing">What it replaces</a>
+      <a class="btn btn-ghost" href="#opportunity">What you are losing without it</a>
     </div>
-    <p class="hero-note">Upload a CSV, or connect a channel. Your own selling website comes free with it — not the other way round.</p>
+    <p class="hero-note">Upload one sales file and the first answers are on screen in about two
+      minutes. Your own selling website is included — we are not going to charge you for a shop
+      and then charge you again to understand it.</p>
   </div>
   <div class="tickets" aria-label="Examples of what One Tap Manager tells a seller to do">
+    <p class="tickets-label">Examples of the cards you get — made up, using round numbers,
+      because we would rather show you the shape than invent a customer.</p>
     <div class="ticket">
-      <div class="t-tag">INSIGHT · ANALYTICS</div>
-      <h4>Four items are below their reorder point</h4>
-      <p>Your best-selling shirt in M runs out in three days at the current rate. The purchase order is written; approve it.</p>
-      <div class="t-metric">order 40 units · supplier already on file</div>
+      <div class="t-tag">EXAMPLE · STOCK</div>
+      <h4>Four things are about to run out</h4>
+      <p>Your best-selling shirt in M lasts three more days at the rate it is going. The order
+        form for that supplier is already written — check it and send it.</p>
+      <div class="t-metric">order 40 · supplier already on file</div>
     </div>
     <div class="ticket">
-      <div class="t-tag">INSIGHT · RFM</div>
-      <h4>38 buyers haven't come back in 45+ days</h4>
-      <p>They spent ₹1.4L with you. One WhatsApp message to this exact list beats discounting everyone — and we measure what comes back.</p>
-      <div class="t-metric">₹42,000 recovered from the last one</div>
+      <div class="t-tag">EXAMPLE · CUSTOMERS</div>
+      <h4>38 buyers have not come back in 45 days</h4>
+      <p>They spent ₹1.4 lakh with you. One WhatsApp message to these 38 beats a discount for
+        everybody — and we count how many actually came back, so you know if it worked.</p>
+      <div class="t-metric">the message is written · you press send</div>
     </div>
     <div class="ticket">
-      <div class="t-tag">INSIGHT · REVIEWS</div>
+      <div class="t-tag">EXAMPLE · REVIEWS</div>
       <h4>“Sizing runs small” is your loudest complaint</h4>
-      <p>31 mentions across your reviews, rising. A size chart on three product pages is the whole fix.</p>
-      <div class="t-metric">fix-first · 3 pages to edit</div>
+      <p>Said again and again in your reviews, and getting worse. A size chart on three product
+        pages is the whole fix.</p>
+      <div class="t-metric">fix this first · 3 pages to edit</div>
     </div>
   </div>
 </header>
 
-<!-- WHAT MSMEs MISS -->
-<section class="alt">
+<!-- ==================================================================
+     WHAT IT COSTS TO NOT HAVE THIS
+     The old version of this section said "you are short on someone who
+     reads your data", which is true and costs the reader nothing to
+     agree with. Nobody buys software because a sentence was correct.
+     What moves a seller is seeing the specific money that walks out of
+     the shop every month while they are busy — and that every one of
+     those leaks is something the big brand down the road already
+     plugged, with staff. That is the actual opportunity being missed.
+     Numbers here are labelled as illustrative and the arithmetic is
+     shown, because an unlabelled figure on a launch page is a lie.
+     ================================================================== -->
+<section class="alt" id="opportunity">
   <div class="wrap">
     <div class="section-head">
-      <span class="eyebrow">The gap</span>
-      <h2>You're not short on data. You're short on someone who reads it.</h2>
-      <p>Every bill you print is a clue. Most small businesses never get to use them — that's the growth they're missing.</p>
+      <span class="eyebrow">The opportunity</span>
+      <h2>The money is already in your shop. It leaves quietly.</h2>
+      <p>Not because you are doing anything wrong — because one person cannot watch
+        everything at once. A brand with eight people watches all of it. Here is what
+        goes out the door while nobody is looking, and what closing it is worth.</p>
     </div>
     <div class="miss">
-      <div class="miss-card"><h3>Which day quietly loses money</h3><p>Weekly dips look normal until you see them measured. Then they look fixable.</p></div>
-      <div class="miss-card"><h3>Which customers are slipping away</h3><p>Your best customers rarely complain — they just stop coming. RFM catches them before they're gone.</p></div>
-      <div class="miss-card"><h3>Which products deserve the shelf</h3><p>Bestsellers by count aren't always bestsellers by profit. One Tap Manager shows both.</p></div>
+      <div class="miss-card">
+        <h3>The customers who just stop coming</h3>
+        <p>They do not complain. They do not cancel. They simply do not come back, and
+          you find out months later. Getting one of them back costs a message; finding
+          a new one costs an ad.</p>
+        <p class="miss-worth">If 40 past buyers who spent ₹3,000 each are sitting
+          uncontacted, that is <b>₹1.2 lakh</b> of goodwill you already paid for.</p>
+      </div>
+      <div class="miss-card">
+        <h3>The bestseller that was out of stock</h3>
+        <p>Every day your best item is not on the shelf is a sale that goes to somebody
+          else, and a customer who learns you run out.</p>
+        <p class="miss-worth">One popular item, out for six days a month, at ₹900 a
+          sale and two sales a day: <b>₹10,800 a month</b>, gone without a trace.</p>
+      </div>
+      <div class="miss-card">
+        <h3>The week you did not post</h3>
+        <p>The brands growing on Instagram are not more talented. They are more regular.
+          Four posts a week, every week, is the whole trick — and it is the first thing
+          to go when you are packing orders.</p>
+        <p class="miss-worth">Posting is the cheapest customer you will ever get.
+          <b>Skipping it costs nothing today and everything in a year.</b></p>
+      </div>
     </div>
+    <div class="cmp-line" style="margin-top:26px;">
+      <b>None of this is a knowledge problem.</b> Every big brand knows these three
+      things. They have people to act on them. That is the only difference, and it is
+      the difference this closes — for one person, in the time it takes to have chai.
+    </div>
+    <p class="stack-note" style="margin-top:14px;">The figures above are worked examples
+      with the arithmetic shown, not results from a customer. We are new and would rather
+      you check our maths than trust our marketing.</p>
   </div>
 </section>
 
@@ -253,13 +309,23 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
   <div class="wrap">
     <div class="section-head">
       <span class="eyebrow">What you get</span>
-      <h2>An analytics team in a browser tab</h2>
+      <h2>The eight people you cannot afford, in one screen</h2>
+      <p>Each of these is a job somebody does at a bigger company. None of them needs
+        you to learn anything.</p>
     </div>
     <div class="features">
-      <div class="feature"><div class="f-icon">📊</div><h3>Sales Analytics</h3><p>Revenue trends, weekday patterns, category performance, top products — from the CSV you already have. No setup, no jargon.</p></div>
-      <div class="feature"><div class="f-icon">🧭</div><h3>RFM Customer Segments</h3><p>Champions, loyal, at-risk, hibernating — every customer scored on recency, frequency and spend, so offers go to the right people.</p></div>
-      <div class="feature"><div class="f-icon">🤖</div><h3>AI Business Analyst</h3><p>Consulting-style recommendations: the observation, why it matters, the action to take, and the expected impact — each with its own chart.</p></div>
-      <div class="feature"><div class="f-icon">💬</div><h3>Ask-Your-Data Chat</h3><p>Type a question in plain language — "why did October dip?" — and get short, practical, data-backed answers.</p></div>
+      <div class="feature"><div class="f-icon">📊</div><h3>The one who reads the numbers</h3><p>What sold, what it earned you, which days quietly lose money, and what next month looks like — from the sales file you already have. Plain sentences, not a wall of charts.</p></div>
+      <div class="feature"><div class="f-icon">🧭</div><h3>The one who watches your customers</h3><p>Who buys often, who spends most, and who has gone quiet. The message to bring the quiet ones back is written for you, and we count how many actually returned.</p></div>
+      <div class="feature"><div class="f-icon">📦</div><h3>The one who orders stock</h3><p>It knows how fast each thing sells and how long your supplier takes, so it tells you to buy again before you run out — and hands you the order form for that supplier, filled in.</p></div>
+      <div class="feature"><div class="f-icon">🎨</div><h3>The one who shoots your photos</h3><p>Upload five pictures you are proud of. It reads your light, your colours, your framing — and then every picture it makes for you looks like your brand, using your own product photo as the starting point so the item is really yours.</p></div>
+      <div class="feature"><div class="f-icon">📱</div><h3>The one who posts every day</h3><p>A whole week of Instagram planned as one story rather than seven unrelated posts: the tease, the reveal, the proof, the close. Captions written, times chosen, pictures made. You approve, it schedules.</p></div>
+      <div class="feature"><div class="f-icon">🧾</div><h3>The one who does the paperwork</h3><p>Proper tax invoices with the right rates, and one file your accountant can file from. Nobody re-types anything.</p></div>
+    </div>
+    <div class="cmp-line" style="margin-top:24px;">
+      <b>The new part is the last three.</b> Reading numbers has been possible for years.
+      A tool that looks at your own photographs, works out what your brand looks like, and
+      then shoots and writes a month of posts in that style — that has only been possible
+      for about a year, and almost nobody has put it in front of a one-person business yet.
     </div>
   </div>
 </section>
@@ -352,22 +418,23 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
       </div>
       <div class="cmp-col">
         <div class="cmp-h">Odoo</div>
-        <p><b>Right depth.</b> One data model. Purchase orders, inventory,
-           invoicing and accounting are the same system, so a receipt moves
-           stock and a sale posts tax without anyone re-keying it.</p>
-        <p><b>Wrong customer.</b> Built for a business with someone to
-           implement it. A jewellery seller with 40 SKUs will not get through
-           the setup, and the UI assumes training.</p>
+        <p><b>Right depth.</b> Everything is joined up. Buying, stock, billing
+           and tax are one system, so a delivery moves your stock and a sale sorts
+           its own tax without you typing it twice.</p>
+        <p><b>Wrong customer.</b> Built for a business with someone employed to
+           set it up. A jewellery seller with 40 designs will not get through the
+           setup, and the screens assume you were trained on them.</p>
       </div>
       <div class="cmp-col cmp-us">
         <div class="cmp-h">One Tap Manager</div>
-        <p><b>Odoo's spine.</b> Products, inventory, suppliers, orders,
-           invoices and GST are one connected model — a website order drops
-           stock, consumes materials, raises a compliant tax invoice and lands
-           in your analytics without a second entry.</p>
+        <p><b>Odoo's joined-up insides.</b> Products, stock, suppliers, orders,
+           bills and GST are one thing, not six — an order on your website takes the
+           item out of stock, uses up the materials it needed, writes a proper tax
+           invoice and shows up in your numbers, without you entering anything
+           twice.</p>
         <p><b>Shopify's front door.</b> Sign up, upload a CSV or connect a
            channel, and the first screen tells you what to do this morning
-           rather than asking you to configure a chart of accounts.</p>
+           rather than asking you to set up an accounting system first.</p>
       </div>
     </div>
 
@@ -378,11 +445,11 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
     </div>
 
     <div class="cmp-honest">
-      <b>What we are not, yet.</b> Odoo has manufacturing, multi-warehouse,
-      payroll and double-entry accounting. We have none of those and are not
-      pretending otherwise. If you have three warehouses and a factory floor,
-      buy Odoo. If you sell 40 to 400 products and your accountant only wants
-      a clean GSTR-1, that gap costs you nothing.
+      <b>What we are not, yet.</b> Odoo handles factories, several warehouses,
+      salaries and full accounting. We handle none of those and are not pretending
+      otherwise. If you run a factory floor and three godowns, buy Odoo. If you sell
+      40 to 400 products and your accountant just wants one clean tax file at the end
+      of the month, that gap costs you nothing.
     </div>
   </div>
 </section>
@@ -403,9 +470,9 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
       monthly costs in each category — before any percentage-of-sales charges, which we do not have.</p>
       <table class="stack-table">
         <tbody>
-          <tr><td>Analytics &amp; customer lifetime value</td><td>₹1,600</td></tr>
-          <tr><td>Inventory &amp; reorder planning</td><td>₹2,500</td></tr>
-          <tr><td>Win-back / retention messaging</td><td>₹1,500</td></tr>
+          <tr><td>Sales reports and customer value</td><td>₹1,600</td></tr>
+          <tr><td>Stock tracking and reordering</td><td>₹2,500</td></tr>
+          <tr><td>Bringing quiet customers back</td><td>₹1,500</td></tr>
           <tr><td>Reviews &amp; reputation</td><td>₹1,200</td></tr>
           <tr><td>Order management</td><td>₹800</td></tr>
           <tr class="stack-sum"><td>Four to six apps, every month</td><td>₹7,600</td></tr>
@@ -423,7 +490,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
         <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Every number about your business.</div>
         <ul>
           <li>Sales analytics, category and sub-category trends</li>
-          <li>RFM segments and the at-risk customer list</li>
+          <li>Who your best customers are, and who has gone quiet</li>
           <li><b>Your own selling website + orders</b> — with our small line in the footer</li>
           <li>Up to 25 products</li>
           <li>5 AI Analyst or Chatbot uses a day</li>
@@ -452,7 +519,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
         <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Runs the shop, not just the reporting.</div>
         <ul>
           <li>Everything in Semi Pro</li>
-          <li><b>Supply Management</b> — reorder points, EOQ, safety stock, waste log</li>
+          <li><b>Stock &amp; suppliers</b> — when to buy again, how much, and the order form ready to send</li>
           <li>PDF purchase orders, sent to your suppliers</li>
           <li>Position Strategy checklists</li>
           <li>Unlimited AI, unlimited products, unlimited outlets</li>

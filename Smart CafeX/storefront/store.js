@@ -1268,8 +1268,14 @@ function openAuth(after, startMode) {
         try {
           const r = await api("/forgot", { method: "POST",
             json: { email: el("aEmail").value.trim() } });
-          const ok = el("aOk");
-          ok.textContent = r.message; ok.hidden = false;
+          // ok:false means this shop has no mail set up — show it as a caution,
+          // not as "sent", so nobody sits waiting for an email that isn't coming.
+          if (r.email_ready === false) {
+            err.textContent = r.message; err.hidden = false;
+          } else {
+            const ok = el("aOk");
+            ok.textContent = r.message; ok.hidden = false;
+          }
         } catch (e2) {
           err.textContent = e2.message; err.hidden = false;
         }

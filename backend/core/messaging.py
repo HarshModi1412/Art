@@ -65,7 +65,13 @@ def _send_email(to: str, subject: str, text: str, html: str = "") -> bool:
         log.info("email to %s not sent (no SMTP configured): %s", to, subject)
         return False
 
-    host = os.environ["SMTP_HOST"]
+    host = (os.environ.get("SMTP_HOST") or "").strip()
+    if not host:
+        # smtp_configured() said yes and the variable is gone. Should be
+        # impossible; a KeyError here would 500 whatever request asked for the
+        # mail, which is never worth it for a notification.
+        _remember("email", to, subject, text, "SMTP_HOST disappeared")
+        return False
     port = int(os.environ.get("SMTP_PORT") or 587)
     user = os.environ.get("SMTP_USER") or ""
     password = os.environ.get("SMTP_PASSWORD") or ""
