@@ -403,6 +403,10 @@ class StudioImageOnlyBody(BaseModel):
     # Which archetype of photograph this beat wants (studio.SHOT_TYPES). Sent
     # by the editor; also resolved from the post when a post_id is given.
     shot_type: str | None = ""
+    # Which AI the seller picked for THIS generation. Empty means "use the
+    # default"; a named engine that is not usable is an error, never a silent
+    # substitution onto a different vendor at a different price.
+    engine: str | None = ""
 
 
 class SocialAttachBody(BaseModel):
@@ -4180,7 +4184,8 @@ def studio_image_only(body: StudioImageOnlyBody,
                                          use_reference=body.use_reference,
                                          strength=body.strength,
                                          occasion_key=occasion_key,
-                                         shot_type=shot_type)
+                                         shot_type=shot_type,
+                                         engine=body.engine or "")
     except (RuntimeError, ValueError) as e:
         raise HTTPException(400, str(e))
     if body.post_id:
@@ -4274,16 +4279,32 @@ def social_approve_ready(body: SocialReadyBody,
 
 @app.get("/api/studio/video-engine")
 def studio_video_engine(authorization: str | None = Header(default=None)):
-    """Whether clips can be generated, and what one costs — asked before the
-    button is offered, so a seller is never surprised by the price."""
+    """Whether clips can be generated, what one costs, and every engine the
+    seller may choose between — asked before the button does anything, so the
+    price is never a surprise."""
     require_user(authorization)
-    return studio.video_engine()
+    return {**studio.video_engine(), "engines": studio.video_engines()}
+
+
+@app.get("/api/studio/image-engines")
+def studio_image_engines(reshoot: bool = False,
+                         authorization: str | None = Header(default=None)):
+    """Every drawing engine this server can offer, so the seller picks rather
+    than inheriting whatever the server preferred.
+
+    `reshoot=true` drops the engines that cannot start from the seller's own
+    photograph. Offering one there would mean quietly returning a picture of a
+    product they do not sell."""
+    require_user(authorization)
+    rows = studio.image_engines(for_reshoot=reshoot)
+    return {"engines": rows, "default": rows[0]["id"] if rows else ""}
 
 
 class StudioVideoBody(BaseModel):
     product_id: str
     post_id: str | None = ""
     prompt: str | None = ""
+    engine: str | None = ""
 
 
 @app.post("/api/studio/video")
@@ -4295,7 +4316,8 @@ def studio_video(body: StudioVideoBody,
     confirms the price first and warns that the tab can be left alone."""
     email = require_user(authorization)
     try:
-        vid = studio.generate_video(email, body.product_id, body.prompt or "")
+        vid = studio.generate_video(email, body.product_id, body.prompt or "",
+                                    engine=body.engine or "")
     except (RuntimeError, ValueError) as e:
         raise HTTPException(400, str(e))
     if body.post_id:

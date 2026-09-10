@@ -124,10 +124,10 @@ check("the two paths genuinely differ", p_ref != p_new)
 _gen_src = __import__("inspect").getsource(studio.generate_image)
 check("generate_image passes has_reference through from the reference argument",
       "has_reference=bool(reference)" in _gen_src)
-check("the Cloudflare negative prompt no longer suppresses text/watermark outright",
-      "extra items, text, " not in _gen_src, _gen_src[_gen_src.find("negative="):][:200])
-check("it negates the brand being LOST instead",
-      all(w in _gen_src for w in ("missing brand name", "erased logo", "altered lettering")))
+check("no image path suppresses text/watermark outright any more",
+      "extra items, text, " not in _gen_src)
+check("brand preservation now rides in the prompt itself, on every engine",
+      all(w in p_ref for w in ("brand name", "logo", "lettering")), p_ref[-320:])
 check("the corner stamp is skipped on a re-shoot (brand would show twice)",
       "if not from_ref:" in _gen_src and "_stamp_brand(content" in _gen_src)
 
@@ -660,7 +660,7 @@ check("the 400-token ceiling that truncated every reading is gone",
       "max_tokens=400" not in _src, _src[_src.find("max_tokens"):][:60])
 check("readings now get real room", "max_tokens=2000" in _src)
 check("the merge asks for a photography bible, not a paragraph",
-      "350-550 words" in _src and "RULES —" in _src)
+      "650-900 words" in _src and "RULES —" in _src)
 check("and explicitly tells the model not to restate the instructions",
       "Do not restate these" in _src)
 
@@ -696,12 +696,12 @@ print("\n== 17. better free models for vision and for drawing ==")
 # =========================================================================
 check("vision has its own preference order, not the text chain's",
       hasattr(aiprovider, "VISION_PREFERENCE"))
-# This asserted "gemini" until the seller asked for Hugging Face and nothing
-# else. The others stay in the chain as fallbacks rather than being removed,
-# so a read still succeeds once the HF credit allowance is spent.
-check("Hugging Face is asked first, as chosen",
-      aiprovider.VISION_PREFERENCE[0] == "huggingface", aiprovider.VISION_PREFERENCE)
-check("and the rest remain as fallbacks for when its credit runs out",
+# This asserted "huggingface" while HF credits lasted. They ran out, and
+# Gemini reads pictures better anyway, so Gemini leads again. The rest stay in
+# the chain as fallbacks rather than being removed.
+check("Gemini is asked first to read pictures",
+      aiprovider.VISION_PREFERENCE[0] == "gemini", aiprovider.VISION_PREFERENCE)
+check("and the rest remain as fallbacks",
       set(aiprovider.VISION_PREFERENCE) >= {"groq", "cloudflare", "openai"},
       aiprovider.VISION_PREFERENCE)
 check("Groq vision is wired now that it has a usable model",
@@ -725,17 +725,14 @@ check("private work keeps its own safety ordering",
       "if sensitivity == \"private\":" in
       __import__("inspect").getsource(aiprovider._vision_order))
 
-# Gemini image support stays in the codebase for anyone who already has that
-# key, but it is no longer the preferred path.
-check("Gemini image support survives as a fallback",
-      hasattr(aiprovider, "gemini_image"))
+check("Gemini image generation is wired", hasattr(aiprovider, "gemini_image"))
 _gen = __import__("inspect").getsource(studio.generate_image)
-check("a RE-SHOOT prefers the HF edit model whatever the nominal engine is",
-      "if reference and aiprovider.hf_ready():" in _gen)
-check("because SD-1.5 img2img redraws the product it is meant to preserve",
-      "redraws the hardware" in _gen)
-check("text-to-image may still fall to the cheaper engine",
-      "cheaper and good enough" in _gen)
+check("the engine is validated before anything is spent",
+      "image_engine(engine, for_reshoot=bool(reference))" in _gen)
+check("SD-1.5 img2img is kept away from re-shoots — it redraws the product",
+      "redraw the product" in __import__("inspect").getsource(studio))
+check("a failure names the engine instead of quietly trying another vendor",
+      "it is a substitution" in _gen)
 check("no image path can raise into the request",
       all("except Exception" in __import__("inspect").getsource(f)
           for f in (aiprovider.gemini_image, aiprovider.hf_image, aiprovider.hf_video)))
@@ -784,10 +781,16 @@ check("approving an unknown post 404s",
              json={"post_id": "nope"}).status_code == 404)
 
 # =========================================================================
-print("\n== 19. Hugging Face only, and honest about what it costs ==")
+print("\n== 19. Hugging Face still carries video, and is honest about cost ==")
 # =========================================================================
-check("Hugging Face is asked first for vision",
-      aiprovider.VISION_PREFERENCE[0] == "huggingface", aiprovider.VISION_PREFERENCE)
+# History: this section once asserted Hugging Face was first for everything.
+# The seller's HF credits ran out, so ChatGPT is now the image default and
+# Gemini reads the pictures (section 20/21). HF keeps video -- it is the only
+# connected engine that makes one -- and it is still offered as an image
+# choice for anyone who has credits. These checks were rewritten, not deleted,
+# because the HF paths are still live code.
+check("HF is still an offered vision engine, just no longer first",
+      "huggingface" in aiprovider.VISION_PREFERENCE, aiprovider.VISION_PREFERENCE)
 check("with a real VLM, not a captioner",
       "VL" in aiprovider.VISION_MODELS["huggingface"],
       aiprovider.VISION_MODELS["huggingface"])
@@ -804,16 +807,16 @@ check("every HF model id is env-overridable",
           for k in ("HF_IMAGE_MODEL", "HF_EDIT_MODEL", "HF_VIDEO_MODEL",
                     "HF_VISION_MODEL")))
 
-_eng_src = __import__("inspect").getsource(studio.image_engine)
-check("HF is the preferred image engine", "aiprovider.hf_ready()" in _eng_src)
-check("and its note says plainly that it is not free",
-      "not free" in _eng_src.lower() or "free HF account" in _eng_src, _eng_src[:200])
+_reg = {e["id"]: e for e in studio.IMAGE_ENGINES}
+check("HF remains selectable for images", "huggingface" in _reg)
+check("and its price is stated plainly, because it is not free",
+      "$" in _reg["huggingface"]["cost"], _reg["huggingface"]["cost"])
+check("ChatGPT is the one marked default in the registry",
+      studio.IMAGE_ENGINES[0]["id"] == "openai", studio.IMAGE_ENGINES[0]["id"])
 
 _gsrc = __import__("inspect").getsource(studio.generate_image)
-check("a re-shoot prefers the HF edit model",
-      "if reference and aiprovider.hf_ready():" in _gsrc)
-check("a failed RE-SHOOT never silently falls back to inventing a product",
-      "not reference" in _gsrc.split("elif eng[\"engine\"] == \"huggingface\":")[1][:700],
+check("a re-shoot on HF uses the edit model, not the invent model",
+      "reference" in _gsrc.split('== "huggingface"')[1][:220],
       "guard missing")
 
 _v = studio.video_engine()
@@ -843,6 +846,101 @@ check("but confirms the price BEFORE spending anything",
       _js4.split('vidGen.onclick')[1][:600])
 check("and warns that generated clips drift",
       "then detail can drift" in _js4)
+
+
+# =========================================================================
+print("\n== 20. the seller picks which AI draws, per generation ==")
+# =========================================================================
+import importlib as _il  # noqa: E402
+
+for _k in list(os.environ):
+    if any(_x in _k for _x in ("OPENAI", "GEMINI", "GROQ", "CF_", "HF_")):
+        os.environ.pop(_k, None)
+_il.reload(aiprovider); _il.reload(studio)
+check("with nothing connected, no engine is offered",
+      studio.image_engines() == [], studio.image_engines())
+check("and the default reports itself as unavailable rather than guessing",
+      studio.image_engine()["engine"] == "")
+
+os.environ["OPENAI_API_KEY"] = "x"
+os.environ["GEMINI_API_KEY"] = "y"
+os.environ["CF_ACCOUNT_ID"] = "a"; os.environ["CF_API_TOKEN"] = "b"
+os.environ["HF_API_TOKEN"] = "hf"
+_il.reload(aiprovider); _il.reload(studio)
+
+_all = [e["id"] for e in studio.image_engines()]
+check("every connected engine is offered", set(_all) ==
+      {"openai", "gemini", "cloudflare", "huggingface"}, _all)
+check("ChatGPT is the default now that the HF credits are gone",
+      studio.image_engine()["engine"] == "openai", studio.image_engine()["engine"])
+check("Gemini is back as a first-class option", "gemini" in _all)
+
+_rs = [e["id"] for e in studio.image_engines(for_reshoot=True)]
+check("Cloudflare is NOT offered for a re-shoot — it would redraw the product",
+      "cloudflare" not in _rs, _rs)
+check("but it IS offered for inventing a picture", "cloudflare" in _all)
+
+check("picking an engine by name honours it",
+      studio.image_engine("gemini")["engine"] == "gemini")
+check("every offered engine carries a price the UI can show",
+      all(e.get("cost") and e.get("note") for e in studio.image_engines()))
+
+try:
+    studio.image_engine("cloudflare", for_reshoot=True)
+    check("asking Cloudflare for a re-shoot is refused", False, "no error raised")
+except ValueError as _e:
+    check("asking Cloudflare for a re-shoot is refused with a reason",
+          "redraw the product" in str(_e), str(_e)[:90])
+try:
+    studio.image_engine("nonsense")
+    check("an unconnected engine is refused", False, "no error raised")
+except ValueError as _e:
+    check("an unconnected engine is refused, never silently swapped",
+          "not connected" in str(_e), str(_e)[:90])
+
+_gsrc2 = __import__("inspect").getsource(studio.generate_image)
+check("generation dispatches to ONE engine, with no silent vendor swap",
+      "it is a substitution" in _gsrc2)
+check("and names the engine that failed",
+      "eng['label']" in _gsrc2 or 'eng["label"]' in _gsrc2)
+
+check("video engines are listed the same way",
+      [e["id"] for e in studio.video_engines()] == ["huggingface"],
+      studio.video_engines())
+check("video stays on Hugging Face, as asked",
+      studio.video_engine()["engine"] == "huggingface")
+
+# =========================================================================
+print("\n== 21. Gemini reads the brand aesthetic, and writes an essay ==")
+# =========================================================================
+check("Gemini is asked first to READ pictures",
+      aiprovider.VISION_PREFERENCE[0] == "gemini", aiprovider.VISION_PREFERENCE)
+check("and the reason is recorded — reading and drawing are different jobs",
+      "not the same judgement as which" in
+      __import__("inspect").getsource(aiprovider).split("VISION_PREFERENCE")[0][-900:])
+
+_asrc = __import__("inspect").getsource(studio.read_aesthetic)
+check("the brand aesthetic is written as an ESSAY, not a checklist",
+      "ESSAY" in _asrc and "Never a bullet" in _asrc)
+check("with real paragraphs under each heading",
+      "60-110 words of real sentences" in _asrc)
+check("that explain WHY, not just what",
+      "explain WHY the choice reads" in _asrc)
+check("and it is long enough to be worth reading",
+      "650-900 words" in _asrc)
+check("with the token room to actually get there",
+      "max_tokens=3000" in _asrc)
+
+_jsE = pathlib.Path("Smart CafeX/smart.js").read_text(encoding="utf-8")
+check("the editor offers the engine picker", "smEngine" in _jsE)
+check("loaded from the server, so it only lists connected engines",
+      "/api/studio/image-engines" in _jsE)
+check("re-shoot and invent load their own valid sets",
+      "loadEngines(true)" in _jsE and "loadEngines(false)" in _jsE)
+check("the chosen engine is sent with the request",
+      'engine: ($("smEngine") || {}).value' in _jsE)
+check("each engine's price is shown before it is used",
+      "smEngineNote" in _jsE and "e.cost" in _jsE)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

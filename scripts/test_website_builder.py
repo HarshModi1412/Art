@@ -1269,8 +1269,10 @@ must("groq" in _aip.VISION_MODELS,
      "Groq is used for vision now that its free tier has a usable model")
 must("llama-3.2" not in _aip.VISION_MODELS["groq"],
      f"and not with a retired model id ({_aip.VISION_MODELS['groq']})")
-must(_aip.VISION_PREFERENCE[0] == "huggingface",
-     "Hugging Face is asked first for vision, as the seller chose")
+must(_aip.VISION_PREFERENCE[0] == "gemini",
+     "Gemini reads pictures first -- it describes a brand's look best")
+must("huggingface" in _aip.VISION_PREFERENCE,
+     "and Hugging Face stays in the chain as a fallback")
 _v = _aip.describe_image(b"", "image/png", system="s", user="u")
 must(_v["text"] == "" and _v["error"] == "no image",
      "an empty image returns an error instead of raising")
@@ -1384,7 +1386,7 @@ _src = _ins.getsource(_st.generate_image)
 # guard that a reference is actually tracked end to end.
 _src_all = _src + _ins.getsource(_st._openai_image)
 must("from_ref = True" in _src_all, "the result records whether a reference was used")
-must("raise RuntimeError" in _src and "Could not re-shoot" in _src,
+must("raise RuntimeError" in _src and "re-shoot your photo" in _src,
      "and a failed re-shoot RAISES rather than silently inventing a product — "
      "falling back to invention is the worst possible failure here")
 must("use_reference: bool = True" in _ins.getsource(_st.generate_image_only),

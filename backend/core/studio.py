@@ -367,11 +367,19 @@ def read_aesthetic(email: str) -> dict:
         # working document instead, with named sections and rules a
         # photographer could actually shoot from.
         merged = aiprovider.generate(
-            "You are an art director building a brand's photography bible from "
-            "separate readings of their own reference images. Write the "
-            "STANDARD, not a summary — another photographer must be able to "
-            "shoot a new product from this alone and have it belong in the same "
-            "feed.\n\n"
+            "You are an art director writing an ESSAY about a brand's "
+            "photography, built from separate readings of their own reference "
+            "images. Not a summary and not a checklist — a piece of writing a "
+            "photographer could read once and then shoot from, and a piece the "
+            "brand's owner would recognise as a description of their own "
+            "taste.\n\n"
+            "Write it as flowing prose in short paragraphs under these "
+            "headings. Under each heading write 60-110 words of real sentences "
+            "— explain WHY the choice reads the way it does, not just what it "
+            "is. 'The key sits low and to the left, which is why every shadow "
+            "runs long across the frame and the whole set feels like late "
+            "afternoon rather than a studio' is the register. Never a bullet "
+            "list.\n\n"
             "Use exactly these headings, each on its own line:\n"
             "LIGHT — the lighting setup this brand repeats. Direction, quality, "
             "colour temperature, shadow behaviour. Give the setup, not an "
@@ -392,14 +400,17 @@ def read_aesthetic(email: str) -> dict:
             "never touches the frame edge'.\n"
             "WHERE THEY VARY — the genuine differences between their images. "
             "Name them; do not average them away.\n\n"
-            "Be concrete and quantitative wherever the readings support it. "
-            "Never use praise or marketing words such as stunning, elevated, "
-            "timeless, premium, curated or aesthetic. Do not restate these "
-            "instructions in your answer — follow them. 350-550 words.",
+            "Be concrete and quantitative wherever the readings support it — "
+            "name the hex, the f-stop, the direction — but carry those inside "
+            "sentences rather than listing them. Never use praise or marketing "
+            "words such as stunning, elevated, timeless, premium, curated or "
+            "aesthetic. Do not restate these instructions in your answer — "
+            "follow them. Aim for 650-900 words in total: this is the document "
+            "the whole feature rests on, and a thin one is worth nothing.",
             "\n\n=== NEXT REFERENCE ===\n\n".join(
                 f"[{SHOT_TYPES.get(r['shot'], {}).get('label', r['shot'])}]\n"
                 + _reading_prose(r) for r in readings),
-            sensitivity="public", max_tokens=2000, fallback="")
+            sensitivity="public", max_tokens=3000, fallback="")
         signature = (merged["text"] or " ".join(sig_lines) or
                      _reading_prose(readings[0]))
 
@@ -411,7 +422,7 @@ def read_aesthetic(email: str) -> dict:
     #   aesthetic_reads  every INDIVIDUAL picture, kept so the seller can see
     #                    what was read out of each one and nothing is silently
     #                    averaged away.
-    b["aesthetic"] = signature.strip()[:6000]
+    b["aesthetic"] = signature.strip()[:9000]
     b["aesthetic_shots"] = shots
     b["aesthetic_reads"] = [{"shot": r["shot"], "shot_label":
                              SHOT_TYPES.get(r["shot"], {}).get("label", r["shot"]),
@@ -858,50 +869,102 @@ def _fallback_caption(brief: dict) -> dict:
             "note": "Written from a template — add an OpenAI key for AI copy."}
 
 
-def image_engine() -> dict:
-    """Which engine will draw, and what it costs.
+# Every engine that can draw, in default preference order.
+#
+# WHY A REGISTRY AND NOT AN IF-CHAIN: the seller wants to pick the engine per
+# generation, not inherit whatever the server happened to prefer. An if-chain
+# can only answer "which one now"; a list can also answer "what are my
+# options, what does each cost, and which handle a re-shoot properly" — which
+# is what a picker needs.
+#
+# `reshoot` is the field that matters most. It says whether the engine can
+# take the seller's own photograph as input and keep the product intact.
+# Engines without it can still draw a picture, but asking one for a "re-shoot"
+# would quietly hand back a different wallet, so the caller must not offer it
+# for that job.
+IMAGE_ENGINES = [
+    {"id": "openai", "label": "ChatGPT (OpenAI)",
+     "model_env": "OPENAI_IMAGE_MODEL", "model_default": "gpt-image-1",
+     "free": False, "reshoot": True, "cost": "about Rs 3.70 an image",
+     "note": "The default. Best all-round quality, and its edit call holds on "
+             "to your product's real details. Paid per image."},
+    {"id": "gemini", "label": "Google Gemini",
+     "model_env": "GEMINI_IMAGE_MODEL", "model_default": "gemini-2.5-flash-image",
+     "free": True, "reshoot": True, "cost": "free tier, then paid",
+     "note": "Very good at keeping a real product — including any lettering on "
+             "it — when re-shooting. Free tier available."},
+    {"id": "cloudflare", "label": "Cloudflare (Flux)",
+     "model_env": "CF_IMAGE_MODEL",
+     "model_default": "@cf/black-forest-labs/flux-1-schnell",
+     "free": True, "reshoot": False, "cost": "about 500 images a day free",
+     "note": "Cheapest by far, and fine for an invented backdrop. Its only "
+             "image-to-image model redraws the product, so it is not offered "
+             "for re-shoots."},
+    {"id": "huggingface", "label": "Hugging Face",
+     "model_env": "HF_EDIT_MODEL", "model_default": "Qwen/Qwen-Image-Edit-2511",
+     "free": False, "reshoot": True, "cost": "about $0.03 an edit",
+     "note": "Credit-metered. A free account's monthly allowance covers about "
+             "four edits, so this needs PRO or pay-as-you-go."},
+]
 
-    Cloudflare Flux Schnell first, and not narrowly: at roughly 19 neurons per
-    1024x1024 image it sits inside the free 10,000/day — about 500 images a
-    day at no cost — and after that costs around Rs 0.04 against gpt-image-1's
-    Rs 3.70. On an unlimited Pro plan that difference is the whole margin: a
-    seller generating 200 images a month costs Rs 740 of a Rs 999 subscription
-    on OpenAI, and Rs 8 on Flux."""
+
+def _engine_ready(eid: str) -> bool:
     from backend.core import aiprovider
-    # Hugging Face first, by the seller's explicit choice. Its edit model
-    # conditions on the source photograph rather than redrawing it, which is
-    # what a re-shoot needs. It is NOT free, and the note says so — a free HF
-    # account carries about $0.10 of credit a month, which is roughly four
-    # edits.
-    if aiprovider.hf_ready():
-        return {"engine": "huggingface", "model": aiprovider.HF_EDIT_MODEL,
-                "free": False,
-                "note": "Hugging Face. Re-shoots use an edit model that keeps "
-                        "your actual product. Around $0.03 an edit and $0.003 a "
-                        "drawn picture — a free HF account's monthly credit "
-                        "covers only a handful, so connect PRO or pay-as-you-go."}
-    if aiprovider.image_ready():
-        return {"engine": "cloudflare", "model": aiprovider.CF_IMAGE_MODEL,
-                "free": True,
-                "note": "Flux Schnell on Cloudflare — about 500 images a day free."}
-    # Gemini draws as well as reads, on the SAME key as the text provider. It
-    # comes before OpenAI because it is free-tier eligible and much better at
-    # keeping a real product intact when re-shooting from a reference — which
-    # is the entire difference between a picture a seller can post and one
-    # showing a wallet they do not sell.
-    if aiprovider.gemini_image_ready():
-        return {"engine": "gemini", "model": aiprovider.GEMINI_IMAGE_MODEL,
-                "free": True,
-                "note": "Gemini image — free tier, and the best of the free "
-                        "engines at keeping your actual product in a re-shoot."}
-    if openai_ready():
-        return {"engine": "openai",
-                "model": os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1"),
-                "free": False,
-                "note": "OpenAI. Around Rs 3.70 per image — roughly 90x the "
-                        "Cloudflare cost. Add CF_ACCOUNT_ID and CF_API_TOKEN "
-                        "to switch."}
-    return {"engine": "", "model": "", "free": False,
+    return {
+        "openai": openai_ready,
+        "gemini": aiprovider.gemini_image_ready,
+        "cloudflare": aiprovider.image_ready,
+        "huggingface": aiprovider.hf_ready,
+    }.get(eid, lambda: False)()
+
+
+def _engine_row(spec: dict) -> dict:
+    return {"engine": spec["id"], "id": spec["id"], "label": spec["label"],
+            "model": os.environ.get(spec["model_env"]) or spec["model_default"],
+            "free": spec["free"], "reshoot": spec["reshoot"],
+            "cost": spec["cost"], "note": spec["note"],
+            "ready": _engine_ready(spec["id"])}
+
+
+def image_engines(for_reshoot: bool = False) -> list[dict]:
+    """Every drawing engine this server can offer, so the seller can choose.
+
+    Only CONFIGURED engines are returned — offering a choice that then fails
+    for want of a key is worse than not offering it. When `for_reshoot` is set,
+    engines that cannot preserve a source photograph are dropped rather than
+    silently substituting an invented product."""
+    rows = [_engine_row(s) for s in IMAGE_ENGINES if _engine_ready(s["id"])]
+    return [r for r in rows if r["reshoot"]] if for_reshoot else rows
+
+
+def image_engine(preferred: str = "", for_reshoot: bool = False) -> dict:
+    """The engine that will draw, honouring the seller's choice when they made
+    one and it is actually usable.
+
+    ChatGPT is the default. It was Hugging Face until the credits ran out, and
+    before that Cloudflare — the ordering is a running answer to "what is both
+    good and available", not a permanent judgement."""
+    options = image_engines(for_reshoot)
+    if preferred:
+        pick = next((r for r in options if r["id"] == preferred), None)
+        if pick:
+            return pick
+        # A named engine that is not usable is worth saying out loud rather
+        # than silently drawing on a different one — the seller chose for a
+        # reason, and the picture would come back looking wrong to them.
+        spec = next((s for s in IMAGE_ENGINES if s["id"] == preferred), None)
+        if spec and for_reshoot and not spec["reshoot"]:
+            raise ValueError(
+                f"{spec['label']} cannot re-shoot from your own photograph — it "
+                f"would redraw the product. Use 'Invent a picture' with it, or "
+                f"pick another engine for a re-shoot.")
+        raise ValueError(
+            f"{(spec or {}).get('label', preferred)} is not connected on this "
+            f"server. Pick another engine, or add its key.")
+    if options:
+        return options[0]
+    return {"engine": "", "id": "", "label": "", "model": "", "free": False,
+            "reshoot": False, "ready": False, "cost": "",
             "note": "No image engine connected. Your own photos still work."}
 
 
@@ -958,7 +1021,7 @@ def _openai_image(prompt: str, reference: tuple[bytes, str] | None) -> tuple[byt
 
 def generate_image(email: str, brief: dict, guidance: dict | None = None,
                    reference: tuple[bytes, str] | None = None,
-                   strength: float | None = None) -> dict:
+                   strength: float | None = None, engine: str = "") -> dict:
     """One photograph, stored durably like any other upload.
 
     Two paths, and the difference matters more than anything else in Studio:
@@ -972,131 +1035,51 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
 
     The result says which path ran, so the UI can tell the seller plainly.
 
-    Cloudflare is tried first when it's configured (it is ~90x cheaper), but
-    it fails silently by design (see aiprovider._cf_run) — a bad request looks
-    identical to an exhausted daily quota from here. Rather than hand the
-    seller an error either way, a configured OpenAI/ChatGPT key is used as an
-    automatic backup, so "Re-shoot" and "Invent" keep working (at OpenAI's
-    per-image cost) instead of going dead until the next day.
+    Which AI draws is the SELLER's choice, passed in as `engine` and validated
+    against the registry by image_engine(). An empty `engine` means "use the
+    default", which is ChatGPT. There is no cross-vendor fallback: see the
+    comment on the dispatch below for why.
     """
     from backend.core import aiprovider
     prompt = image_prompt(brief, guidance, has_reference=bool(reference))
-    eng = image_engine()
-    content = None
-    from_ref = False
-    used_engine, used_free = eng["engine"], eng["free"]
-
-    # A RE-SHOOT goes to Hugging Face's edit model first whenever that token
-    # exists, whatever the nominal engine is. Cloudflare's only image-to-image
-    # model is Stable Diffusion 1.5, and at any strength high enough to change
-    # the setting it also redraws the hardware, the stitching and any brand
-    # marking on the item — precisely what a re-shoot must not do. An
-    # instruction-edit model conditions on the source instead, so the wallet
-    # stays the wallet. Text-to-image can still fall to Cloudflare, which is
-    # ~10x cheaper and good enough when nothing is being preserved.
-    if reference and aiprovider.hf_ready():
-        try:
-            content = aiprovider.hf_image(prompt, reference[0])
-        except Exception as e:  # noqa: BLE001 — fall through to the normal chain
-            log.warning("hugging face re-shoot raised: %s", e)
-            content = None
-        if content:
-            from_ref = True
-            used_engine, used_free = "huggingface", False
-
-    if content:
-        pass                       # already drawn above
-    elif eng["engine"] == "huggingface":
-        content = aiprovider.hf_image(prompt, reference[0] if reference else None)
-        from_ref = bool(reference and content)
-        if not content and aiprovider.image_ready() and not reference:
-            # Only text-to-image may fall back to Cloudflare. Falling back for a
-            # RE-SHOOT would quietly hand the seller a picture of a product they
-            # do not sell, which is worse than an error.
-            content = aiprovider.generate_image(prompt)
-            if content:
-                used_engine, used_free = "cloudflare", True
-        if not content:
-            raise RuntimeError(
-                "Could not re-shoot your photo just now. This is usually the "
-                "Hugging Face credit allowance being spent — check your usage, "
-                "or use 'Invent a picture' if you only need a backdrop."
-                if reference else
-                "Could not generate the image just now. This is usually the "
-                "Hugging Face credit allowance being spent.")
-
-    elif eng["engine"] == "cloudflare":
-        try:
-            if reference:
-                content = aiprovider.restyle_image(
-                    reference[0], prompt, strength,
-                    # "text" and "watermark" used to sit in this list, which is
-                    # the other half of why the wallet came back blank: it told
-                    # the model to suppress the brand name embossed on the item
-                    # itself. What we actually want negated is the brand being
-                    # LOST or rewritten, not the brand existing.
-                    negative="different product, changed pattern, extra items, "
-                             "missing brand name, erased logo, altered lettering, "
-                             "misspelled brand, added watermark, distorted proportions")
-            else:
-                content = aiprovider.generate_image(prompt)
-        except Exception as e:  # noqa: BLE001 — aiprovider already logs; fall through below
-            log.warning("cloudflare image path raised: %s", e)
-            content = None
-        from_ref = bool(reference)
-
-        if not content and openai_ready():
-            try:
-                content, from_ref = _openai_image(prompt, reference)
-                used_engine, used_free = "openai", False
-            except Exception as e:  # noqa: BLE001
-                content = None
-                log.warning("openai fallback after cloudflare failure also failed: %s", e)
-
-        if not content:
-            if reference:
-                raise RuntimeError(
-                    "Could not re-shoot your photo. This is usually the daily "
-                    "free allowance being spent" + (" (the OpenAI backup didn't "
-                    "work either)" if openai_ready() else "") + ". Try again "
-                    "tomorrow, or use 'Invent a picture' if you only need a "
-                    "backdrop.")
-            raise RuntimeError("Cloudflare did not return an image. This is "
-                               "usually the daily free allowance being spent"
-                               + (" (the OpenAI backup didn't work either)"
-                                  if openai_ready() else "") + ".")
-
-    elif eng["engine"] == "gemini":
-        content = aiprovider.gemini_image(
-            prompt, reference[0] if reference else None,
-            (reference[1] if reference else "") or "image/jpeg")
-        from_ref = bool(reference and content)
-        if not content and openai_ready():
-            try:
-                content, from_ref = _openai_image(prompt, reference)
-                used_engine, used_free = "openai", False
-            except Exception as e:  # noqa: BLE001
-                content = None
-                log.warning("openai fallback after gemini failure also failed: %s", e)
-        if not content:
-            raise RuntimeError(
-                "Could not re-shoot your photo just now. Try again in a moment, "
-                "or use 'Invent a picture' if you only need a backdrop."
-                if reference else
-                "Could not generate the image just now. Try again in a moment.")
-
-    elif eng["engine"] == "openai":
-        try:
-            content, from_ref = _openai_image(prompt, reference)
-        except Exception as e:  # noqa: BLE001 — surfaced as a clear message either path
-            raise RuntimeError(
-                "Could not re-shoot your photo. Try again in a moment, or "
-                "use 'Invent a picture' if you only need a backdrop." if reference
-                else "Could not generate the image. Try again in a moment.") from e
-
-    else:
+    eng = image_engine(engine, for_reshoot=bool(reference))   # raises if unusable
+    if not eng["engine"]:
         raise RuntimeError("No image engine is connected on this server, so "
                            "images cannot be generated. Your own photos still work.")
+
+    # ONE dispatch, one engine. This used to be a chain that quietly tried a
+    # different vendor when the first failed — which was fine while the server
+    # chose, and wrong the moment the SELLER chooses: silently drawing on an
+    # engine they did not pick, at a price they did not agree to, is not a
+    # fallback, it is a substitution. A failure now says which engine failed
+    # and leaves the choice with them.
+    content, from_ref = None, False
+    eid = eng["engine"]
+    try:
+        if eid == "openai":
+            content, from_ref = _openai_image(prompt, reference)
+        elif eid == "gemini":
+            content = aiprovider.gemini_image(
+                prompt, reference[0] if reference else None,
+                (reference[1] if reference else "") or "image/jpeg")
+            from_ref = bool(reference and content)
+        elif eid == "huggingface":
+            content = aiprovider.hf_image(prompt, reference[0] if reference else None)
+            from_ref = bool(reference and content)
+        elif eid == "cloudflare":
+            # image_engine() already refused Cloudflare for a re-shoot, so this
+            # is always the text-to-image path.
+            content = aiprovider.generate_image(prompt)
+            from_ref = False
+    except Exception as e:  # noqa: BLE001 — turned into a message the seller can act on
+        log.warning("%s image path raised: %s", eid, e)
+        content = None
+
+    if not content:
+        raise RuntimeError(
+            f"{eng['label']} could not {'re-shoot your photo' if reference else 'draw the picture'} "
+            f"just now. This is usually that account's allowance being spent — "
+            f"try another engine from the list, or again later.")
 
     # The corner tag is for INVENTED pictures only. A re-shoot starts from the
     # seller's own photograph, so the product already carries its real brand
@@ -1106,7 +1089,9 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
         content = _stamp_brand(content, brief.get("brand_name") or "")
     saved = media.save(f"{uuid.uuid4().hex}.png", content, email)
     return {"url": saved["url"], "durable": saved["durable"], "generated": True,
-            "prompt": prompt, "engine": used_engine, "free": used_free,
+            "prompt": prompt, "engine": eng["engine"],
+            "engine_label": eng["label"], "model": eng["model"],
+            "free": eng["free"],
             "from_reference": from_ref,
             "strength": (aiprovider.STRENGTH_DEFAULT if strength is None else strength)
                         if from_ref else None}
@@ -1177,6 +1162,25 @@ def _stamp_brand(image_bytes: bytes, brand_name: str) -> bytes:
         return image_bytes
 
 
+# Engines that can turn a still into a short clip. Only Hugging Face for now,
+# by the seller's choice — but the list exists so the picker has the same shape
+# as the image one and a second engine is a data change, not a rewrite.
+VIDEO_ENGINES = [
+    {"id": "huggingface", "label": "Hugging Face (Wan I2V)",
+     "model_env": "HF_VIDEO_MODEL", "model_default": "Wan-AI/Wan2.2-I2V-A14B",
+     "free": False, "reshoot": True, "cost": "about $0.20 for 5 seconds",
+     "note": "Animates your own photograph, so the product stays yours. About a "
+             "minute per clip. Identity holds for the first couple of seconds, "
+             "then detail starts to drift — best for a slow push-in."},
+]
+
+
+def video_engines() -> list[dict]:
+    """Every clip engine this server can offer. Configured ones only."""
+    return [{**_engine_row(s), "cost_usd": 0.20}
+            for s in VIDEO_ENGINES if _engine_ready(s["id"])]
+
+
 def video_engine() -> dict:
     """Whether a clip can be generated, and what it honestly costs.
 
@@ -1202,7 +1206,8 @@ def video_engine() -> dict:
                     "not for real movement."}
 
 
-def generate_video(email: str, product_id: str, prompt: str = "") -> dict:
+def generate_video(email: str, product_id: str, prompt: str = "",
+                   engine: str = "") -> dict:
     """A short clip made FROM the seller's own product photograph.
 
     Image-to-video on purpose. Text-to-video would invent a product, and a
@@ -1244,7 +1249,8 @@ def generate_image_only(email: str, product_id: str, pillar: str = "",
                         fmt: str = "", angle: str = "",
                         use_reference: bool = True,
                         strength: float | None = None,
-                        occasion_key: str = "", shot_type: str = "") -> dict:
+                        occasion_key: str = "", shot_type: str = "",
+                        engine: str = "") -> dict:
     """Make a picture and nothing else.
 
     Separate from make_post because the two are wanted at different moments: a
@@ -1268,7 +1274,7 @@ def generate_image_only(email: str, product_id: str, pillar: str = "",
     brief = build_brief(brand, product, material, angle)
     ref = _reference_shot(email, product, material) if use_reference else None
     guidance = guidance_for(pillar, fmt, occasion_key, brand.get("look"), shot_type)
-    img = generate_image(email, brief, guidance, ref, strength)
+    img = generate_image(email, brief, guidance, ref, strength, engine)
     return {**img, "product_id": product_id,
             "product_name": product.get("name"),
             "pillar": pillar, "format": fmt,

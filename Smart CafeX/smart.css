@@ -1701,6 +1701,17 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .sm-vid-opt[open] > summary::before { content: "− "; }
 .sm-vid-opt > summary:hover { color: var(--text); }
 
+/* which AI draws this one. Sits under the two generate buttons because the
+   choice belongs to the action, not to a settings page somewhere else. */
+.ai-pick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 10px; font-size: 12.5px; }
+.ai-pick label { color: var(--muted); flex: none; }
+.ai-pick select { font-size: 12.5px; padding: 5px 8px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); max-width: 220px; }
+.ai-pick-note { flex-basis: 100%; color: var(--muted); font-size: 11.5px;
+  line-height: 1.5; }
+
 /* what this post still needs before it can go out */
 .sm-needs { display: flex; align-items: center; gap: 8px; font-size: 12.5px;
   padding: 9px 12px; border-radius: 8px; margin: 12px 0 0;

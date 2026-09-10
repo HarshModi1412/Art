@@ -220,11 +220,15 @@ VISION_MODELS = {
 # models tend to stop after two lines however hard the prompt pushes, which is
 # exactly the "reading is too shallow" problem. So vision gets its own order
 # rather than inheriting the text chain's.
-# Hugging Face first, by the seller's explicit choice — one account, one key,
-# and the largest catalogue of the options. The rest stay in the chain purely
-# as fallbacks for when its credit allowance runs out, so a read still
-# succeeds rather than failing outright.
-VISION_PREFERENCE = ["huggingface", "groq", "gemini", "openai", "cloudflare"]
+# Gemini first for READING pictures. This is not the same judgement as which
+# engine should DRAW them: describing a brand's photography well means writing
+# six hundred words of genuine art direction, and the models differ far more at
+# that than at anything else in this app. Gemini does it best and its free tier
+# is generous enough to carry the whole feature.
+#
+# Hugging Face dropped down the list once its credit allowance proved to be
+# about $0.10 a month — enough to prove the wiring works, not enough to run on.
+VISION_PREFERENCE = ["gemini", "openai", "groq", "cloudflare", "huggingface"]
 
 
 def _vision_order(sensitivity: str) -> list[Provider]:

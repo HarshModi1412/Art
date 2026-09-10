@@ -5871,6 +5871,11 @@ function openSocialEditor(post) {
           <button class="btn primary sm" id="smGenRef">${sic("image")}Re-shoot my photo</button>
           <button class="btn ghost sm" id="smGenNew">${sic("spark")}Invent a picture</button>
         </div>
+        <div class="ai-pick" id="smEnginePick">
+          <label for="smEngine">Draw with</label>
+          <select id="smEngine"><option value="">Loading…</option></select>
+          <span class="ai-pick-note" id="smEngineNote"></span>
+        </div>
         <p class="sm-hint" style="margin:8px 0 0;">
           <b>Re-shoot</b> starts from your own photograph, so the item in the picture
           is the item you ship — only the light and setting change.
@@ -5929,6 +5934,36 @@ function openSocialEditor(post) {
      media store first (which already handles video up to 48MB and survives a
      redeploy), then the post records which clip is its own. Doing it in one
      endpoint would have meant a second upload path to keep correct. */
+  /* Which AI draws this picture. Loaded from the server rather than hardcoded,
+     so the list only ever offers engines that actually have a key — an option
+     that fails on click is worse than no option. Re-shoot and Invent have
+     DIFFERENT valid sets (Cloudflare can invent but would redraw the product
+     on a re-shoot), so the list is reloaded when the seller switches between
+     them rather than showing one union that is wrong for one of the two. */
+  let _engines = [], _engineFor = null;
+  async function loadEngines(forReshoot) {
+    if (_engineFor === forReshoot) return;
+    const sel = $("smEngine"), note = $("smEngineNote");
+    if (!sel) return;
+    try {
+      const d = await api(`/api/studio/image-engines?reshoot=${forReshoot ? "true" : "false"}`);
+      _engines = d.engines || [];
+      _engineFor = forReshoot;
+      sel.innerHTML = _engines.length
+        ? _engines.map((e) => `<option value="${esc(e.id)}">${esc(e.label)}${e.free ? " — free tier" : ""}</option>`).join("")
+        : `<option value="">No engine connected</option>`;
+      const showNote = () => {
+        const e = _engines.find((x) => x.id === sel.value);
+        if (note) note.textContent = e ? `${e.cost}. ${e.note}` : "";
+      };
+      sel.onchange = showNote;
+      showNote();
+    } catch (e) {
+      sel.innerHTML = `<option value="">Could not load engines</option>`;
+    }
+  }
+  if ($("smEngine")) loadEngines(true);
+
   const vidPick = $("smVidPick"), vidFile = $("smVidFile");
   if (vidPick && vidFile) {
     vidPick.onclick = () => vidFile.click();
@@ -5976,14 +6011,22 @@ function openSocialEditor(post) {
     try { eng = await api("/api/studio/video-engine"); }
     catch (e) { return toast(e.message, 6000); }
     if (!eng.ready) return toast(eng.note, 8000);
-    if (!confirm(`Generate a clip from your own photo of this product?\n\n${eng.note}\n\n`
-                 + "Continue?")) return;
+    const opts = eng.engines || [];
+    // One engine today, but the seller still gets told which one and what it
+    // costs before anything is spent — and the moment a second is connected
+    // this becomes a real choice with no code change.
+    const pickLine = opts.length > 1
+      ? `Available: ${opts.map((o) => `${o.label} (${o.cost})`).join(", ")}\n\n`
+      : "";
+    if (!confirm(`Generate a clip from your own photo of this product?\n\n`
+                 + `${pickLine}${eng.note}\n\nContinue?`)) return;
     try {
       const vid = await withBusy("Making your clip…",
         "This takes about a minute. It animates your own photograph, so the "
         + "product stays yours. You can carry on using the app.",
         () => api("/api/studio/video", { method: "POST", json: {
-          product_id: post.product_id, post_id: post.id } }));
+          product_id: post.product_id, post_id: post.id,
+          engine: (opts[0] || {}).id || "" } }));
       post.video_url = vid.url;
       const slot = $("smVidSlot");
       if (slot) {
@@ -6021,7 +6064,8 @@ function openSocialEditor(post) {
           : "Building it from your brand's look and this product's description.",
         () => api("/api/studio/image", { method: "POST", json: {
           product_id: post.product_id, pillar: post.pillar, format: post.format,
-          post_id: post.id, use_reference: useRef, shot_type: post.shot_type || "" } }));
+          post_id: post.id, use_reference: useRef, shot_type: post.shot_type || "",
+          engine: ($("smEngine") || {}).value || "" } }));
       // The editor may have been closed while this was drawing — the picture is
       // saved to the post either way, so there is nothing to recover, only a
       // missing element to not write into.
@@ -6036,8 +6080,8 @@ function openSocialEditor(post) {
     } catch (e) { toast(e.message, 6000); b.innerHTML = was; }
     btns.forEach((x) => x.disabled = false);
   };
-  if ($("smGenRef")) $("smGenRef").onclick = () => gen(true);
-  if ($("smGenNew")) $("smGenNew").onclick = () => gen(false);
+  if ($("smGenRef")) $("smGenRef").onclick = async () => { await loadEngines(true); gen(true); };
+  if ($("smGenNew")) $("smGenNew").onclick = async () => { await loadEngines(false); gen(false); };
 
   const h = $("smHook"), cnt = $("smHookCount");
   if (h && cnt) h.oninput = () => {
