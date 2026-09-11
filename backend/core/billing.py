@@ -16,11 +16,12 @@ Razorpay credentials: RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET.
 import hashlib
 import hmac
 import os
+import threading
 from datetime import datetime
 
 import pandas as pd
 
-from backend.core import auth, db, pricing
+from backend.core import auth, db, pricing, user_store
 
 try:
     import razorpay
@@ -33,7 +34,24 @@ _PURCHASE_COLS = ["email", "product", "credits_total", "credits_used",
 
 # order_id -> (email, product_id) for orders awaiting payment verification.
 # Short-lived (one checkout round-trip); kept in memory intentionally.
-_pending_orders: dict[str, tuple[str, str]] = {}
+_PENDING_KEY = "billing_pending_orders"
+_pending_lock = threading.Lock()
+
+
+def _pending_for(email: str) -> dict:
+    """Pending checkout records belong to the buyer and must survive a restart.
+
+    Keeping this only in process memory made a completed Razorpay signature
+    reusable after a restart: the client could choose a different product when
+    no matching pending entry was found.  The record is deliberately stored
+    with the account, not trusted from the browser.
+    """
+    rows = user_store.get_key(email, _PENDING_KEY, {}) or {}
+    return rows if isinstance(rows, dict) else {}
+
+
+def _save_pending(email: str, rows: dict) -> None:
+    user_store.set_key(email, _PENDING_KEY, rows)
 
 
 # ---------------- plans ----------------
@@ -247,7 +265,16 @@ def create_order(email: str, product_id: str) -> dict:
         "receipt": f"otm_{product_id[:12]}_{email[:20]}",
         "notes": {"email": email, "product": product_id},
     })
-    _pending_orders[order["id"]] = (email, product_id)
+    pending = _pending_for(email)
+    pending[order["id"]] = {
+        "product": product_id,
+        "created": datetime.now().isoformat(),
+    }
+    # Keep this small even if somebody abandons many checkouts.
+    if len(pending) > 30:
+        keep = sorted(pending.items(), key=lambda x: x[1].get("created", ""))[-30:]
+        pending = dict(keep)
+    _save_pending(email, pending)
     return {
         "key_id": os.environ["RAZORPAY_KEY_ID"],
         "order_id": order["id"],
@@ -271,13 +298,22 @@ def verify_payment(email: str, order_id: str, payment_id: str, signature: str,
     if not hmac.compare_digest(expected, signature):
         return None
 
-    pending = _pending_orders.pop(order_id, None)
-    if pending:
-        email, product_id = pending
-    if not product_id or not pricing.get_product(product_id):
-        return None
+    # Never accept the product from the browser.  A signature proves that a
+    # Razorpay payment exists, not what the caller wants to receive for it.
+    # Requiring and consuming the server-side checkout record also makes a
+    # payment id single-use.
+    with _pending_lock:
+        pending = _pending_for(email)
+        rec = pending.get(order_id)
+        if not isinstance(rec, dict):
+            return None
+        product_id = str(rec.get("product") or "")
+        if not pricing.get_product(product_id):
+            return None
+        pending.pop(order_id, None)
+        _save_pending(email, pending)
 
-    if product_id in pricing.PLANS or product_id in pricing.PLAN_ALIASES:
-        set_plan(email, product_id)
-    record_purchase(email, product_id, order_id, payment_id)
-    return product_id
+        if product_id in pricing.PLANS or product_id in pricing.PLAN_ALIASES:
+            set_plan(email, product_id)
+        record_purchase(email, product_id, order_id, payment_id)
+        return product_id

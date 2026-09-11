@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import re
 import secrets
+import hashlib
+import json
 
 import pandas as pd
 
@@ -64,6 +66,13 @@ def _money(v) -> float:
         return round(float(v), 2)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _spreadsheet_safe(v):
+    """Prevent a shopper-controlled cell becoming an Excel formula on export."""
+    if isinstance(v, str) and v[:1] in ("=", "+", "-", "@"):
+        return "'" + v
+    return v
 
 
 # =========================================================================
@@ -149,6 +158,11 @@ def guest_customer(seller: str, name: str = "", phone: str = "",
                       if re.sub(r"\D", "", str(c.get("phone") or "")) ==
                          re.sub(r"\D", "", phone_digits)), None)
     if match:
+        # A phone number is needed for delivery, not proof of account ownership.
+        # Reusing a password-backed customer here would let anybody who knew a
+        # shopper's phone receive a session for their account at checkout.
+        if match.get("password"):
+            raise StoreError("An account already uses that phone or email. Log in to place an order for it.")
         # a returning guest — keep their history, refresh what they just told us
         patch = {}
         if name and not match.get("name"):
@@ -231,6 +245,12 @@ def update_customer(seller: str, customer_id: str, patch: dict) -> dict:
                 c["name"] = str(patch["name"] or "").strip()[:80]
             if "phone" in patch:
                 c["phone"] = re.sub(r"[^0-9+]", "", str(patch["phone"] or ""))[:16]
+            if "email" in patch:
+                email = _norm_email(patch["email"])
+                if email and not _EMAIL_RE.match(email):
+                    raise StoreError("Enter a valid email address.")
+                if email:
+                    c["email"] = email
             if isinstance(patch.get("address"), dict):
                 c["address"] = _clean_address(patch["address"])
             out = c
@@ -356,6 +376,19 @@ def price_cart(seller: str, lines: list[dict]) -> dict:
             "cod": store_payments.split_due(c, total, "cod"),
         },
     }
+
+
+def cart_fingerprint(priced: dict, payment: str) -> str:
+    """Stable server-side identity of the exact cart presented to Razorpay."""
+    payload = {
+        "payment": payment,
+        "total": priced.get("total"),
+        "items": [{"product_id": i.get("product_id"), "variant_id": i.get("variant_id"),
+                   "qty": i.get("qty"), "unit_price": i.get("unit_price")}
+                  for i in priced.get("items") or []],
+    }
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 # =========================================================================
@@ -570,7 +603,11 @@ def orders_csv(seller: str) -> str:
                 "unit_price": it.get("unit_price"), "line_total": it.get("line_total"),
                 "order_total": o.get("total"), "payment": o.get("payment"),
             })
-    return pd.DataFrame(rows).to_csv(index=False)
+    frame = pd.DataFrame(rows)
+    for col in frame.columns:
+        if frame[col].dtype == object:
+            frame[col] = frame[col].map(_spreadsheet_safe)
+    return frame.to_csv(index=False)
 
 
 # =========================================================================

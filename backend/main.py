@@ -117,6 +117,16 @@ class SafeJSONResponse(JSONResponse):
         ).encode("utf-8")
 
 
+def _spreadsheet_safe_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Quote formula-shaped user data before it becomes an XLSX export."""
+    out = df.copy()
+    for col in out.columns:
+        if out[col].dtype == object:
+            out[col] = out[col].map(
+                lambda v: "'" + v if isinstance(v, str) and v[:1] in ("=", "+", "-", "@") else v)
+    return out
+
+
 app = FastAPI(title="Cafe_X Intelligence Platform",
               default_response_class=SafeJSONResponse)
 
@@ -261,6 +271,11 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 # ---------------------------------------------------------
 class SessionData:
     def __init__(self):
+        # Anonymous uploads can be explored before login. Once a seller uses
+        # the session while authenticated it is permanently bound to that
+        # account, so a leaked browser session id is not enough to read or use
+        # another seller's private analysis.
+        self.owner: str | None = None
         self.raw_dfs: dict[str, pd.DataFrame] = {}
         self.file_names: dict[str, str] = {}
         self.txns_df: pd.DataFrame | None = None
@@ -277,6 +292,16 @@ def get_session(session_id: str | None) -> SessionData:
     if session_id not in _data_sessions:
         _data_sessions[session_id] = SessionData()
     return _data_sessions[session_id]
+
+
+def bind_session(sess: SessionData, email: str | None) -> SessionData:
+    email = (email or "").strip().lower()
+    if not email:
+        return sess
+    if sess.owner and sess.owner != email:
+        raise HTTPException(403, "This browser session belongs to another account. Start a new session and try again.")
+    sess.owner = email
+    return sess
 
 
 def require_user(authorization: str | None) -> str:
@@ -639,15 +664,22 @@ def digest_test(authorization: str | None = Header(default=None)):
 
 
 @app.post("/api/digest/run")
-def digest_run(hour: int | None = None):
-    """Cron target: send every seller whose digest hour is now."""
+def digest_run(hour: int | None = None,
+               x_admin_token: str | None = Header(default=None)):
+    """Cron target: send every seller whose digest hour is now.
+
+    This is an operator job, not a public endpoint: otherwise anyone on the
+    internet can cause a batch of seller emails to be sent.
+    """
+    _require_admin(x_admin_token)
     return today_mod.run_due(hour)
 
 
 @app.get("/api/dev/outbox")
-def dev_outbox():
+def dev_outbox(x_admin_token: str | None = Header(default=None)):
     """What we tried to send but had nowhere to send it — visible only while
     SMTP is unconfigured, so a first deploy can still test password reset."""
+    _require_admin(x_admin_token)
     if messaging.smtp_configured():
         raise HTTPException(404, "Not available once SMTP is configured.")
     return {"outbox": messaging.outbox()}
@@ -1346,10 +1378,19 @@ def content_delete_scheduled(entry_id: str,
 @app.post("/api/content/scheduled/run")
 def content_run_scheduled(request: Request,
                           authorization: str | None = Header(default=None)):
-    """Manually fire due scheduled posts (a cron would call this too)."""
-    require_user(authorization)
-    fired = content_gen.run_due_posts(base_public_url=_public_base_url(request))
+    """Manually fire only this seller's due scheduled posts."""
+    email = require_user(authorization)
+    fired = content_gen.run_due_posts(base_public_url=_public_base_url(request), email=email)
     return {"ok": True, "fired": fired}
+
+
+@app.post("/api/admin/content/scheduled/run")
+def admin_content_run_scheduled(request: Request,
+                                x_admin_token: str | None = Header(default=None)):
+    """The authenticated cron target for publishing due posts for all sellers."""
+    _require_admin(x_admin_token)
+    return {"ok": True,
+            "fired": content_gen.run_due_posts(base_public_url=_public_base_url(request))}
 
 
 # ---------------------------------------------------------
@@ -1611,7 +1652,7 @@ def delete_file(file_id: str, x_session_id: str | None = Header(default=None)):
 @app.post("/api/mapping")
 def confirm_mapping(body: MappingBody, x_session_id: str | None = Header(default=None),
                     authorization: str | None = Header(default=None)):
-    sess = get_session(x_session_id)
+    sess = bind_session(get_session(x_session_id), optional_user(authorization))
     if body.file_id not in sess.raw_dfs:
         raise HTTPException(404, "File not found — upload it first")
     try:
@@ -1658,8 +1699,9 @@ def _require_txns(sess: SessionData, authorization: str | None = None) -> pd.Dat
     session has none but the logged-in account has saved sales (uploaded in
     Smart mode, or another device), hydrate from the account so Classic and
     Smart always see the same data — upload once, use everywhere."""
+    email = optional_user(authorization)
+    bind_session(sess, email)
     if sess.txns_df is None:
-        email = optional_user(authorization)
         if email:
             saved = smart.load_sales(email)
             if saved is not None and len(saved):
@@ -1819,7 +1861,8 @@ class WinbackSession:
     """Holds the last generated batch of win-back messages so the Excel
     download endpoint doesn't have to regenerate them (and doesn't burn
     another AI call just to produce the file)."""
-    def __init__(self):
+    def __init__(self, email: str):
+        self.email = email
         self.rows: list[dict] = []
 
 _winback_cache: dict[str, WinbackSession] = {}
@@ -1829,7 +1872,7 @@ _winback_cache: dict[str, WinbackSession] = {}
 def generate_winback(x_session_id: str | None = Header(default=None),
                      authorization: str | None = Header(default=None)):
     email = require_user(authorization)
-    sess = get_session(x_session_id)
+    sess = bind_session(get_session(x_session_id), email)
     txns = _require_txns(sess, authorization)
 
     customers = analytics.at_risk_cached(email, txns)
@@ -1846,7 +1889,8 @@ def generate_winback(x_session_id: str | None = Header(default=None),
     # template + market-basket-analysis based — no OpenAI call, no rate limit needed
     results = templates.build_winback_messages(customers)
 
-    _winback_cache.setdefault(x_session_id, WinbackSession()).rows = results
+    _winback_cache[x_session_id] = WinbackSession(email)
+    _winback_cache[x_session_id].rows = results
     return {"customers": results, "usage": _usage(email)}
 
 
@@ -1861,6 +1905,8 @@ def winback_send(body: CampaignBody,
     rows = body.rows or []
     if not rows:
         cached = _winback_cache.get(x_session_id)
+        if cached and cached.email != email:
+            cached = None
         rows = (cached.rows if cached else []) or []
     if not rows:
         raise HTTPException(400, "Generate the campaign first, then send it.")
@@ -1914,6 +1960,8 @@ def winback_mark_sent(body: WinbackSentBody,
     rows = body.customers or []
     if not rows:
         cached = _winback_cache.get(x_session_id)
+        if cached and cached.email != email:
+            cached = None
         rows = (cached.rows if cached else []) or []
     try:
         winback_proof.mark_sent(email, rows, body.channel or "whatsapp", body.note or "")
@@ -1944,12 +1992,12 @@ def winback_unmark(body: WinbackUnsentBody, authorization: str | None = Header(d
 @app.get("/api/rfm/winback/download")
 def download_winback(x_session_id: str | None = Header(default=None),
                      authorization: str | None = Header(default=None)):
-    require_user(authorization)
+    email = require_user(authorization)
     cached = _winback_cache.get(x_session_id)
-    if not cached or not cached.rows:
+    if not cached or cached.email != email or not cached.rows:
         raise HTTPException(400, "Generate the messages first, then download.")
 
-    df = pd.DataFrame(cached.rows).rename(columns={
+    df = _spreadsheet_safe_frame(pd.DataFrame(cached.rows)).rename(columns={
         "customer_id": "Customer ID",
         "customer_name": "Customer Name",
         "recency_days": "Days Since Last Visit",
@@ -2003,7 +2051,7 @@ def export_winback_edited(body: WinbackExportBody,
     require_user(authorization)
     if not body.rows:
         raise HTTPException(400, "Nothing to export — the list is empty.")
-    df = pd.DataFrame(body.rows)
+    df = _spreadsheet_safe_frame(pd.DataFrame(body.rows))
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Win-back")
@@ -2046,7 +2094,7 @@ def _consume_ai_use(email: str, feature: str) -> None:
 def run_analyst(x_session_id: str | None = Header(default=None),
                 authorization: str | None = Header(default=None)):
     email = require_user(authorization)
-    sess = get_session(x_session_id)
+    sess = bind_session(get_session(x_session_id), email)
     if not sess.raw_dfs:
         raise HTTPException(400, "Upload files first")
     _consume_ai_use(email, "analyst_ai")
@@ -2062,7 +2110,7 @@ def run_analyst(x_session_id: str | None = Header(default=None),
 def chat(body: ChatBody, x_session_id: str | None = Header(default=None),
          authorization: str | None = Header(default=None)):
     email = require_user(authorization)
-    sess = get_session(x_session_id)
+    sess = bind_session(get_session(x_session_id), email)
     _consume_ai_use(email, "chatbot")
 
     sess.chat_messages.append({"role": "user", "content": body.message})
@@ -2077,8 +2125,12 @@ def chat(body: ChatBody, x_session_id: str | None = Header(default=None),
 
 
 @app.get("/api/chat/history")
-def chat_history(x_session_id: str | None = Header(default=None)):
-    return {"messages": get_session(x_session_id).chat_messages}
+def chat_history(x_session_id: str | None = Header(default=None),
+                 authorization: str | None = Header(default=None)):
+    # Chat history can contain sales-derived answers. It is private account
+    # data, unlike the anonymous first-run upload preview.
+    email = require_user(authorization)
+    return {"messages": bind_session(get_session(x_session_id), email).chat_messages}
 
 
 # ---------------------------------------------------------
@@ -2312,7 +2364,7 @@ def smart_state(response: Response,
     if if_none_match and if_none_match.strip() == tag:
         return Response(status_code=304, headers={
             "ETag": tag, "Cache-Control": "private, no-cache"})
-    return _smart_status_payload(email, get_session(x_session_id))
+    return _smart_status_payload(email, bind_session(get_session(x_session_id), email))
 
 
 @app.get("/api/smart/history")
@@ -2333,7 +2385,7 @@ async def smart_upload(kind: str, files: list[UploadFile] = File(...),
         raise HTTPException(400, "kind must be 'sales', 'supply_sales' or 'review'")
     if len(files) > 100:
         raise HTTPException(400, "Please upload at most 100 files at a time.")
-    sess = get_session(x_session_id)
+    sess = bind_session(get_session(x_session_id), email)
     dfs = []
     names = []
     for f in files:
@@ -2415,7 +2467,7 @@ def smart_map(body: SmartMapBody, x_session_id: str | None = Header(default=None
               authorization: str | None = Header(default=None)):
     """Confirm the mapping, build the dataset and persist it to the account."""
     email = require_user(authorization)
-    sess = get_session(x_session_id)
+    sess = bind_session(get_session(x_session_id), email)
     if body.kind in ("sales", "supply_sales"):
         is_supply = body.kind == "supply_sales"
         pending_key = "smart_pending_supply_sales" if is_supply else "smart_pending_sales"
@@ -2480,7 +2532,7 @@ def smart_remap(kind: str, x_session_id: str | None = Header(default=None),
     """Re-open the column mapping for data already saved to the account, so the
     user can adjust which column is which later without re-uploading a file."""
     email = require_user(authorization)
-    sess = get_session(x_session_id)
+    sess = bind_session(get_session(x_session_id), email)
     if kind in ("sales", "supply_sales"):
         df = smart.load_supply_sales(email) if kind == "supply_sales" else smart.load_sales(email)
         if df is None or getattr(df, "empty", True):
@@ -2524,7 +2576,7 @@ def smart_clear(kind: str, x_session_id: str | None = Header(default=None),
     # Cascade: also wipe the data from the live browser session so it disappears
     # from every module immediately, not just from the saved copy.
     try:
-        sess = get_session(x_session_id)
+        sess = bind_session(get_session(x_session_id), email)
         if kind == "sales":
             sess.txns_df = None
             sess.mapped_file_id = None
@@ -2615,7 +2667,7 @@ def smart_records_add(body: SmartRecordsBody,
         smart.save_sales(email, new_df, {"files": "Manual entry"}, mode="append")
         combined = smart.load_sales(email)
         try:
-            sess = get_session(x_session_id)
+            sess = bind_session(get_session(x_session_id), email)
             sess.txns_df = combined
             sess.mapped_file_id = "smart_sales"
         except HTTPException:
@@ -3669,10 +3721,15 @@ def shop_pay(handle: str, body: ShopPayBody):
     due = store_payments.split_due(site["commerce"], priced["total"], pay)
     if due["online"] <= 0:
         raise HTTPException(400, "Nothing to pay online for this order.")
+    if pay == "cod" and not priced["cod_enabled"]:
+        raise HTTPException(400, "Cash on delivery is not available for this store.")
+    if pay == "prepaid" and not priced["online_enabled"]:
+        raise HTTPException(400, "Online payment is not available for this store.")
     try:
         out = store_payments.create_order(
             seller, due["online"], handle,
-            note="advance" if due["kind"] == "cod_advance" else "full")
+            note="advance" if due["kind"] == "cod_advance" else "full",
+            intent={"fingerprint": storefront.cart_fingerprint(priced, pay), "payment": pay})
     except (ValueError, RuntimeError) as e:
         raise HTTPException(400, str(e))
     return {**out, "due": due, "brand": site.get("brand") or handle,
@@ -3691,6 +3748,7 @@ def shop_order(handle: str, body: ShopOrderBody,
     """
     seller = _seller_for(handle)
     cust = storefront.customer_from_token(seller, (x_store_token or "").strip())
+    signed_in = cust is not None
     if not cust:
         addr = body.address or {}
         try:
@@ -3705,10 +3763,14 @@ def shop_order(handle: str, body: ShopOrderBody,
     # Verify the payment here, server-side, against the seller's own secret —
     # everything the browser sent is attacker-controlled until this passes.
     paid = False
+    priced = storefront.price_cart(seller, body.lines or [])
+    pay = "prepaid" if body.payment == "prepaid" else "cod"
+    due = store_payments.split_due(sitebuilder.get_site(seller)["commerce"], priced["total"], pay)
     if body.razorpay_payment_id:
         paid = store_payments.verify(seller, body.razorpay_order_id or "",
                                      body.razorpay_payment_id or "",
-                                     body.razorpay_signature or "")
+                                     body.razorpay_signature or "", due["online"],
+                                     storefront.cart_fingerprint(priced, pay), pay)
         if not paid:
             raise HTTPException(400, "We could not verify that payment. "
                                      "Nothing has been charged twice — please try again.")
@@ -3719,8 +3781,12 @@ def shop_order(handle: str, body: ShopOrderBody,
                                        payment_ref=body.razorpay_payment_id or "")
     except storefront.StoreError as e:
         raise HTTPException(400, str(e))
+    if paid:
+        store_payments.consume_verified(seller, body.razorpay_order_id or "",
+                                        body.razorpay_payment_id or "")
     # a guest gets a session too, so "your orders" works on the thank-you page
-    token = (x_store_token or "").strip() or storefront.issue_token(seller, cust["id"])
+    token = ((x_store_token or "").strip() if signed_in
+             else storefront.issue_token(seller, cust["id"]))
     return {"order": order, "token": token,
             "customer": storefront._public_customer(cust)}
 

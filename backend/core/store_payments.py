@@ -31,12 +31,15 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
+import json
+import secrets
 
-from backend.core import secrets_store
+from backend.core import secrets_store, user_store
 
 log = logging.getLogger("store_payments")
 
 CONNECTOR = "razorpay_store"     # key under which a seller's gateway lives
+_INTENTS_KEY = "store_payment_intents"
 
 try:
     import razorpay
@@ -137,7 +140,8 @@ def describe(commerce: dict) -> str:
 # ---------------------------------------------------------------------------
 # taking the payment
 # ---------------------------------------------------------------------------
-def create_order(seller: str, amount: float, handle: str, note: str = "") -> dict:
+def create_order(seller: str, amount: float, handle: str, note: str = "",
+                 intent: dict | None = None) -> dict:
     """A Razorpay order on the SELLER's account. Returns what the browser
     checkout needs — never the secret."""
     client, keys = _client(seller)
@@ -150,6 +154,20 @@ def create_order(seller: str, amount: float, handle: str, note: str = "") -> dic
         "receipt": f"otm_{handle[:16]}_{int(paise)}",
         "notes": {"store": handle, "note": note[:120]},
     })
+    intents = user_store.get_key(seller, _INTENTS_KEY, {}) or {}
+    if not isinstance(intents, dict):
+        intents = {}
+    intents[order["id"]] = {
+        "amount": paise,
+        "fingerprint": str((intent or {}).get("fingerprint") or ""),
+        "payment": str((intent or {}).get("payment") or ""),
+        "created": __import__("time").time(),
+        "payment_id": "",
+    }
+    # Abandoned checkouts are harmless, but never let them grow forever.
+    if len(intents) > 50:
+        intents = dict(sorted(intents.items(), key=lambda x: x[1].get("created", 0))[-50:])
+    user_store.set_key(seller, _INTENTS_KEY, intents)
     return {
         "key_id": keys["key_id"],          # public by design
         "order_id": order["id"],
@@ -158,7 +176,8 @@ def create_order(seller: str, amount: float, handle: str, note: str = "") -> dic
     }
 
 
-def verify(seller: str, order_id: str, payment_id: str, signature: str) -> bool:
+def verify(seller: str, order_id: str, payment_id: str, signature: str,
+           amount: float, fingerprint: str, payment: str) -> bool:
     """Razorpay's HMAC check, against the seller's own secret.
 
     Done server-side on purpose: everything the browser sends is attacker
@@ -167,7 +186,34 @@ def verify(seller: str, order_id: str, payment_id: str, signature: str) -> bool:
     keys = get_keys(seller)
     if not keys or not (order_id and payment_id and signature):
         return False
+    intents = user_store.get_key(seller, _INTENTS_KEY, {}) or {}
+    intent = intents.get(order_id) if isinstance(intents, dict) else None
+    expected_paise = int(round(float(amount) * 100))
+    if (not isinstance(intent, dict) or intent.get("amount") != expected_paise
+            or intent.get("fingerprint") != fingerprint
+            or intent.get("payment") != payment):
+        return False
+    # A verified payment can be retried after an address-validation failure,
+    # but cannot be swapped for a different Razorpay payment or a different cart.
+    if intent.get("payment_id") and intent.get("payment_id") != payment_id:
+        return False
     expected = hmac.new(keys["key_secret"].encode(),
                         f"{order_id}|{payment_id}".encode(),
                         hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature)
+    if not hmac.compare_digest(expected, signature):
+        return False
+    intent["payment_id"] = payment_id
+    intents[order_id] = intent
+    user_store.set_key(seller, _INTENTS_KEY, intents)
+    return True
+
+
+def consume_verified(seller: str, order_id: str, payment_id: str) -> None:
+    """Make a verified payment single-use after its order was saved."""
+    intents = user_store.get_key(seller, _INTENTS_KEY, {}) or {}
+    if not isinstance(intents, dict):
+        return
+    intent = intents.get(order_id) or {}
+    if intent.get("payment_id") == payment_id:
+        intents.pop(order_id, None)
+        user_store.set_key(seller, _INTENTS_KEY, intents)

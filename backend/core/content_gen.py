@@ -29,7 +29,7 @@ from typing import Any
 
 import requests
 
-from backend.core import product_config, user_store
+from backend.core import product_config, user_store, media
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
 IMG_DIR = os.path.join(DATA_DIR, "generated_images")
@@ -173,9 +173,10 @@ def _openai_image(product_type: str, topic: str) -> str | None:
     else:
         return None
     fname = f"{uuid.uuid4().hex}.png"
-    with open(os.path.join(IMG_DIR, fname), "wb") as f:
-        f.write(content)
-    return f"/generated_images/{fname}"
+    # Generated images must use the same durable store as every seller upload.
+    # Writing straight into the checkout repository made an unviewed image
+    # vanish on the next deploy before media.py could backfill it.
+    return media.save(fname, content).get("url")
 
 
 # ---------------------------------------------------------
@@ -231,7 +232,7 @@ def delete_scheduled(email: str, entry_id: str) -> list[dict]:
     return lst
 
 
-def run_due_posts(base_public_url: str = "") -> list[dict]:
+def run_due_posts(base_public_url: str = "", email: str = "") -> list[dict]:
     """Iterate every account with scheduled posts and publish those whose
     `at` has passed. Returns a summary list. Designed to be called by a
     cron/background scheduler; a fresh call at any time is safe."""
@@ -239,7 +240,7 @@ def run_due_posts(base_public_url: str = "") -> list[dict]:
     from backend.core import auth as _auth, instagram as _ig
     now = pd.Timestamp.now()
     fired = []
-    users = _auth.load_users()
+    users = {email: ""} if email else _auth.load_users()
     for email in users:
         lst = user_store.get_key(email, _SCH_KEY, []) or []
         changed = False
