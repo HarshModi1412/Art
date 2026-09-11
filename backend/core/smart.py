@@ -527,3 +527,93 @@ def delete_task(email: str, task_id: str) -> list[dict]:
     tasks = [t for t in get_tasks(email) if t["id"] != task_id]
     user_store.set_key(email, "smart_tasks", tasks)
     return tasks
+
+
+# ---------------------------------------------------------
+# Post tasks — the work an approved post still needs from the seller
+# ---------------------------------------------------------
+# A reel cannot be drawn for the seller: approving one creates a task that
+# walks them through it (copy the prompt → Google Flow → paste and generate →
+# upload the clip → schedule). A photo post whose picture could not be made
+# gets a smaller one. These live in the same list as hand-written tasks so
+# there is one to-do list, not two, but they carry the post they belong to and
+# are closed automatically when that post is scheduled or cancelled (see
+# social._sync_tasks), so the seller never has to tick off something the app
+# already knows is done.
+VIDEO_STEPS = [
+    {"id": "copy", "label": "Copy the video prompt"},
+    {"id": "flow", "label": "Open Google Flow"},
+    {"id": "make", "label": "Paste the prompt, generate, download the clip"},
+    {"id": "upload", "label": "Upload the clip here"},
+    {"id": "schedule", "label": "Save & schedule"},
+]
+PHOTO_STEPS = [
+    {"id": "picture", "label": "Add a picture (generate one or upload your own)"},
+    {"id": "schedule", "label": "Save & schedule"},
+]
+
+
+def post_tasks(email: str) -> list[dict]:
+    return [t for t in get_tasks(email) if t.get("post_id")]
+
+
+def ensure_post_task(email: str, post: dict, kind: str = "video",
+                     reason: str = "") -> dict:
+    """The open task for this post, creating it if there is none. New post
+    tasks go to the TOP of the list — they are the ones with a date on them."""
+    tasks = get_tasks(email)
+    pid = post.get("id") or ""
+    for t in tasks:
+        if t.get("post_id") == pid and not t.get("done"):
+            return t
+    name = post.get("product_name") or "your post"
+    when = post.get("scheduled_at") or ""
+    try:
+        label = pd.Timestamp(when).strftime("%a %d %b, %I:%M %p").replace(" 0", " ")
+    except Exception:  # noqa: BLE001
+        label = when
+    text = (f"Make the reel for {name}" if kind == "video"
+            else f"Add a picture to the {name} post") + (f" — goes out {label}" if label else "")
+    t = {"id": hashlib.md5(f"{pid}{kind}{pd.Timestamp.now().isoformat()}".encode()).hexdigest()[:10],
+         "text": text[:280], "done": False, "kind": kind, "post_id": pid,
+         "product_name": name, "due": when, "format": post.get("format") or "",
+         "reason": (reason or "")[:300],
+         "steps": VIDEO_STEPS if kind == "video" else PHOTO_STEPS,
+         "steps_done": [],
+         "created_at": pd.Timestamp.now().isoformat(timespec="seconds")}
+    tasks.insert(0, t)
+    user_store.set_key(email, "smart_tasks", tasks)
+    return t
+
+
+def close_post_tasks(email: str, post_id: str, remove: bool = False) -> list[dict]:
+    """Tick off (or drop, for a cancelled post) every task tied to one post."""
+    tasks = get_tasks(email)
+    changed = False
+    out = []
+    for t in tasks:
+        if t.get("post_id") == post_id and not t.get("done"):
+            changed = True
+            if remove:
+                continue
+            t["done"] = True
+            t["steps_done"] = [s["id"] for s in (t.get("steps") or [])]
+            t["done_at"] = pd.Timestamp.now().isoformat(timespec="seconds")
+        out.append(t)
+    if changed:
+        user_store.set_key(email, "smart_tasks", out)
+    return out
+
+
+def task_progress(email: str, task_id: str, step: str, done: bool = True) -> list[dict]:
+    """Remember which steps of a post task the seller has already done, so the
+    popup reopens where they left off (on another device too)."""
+    tasks = get_tasks(email)
+    for t in tasks:
+        if t["id"] == task_id:
+            steps = [s for s in (t.get("steps_done") or []) if s != step]
+            if done:
+                steps.append(step)
+            t["steps_done"] = steps
+    user_store.set_key(email, "smart_tasks", tasks)
+    return tasks

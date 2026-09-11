@@ -102,7 +102,7 @@ def assign(card: dict) -> str:
     cid = str(card.get("id") or "")
     if cid in BY_ID:
         return BY_ID[cid]
-    for prefix, who in (("content_", "social"), ("post_", "social"),
+    for prefix, who in (("content_", "social"), ("post_", "social"), ("autoplan_", "social"),
                         ("supplier_", "supply"), ("stock_", "operations")):
         if cid.startswith(prefix):
             return who
@@ -291,7 +291,10 @@ def _social_post(card: dict) -> dict:
            + (f" for {occ}" if occ else "") + "."
            + (f' The hook: "{hook}"' if hook else "")
            + (" This one is already overdue — it stayed a draft past its own"
-              " posting time." if overdue else ""))
+              " posting time." if overdue else "")
+           # Auto-planned posts say why THIS product this week — the sales
+           # signal or the festival that put it on the calendar.
+           + (f" Why this one: {card['plan_reason']}" if card.get("plan_reason") else ""))
     # A reel and a photo post are two different asks, and the button has to say
     # which. "Approve → schedule" was the same word for both, so a seller who
     # tapped it expecting a picture got a shot list to go and film, and a seller
@@ -304,6 +307,30 @@ def _social_post(card: dict) -> dict:
             "needs_from_you": card.get("needs_from_you") or ""}
 
 
+def _autoplan_week(card: dict) -> dict:
+    """The header card over one auto-planned week: what the planner found,
+    in the Social Media Manager's voice, before the seller looks at posts."""
+    n = _n(card.get("waiting"))
+    added, existing, target = _n(card.get("added")), _n(card.get("existing")), _n(card.get("target"))
+    occ = card.get("occasion") or ""
+    wins = [w for w in (card.get("winners") or []) if w]
+    slow = [x for x in (card.get("strugglers") or []) if x]
+    body = (f"{card.get('week_label') or 'Next week'}: {n} post{'' if n == 1 else 's'} "
+            f"to approve" + (f", built around {occ}" if occ else "") + ".")
+    why = (f"I planned {card.get('week_label') or 'next week'}. "
+           + (f"{existing} post{'' if existing == 1 else 's'} were already on the "
+              f"calendar, so I added {added} to reach your {target}. " if existing
+              else f"I added {added} — your week is {target}. ")
+           + (f"{occ} is live, so the week builds towards it. " if occ else "")
+           + (f"Selling well: {', '.join(wins)} — those get the proof posts. " if wins else "")
+           + (f"Struggling: {', '.join(slow)} — those get the detail posts, which "
+              f"are the ones that actually sell. " if slow else "")
+           + "Approve makes each picture and schedules it; reels go on your task "
+             "list with the prompt ready for Google Flow.")
+    return {"headline": f"Next week is planned — {n} post{'' if n == 1 else 's'} waiting",
+            "body": body, "why": why, "cta": f"Approve all {n}"}
+
+
 WRITERS = {
     "winback": _winback, "festival": _festival, "reorder": _reorder,
     "overstock": _overstock, "supplier_risk": _supplier_risk,
@@ -311,7 +338,8 @@ WRITERS = {
 }
 # Dynamic ids (one per social post, e.g. "post_a1b2c3") can't live in WRITERS
 # by exact match, so they're matched by prefix instead, checked in dress().
-PREFIX_WRITERS = [("post_", _social_post), ("content_", _social)]
+PREFIX_WRITERS = [("post_", _social_post), ("content_", _social),
+                  ("autoplan_", _autoplan_week)]
 
 
 def dress(card: dict) -> dict:

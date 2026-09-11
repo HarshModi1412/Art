@@ -2340,3 +2340,114 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .vt-warn { margin-top: 8px; }
 .vt-warn summary { cursor: pointer; font-size: 12px; color: var(--amber); }
 .vt-warn ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.6; color: var(--text-2); }
+
+/* =====================================================================
+   Weekly auto-plan, post tasks and the reel task popup
+   ===================================================================== */
+
+/* ---------- the task list, now the first thing on Home ---------- */
+.task-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 16px 20px 10px; margin-bottom: 18px;
+  box-shadow: var(--shadow);
+}
+.task-card-h { display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+.task-card-h h3 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.task-card .task-add { margin: 0; flex: 1 1 260px; max-width: 420px; }
+.task-post { align-items: flex-start; padding: 11px 4px; }
+.task-post .t { display: grid; gap: 3px; min-width: 0; }
+.task-post .t b { font-size: 13.8px; font-weight: 600; line-height: 1.35; }
+.task-sub { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.task-dots { display: flex; gap: 4px; margin-top: 3px; }
+.task-dots i { width: 18px; height: 4px; border-radius: 2px; background: var(--surface-2);
+  border: 1px solid var(--border); }
+.task-dots i.on { background: var(--green); border-color: var(--green); }
+.task-ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: none; }
+.task-ico svg { width: 15px; height: 15px; }
+.task-ico.reel { background: var(--amber-soft); color: var(--amber); }
+.task-ico.photo { background: var(--blue-soft); color: var(--blue); }
+.task-post .btn { flex: none; align-self: center; }
+
+/* ---------- Approval panel: the week header and why-this-product ---------- */
+.ins-kind.plan { background: var(--primary-soft); color: var(--primary); }
+.wk-card { border-color: var(--primary-line); background: var(--surface); }
+.wk-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: -2px 0 10px; }
+.wk-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 99px; background: var(--surface-2); color: var(--text-2);
+  border: 1px solid var(--border); }
+.wk-chip svg { width: 11px; height: 11px; }
+.wk-chip.fest { background: var(--amber-soft); color: var(--amber); border-color: transparent; }
+.wk-chip.win { background: var(--green-soft); color: var(--green); border-color: transparent; }
+.wk-chip.slow { background: var(--red-soft); color: var(--red); border-color: transparent; }
+.ins-why { font-size: 11.5px; line-height: 1.5; color: var(--text-2); margin: -4px 0 9px;
+  padding: 6px 8px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); }
+.ins-why.winner { border-left: 3px solid var(--green); }
+.ins-why.struggling { border-left: 3px solid var(--red); }
+.ins-why.festival { border-left: 3px solid var(--amber); }
+
+/* ---------- the week's brief ---------- */
+.wk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.wk-grid h4 { margin: 4px 0 6px; font-size: 13px; }
+.wk-list { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; color: var(--text-2); }
+.wk-list li { margin-bottom: 4px; }
+.wk-list li.win b { color: var(--green); }
+.wk-list li.slow b { color: var(--red); }
+.wk-sig { font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 99px;
+  background: var(--surface-2); color: var(--muted); margin-left: 4px; }
+.wk-sig.winner { background: var(--green-soft); color: var(--green); }
+.wk-sig.struggling { background: var(--red-soft); color: var(--red); }
+.wk-sig.festival { background: var(--amber-soft); color: var(--amber); }
+@media (max-width: 640px) { .wk-grid { grid-template-columns: 1fr; } }
+
+/* ---------- the reel task, one step at a time ---------- */
+.vt-steps2 { list-style: none; margin: 10px 0 12px; padding: 0; counter-reset: vs; }
+.vt-steps2 > li { counter-increment: vs; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; margin-bottom: 8px; background: var(--surface-2); }
+.vt-steps2 .vs-h { display: flex; align-items: center; gap: 9px; }
+.vt-steps2 .vs-h i { width: 22px; height: 22px; border-radius: 50%; flex: none; display: grid;
+  place-items: center; font-style: normal; font-size: 11.5px; font-weight: 700;
+  background: var(--surface); border: 1px solid var(--border-strong); color: var(--muted); }
+.vt-steps2 .vs-h i::before { content: counter(vs); }
+.vt-steps2 .vs-h b { font-size: 13.5px; }
+.vt-steps2 .vs-b { display: none; margin: 9px 0 2px 31px; }
+.vt-steps2 > li.current { border-color: var(--primary); background: var(--surface); }
+.vt-steps2 > li.current .vs-b { display: block; }
+.vt-steps2 > li.current .vs-h i { border-color: var(--primary); color: var(--primary); }
+.vt-steps2 > li.done .vs-h i { background: var(--green); border-color: var(--green); color: #fff; }
+.vt-steps2 > li.done .vs-h i::before { content: "✓"; }
+.vt-steps2 > li.done .vs-h b { color: var(--muted); }
+/* A finished step reopens when its title is tapped — copying the prompt again
+   is the common reason. Deliberately not on hover: a step that expands under
+   the pointer shoves the next button away just as it is clicked. */
+.vt-steps2 > li.open .vs-b { display: block; }
+.vt-steps2 .vs-h { cursor: pointer; }
+.vt-steps2 .sm-prompt-body { max-height: 180px; overflow: auto; margin: 0 0 8px; }
+.vt-steps2 .sm-vid-slot { margin-bottom: 4px; }
+
+/* ---------- the auto-plan line on the Social page ---------- */
+.ap-strip { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  flex-wrap: wrap; border: 1px solid var(--border); border-left: 3px solid var(--primary);
+  border-radius: var(--radius); background: var(--surface); padding: 11px 14px; margin: 0 0 14px; }
+.ap-strip.off { border-left-color: var(--border-strong); }
+.ap-strip-t { display: flex; gap: 10px; align-items: flex-start; min-width: 0; flex: 1 1 380px; }
+.ap-strip-t > svg { width: 18px; height: 18px; color: var(--primary); flex: none; margin-top: 2px; }
+.ap-strip-t b { display: block; font-size: 13.5px; }
+.ap-strip-t span { display: block; line-height: 1.5; margin-top: 2px; }
+.ap-strip-a { display: flex; gap: 8px; flex-wrap: wrap; }
+.ap-setup { border: 1px solid var(--border); border-radius: var(--radius); padding: 11px 13px;
+  margin: 6px 0 14px; background: var(--surface-2); }
+.ap-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13.5px; }
+.ap-toggle input { width: 17px; height: 17px; accent-color: var(--primary); }
+.ap-setup-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+
+/* ---------- editor: what Studio will draw ---------- */
+.sm-studio { display: grid; grid-template-columns: 96px 1fr; gap: 10px; align-items: start; margin-top: 8px; }
+.sm-studio img { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+.sm-studio .pp-text { max-height: 160px; overflow: auto; }
+.sm-studio:not(:has(img)) { grid-template-columns: 1fr; }
+.sm-why { color: var(--text-2); }
+
+/* ---------- the two new post states ---------- */
+.st-appr { background: var(--primary-soft); color: var(--primary); }
+.cal-post.st-approved { border-left-color: var(--primary); }

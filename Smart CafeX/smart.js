@@ -853,12 +853,6 @@ function renderHome(s) {
   }).join("");
 
   const tasks = (s.tasks || []);
-  const taskRows = tasks.length ? tasks.map((t) => `
-      <div class="task-item ${t.done ? "done" : ""}" data-task="${t.id}">
-        <input type="checkbox" ${t.done ? "checked" : ""} />
-        <span class="t">${esc(t.text)}</span>
-        <button class="task-del" title="Delete">${sic("close")}</button>
-      </div>`).join("") : `<div class="ap-empty">No tasks yet. Approving an insight adds one automatically.</div>`;
 
   setView(`
     <div class="page-head">
@@ -869,6 +863,23 @@ function renderHome(s) {
           ${sic("refresh")}Refresh</button>
       </div>
     </div>
+
+    <!-- The task list leads the home screen. Approving a reel puts a dated
+         task here (make the clip in Google Flow, upload it, schedule it), and a
+         task with a posting time on it is the most urgent thing on the page. -->
+    <section class="task-card" id="taskBox">
+      <div class="task-card-h">
+        <div>
+          <div class="today-eyebrow">Your tasks</div>
+          <h3 id="taskHead">${taskHeadline(tasks)}</h3>
+        </div>
+        <div class="task-add">
+          <input id="taskInput" placeholder="Add a task…" />
+          <button class="btn primary sm" id="taskAddBtn">Add</button>
+        </div>
+      </div>
+      <div id="taskList">${taskRowsHtml(tasks)}</div>
+    </section>
 
     <section class="today" id="todayBox">
       <div class="today-h">
@@ -905,16 +916,6 @@ function renderHome(s) {
       <div class="chan-strip" id="chanStrip"><div class="ap-empty">Loading platforms…</div></div>
     </details>
 
-    <details class="fold" ${tasks.length ? "open" : ""}>
-      <summary>My tasks ${tasks.filter((t) => !t.done).length ? `<span class="fold-count">${tasks.filter((t) => !t.done).length}</span>` : ""}</summary>
-      <div class="card">
-        <div class="task-add">
-          <input id="taskInput" placeholder="Add a task…" />
-          <button class="btn primary sm" id="taskAddBtn">Add</button>
-        </div>
-        <div id="taskList">${taskRows}</div>
-      </div>
-    </details>
   `);
 
   document.querySelectorAll("[data-mod]").forEach((el) => el.onclick = () => {
@@ -983,13 +984,60 @@ async function addTask() {
   const r = await api("/api/smart/tasks", { method: "POST", json: { action: "add", text } });
   refreshTaskList(r.tasks);
 }
+/* Post tasks first (the ones with a posting time on them, soonest first), then
+   the seller's own, then a few recently finished ones so a tick is visible. */
+function orderTasks(tasks) {
+  const open = (tasks || []).filter((t) => !t.done);
+  const post = open.filter((t) => t.post_id).sort((a, b) => String(a.due || "").localeCompare(String(b.due || "")));
+  const own = open.filter((t) => !t.post_id);
+  const done = (tasks || []).filter((t) => t.done).slice(-4).reverse();
+  return [...post, ...own, ...done];
+}
+function taskHeadline(tasks) {
+  const open = (tasks || []).filter((t) => !t.done);
+  const reels = open.filter((t) => t.kind === "video").length;
+  if (!open.length) return "Nothing waiting on you";
+  if (reels) return `${open.length} to do · ${reels} reel${reels === 1 ? "" : "s"} to make`;
+  return `${open.length} to do`;
+}
+function taskRowsHtml(tasks) {
+  const rows = orderTasks(tasks);
+  if (!rows.length) return `<div class="ap-empty">No tasks yet. Approving a reel adds one here, with every step to finish it.</div>`;
+  return rows.map((t) => {
+    if (t.post_id && !t.done) {
+      const steps = t.steps || [];
+      const doneSteps = new Set(t.steps_done || []);
+      const n = steps.filter((x) => doneSteps.has(x.id)).length;
+      const next = steps.find((x) => !doneSteps.has(x.id));
+      return `
+      <div class="task-item task-post" data-task="${esc(t.id)}">
+        <span class="task-ico ${t.kind === "video" ? "reel" : "photo"}">${sic(t.kind === "video" ? "play" : "image")}</span>
+        <div class="t">
+          <b>${esc(t.text)}</b>
+          <span class="task-sub">${n} of ${steps.length} steps done${next ? ` · next: ${esc(next.label)}` : ""}${t.reason ? ` · ${esc(t.reason.length > 90 ? t.reason.slice(0, 88) + "…" : t.reason)}` : ""}</span>
+          <span class="task-dots">${steps.map((x) => `<i class="${doneSteps.has(x.id) ? "on" : ""}" title="${esc(x.label)}"></i>`).join("")}</span>
+        </div>
+        <button class="btn primary sm" data-vtask="${esc(t.id)}">${t.kind === "video" ? "Open task" : "Add picture"}</button>
+      </div>`;
+    }
+    return `
+      <div class="task-item ${t.done ? "done" : ""}" data-task="${esc(t.id)}">
+        <input type="checkbox" ${t.done ? "checked" : ""} ${t.post_id ? "disabled" : ""} />
+        <span class="t">${esc(t.text)}</span>
+        <button class="task-del" title="Delete">${sic("close")}</button>
+      </div>`;
+  }).join("");
+}
 function wireTasks() {
+  document.querySelectorAll("#taskList [data-vtask]").forEach((b) => b.onclick = () => openVideoTask(b.dataset.vtask));
   document.querySelectorAll("#taskList [data-task]").forEach((row) => {
-    row.querySelector("input").onchange = async (e) => {
+    const box = row.querySelector("input[type=checkbox]");
+    if (box) box.onchange = async (e) => {
       const r = await api("/api/smart/tasks", { method: "POST", json: { action: "toggle", task_id: row.dataset.task, done: e.target.checked } });
       refreshTaskList(r.tasks);
     };
-    row.querySelector(".task-del").onclick = async () => {
+    const del = row.querySelector(".task-del");
+    if (del) del.onclick = async () => {
       const text = (row.querySelector(".t") || {}).textContent || "";
       const r = await api("/api/smart/tasks", { method: "POST", json: { action: "delete", task_id: row.dataset.task } });
       refreshTaskList(r.tasks);
@@ -1003,12 +1051,8 @@ function wireTasks() {
 function refreshTaskList(tasks) {
   if (state.lastState) state.lastState.tasks = tasks;
   const list = $("taskList"); if (!list) return;
-  list.innerHTML = tasks.length ? tasks.map((t) => `
-      <div class="task-item ${t.done ? "done" : ""}" data-task="${t.id}">
-        <input type="checkbox" ${t.done ? "checked" : ""} />
-        <span class="t">${esc(t.text)}</span>
-        <button class="task-del" title="Delete">${sic("close")}</button>
-      </div>`).join("") : `<div class="ap-empty">No tasks yet.</div>`;
+  list.innerHTML = taskRowsHtml(tasks || []);
+  const head = $("taskHead"); if (head) head.textContent = taskHeadline(tasks || []);
   wireTasks();
 }
 
@@ -1027,10 +1071,12 @@ function renderApprovals(insights) {
      page, then escalate to "everything matching". The same idea applies here:
      a seller with nine pending insights should not have to press Approve nine
      times to agree with all of them. The count is in the label so the tap is
-     never ambiguous about how much it is agreeing to. */
-  const bulk = insights.length > 1 ? `
+     never ambiguous about how much it is agreeing to. The weekly plan's header
+     card is not counted: its posts are already in the list. */
+  const actionable = insights.filter((i) => !i.summary);
+  const bulk = actionable.length > 1 ? `
     <div class="ap-bulk">
-      <button class="btn approve sm" id="apAll">✓ Approve all ${insights.length}</button>
+      <button class="btn approve sm" id="apAll">✓ Approve all ${actionable.length}</button>
       <button class="btn ghost sm" id="apNone">Dismiss all</button>
     </div>` : "";
 
@@ -1047,21 +1093,51 @@ function renderApprovals(insights) {
            <span>${esc(i.manager_remit || "")}</span>
          </div>` : "";
     lastMgr = i.manager || lastMgr;
+
+    // The week the Social Media Manager planned on its own: what it found and
+    // one decision for all of it, above the posts themselves.
+    if (i.summary) {
+      const chips = [
+        i.occasion ? `<span class="wk-chip fest">${esc(i.occasion)}</span>` : "",
+        ...(i.winners || []).map((w) => `<span class="wk-chip win" title="Selling well">${sic("trend")}${esc(w)}</span>`),
+        ...(i.strugglers || []).map((w) => `<span class="wk-chip slow" title="Struggling">${esc(w)}</span>`),
+      ].join("");
+      return head + `
+      <div class="ins-card mgr-card wk-card" data-ins="${esc(i.id)}" style="--mgr:${esc(i.manager_colour || "#5c6790")}">
+        <span class="ins-kind plan">WEEKLY PLAN · ${esc(i.week_label || "")}</span>
+        <div class="ins-title"><span>${esc(i.headline || i.title)}</span></div>
+        <div class="ins-detail">${esc(i.body || i.detail)}</div>
+        ${chips ? `<div class="wk-chips">${chips}</div>` : ""}
+        <div class="ins-actions">
+          <button class="btn approve" data-apweek="${esc(i.id)}">${esc(i.cta || "Approve all")}</button>
+          <button class="btn ghost" data-details="${esc(i.id)}">Details</button>
+          <button class="btn reject" data-cancel="${esc(i.id)}">Cancel</button>
+        </div>
+      </div>`;
+    }
+
     // A reel and a photo post ask completely different things of the seller, so
     // the card says which it is BEFORE they tap, and the button says what will
     // actually happen.
     const kind = i.kind_label ? `<span class="ins-kind ${i.kind === "reel" ? "reel" : "photo"}">${esc(i.kind_label)}</span>` : "";
     const need = i.needs_from_you ? `<div class="ins-need">${sic(i.kind === "reel" ? "play" : "image")}<span>${esc(i.needs_from_you)}</span></div>` : "";
+    const isPost = String(i.id).startsWith("post_");
+    // Why THIS product, this week — the sales signal or festival behind it.
+    const why = isPost && i.plan_reason
+      ? `<div class="ins-why ${esc(i.signal || "")}">${esc(i.plan_reason)}</div>` : "";
     return head + `
-    <div class="ins-card mgr-card" data-ins="${i.id}" style="--mgr:${esc(i.manager_colour || "#5c6790")}">
+    <div class="ins-card mgr-card" data-ins="${esc(i.id)}" style="--mgr:${esc(i.manager_colour || "#5c6790")}">
       ${kind}
       <div class="ins-title"><span>${esc(i.headline || i.title)}</span></div>
       <div class="ins-detail">${esc(i.body || i.detail)}</div>
+      ${why}
       ${need}
       <div class="ins-actions">
-        <button class="btn approve" data-approve="${i.id}">${esc(i.cta || "Approve")}</button>
-        <button class="btn reject" data-reject="${i.id}">Not now</button>
-        <button class="btn ghost" data-details="${i.id}">Details</button>
+        <button class="btn approve" data-approve="${esc(i.id)}">${esc(i.cta || "Approve")}</button>
+        <button class="btn ghost" data-details="${esc(i.id)}">Details</button>
+        ${isPost
+          ? `<button class="btn reject" data-cancel="${esc(i.id)}">Cancel</button>`
+          : `<button class="btn reject" data-reject="${esc(i.id)}">Not now</button>`}
       </div>
     </div>`;
   }).join("");
@@ -1070,23 +1146,82 @@ function renderApprovals(insights) {
 
   list.querySelectorAll("[data-approve]").forEach((b) => b.onclick = () => decide(b.dataset.approve, "approve"));
   list.querySelectorAll("[data-reject]").forEach((b) => b.onclick = () => decide(b.dataset.reject, "disapprove"));
+  list.querySelectorAll("[data-cancel]").forEach((b) => b.onclick = () => decide(b.dataset.cancel, "cancel"));
   list.querySelectorAll("[data-details]").forEach((b) => b.onclick = () => openDetails(b.dataset.details));
+  list.querySelectorAll("[data-apweek]").forEach((b) => b.onclick = () => {
+    const card = insights.find((x) => x.id === b.dataset.apweek);
+    if (card) approveWeek(card);
+  });
 
   const runAll = async (decision, label) => {
     const btn = $(decision === "approve" ? "apAll" : "apNone");
     if (btn) { btn.disabled = true; btn.textContent = label + "…"; }
     // Sequential, not Promise.all: each decision mutates the same server-side
     // insight list, and firing nine concurrent writes at it loses some of them.
+    // Posts go through the same approve-and-make-ready path as their own
+    // button, so "Approve all" never schedules a post with an empty frame.
     let done = 0;
-    for (const i of insights) {
-      try { await api(`/api/smart/insight/${i.id}/decision`, { method: "POST", json: { decision } }); done++; }
+    for (const i of actionable) {
+      try {
+        if (String(i.id).startsWith("post_") && decision === "approve") {
+          if (btn) btn.textContent = `${label}… ${done + 1}/${actionable.length}`;
+          await approvePostReady(i.id.slice(5), { batch: true });
+        } else if (String(i.id).startsWith("post_")) {
+          await api(`/api/smart/insight/${i.id}/decision`, { method: "POST", json: { decision: "cancel" } });
+        } else {
+          await api(`/api/smart/insight/${i.id}/decision`, { method: "POST", json: { decision } });
+        }
+        done++;
+      }
       catch (e) { /* keep going — one failure should not strand the rest */ }
     }
-    toast(`${done} of ${insights.length} handled.`);
+    toast(`${done} of ${actionable.length} handled.`);
     await goHome();
   };
   if ($("apAll")) $("apAll").onclick = () => runAll("approve", "Approving");
   if ($("apNone")) $("apNone").onclick = () => runAll("disapprove", "Dismissing");
+}
+
+/* Approve every post in an auto-planned week, one at a time so each picture is
+   drawn and each reel gets its task, with progress on screen. */
+async function approveWeek(card) {
+  const ids = card.post_ids || [];
+  if (!ids.length) return;
+  const out = { pics: 0, reels: 0, waiting: 0, failed: 0 };
+  try {
+    await withBusy(`Approving ${ids.length} post${ids.length === 1 ? "" : "s"}…`,
+      "Pictures are drawn from your own photos and brand look, cleaned of any watermark and scheduled. Reels go on your task list.",
+      async () => {
+        for (let n = 0; n < ids.length; n++) {
+          busyStep(`Post ${n + 1} of ${ids.length}…`);
+          try {
+            const r = await approvePostReady(ids[n], { batch: true });
+            if (!r) { out.failed++; continue; }
+            if (r.is_reel) out.reels++;
+            else if (r.post && r.post.state === "scheduled") out.pics++;
+            else out.waiting++;
+            if (r.tasks) refreshTaskList(r.tasks);
+          } catch (e) { out.failed++; }
+        }
+      });
+  } catch (e) { toast(e.message); }
+  await afterPostChange();
+  const bits = [];
+  if (out.pics) bits.push(`${out.pics} picture${out.pics === 1 ? "" : "s"} made & scheduled`);
+  if (out.reels) bits.push(`${out.reels} reel${out.reels === 1 ? "" : "s"} added to your tasks`);
+  if (out.waiting) bits.push(`${out.waiting} waiting on a picture (see tasks)`);
+  if (out.failed) bits.push(`${out.failed} could not be approved`);
+  toast(bits.join(" · ") || "Done.", 8000);
+}
+
+/* Everything that shows a post's state, repainted after one changes. */
+async function afterPostChange() {
+  await refreshApprovals(true);
+  if (state.lastState && state.lastState.tasks) refreshTaskList(state.lastState.tasks);
+  if (_currentModule === "social" && _socialData) {
+    try { _socialData = await api("/api/social"); await renderSocial(); } catch (e) { /* next open repaints */ }
+  }
+  if (!_currentModule && $("upStrip")) renderUpcomingSocial();
 }
 
 /* Approve, and make the post actually postable.
@@ -1137,36 +1272,250 @@ function pickVideoEngine(opts) {
   });
 }
 
-async function approvePostReady(postId) {
-  const post = findPost ? findPost(postId) : null;
-  const isReel = post && post.format === "reel";
+/* Approve one post and make it ready — see _approve_post_ready in main.py.
+   A photo post gets its picture drawn (and cleaned of any watermark) and is
+   scheduled. A reel is approved and gets a task at the top of Home, and the
+   step-by-step popup opens straight away because that is what they need next.
+   `batch` keeps it quiet for Approve-all loops, which report once at the end. */
+async function approvePostReady(postId, opts = {}) {
+  const card = (((state.lastState || {}).insights) || []).find((x) => x.id === "post_" + postId);
+  const isReel = !!(card && card.kind === "reel");
+  const run = () => api("/api/social/approve-ready", { method: "POST", json: { post_id: postId } });
+  if (opts.batch) return run();
   try {
     const r = await withBusy(
-      isReel ? "Approving and writing the shot list…" : "Approving and drawing the picture…",
+      isReel ? "Approving and setting up the video task…" : "Approving and making the picture…",
       isReel
-        ? "A reel is filmed, so this gets you the beats and a prompt for a video AI."
-        : "Generating the image for this post, then putting it on the calendar.",
-      () => api("/api/social/approve-ready", { method: "POST", json: { post_id: postId } }));
-
-    refreshApprovals(true);
-    if (_currentModule === "social" && _socialData) {
-      _socialData = await api("/api/social");
-      await renderSocial();
-    }
-
+        ? "A reel is made in Google Flow — this gets you the prompt and puts every step on your task list."
+        : "Drawn from your own product photo and your brand's look, checked for watermarks, then put on the calendar.",
+      run);
+    if (r.tasks) refreshTaskList(r.tasks);
+    await afterPostChange();
     if (r.is_reel) {
-      // Hand the prompt over immediately — it is the thing they need next, and
-      // making them hunt for it in the editor is the friction this removes.
-      openReelPrompt(r.post, r.script || {});
+      toast("Approved — the reel is on your task list at the top of Home.", 6000);
+      if (r.task) openVideoTask(r.task.id, r.post);
     } else if (r.media_error) {
-      toast("Approved and scheduled — but the picture could not be made: "
-            + r.media_error, 8000);
+      toast("Approved, but the picture could not be made: " + r.media_error
+            + " It is on your task list so it cannot go out empty.", 9000);
     } else if (r.image) {
-      toast("Approved, picture made, scheduled.");
+      const wm = r.watermark || {};
+      toast("Approved, picture made" + (wm.removed ? ", watermark removed" : "") + ", scheduled.");
     } else {
       toast("Approved and scheduled.");
     }
-  } catch (e) { toast(e.message, 6000); }
+    return r;
+  } catch (e) { toast(e.message, 6000); return null; }
+}
+
+/* The reel task, step by step: copy the prompt → open Google Flow → paste,
+   generate and download → upload the clip here (the watermark remover runs on
+   the way in) → save & schedule. Progress is saved on the task, so it reopens
+   where the seller left off — on their phone too. */
+async function openVideoTask(taskId, postHint) {
+  const tasks = ((state.lastState || {}).tasks) || [];
+  let task = tasks.find((t) => t.id === taskId);
+  if (!task && postHint) task = { id: taskId, post_id: postHint.id, kind: "video", steps_done: [] };
+  if (!task) { toast("That task is no longer open."); return; }
+  let post;
+  try { post = await api(`/api/social/post/${encodeURIComponent(task.post_id)}`); }
+  catch (e) { toast(e.message); return; }
+  if (task.kind === "photo" || post.format !== "reel") { openSocialEditor(post); return; }
+
+  if (!_vidTools) { try { _vidTools = await api("/api/studio/video-tools"); } catch (e) { _vidTools = null; } }
+  const flow = ((_vidTools || {}).primary) || {};
+  const flowUrl = flow.url || "https://labs.google/fx/tools/flow";
+  const prompt = ((post.script || {}).ai_prompt || "").trim();
+  const beats = (post.script || {}).beats || [];
+  const done = new Set(task.steps_done || []);
+  // A clip on the post means everything before it happened, whatever was
+  // (or was not) ticked on the way.
+  if (post.video_url) ["copy", "flow", "make", "upload"].forEach((x) => done.add(x));
+  const photo = post.reference_photo || "";
+
+  // Progress writes go one after another: two taps in quick succession would
+  // otherwise race each other on the server and one tick would be lost.
+  let chain = Promise.resolve();
+  const mark = (step) => {
+    if (done.has(step)) return chain;
+    done.add(step);
+    paintSteps();
+    chain = chain.then(async () => {
+      try {
+        const r = await api("/api/smart/tasks", { method: "POST", json: { action: "progress", task_id: task.id, step } });
+        refreshTaskList(r.tasks);
+      } catch (e) { /* the popup still works; progress just is not saved */ }
+    });
+    return chain;
+  };
+  const copyPrompt = async () => {
+    try { await navigator.clipboard.writeText(prompt); return true; }
+    catch (e) {
+      const rg = document.createRange(); rg.selectNodeContents($("vtPrompt"));
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+      return false;
+    }
+  };
+
+  openModal(`Make the reel — ${post.product_name || "your post"}`, `
+    <p class="sm-hint" style="margin-top:0;">Goes out <b>${esc(shortWhen(post.scheduled_at))}</b>${post.occasion ? ` · ${esc(post.occasion)}` : ""}.
+      Five steps; each one ticks itself off as you go.</p>
+    <ol class="vt-steps2" id="vtSteps">
+      <li data-step="copy">
+        <div class="vs-h"><i></i><b>Copy the video prompt</b></div>
+        <div class="vs-b">
+          <pre class="sm-prompt-body" id="vtPrompt">${esc(prompt || "No prompt yet — regenerate the script from the post editor.")}</pre>
+          <button class="btn primary sm" id="vtCopy">${sic("layers")}Copy prompt</button>
+        </div>
+      </li>
+      <li data-step="flow">
+        <div class="vs-h"><i></i><b>Open Google Flow</b></div>
+        <div class="vs-b">
+          <p class="muted tiny" style="margin:0 0 8px;">Sign in, then in the prompt box choose <b>Video → Frames</b> and add
+            ${photo ? `<a href="${esc(photo)}" target="_blank" rel="noopener" download>this product photo</a>` : "your product photo"}
+            as the <b>start frame</b> — that keeps the product in the clip your real product. Set <b>9:16</b> and <b>8 seconds</b>.</p>
+          <a class="btn primary sm" id="vtFlow" href="${esc(flowUrl)}" target="_blank" rel="noopener">${sic("arrow-up-right")}Open Google Flow</a>
+          ${flow.free ? `<span class="muted tiny" style="margin-left:8px;">${esc(flow.free)}</span>` : ""}
+        </div>
+      </li>
+      <li data-step="make">
+        <div class="vs-h"><i></i><b>Paste the prompt, generate, download the clip</b></div>
+        <div class="vs-b">
+          <p class="muted tiny" style="margin:0 0 8px;">Paste (Ctrl+V), press Generate, pick the take you like and download it as MP4.
+            Flow puts its mark in a corner — leave it, we remove it when you upload.</p>
+          <button class="btn ghost sm" id="vtMade">${sic("check")}I have the clip</button>
+        </div>
+      </li>
+      <li data-step="upload">
+        <div class="vs-h"><i></i><b>Upload the clip here</b></div>
+        <div class="vs-b">
+          <div class="sm-vid-slot" id="vtSlot">${post.video_url
+            ? `<video src="${esc(post.video_url)}" controls playsinline preload="metadata"></video>`
+            : `<div class="sm-vid-empty">${sic("play")}<b>No clip yet</b><span>MP4 or WEBM, up to 48MB.</span></div>`}</div>
+          <div id="vtWm" class="muted tiny" style="margin:6px 0;"></div>
+          <button class="btn ${post.video_url ? "ghost" : "primary"} sm" id="vtPick">${sic("arrow-up-right")}${post.video_url ? "Replace clip" : "Choose the clip"}</button>
+          <input type="file" id="vtFile" accept="video/mp4,video/webm,video/quicktime" hidden />
+        </div>
+      </li>
+      <li data-step="schedule">
+        <div class="vs-h"><i></i><b>Save &amp; schedule</b></div>
+        <div class="vs-b">
+          <label class="fld" style="margin:0 0 8px;"><span>Goes out</span>
+            <input id="vtWhen" type="datetime-local" value="${esc(post.scheduled_at || "")}" /></label>
+          <button class="btn approve" id="vtSchedule">Save &amp; schedule</button>
+        </div>
+      </li>
+    </ol>
+    ${beats.length ? `<details class="sm-vid-opt"><summary>Rather film it yourself? The shot list</summary>
+      <div class="sm-script-rows">${beats.map((b) => `
+        <div class="sm-beat-row" style="grid-template-columns:64px 1fr 1fr;">
+          <input value="${esc(b.sec || "")}" readonly /><input value="${esc(b.shot || "")}" readonly />
+          <input value="${esc(b.on_screen_text || "")}" readonly /></div>`).join("")}</div></details>` : ""}
+    <div class="modal-actions">
+      <button class="btn ghost" data-vtclose>Later</button>
+      <button class="btn ghost" id="vtEditor">Open the post</button>
+    </div>`, { wide: true });
+
+  function paintSteps() {
+    const order = ["copy", "flow", "make", "upload", "schedule"];
+    const firstOpen = order.find((x) => !done.has(x));
+    document.querySelectorAll("#vtSteps [data-step]").forEach((li) => {
+      li.classList.toggle("done", done.has(li.dataset.step));
+      li.classList.toggle("current", li.dataset.step === firstOpen);
+    });
+    const sch = $("vtSchedule");
+    if (sch) sch.disabled = !done.has("upload");
+  }
+  paintSteps();
+  // Any step can be reopened by tapping its title — copying the prompt again
+  // is the usual reason, and a phone has no hover.
+  document.querySelectorAll("#vtSteps .vs-h").forEach((h) => h.onclick = () =>
+    h.parentElement.classList.toggle("open"));
+
+  document.querySelector("[data-vtclose]").onclick = closeModal;
+  $("vtEditor").onclick = () => { closeModal(); openSocialEditor(post); };
+  $("vtCopy").onclick = async () => {
+    const ok = await copyPrompt();
+    $("vtCopy").innerHTML = sic("check") + (ok ? "Copied" : "Selected — press Ctrl+C");
+    mark("copy");
+  };
+  // Copy again on the way out, so the paste on the other side always works.
+  $("vtFlow").onclick = () => { copyPrompt(); mark("copy"); mark("flow"); };
+  $("vtMade").onclick = () => mark("make");
+  $("vtPick").onclick = () => $("vtFile").click();
+  $("vtFile").onchange = async () => {
+    const f = $("vtFile").files[0];
+    if (!f) return;
+    if (f.size > 48 * 1024 * 1024) {
+      return toast("That clip is over 48MB. Export it at 1080p — a reel rarely needs more.", 7000);
+    }
+    try {
+      await chain;                 // let any step tick land first
+      const att = await withBusy("Uploading and cleaning your clip…",
+        "The watermark remover checks every corner for Flow's mark and paints it out.",
+        async () => {
+          const fd = new FormData(); fd.append("files", f);
+          const up = await api("/api/site/image", { method: "POST", body: fd });
+          const u = up.url || up.image_url;
+          if (!u) throw new Error("The upload did not come back with a file.");
+          return api("/api/social/attach-video", { method: "POST", json: { post_id: post.id, url: u } });
+        });
+      post.video_url = att.video_url;
+      $("vtSlot").innerHTML = `<video src="${esc(att.video_url)}" controls playsinline preload="metadata"></video>`;
+      const wm = att.watermark || {};
+      $("vtWm").textContent = wm.removed ? "Watermark found and removed."
+        : wm.checked ? "Checked — no watermark on this clip." : (wm.reason || "");
+      $("vtPick").innerHTML = sic("arrow-up-right") + "Replace clip";
+      $("vtPick").className = "btn ghost sm";
+      ["copy", "flow", "make"].forEach((x) => done.add(x));
+      done.add("upload");
+      paintSteps();
+      if (att.tasks) refreshTaskList(att.tasks);
+    } catch (e) { toast(e.message, 7000); }
+    $("vtFile").value = "";
+  };
+  $("vtSchedule").onclick = async () => {
+    try {
+      await chain;
+      const r = await api("/api/social/schedule-ready", { method: "POST",
+        json: { post_id: post.id, scheduled_at: ($("vtWhen") || {}).value || "" } });
+      if (r.tasks) refreshTaskList(r.tasks);
+      closeModal();
+      await afterPostChange();
+      toast("Reel scheduled. Task done.");
+    } catch (e) { toast(e.message, 6000); }
+  };
+}
+
+/* What the planner found for one week, and what it did about it. */
+async function openWeekBrief(card) {
+  let b;
+  try { b = await api(`/api/social/autoplan/brief?week=${encodeURIComponent(card.week || "")}`); }
+  catch (e) { return toast(e.message); }
+  const list = (rows, cls) => rows.length ? `<ul class="wk-list ${cls || ""}">${rows.join("")}</ul>` : `<p class="muted tiny">None.</p>`;
+  const sig = { winner: "Selling well", struggling: "Needs a push", festival: "Festival", steady: "In rotation" };
+  openModal(`Week of ${b.week_label || card.week}`, `
+    <p class="sm-hint" style="margin-top:0;">${esc(b.note || "")}</p>
+    <div class="wk-grid">
+      <div><h4>What is happening that week</h4>
+        ${list((b.opportunities || []).map((o) => `<li><b>${esc(o.name)}</b> — ${esc(o.text)}</li>`))}</div>
+      <div><h4>Sales${b.sales_anchor ? ` <span class="muted tiny">(data to ${esc(b.sales_anchor)})</span>` : ""}</h4>
+        ${b.sales_data ? "" : `<p class="muted tiny">No sales data yet — stock levels were used instead.</p>`}
+        ${list([...(b.winners || []).map((w) => `<li class="win"><b>${esc(w.name)}</b> · ${esc(w.label)} — ${esc(w.why)}</li>`),
+                ...(b.strugglers || []).map((w) => `<li class="slow"><b>${esc(w.name)}</b> · ${esc(w.label)} — ${esc(w.why)}</li>`)])}</div>
+    </div>
+    <h4 style="margin:14px 0 6px;">The posts (${b.added} added, ${b.existing} already planned, ${b.target} a week)</h4>
+    ${list((b.posts || []).map((p) => `<li><b>${esc(shortWhen(p.scheduled_at))}</b> · ${esc(p.product_name)} · ${esc(p.format)}
+        <span class="wk-sig ${esc(p.signal)}">${esc(sig[p.signal] || "")}</span><br><span class="muted tiny">${esc(p.plan_reason)}</span></li>`))}
+    <div class="modal-actions">
+      <button class="btn ghost" data-wkclose>Close</button>
+      <button class="btn ghost" id="wkCal">Open the calendar</button>
+      <button class="btn reject" id="wkCancel">Cancel all</button>
+      <button class="btn approve" id="wkApprove">Approve all</button>
+    </div>`, { wide: true });
+  document.querySelector("[data-wkclose]").onclick = closeModal;
+  $("wkCal").onclick = () => { closeModal(); openModule("social"); };
+  $("wkCancel").onclick = () => { closeModal(); decide(card.id, "cancel"); };
+  $("wkApprove").onclick = () => { closeModal(); approveWeek(card); };
 }
 
 /* What a reel needs the moment it is approved: the beats to film, and a prompt
@@ -1346,6 +1695,28 @@ async function decide(id, decision) {
   if (id && id.startsWith("post_") && decision === "approve") {
     return approvePostReady(id.slice(5));
   }
+  // The weekly plan's header: Approve walks every post through the same
+  // make-it-ready path, one at a time, with progress on screen.
+  if (id && id.startsWith("autoplan_") && decision === "approve") {
+    const card = (((state.lastState || {}).insights) || []).find((x) => x.id === id);
+    if (card) return approveWeek(card);
+  }
+  // Cancel on a planned post, or on the whole week. Undecided posts only —
+  // anything already approved keeps its decision.
+  if (id && (id.startsWith("post_") || id.startsWith("autoplan_")) && decision === "cancel") {
+    const whole = id.startsWith("autoplan_");
+    if (whole && !confirm("Cancel every post in this week's plan that you have not approved yet?")) return;
+    try {
+      await api(`/api/smart/insight/${id}/decision`, { method: "POST", json: { decision: "cancel" } });
+      await afterPostChange();
+      if (whole) toast("Week's plan cancelled. Posts you already approved are untouched.");
+      else toastUndo("Post cancelled — it will not go out.", async () => {
+        await api("/api/social/state", { method: "POST", json: { post_id: id.slice(5), state: "draft" } });
+        await afterPostChange();
+      });
+    } catch (e) { toast(e.message); }
+    return;
+  }
   try {
     const r = await api(`/api/smart/insight/${id}/decision`, { method: "POST", json: { decision } });
     if (state.lastState) {
@@ -1408,6 +1779,13 @@ $("drawerBack").onclick = closeHistory;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("historyDrawer").hidden) closeHistory(); });
 
 function openDetails(id) {
+  // A planned post's details ARE the post: caption, picture prompt, why this
+  // product — all in the editor. The week header opens what the planner found.
+  if (id && id.startsWith("post_")) return openSocialPostDetails(id.slice(5));
+  if (id && id.startsWith("autoplan_")) {
+    const card = (((state.lastState || {}).insights) || []).find((x) => x.id === id);
+    if (card) return openWeekBrief(card);
+  }
   /* The panel body is one line by design — it has to fit a narrow column.
      The manager's full reasoning lives here, so a seller who wants to know
      WHY before pressing the button can read it without the panel becoming a
@@ -5906,8 +6284,9 @@ async function openSocial() {
 
 function socialStateChip(st) {
   const map = { draft: ["Draft", "st-draft"], ready: ["Ready", "st-ready"],
+                approved: ["Approved · needs media", "st-appr"],
                 scheduled: ["Scheduled", "st-sched"], published: ["Published", "st-pub"],
-                failed: ["Failed", "st-fail"] };
+                failed: ["Failed", "st-fail"], cancelled: ["Cancelled", "st-fail"] };
   const [label, cls] = map[st] || ["Draft", "st-draft"];
   return `<span class="sm-chip ${cls}">${label}</span>`;
 }
@@ -5916,8 +6295,9 @@ let _socialMonth = null;   // {year, month} being viewed
 
 function socialStateChipFor(st) {
   const map = { draft: ["Needs you", "st-draft"], ready: ["Ready", "st-ready"],
+                approved: ["Needs its media", "st-appr"],
                 scheduled: ["Scheduled", "st-sched"], published: ["Posted", "st-pub"],
-                failed: ["Skipped", "st-fail"] };
+                failed: ["Skipped", "st-fail"], cancelled: ["Cancelled", "st-fail"] };
   const [label, cls] = map[st] || ["Draft", "st-draft"];
   return `<span class="sm-chip ${cls}">${label}</span>`;
 }
@@ -5988,6 +6368,8 @@ async function renderSocial() {
         <button class="btn ghost sm danger" id="smClearPlan" title="Delete every planned post and campaign">${sic("close")}Clear plan</button>
       </div>
     </div>
+
+    ${autoplanStrip(d.autoplan)}
 
     <div id="smCampaigns"></div>
 
@@ -6077,6 +6459,8 @@ async function renderSocial() {
   };
   $("smBuild").onclick = () => build(1);
   $("smBuild4").onclick = () => build(4);
+  if ($("apRunNow")) $("apRunNow").onclick = () => runAutoplanNow();
+  if ($("apChange")) $("apChange").onclick = openSocialSetup;
   $("smShoot").onclick = openShootList;
   $("smSettings").onclick = openSocialSetup;
   $("smClearPlan").onclick = async () => {
@@ -6138,6 +6522,50 @@ async function renderSocial() {
 
 let _socialCal = null;
 
+/* The automatic weekly plan, said in one line at the top of the planner. */
+function autoplanStrip(ap) {
+  if (!ap) return "";
+  const hr = (h) => { const n = Number(h) || 0; return `${((n + 11) % 12) + 1}${n < 12 ? " AM" : " PM"}`; };
+  const last = ap.last || null;
+  return `
+    <div class="ap-strip ${ap.enabled ? "on" : "off"}">
+      <div class="ap-strip-t">
+        ${sic("clock")}
+        <div>
+          <b>${ap.enabled
+            ? `Plans next week by itself every ${esc(ap.day_name)} at ${esc(hr(ap.hour))}`
+            : "Automatic weekly planning is off"}</b>
+          <span class="muted tiny">${ap.enabled
+            ? (ap.pending_week ? `Next week is due now — it runs in the background as soon as it can.`
+               : `Next run ${esc(ap.next_run_label || "")}. It checks festivals, what is already planned and how each product is selling, then puts the posts in your Approval panel.`)
+            : "Turn it on in Setup and the week plans itself."}
+            ${last ? ` Last plan: ${esc(last.week_label || "")} — ${esc(last.note || "")}` : ""}</span>
+        </div>
+      </div>
+      <div class="ap-strip-a">
+        <button class="btn primary sm" id="apRunNow">${sic("spark")}Plan next week now</button>
+        <button class="btn ghost sm" id="apChange">${sic("settings")}Change day</button>
+      </div>
+    </div>`;
+}
+
+async function runAutoplanNow() {
+  const b = $("apRunNow");
+  if (b && b.disabled) return;
+  if (b) b.disabled = true;
+  try {
+    const r = await withBusy("Planning next week…",
+      "Checking festivals and seasons, what is already on the calendar and how each product is selling — then writing each post and its Product Studio prompt.",
+      () => api("/api/social/autoplan/run-now", { method: "POST", json: {} }));
+    const br = r.brief || {};
+    await afterPostChange();
+    toast(br.added
+      ? `${br.added} post${br.added === 1 ? "" : "s"} planned for ${br.week_label} — they are in your Approval panel.`
+      : (br.note || "Nothing to add."), 8000);
+  } catch (e) { toast(e.message, 6000); }
+  if ($("apRunNow")) $("apRunNow").disabled = false;
+}
+
 function shortWhen(iso) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -6186,7 +6614,19 @@ function openSocialEditor(post) {
       ${post.beat_job ? `<p class="sm-hint" style="margin:6px 0 0;">${esc(post.beat_job)}</p>` : ""}
       ${post.earns ? `<p class="sm-hint" style="margin:2px 0 0;"><b>Earns:</b> ${esc(post.earns)}</p>` : ""}
       ${post.theme ? `<p class="sm-hint" style="margin:2px 0 0;"><b>This week:</b> ${esc(post.theme)}</p>` : ""}
+      ${post.plan_reason ? `<p class="sm-hint sm-why" style="margin:6px 0 0;"><b>Why this product:</b> ${esc(post.plan_reason)}</p>` : ""}
     </div>` : "";
+
+  /* What Product Studio will draw, written when the week was planned from the
+     product's own photo and the brand's look — readable before approving. */
+  const studioBlock = (!isReel && post.image_prompt && !post.image_url) ? `
+    <details class="sm-vid-opt" open>
+      <summary>What Product Studio will draw${post.reference_photo ? " (starting from your photo)" : ""}</summary>
+      <div class="sm-studio">
+        ${post.reference_photo ? `<img src="${esc(post.reference_photo)}" alt="Your product photo" />` : ""}
+        <pre class="pp-text">${esc(post.image_prompt)}</pre>
+      </div>
+    </details>` : "";
 
   /* Where the finished clip goes.
      A reel slot could be planned, scripted and handed a prompt for a video AI
@@ -6251,6 +6691,7 @@ function openSocialEditor(post) {
         <div class="sm-ed-imgacts">
           <button class="btn primary sm" id="smGenRef">${sic("image")}Re-shoot my photo</button>
           <button class="btn ghost sm" id="smGenNew">${sic("spark")}Invent a picture</button>
+          <button class="btn ghost sm" id="smUpImg">${sic("arrow-up-right")}Use my own photo</button>
         </div>
         <div class="ai-pick" id="smEnginePick">
           <label for="smEngine">Draw with</label>
@@ -6268,6 +6709,7 @@ function openSocialEditor(post) {
           not for showing a customer what they are buying.</p>
       </div>
     </div>
+    ${studioBlock}
     <details class="sm-vid-opt">
       <summary>Post a video instead of the picture</summary>
       ${videoBlock("No clip on this post")}
@@ -6307,9 +6749,14 @@ function openSocialEditor(post) {
     </div>` : ""}
 
     <div class="modal-actions">
-      <button class="btn ghost" data-mclose2>Cancel</button>
-      <button class="btn reject" id="smSkip">Skip</button>
-      <button class="btn approve" id="smApprove">Approve</button>
+      <button class="btn ghost" data-mclose2>Close</button>
+      ${post.state === "draft" ? `<button class="btn reject" id="smSkip">Cancel post</button>` : ""}
+      ${post.state === "approved" && isReel
+        ? `<button class="btn approve" id="smTask">${sic("play")}Open the video task</button>`
+        : post.state === "approved" && !needsMedia
+          ? `<button class="btn approve" id="smSched">Save &amp; schedule</button>`
+          : post.state === "draft"
+            ? `<button class="btn approve" id="smApprove">${isReel ? "Approve & add the video task" : "Approve & make the picture"}</button>` : ""}
       <button class="btn primary" id="smSave">Save</button>
     </div>`);
 
@@ -6501,9 +6948,11 @@ function openSocialEditor(post) {
       // saved to the post either way, so there is nothing to recover, only a
       // missing element to not write into.
       showAiLeft(true);
+      post.image_url = img.url;
       const shotEl = $("smEdShot");
-      if (shotEl) shotEl.innerHTML = `<img src="${esc(img.url)}" alt="" /><span class="sm-gen">AI</span>`;
+      if (shotEl) { shotEl.innerHTML = `<img src="${esc(img.url)}" alt="" /><span class="sm-gen">AI</span>`; offerSchedule(); }
       else toast("Your picture is ready — reopen the post to see it.", 6000);
+      if (img.watermark && img.watermark.removed) toast("Picture made — a watermark was found and removed.");
       if (useRef && !img.had_reference) {
         toast("No photo on this product, so it was invented rather than re-shot. " +
               "Add a photo in Product Studio for a picture of the real item.", 7000);
@@ -6512,6 +6961,39 @@ function openSocialEditor(post) {
     } catch (e) { toast(e.message, 6000); b.innerHTML = was; }
     btns.forEach((x) => x.disabled = false);
   };
+  // The seller's own photograph, straight onto the post — the answer when no
+  // image AI is connected, and often the better picture anyway. Not run
+  // through the watermark remover: it is their photo, not a generated one.
+  if ($("smUpImg")) $("smUpImg").onclick = () => pickImage(async (url) => {
+    try {
+      await api("/api/social/attach-image", { method: "POST", json: { post_id: post.id, url } });
+      post.image_url = url;
+      const shotEl = $("smEdShot");
+      if (shotEl) shotEl.innerHTML = `<img src="${esc(url)}" alt="" />`;
+      offerSchedule();
+    } catch (e) { toast(e.message, 6000); }
+  });
+  // An approved post that was only waiting for its picture can go out as soon
+  // as it has one — offer Save & schedule right here instead of a round trip.
+  function offerSchedule() {
+    const warn = document.querySelector(".sm-needs");
+    if (warn) warn.remove();
+    if (post.state !== "approved" || $("smSched")) return;
+    const acts = document.querySelector(".modal-actions");
+    if (!acts) return;
+    const b = document.createElement("button");
+    b.className = "btn approve"; b.id = "smSched"; b.innerHTML = "Save &amp; schedule";
+    acts.insertBefore(b, $("smSave"));
+    b.onclick = async () => {
+      try {
+        const r = await api("/api/social/schedule-ready", { method: "POST",
+          json: { post_id: post.id, scheduled_at: $("smWhen").value } });
+        if (r.tasks) refreshTaskList(r.tasks);
+        closeModal(); await afterEdit();
+        toast("Scheduled.");
+      } catch (e) { toast(e.message, 6000); }
+    };
+  }
   if ($("smGenRef")) $("smGenRef").onclick = async () => { await loadEngines(true); gen(true); };
   if ($("smGenNew")) $("smGenNew").onclick = async () => { await loadEngines(false); gen(false); };
 
@@ -6528,15 +7010,30 @@ function openSocialEditor(post) {
     }
     refreshApprovals(true);
   };
-  $("smApprove").onclick = async () => {
-    await decidePost(post.id, "scheduled");
+  // Approve here means the same as in the Approval panel: a photo post gets
+  // its picture made and is scheduled; a reel gets its task.
+  if ($("smApprove")) $("smApprove").onclick = async () => {
     closeModal();
-    toast("Approved — scheduled.");
+    await approvePostReady(post.id);
   };
-  $("smSkip").onclick = async () => {
-    await decidePost(post.id, "failed");
+  if ($("smTask")) $("smTask").onclick = () => {
+    const t = ((((state.lastState || {}).tasks) || []).find((x) => x.post_id === post.id && !x.done));
     closeModal();
-    toast("Skipped.");
+    openVideoTask(t ? t.id : `post-${post.id}`, post);
+  };
+  if ($("smSched")) $("smSched").onclick = async () => {
+    try {
+      const r = await api("/api/social/schedule-ready", { method: "POST",
+        json: { post_id: post.id, scheduled_at: $("smWhen").value } });
+      if (r.tasks) refreshTaskList(r.tasks);
+      closeModal(); await afterEdit();
+      toast("Scheduled.");
+    } catch (e) { toast(e.message, 6000); }
+  };
+  if ($("smSkip")) $("smSkip").onclick = async () => {
+    await decidePost(post.id, "cancelled");
+    closeModal();
+    toast("Cancelled — it will not go out.");
   };
   $("smSave").onclick = async () => {
     const tags = ($("smTags").value || "").split(/\s+/).filter(Boolean).slice(0, 5);
@@ -6709,6 +7206,23 @@ function openSocialSetup() {
         `<option value="${k}"${s.cadence === k ? " selected" : ""}>${esc(v.label)} — ${esc(String(v.posts))} posts a week, ${esc(v.hours)}</option>`).join("")}</select></label>
     <p class="sm-hint" id="soCadWhy">${esc(((d.cadence || {})[s.cadence] || {}).why || "")}</p>
 
+    <div class="ap-setup">
+      <label class="ap-toggle"><input type="checkbox" id="apOn" ${s.auto_plan !== false ? "checked" : ""} />
+        <b>Plan next week automatically</b></label>
+      <div class="ap-setup-row">
+        <label class="fld"><span>Every</span>
+          <select id="apDay">${(d.day_names || ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
+            .map((n, i) => `<option value="${i}"${Number(s.auto_plan_day ?? 5) === i ? " selected" : ""}>${n}</option>`).join("")}</select></label>
+        <label class="fld"><span>At</span>
+          <select id="apHour">${Array.from({ length: 24 }, (_, h) =>
+            `<option value="${h}"${Number(s.auto_plan_hour ?? 9) === h ? " selected" : ""}>${((h + 11) % 12) + 1}:00 ${h < 12 ? "AM" : "PM"}</option>`).join("")}</select></label>
+      </div>
+      <p class="sm-hint">It checks festivals and the season, what is already on the calendar
+        and which products are selling or stuck, then tops next week up to your number of
+        posts — never past it. The posts wait in your Approval panel; nothing goes out
+        until you approve it.</p>
+    </div>
+
     <label class="fld"><span>Your city</span><input id="soCity" value="${esc(s.city || "")}" /></label>
 
     <label class="fld"><span>How people order</span>
@@ -6732,6 +7246,8 @@ function openSocialSetup() {
         category: $("soCat").value, language: $("soLang").value,
         cadence: $("soCad").value, city: $("soCity").value,
         order_cta: $("soCta").value } } });
+      await api("/api/social/autoplan/settings", { method: "POST", json: {
+        enabled: $("apOn").checked, day: Number($("apDay").value), hour: Number($("apHour").value) } });
       closeModal(); await openSocial();
     } catch (e) { toast(e.message); }
   };
@@ -7207,7 +7723,8 @@ async function renderUpcomingSocial() {
           <div class="up-acts">
             ${p.state === "draft" ? `
               <button class="btn ghost xs" data-upok="${esc(p.id)}">Approve</button>
-              <button class="btn ghost xs danger" data-upno="${esc(p.id)}">Skip</button>`
+              <button class="btn ghost xs danger" data-upno="${esc(p.id)}">Cancel</button>`
+              : p.state === "approved" ? `<span class="sm-chip st-appr">Needs media</span>`
               : `<span class="sm-chip st-sched">Scheduled</span>`}
           </div>
         </div>`).join("")}
@@ -7220,8 +7737,9 @@ async function renderUpcomingSocial() {
       renderUpcomingSocial();
     } catch (e) { toast(e.message); }
   };
-  box.querySelectorAll("[data-upok]").forEach((b) => b.onclick = () => decide(b.dataset.upok, "scheduled"));
-  box.querySelectorAll("[data-upno]").forEach((b) => b.onclick = () => decide(b.dataset.upno, "failed"));
+  // Same paths as the Approval panel: approving makes the post ready.
+  box.querySelectorAll("[data-upok]").forEach((b) => b.onclick = () => approvePostReady(b.dataset.upok));
+  box.querySelectorAll("[data-upno]").forEach((b) => b.onclick = () => decide(b.dataset.upno, "cancelled"));
 }
 
 /* =====================================================================

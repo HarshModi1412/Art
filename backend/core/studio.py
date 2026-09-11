@@ -1256,10 +1256,19 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     # into the corner would show the brand twice, once real and once pasted on.
     aicaps.consume(email, "image")
 
+    # Every generated picture goes through the watermark remover BEFORE the
+    # brand tag is added — the other order would have the remover looking at
+    # the seller's own corner plate. Engines known to return unmarked pictures
+    # are checked with stricter limits (see backend/core/watermark.py), so a
+    # white stitch near the corner of a re-shoot is never rubbed out.
+    from backend.core import watermark
+    content, wm_report = watermark.clean_image(content, source=eid)
+
     if not from_ref:
         content = _stamp_brand(content, brief.get("brand_name") or "")
     saved = media.save(f"{uuid.uuid4().hex}.png", content, email)
     return {"url": saved["url"], "durable": saved["durable"], "generated": True,
+            "watermark": wm_report,
             "prompt": prompt, "engine": eng["engine"],
             "engine_label": eng["label"], "model": eng["model"],
             "free": eng["free"],
@@ -1452,8 +1461,13 @@ def generate_video(email: str, product_id: str, prompt: str = "",
     if not data:
         raise RuntimeError(fail)
     aicaps.consume(email, "video")
+    # Same rule as stills: a generated clip is cleaned of any visible corner
+    # mark before it is stored against the seller's post.
+    from backend.core import watermark
+    data, wm_report = watermark.clean_video_bytes(data, "clip.mp4", source=eng["engine"])
     saved = media.save(f"{uuid.uuid4().hex}.mp4", data, email)
     return {"url": saved["url"], "durable": saved["durable"], "generated": True,
+            "watermark": wm_report,
             "product_id": product_id, "prompt": motion,
             "engine": eng["engine"], "engine_label": eng.get("label", ""),
             "model": eng["model"],

@@ -55,6 +55,8 @@ from backend.core import cancel_requests
 from backend.core import social
 from backend.core import personas
 from backend.core import playbook
+from backend.core import autoplan
+from backend.core import watermark
 
 # ---------------------------------------------------------
 # numpy/pandas JSON safety net
@@ -164,6 +166,10 @@ log = logging.getLogger("onetap")
 # ---------------------------------------------------------------------------
 @app.middleware("http")
 async def _state_scope(request, call_next):
+    # The weekly social auto-planner's ticker starts with the first request
+    # rather than at import, so importing the app (tests, scripts) never
+    # spawns a thread. It is one flag check after that.
+    autoplan.ensure_scheduler()
     with user_store.request_scope():
         return await call_next(request)
 
@@ -2334,7 +2340,41 @@ def _smart_status_payload(email: str, sess) -> dict:
         # home screen leads with this for a seller who has just signed up, and
         # hides it entirely once they are through it.
         "setup": setup_steps.progress(email),
+        # When the Social Media Manager plans next week on its own.
+        "autoplan": _safe_autoplan_status(email),
     }
+
+
+def _safe_autoplan_status(email: str) -> dict | None:
+    try:
+        return autoplan.status(email)
+    except Exception:  # noqa: BLE001 — the home screen must never fail on this
+        return None
+
+
+def _home_fingerprint(email: str) -> str:
+    """Everything else the home screen shows that cache.stamp() cannot see.
+
+    BUG THIS FIXES: the ETag was the data fingerprint alone — datasets and
+    order count. Approving a post, ticking a task or a new auto-planned week
+    changed none of those, so the browser was told "304, nothing changed" and
+    kept painting the Approval panel and task list from before the action."""
+    try:
+        posts = [(p.get("id"), p.get("state"), bool(p.get("image_url")),
+                  bool(p.get("video_url")), p.get("scheduled_at"))
+                 for p in social._posts(email)]
+        tasks = [(t.get("id"), t.get("done"), tuple(t.get("steps_done") or []))
+                 for t in smart.get_tasks(email)]
+        dec = user_store.get_key(email, "smart_decisions", {}) or {}
+        ap = user_store.get_key(email, autoplan.STATE_KEY, {}) or {}
+        # Not the content-suggestion id: the payload itself creates one on the
+        # first read, which would make every first 200 look stale. Deciding a
+        # suggestion changes smart_decisions, which is already in here.
+        return json.dumps([posts, tasks, sorted((k, str(v)) for k, v in dec.items()),
+                           ap.get("last_run_at"), social.get_settings(email).get("auto_plan_day")],
+                          default=str)
+    except Exception:  # noqa: BLE001 — a fingerprint failure only costs a 200
+        return secrets.token_hex(4)
 
 
 @app.get("/api/smart/state")
@@ -2355,7 +2395,13 @@ def smart_state(response: Response,
     The stamp changes the moment a dataset, an order or an upload changes, so
     a seller can never be shown a stale figure waiting for a timer."""
     email = require_user(authorization)
-    tag = f'W/"{hashlib.md5(cache.stamp(email).encode()).hexdigest()}"'
+    # A missed weekly plan (the server slept through Saturday) catches up in
+    # the background the moment the seller opens the app. Never blocks this.
+    try:
+        autoplan.kick(email)
+    except Exception:  # noqa: BLE001
+        pass
+    tag = f'W/"{hashlib.md5((cache.stamp(email) + _home_fingerprint(email)).encode()).hexdigest()}"'
     # Private: this is one seller's data and must never be held by a shared
     # proxy. no-cache means "revalidate every time", not "do not store" — the
     # browser keeps the body and we answer 304 when it is still good.
@@ -2871,12 +2917,35 @@ def smart_decision(insight_id: str, body: SmartDecisionBody,
     # the post's state field IS the decision, so there's nothing to snapshot
     # into History and no "insight" bookkeeping to do. Both branches return
     # early with the same shape the normal path returns.
+    if str(insight_id).startswith("autoplan_"):
+        # The header card over an auto-planned week. Approve runs every one of
+        # its posts through the same approve-and-make-ready path as the single
+        # card; Cancel turns the whole week down.
+        week = insight_id[len("autoplan_"):]
+        results = []
+        if body.decision == "approve":
+            for p in list(social._posts(email)):
+                if (p.get("source") == "autoplan" and p.get("autoplan_week") == week
+                        and p.get("state") == "draft"):
+                    results.append(_approve_post_ready(email, p["id"]))
+        elif body.decision in ("disapprove", "cancel"):
+            autoplan.cancel_week(email, week)
+        cache.clear(email)
+        return {"ok": True, "download": False, "download_url": None,
+                "results": [{"post_id": r["post"]["id"], "state": r["post"]["state"],
+                             "is_reel": r["is_reel"], "media_error": r["media_error"]}
+                            for r in results if r.get("post")],
+                "insights": smart.build_insights(email),
+                "history": smart.build_history(email),
+                "tasks": smart.get_tasks(email)}
     if str(insight_id).startswith("post_"):
         post_id = insight_id[len("post_"):]
         if body.decision == "approve":
             p = social.set_state(email, post_id, "scheduled")
         elif body.decision == "disapprove":
             p = social.set_state(email, post_id, "failed")
+        elif body.decision == "cancel":
+            p = social.set_state(email, post_id, "cancelled")
         else:
             return {"ok": True, "insights": smart.build_insights(email),
                     "history": smart.build_history(email)}
@@ -2936,10 +3005,11 @@ def smart_insight_download(insight_id: str, authorization: str | None = Header(d
 
 
 class SmartTaskBody(BaseModel):
-    action: str          # add | toggle | delete
+    action: str          # add | toggle | delete | progress
     text: str | None = None
     task_id: str | None = None
     done: bool | None = None
+    step: str | None = None
 
 
 @app.post("/api/smart/tasks")
@@ -2951,8 +3021,11 @@ def smart_tasks(body: SmartTaskBody, authorization: str | None = Header(default=
         tasks = smart.toggle_task(email, body.task_id or "", bool(body.done))
     elif body.action == "delete":
         tasks = smart.delete_task(email, body.task_id or "")
+    elif body.action == "progress":
+        tasks = smart.task_progress(email, body.task_id or "", body.step or "",
+                                    True if body.done is None else bool(body.done))
     else:
-        raise HTTPException(400, "action must be add, toggle or delete")
+        raise HTTPException(400, "action must be add, toggle, delete or progress")
     return {"ok": True, "tasks": tasks}
 
 
@@ -4225,6 +4298,8 @@ def social_home(authorization: str | None = Header(default=None)):
         "ai": aiprovider.status(),
         "offer_cap": social.OFFER_CAP_PERCENT,
         "catalogue_size": len(_social_catalogue(email)),
+        "autoplan": _safe_autoplan_status(email),
+        "day_names": autoplan.DAY_NAMES,
     }
 
 
@@ -4497,38 +4572,37 @@ class SocialReadyBody(BaseModel):
     # A reel is filmed or generated, never drawn — so "make the media for me"
     # means different things per format and the caller says which it wants.
     generate: bool = True
+    engine: str | None = ""
 
 
-@app.post("/api/social/approve-ready")
-def social_approve_ready(body: SocialReadyBody,
-                         authorization: str | None = Header(default=None)):
-    """Approve a post AND give it the media it needs, in one action.
+def _approve_post_ready(email: str, post_id: str, generate: bool = True,
+                        engine: str = "") -> dict:
+    """Approve one post and do the work that approving it implies.
 
-    WHY: the Approval panel's Approve button scheduled a post that had no
-    picture on it. The seller then had to find that post again in the calendar,
-    open it, generate a picture and save — three steps later, for something
-    they had already said yes to. Approving now means "yes, and make it ready".
+    WHY: approving used to mean "set a flag". The seller then had to find the
+    post in the calendar, generate its picture and save — three steps after
+    they had already said yes. Approving now means "yes, make it ready":
 
-    The two formats need different things and get them:
-      * an IMAGE post has its picture generated here and is then scheduled;
-      * a REEL cannot be — there is no single photograph that is a video — so
-        its shot list and paste-ready prompt are returned instead, and it is
-        scheduled as ready-to-film rather than pretending it is finished.
+      * a PHOTO post gets its picture generated from Product Studio (the
+        product's own photo + the brand's look), passed through the watermark
+        remover, attached, and the post is SCHEDULED;
+      * a REEL cannot be drawn — there is no single photograph that is a
+        video — so it is marked APPROVED and a task goes to the top of the
+        Home task list that walks the seller through it: copy the prompt,
+        open Google Flow, paste and generate, upload the clip here (cleaned of
+        Flow's mark on the way in), then save & schedule.
 
-    A generation failure does NOT block the approval. The seller's decision is
-    the valuable part and it is honoured either way; the reason is reported so
-    the panel can say what still needs doing."""
-    email = require_user(authorization)
-    post = social.get_post(email, body.post_id)
+    A picture that cannot be made (no engine, allowance spent) never loses the
+    decision: the post is approved, the reason is reported, and it gets a task
+    of its own so it cannot slip out with an empty frame."""
+    post = social.get_post(email, post_id)
     if not post:
         raise HTTPException(404, "Post not found")
 
     is_reel = post.get("format") == "reel"
-    made, media_error, script = None, "", None
+    made, media_error, script, task = None, "", None, None
 
     if is_reel:
-        # Nothing to draw. Hand back what the seller actually needs to produce
-        # the clip: the beats to film, and the prompt to paste into a video AI.
         script = post.get("script") or None
         if not script or not (script.get("beats") or []):
             cat = {p["id"]: p for p in _social_catalogue(email)}
@@ -4540,33 +4614,160 @@ def social_approve_ready(body: SocialReadyBody,
                 email, product, post.get("pillar") or "detail", occasion=occasion,
                 shot_type=post.get("shot_type") or "",
                 theme=post.get("theme_note") or "")
-            social.update_post(email, body.post_id, {"script": script})
-    elif body.generate and not post.get("image_url"):
+            social.update_post(email, post_id, {"script": script})
+            script = (social.get_post(email, post_id) or {}).get("script") or script
+    elif generate and not post.get("image_url"):
         try:
             made = studio.generate_image_only(
                 email, post.get("product_id") or "",
                 post.get("pillar") or "", post.get("format") or "",
                 use_reference=True,
                 occasion_key=post.get("occasion_key") or "",
-                shot_type=post.get("shot_type") or "")
-            social.attach_image(email, body.post_id, made["url"], True,
-                               made.get("prompt", ""))
+                shot_type=post.get("shot_type") or "",
+                engine=engine or "")
+            social.attach_image(email, post_id, made["url"], True,
+                                made.get("prompt", ""))
         except aicaps.CapReached as e:
-            # Not fatal here: the post is still approved and scheduled, it just
-            # has no picture yet. Reported as the media_error so the panel says
-            # what is missing instead of failing the whole approval.
             media_error = str(e)
         except (RuntimeError, ValueError) as e:
             media_error = str(e)
 
-    p = social.set_state(email, body.post_id, "scheduled")
+    fresh = social.get_post(email, post_id) or post
+    if social.post_ready(fresh):
+        p = social.set_state(email, post_id, "scheduled")
+    else:
+        p = social.set_state(email, post_id, "approved")
+        task = smart.ensure_post_task(email, fresh, "video" if is_reel else "photo",
+                                      reason=media_error)
     if p.get("error"):
         raise HTTPException(400, p["error"])
     cache.clear(email)
-    return {"post": social.get_post(email, body.post_id),
+    out_post = social.get_post(email, post_id)
+    return {"post": out_post,
             "image": made, "script": script, "is_reel": is_reel,
-            "media_error": media_error,
-            "ready": social.post_ready(social.get_post(email, body.post_id) or {})}
+            "media_error": media_error, "task": task,
+            "tasks": smart.get_tasks(email),
+            "watermark": (made or {}).get("watermark"),
+            "ready": social.post_ready(out_post or {})}
+
+
+@app.post("/api/social/approve-ready")
+def social_approve_ready(body: SocialReadyBody,
+                         authorization: str | None = Header(default=None)):
+    """Approve a post AND give it what it needs — see _approve_post_ready."""
+    email = require_user(authorization)
+    return _approve_post_ready(email, body.post_id, body.generate, body.engine or "")
+
+
+class SocialScheduleBody(BaseModel):
+    post_id: str
+    scheduled_at: str | None = ""
+
+
+@app.post("/api/social/schedule-ready")
+def social_schedule_ready(body: SocialScheduleBody,
+                          authorization: str | None = Header(default=None)):
+    """The last step of a reel task: the clip is on the post, so save and
+    schedule it. Refuses a post that still has no media, rather than
+    scheduling an empty frame."""
+    email = require_user(authorization)
+    post = social.get_post(email, body.post_id)
+    if not post:
+        raise HTTPException(404, "Post not found")
+    if not social.post_ready(post):
+        raise HTTPException(400, "This reel has no clip yet. Upload it first, then schedule."
+                            if post.get("format") == "reel" else
+                            "This post has no picture yet. Add one first, then schedule.")
+    if body.scheduled_at:
+        social.update_post(email, body.post_id, {"scheduled_at": body.scheduled_at})
+    p = social.set_state(email, body.post_id, "scheduled")
+    cache.clear(email)
+    return {"post": p, "tasks": smart.get_tasks(email)}
+
+
+# -------------------------------------------------------------------------
+# Automatic weekly planning — see backend/core/autoplan.py for the flow
+# -------------------------------------------------------------------------
+class AutoplanSettingsBody(BaseModel):
+    enabled: bool | None = None
+    day: int | None = None
+    hour: int | None = None
+
+
+class AutoplanRunBody(BaseModel):
+    week: str | None = ""       # a Monday, YYYY-MM-DD; default = next week
+
+
+class AutoplanWeekBody(BaseModel):
+    week: str
+
+
+@app.get("/api/social/autoplan")
+def social_autoplan(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return {**autoplan.status(email), "day_names": autoplan.DAY_NAMES,
+            "watermark": watermark.capabilities()}
+
+
+@app.post("/api/social/autoplan/settings")
+def social_autoplan_settings(body: AutoplanSettingsBody,
+                             authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    patch = {k: v for k, v in body.model_dump().items() if v is not None} \
+        if hasattr(body, "model_dump") else {k: v for k, v in body.dict().items() if v is not None}
+    st = autoplan.save_config(email, patch)
+    cache.clear(email)
+    return st
+
+
+@app.post("/api/social/autoplan/run-now")
+def social_autoplan_run_now(body: AutoplanRunBody,
+                            authorization: str | None = Header(default=None)):
+    """"Plan next week now" — the same planner the schedule runs, on demand.
+    Fills next week up to the cadence and never past it."""
+    email = require_user(authorization)
+    from datetime import date as _date
+    week = None
+    if body.week:
+        try:
+            week = _date.fromisoformat(body.week)
+        except ValueError:
+            raise HTTPException(400, "week must be a date like 2026-09-14")
+        week = week - __import__("datetime").timedelta(days=week.weekday())
+    res = autoplan.run_for(email, week, trigger="manual")
+    if res.get("skipped"):
+        raise HTTPException(409, res.get("reason") or "A plan is already being made.")
+    cache.clear(email)
+    return {"brief": res, "status": autoplan.status(email), "week": social.week(email)}
+
+
+@app.get("/api/social/autoplan/brief")
+def social_autoplan_brief(week: str = "", authorization: str | None = Header(default=None)):
+    """What the planner found for a week: occasions, sales, what it added."""
+    email = require_user(authorization)
+    b = autoplan.latest_brief(email, week)
+    if not b:
+        raise HTTPException(404, "No automatic plan for that week yet.")
+    return b
+
+
+@app.post("/api/social/autoplan/cancel")
+def social_autoplan_cancel(body: AutoplanWeekBody,
+                           authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    n = autoplan.cancel_week(email, body.week)
+    cache.clear(email)
+    return {"cancelled": n, "insights": smart.build_insights(email)}
+
+
+@app.post("/api/social/autoplan/run")
+def social_autoplan_cron(x_admin_token: str | None = Header(default=None)):
+    """Cron target (operator only): plan next week for every account whose
+    chosen day and hour have come. Safe to call every 15 minutes — each week
+    is planned at most once per account. The app also runs this itself in the
+    background; the cron is for hosts that sleep between requests."""
+    _require_admin(x_admin_token)
+    return autoplan.run_due()
 
 
 @app.get("/api/studio/video-engine")
@@ -4651,11 +4852,28 @@ def social_attach_video(body: SocialAttachBody,
     so a wrong upload is one action to undo rather than a reason to delete a
     post the seller has already written and scheduled."""
     email = require_user(authorization)
-    p = social.attach_video(email, body.post_id, body.url)
+    if not social.get_post(email, body.post_id):
+        raise HTTPException(404, "not found")
+    url, report = body.url, None
+    if url:
+        # A reel clip is almost always generated somewhere else — Google Flow,
+        # Kling — and comes back with that tool's mark in a corner. It goes
+        # through the watermark remover on the way in; the clean copy is saved
+        # under a new name and the original upload is kept.
+        cleaned = watermark.clean_media_url(url, email)
+        url, report = cleaned["url"], cleaned["report"]
+    p = social.attach_video(email, body.post_id, url)
     if p.get("error"):
         raise HTTPException(404, p["error"])
+    if url and p.get("state") == "approved":
+        smart_tasks_for = [t for t in smart.post_tasks(email)
+                           if t.get("post_id") == body.post_id and not t.get("done")]
+        # A clip on the post means every step before the upload happened too.
+        for t in smart_tasks_for:
+            for step in ("copy", "flow", "make", "upload"):
+                smart.task_progress(email, t["id"], step, True)
     cache.clear(email)
-    return p
+    return {**p, "watermark": report, "tasks": smart.get_tasks(email)}
 
 
 @app.get("/api/managers")

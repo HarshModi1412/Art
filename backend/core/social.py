@@ -179,7 +179,11 @@ def blank_settings() -> dict:
     return {"category": "clothing", "language": "hinglish", "cadence": "standard",
             "pillars": [p["id"] for p in PILLARS], "whatsapp": "",
             "brand_hashtag": "", "handle": "", "city": "",
-            "order_cta": "DM us to order"}
+            "order_cta": "DM us to order",
+            # Automatic weekly planning (backend/core/autoplan.py): on by
+            # default, every Saturday at 9am India time, planning the week
+            # that starts the following Monday. Monday = 0 ... Sunday = 6.
+            "auto_plan": True, "auto_plan_day": 5, "auto_plan_hour": 9}
 
 
 def get_settings(email: str) -> dict:
@@ -197,6 +201,15 @@ def save_settings(email: str, patch: dict) -> dict:
         s["cadence"] = "standard"
     if s["language"] not in LANGUAGES:
         s["language"] = "hinglish"
+    s["auto_plan"] = bool(s.get("auto_plan", True))
+    try:
+        s["auto_plan_day"] = int(s.get("auto_plan_day", 5)) % 7
+    except (TypeError, ValueError):
+        s["auto_plan_day"] = 5
+    try:
+        s["auto_plan_hour"] = max(0, min(23, int(s.get("auto_plan_hour", 9))))
+    except (TypeError, ValueError):
+        s["auto_plan_hour"] = 9
     user_store.set_key((email or "").lower(), SETTINGS_KEY, s)
     return s
 
@@ -987,7 +1000,13 @@ def caption_check(caption: dict, settings: dict) -> list[dict]:
 
 # --------------------------------------------------------------- posts
 
-STATES = ["draft", "ready", "scheduled", "published", "failed"]
+# "approved" — the seller said yes, but the post is still waiting on its media
+#   (a reel waiting for its clip, or a photo post whose picture could not be
+#   made). It sits on the task list at the top of Home until it has one, and
+#   only then becomes "scheduled".
+# "cancelled" — turned down from the Approval panel. Not counted towards the
+#   week's total, and hidden from the calendar.
+STATES = ["draft", "ready", "approved", "scheduled", "published", "failed", "cancelled"]
 
 
 def _posts(email: str) -> list[dict]:
@@ -1332,7 +1351,8 @@ def plan_ahead(email: str, catalogue: list[dict], weeks: int = 4,
 
 
 def week(email: str) -> list[dict]:
-    live = [p for p in _posts(email) if p.get("state") in ("draft", "ready", "scheduled")]
+    live = [p for p in _posts(email)
+            if p.get("state") in ("draft", "ready", "approved", "scheduled")]
     return sorted(live, key=lambda p: p.get("scheduled_at") or "")
 
 
@@ -1345,8 +1365,27 @@ def set_state(email: str, post_id: str, state: str) -> dict:
             p["state"] = state
             p["state_at"] = _now()
             _save_posts(email, rows)
+            _sync_tasks(email, p)
             return p
     return {"error": "not found"}
+
+
+def _sync_tasks(email: str, post: dict) -> None:
+    """Keep the task list honest about this post.
+
+    A reel that was approved gets a "make the clip" task at the top of Home.
+    The moment the post is scheduled with its media, or cancelled, that task
+    has nothing left to ask for — so it is closed here, at the one place every
+    state change passes through, rather than trusting each caller to remember."""
+    try:
+        from backend.core import smart
+        st = post.get("state")
+        if st == "scheduled" and post_ready(post):
+            smart.close_post_tasks(email, post["id"])
+        elif st in ("cancelled", "failed"):
+            smart.close_post_tasks(email, post["id"], remove=True)
+    except Exception:  # noqa: BLE001 — a task list hiccup must never block a post
+        pass
 
 
 def approve_all(email: str) -> dict:
@@ -1408,7 +1447,10 @@ def pending_insight_cards(email: str) -> list[dict]:
             when = datetime.fromisoformat(when_raw)
         except ValueError:
             continue
-        if when > horizon:
+        # The weekly auto-plan runs on Saturday for the week after, so its
+        # Sunday post is eight days out — past the usual window. Everything it
+        # planned is shown, because the seller was promised one list to approve.
+        if when > horizon and p.get("source") != "autoplan":
             continue
         cap = p.get("caption") or {}
         cards.append({
@@ -1430,10 +1472,57 @@ def pending_insight_cards(email: str) -> list[dict]:
             # two different things. A seller who taps Approve expecting a picture
             # and gets a shot list has been surprised by their own tool.
             "format": p.get("format") or "",
+            # Auto-planned posts carry why this product, this week — the panel
+            # shows it, and they get Approve / Details / Cancel.
+            "autoplan": p.get("source") == "autoplan",
+            "autoplan_week": p.get("autoplan_week") or "",
+            "plan_reason": p.get("plan_reason") or "",
+            "signal": p.get("signal") or "",
+            "signal_label": p.get("signal_label") or "",
+            "reference_photo": p.get("reference_photo") or "",
             **_card_kind(p, can_draw),
         })
     cards.sort(key=lambda c: c["scheduled_at"])
-    return cards
+    return _autoplan_summary_cards(email, cards) + cards
+
+
+def _autoplan_summary_cards(email: str, cards: list[dict]) -> list[dict]:
+    """One header card per auto-planned week that still has posts waiting:
+    what the planner found, and one tap to approve or cancel the lot."""
+    weeks: dict[str, list[dict]] = {}
+    for c in cards:
+        if c.get("autoplan") and c.get("autoplan_week"):
+            weeks.setdefault(c["autoplan_week"], []).append(c)
+    if not weeks:
+        return []
+    try:
+        from backend.core import autoplan
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for wk, members in sorted(weeks.items()):
+        brief = autoplan.latest_brief(email, wk) or {}
+        occ = next((o for o in (brief.get("opportunities") or [])
+                    if o.get("kind") == "festival"), None)
+        out.append({
+            "id": f"autoplan_{wk}", "module": "social",
+            "title": f"Next week's posts: {len(members)} waiting",
+            "detail": brief.get("note") or "",
+            "week": wk, "week_label": brief.get("week_label") or wk,
+            "post_ids": [m["id"][len("post_"):] for m in members],
+            "waiting": len(members),
+            "added": brief.get("added", len(members)),
+            "existing": brief.get("existing", 0),
+            "target": brief.get("target", 0),
+            "occasion": (occ or {}).get("name", ""),
+            "winners": [w.get("name") for w in (brief.get("winners") or [])][:3],
+            "strugglers": [x.get("name") for x in (brief.get("strugglers") or [])][:3],
+            "summary": True, "autoplan": True,
+            # dress_all() orders a desk's cards by count, largest first, so
+            # the week's header leads its own posts.
+            "count": 1000 + len(members),
+        })
+    return out
 
 
 def _card_kind(post: dict, can_draw: bool) -> dict:
@@ -1457,14 +1546,17 @@ def _card_kind(post: dict, can_draw: bool) -> dict:
     is_reel = (post.get("format") or "") == "reel"
     if is_reel:
         return {"kind": "reel",
-                "kind_label": "REEL · you film it",
-                "cta": "Approve & get the shot list",
-                "needs_from_you": "Film a short clip, or have an AI make one, then upload it."}
+                "kind_label": "REEL · you make the clip",
+                "cta": "Approve & add the video task",
+                "needs_from_you": "Approving puts a task at the top of Home: copy the "
+                                  "prompt, make the clip in Google Flow, upload it here, "
+                                  "then schedule."}
     if can_draw:
         return {"kind": "photo",
                 "kind_label": "PHOTO POST · we draw it",
                 "cta": "Approve & make the picture",
-                "needs_from_you": "Nothing — the picture is made and scheduled for you."}
+                "needs_from_you": "Nothing — the picture is made, cleaned of any "
+                                  "watermark and scheduled for you."}
     if post.get("image_url"):
         return {"kind": "photo",
                 "kind_label": "PHOTO POST · picture ready",
@@ -1489,6 +1581,13 @@ def clear_plan(email: str) -> int:
     n = len(_posts(email))
     _save_posts(email, [])
     user_store.set_key((email or "").lower(), CAMPAIGN_KEY, [])
+    # The open "make the reel" / "add a picture" tasks belonged to those posts.
+    try:
+        from backend.core import smart
+        keep = [t for t in smart.get_tasks(email) if not t.get("post_id") or t.get("done")]
+        user_store.set_key((email or "").lower(), "smart_tasks", keep)
+    except Exception:  # noqa: BLE001
+        pass
     return n
 
 
@@ -1799,7 +1898,8 @@ def month(email: str, year: int, mon: int) -> dict:
     first = date(year, mon, 1)
     last = date(year, mon, _cal.monthrange(year, mon)[1])
 
-    posts = [p for p in _posts(email) if p.get("scheduled_at")]
+    posts = [p for p in _posts(email)
+             if p.get("scheduled_at") and p.get("state") != "cancelled"]
     by_day: dict[str, list] = {}
     for p in posts:
         d = (p.get("scheduled_at") or "")[:10]
@@ -1854,7 +1954,7 @@ def upcoming(email: str, days: int = 5) -> list[dict]:
             on = date.fromisoformat(d)
         except ValueError:
             continue
-        if today <= on <= horizon and p.get("state") in ("draft", "ready", "scheduled"):
+        if today <= on <= horizon and p.get("state") in ("draft", "ready", "approved", "scheduled"):
             out.append(p)
     out.sort(key=lambda p: (p.get("state") != "draft", p.get("scheduled_at") or ""))
     return out

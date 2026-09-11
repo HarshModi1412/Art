@@ -248,8 +248,8 @@ for _ep in ("/api/studio/image", "/api/studio/video"):
           r.json().get("code") == "daily_cap", r.json())
 check("CapReached is re-raised past the 400 handler rather than swallowed",
       "except aicaps.CapReached:" in MAIN and "429 via the handler" in MAIN)
-check("but approving a post at the cap still schedules it, without a picture",
-      "the post is still approved and scheduled" in MAIN)
+check("but approving a post at the cap still approves it, and puts it on the task list",
+      "never loses the" in MAIN and "ensure_post_task" in MAIN)
 check("the editor shows what is left before the seller presses anything",
       "showAiLeft" in JS and "pictures left today" in JS)
 check("and refreshes it after a generation", "showAiLeft(true)" in JS)

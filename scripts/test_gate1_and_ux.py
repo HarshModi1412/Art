@@ -450,9 +450,9 @@ print("\n== post or reel, said before the seller taps ==")
 _soc = __import__("inspect").getsource(social)
 check("a card knows which kind it is", '"kind": "reel",' in _soc and "_card_kind" in _soc)
 check("and says so in words, not a format code",
-      "REEL · you film it" in _soc and "PHOTO POST · we draw it" in _soc)
+      "REEL · you make the clip" in _soc and "PHOTO POST · we draw it" in _soc)
 check("the button says what will actually happen",
-      "Approve & get the shot list" in _soc and "Approve & make the picture" in _soc)
+      "Approve & add the video task" in _soc and "Approve & make the picture" in _soc)
 check("and what is still needed from the seller", '"needs_from_you"' in _soc)
 check("the panel renders that badge", "ins-kind" in JS and "ins-kind" in CSS)
 check("the persona layer passes those words through instead of overwriting them",

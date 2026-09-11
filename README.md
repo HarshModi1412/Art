@@ -455,6 +455,60 @@ Consequences you will see in the code:
 Festival dates in `FESTIVALS_2026` are lunisolar and **must be refreshed each
 year, never extrapolated** — marketing blogs routinely get them a week wrong.
 
+## Automatic weekly planning
+
+`backend/core/autoplan.py`. The Social Media Manager plans next week on its own,
+once a week, and the seller only has to say yes.
+
+1. **Trigger** — every Saturday at 9am India time by default; the day and hour
+   are the seller's choice (Social → Setup). An in-process ticker checks every
+   15 minutes, `POST /api/social/autoplan/run` (admin token) is there for a cron,
+   and opening the app catches up a run the server slept through. Each week is
+   planned at most once. A new account is *armed* on first look and fires at
+   the next trigger — deploying on a Friday does not plan everyone's weekend.
+2. **Occasions** — festivals whose run-up or day falls in the week (or starts
+   soon after), wedding season, the weather season, salary week.
+3. **What is already planned** — posts on the calendar for that week count
+   towards it; cancelled and skipped ones do not.
+4. **Sales** — the last four weeks against the four before, anchored on the
+   last date in the data. Winners get the proof beats (a real person using it,
+   someone already bought it); strugglers get the reveal and the detail/answer
+   beats, because informational content is what moves a sale. No sales data →
+   stock level, labelled as such.
+5. **Decide** — the week's total is the cadence (2 / 4 / 6) and is never
+   exceeded: 2 of 4 already planned means exactly 2 are added, on the best free
+   days, one a day, in arc order. Max two posts per product.
+6. **Product Studio** — each photo post carries the exact image prompt built
+   from the product's own photo and the brand aesthetic (`studio.preview_prompt`);
+   each reel carries its shot list and a paste-ready video prompt. No picture is
+   drawn at plan time.
+7. **Approval panel** — a header card for the week (Approve all / Details /
+   Cancel) and one card per post (Approve / Details / Cancel).
+
+**Approve** (`POST /api/social/approve-ready`): a photo post gets its picture
+generated, cleaned and scheduled. A reel is marked `approved` and a task goes to
+the **top of Home**: copy the prompt → open Google Flow → paste, generate,
+download → upload the clip here → Save & schedule
+(`POST /api/social/schedule-ready`). A picture that cannot be made (no engine,
+cap reached) leaves the post `approved` with a photo task — never scheduled
+with an empty frame. Tasks close themselves when their post is scheduled or
+cancelled.
+
+## Watermark remover
+
+`backend/core/watermark.py`. Every generated picture, every clip we generate and
+every clip uploaded for a reel goes through it. It removes only the *visible*
+corner mark (Flow/Veo, Kling, a sparkle): position (hugs a corner), look (light,
+low-saturation strokes brighter than what is behind them) and shape (small,
+stroke-like, isolated) must all agree — and for video, the mark must stay put
+while the picture moves. Anything else is left untouched; a picture with no mark
+comes back byte-for-byte. Removal is OpenCV Telea inpainting on the corner only;
+clips are re-encoded to H.264 with ffmpeg (`imageio-ffmpeg` ships one) keeping the
+audio. The clean copy is saved under a new name and the original upload kept.
+Invisible provenance (SynthID/C2PA) is not touched, and posts keep their AI flag.
+
+Tests: `python scripts/test_autoplan.py`, `python scripts/test_watermark.py`.
+
 ## The approval panel, staffed
 
 `personas.py`. Every insight is attributed to one of five managers — Social

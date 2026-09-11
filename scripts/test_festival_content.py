@@ -765,17 +765,24 @@ _areel = next((p for p in _aps if p["format"] == "reel"), None)
 _r = c.post("/api/social/approve-ready", headers=_AH, json={"post_id": _aimg["id"]})
 check("approving an image post succeeds", _r.status_code == 200, _r.text[:200])
 _d = _r.json()
-check("it is scheduled", _d["post"]["state"] == "scheduled", _d["post"]["state"])
+# With no image engine on this server the picture cannot be made. The post is
+# not scheduled with an empty frame: it is approved, and goes on the task list.
+check("it is approved, not scheduled with an empty frame",
+      _d["post"]["state"] == "approved", _d["post"]["state"])
 check("a failed generation does NOT lose the seller's decision",
-      _d["post"]["state"] == "scheduled" and bool(_d["media_error"]),
+      _d["post"]["state"] == "approved" and bool(_d["media_error"]),
       _d["media_error"][:80])
+check("and it becomes a task instead of slipping out",
+      (_d.get("task") or {}).get("kind") == "photo", _d.get("task"))
 check("and the reason is reported so the panel can say what is left",
       "image engine" in _d["media_error"].lower(), _d["media_error"][:90])
 
 _r2 = c.post("/api/social/approve-ready", headers=_AH, json={"post_id": _areel["id"]})
 _d2 = _r2.json()
 check("approving a reel succeeds", _r2.status_code == 200, _r2.text[:200])
-check("it is scheduled too", _d2["post"]["state"] == "scheduled")
+check("it waits for its clip — approved, with a video task",
+      _d2["post"]["state"] == "approved" and (_d2.get("task") or {}).get("kind") == "video",
+      (_d2["post"]["state"], _d2.get("task")))
 check("a reel is recognised as a reel", _d2["is_reel"] is True)
 check("no picture is drawn for it — there is no photograph that IS a video",
       _d2.get("image") is None)
