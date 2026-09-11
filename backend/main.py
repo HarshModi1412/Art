@@ -57,6 +57,8 @@ from backend.core import personas
 from backend.core import playbook
 from backend.core import autoplan
 from backend.core import watermark
+from backend.core import replenish
+from backend.core import writer
 
 # ---------------------------------------------------------
 # numpy/pandas JSON safety net
@@ -2367,12 +2369,17 @@ def _home_fingerprint(email: str) -> str:
                  for t in smart.get_tasks(email)]
         dec = user_store.get_key(email, "smart_decisions", {}) or {}
         ap = user_store.get_key(email, autoplan.STATE_KEY, {}) or {}
+        try:
+            pos = [(p.get("po_number"), p.get("status"), p.get("n_items"))
+                   for p in supply.get_purchase_orders(email)]
+        except Exception:  # noqa: BLE001
+            pos = []
         # Not the content-suggestion id: the payload itself creates one on the
         # first read, which would make every first 200 look stale. Deciding a
         # suggestion changes smart_decisions, which is already in here.
         return json.dumps([posts, tasks, sorted((k, str(v)) for k, v in dec.items()),
-                           ap.get("last_run_at"), social.get_settings(email).get("auto_plan_day")],
-                          default=str)
+                           ap.get("last_run_at"), social.get_settings(email).get("auto_plan_day"),
+                           pos], default=str)
     except Exception:  # noqa: BLE001 — a fingerprint failure only costs a 200
         return secrets.token_hex(4)
 
@@ -2917,6 +2924,24 @@ def smart_decision(insight_id: str, body: SmartDecisionBody,
     # the post's state field IS the decision, so there's nothing to snapshot
     # into History and no "insight" bookkeeping to do. Both branches return
     # early with the same shape the normal path returns.
+    if str(insight_id).startswith("po_"):
+        # A purchase order the replenishment check drafted. Approve sends it
+        # (the email as last drafted or edited in Details); Cancel cancels it.
+        po_number = insight_id[len("po_"):]
+        send = None
+        if body.decision == "approve":
+            try:
+                send = replenish.send_po(email, po_number)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+        elif body.decision in ("disapprove", "cancel"):
+            if not replenish.cancel_po(email, po_number):
+                raise HTTPException(404, "Purchase order not found.")
+        cache.clear(email)
+        return {"ok": True, "download": False, "download_url": None, "send": send,
+                "insights": smart.build_insights(email),
+                "history": smart.build_history(email),
+                "tasks": smart.get_tasks(email)}
     if str(insight_id).startswith("autoplan_"):
         # The header card over an auto-planned week. Approve runs every one of
         # its posts through the same approve-and-make-ready path as the single
@@ -2960,10 +2985,10 @@ def smart_decision(insight_id: str, body: SmartDecisionBody,
         # this insight is no longer in the active list.
         title = next((i["title"] for i in smart.build_insights(email) if i["id"] == insight_id), None)
         if insight_id == "reorder":
-            # One order form per supplier — see supply.create_pos_by_supplier.
-            # (This line used to be create_po(email, insight_id), which put the
-            # insight id in the item_ids slot and silently produced nothing.)
-            supply.create_pos_by_supplier(email, insight_id=insight_id)
+            # Draft one PO per supplier through the same replenishment path an
+            # order triggers — they come back as purchase-order cards to check
+            # and send, instead of a download nobody sends.
+            replenish.check(email, trigger="insight")
         smart.set_decision(email, insight_id, "approved")
         if str(insight_id).startswith("content_"):
             smart.clear_content_suggestion(email)   # rotate a fresh suggestion in
@@ -3048,6 +3073,12 @@ class SupplyItemBody(BaseModel):
     supplier_name: str | None = ""
     supplier_phone: str | None = ""
     supplier_email: str | None = ""
+    # Add Item picks the product this raw material goes into (from Product
+    # Management) and how much of it one unit of that product uses; saving the
+    # item also saves that link, which is what turns product sales into
+    # raw-material consumption.
+    link_product: str | None = ""
+    qty_per_unit: float | None = None
 
 
 class SupplyIdBody(BaseModel):
@@ -3076,14 +3107,31 @@ class SupplyPOBody(BaseModel):
 
 def _supply_payload(email: str) -> dict:
     comp = supply.compute_inventory(email)
+    try:
+        covered = replenish.covered_item_ids(email)
+    except Exception:  # noqa: BLE001
+        covered = set()
+    for r in comp["items"]:
+        r["on_order"] = r["id"] in covered
     return {
         "inventory": comp["items"], "below": comp["below"], "meta": comp["meta"],
         "n_below": comp["n_below"],
-        "suggestions": comp["below"],
+        # items below the DOS rule that are NOT already on an active PO — the
+        # ones that still need an order form
+        "suggestions": [r for r in comp["below"] if r["id"] not in covered],
+        "n_on_order": sum(1 for r in comp["below"] if r["id"] in covered),
         "products": supply.get_products(email),
+        # Product Management's own records, for the Add Item product picker
+        "catalog": [{"id": p["id"], "name": p["name"], "category": p.get("category") or ""}
+                    for p in products.get_products(email) if p.get("status") != "archived"],
+        "suppliers": supply.get_suppliers(email),
         "maps": supply.get_maps(email),
         "waste": supply.get_waste(email),
         "purchase_orders": supply.get_purchase_orders(email),
+        "replenish_log": replenish.recent_log(email),
+        "rule": {"dos_multiple": supply.DOS_LEAD_MULTIPLE,
+                 "eoq_min_days": supply.EOQ_MIN_DAYS,
+                 "window_days": supply.RECENT_WINDOW_DAYS},
         "insights": smart.build_insights(email),
     }
 
@@ -3131,12 +3179,137 @@ def supply_state(authorization: str | None = Header(default=None)):
 @app.post("/api/supply/item")
 def supply_item(body: SupplyItemBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
+    data = body.dict()
+    link, qpu = (data.pop("link_product", "") or "").strip(), data.pop("qty_per_unit", None)
     try:
         cache.clear(email)
-        supply.upsert_item(email, body.dict())
+        before = {it["id"] for it in supply.get_inventory(email)}
+        items = supply.upsert_item(email, data)
+        if link:
+            saved = next((it for it in items if it["id"] == body.id), None) if body.id else None
+            if saved is None:
+                new = [it for it in items if it["id"] not in before]
+                saved = next((it for it in new if it["name"] == data["name"].strip()),
+                             new[0] if new else None)
+            if saved:
+                supply.upsert_map(email, link, saved["id"], qpu if qpu and qpu > 0 else 1)
     except ValueError as e:
         raise HTTPException(400, str(e))
     return _supply_payload(email)
+
+
+class SupplyDoqBody(BaseModel):
+    id: str
+    doq: float | None = None       # None/0 = go back to the worked-out DOQ
+
+
+@app.post("/api/supply/doq")
+def supply_doq(body: SupplyDoqBody, authorization: str | None = Header(default=None)):
+    """The seller's own default order quantity for one raw material. Blank
+    returns it to the worked-out value (MOQ, or EOQ when it applies)."""
+    email = require_user(authorization)
+    it = next((x for x in supply.get_inventory(email) if x["id"] == body.id), None)
+    if not it:
+        raise HTTPException(404, "Item not found.")
+    it = dict(it)
+    it["reorder_qty"] = body.doq if body.doq and body.doq > 0 else None
+    supply.upsert_item(email, it)
+    cache.clear(email)
+    return _supply_payload(email)
+
+
+@app.post("/api/supply/replenish/check")
+def supply_replenish_check(authorization: str | None = Header(default=None)):
+    """Run the days-of-supply check on every raw material now, drafting
+    purchase orders where it fails — the same check every order triggers."""
+    email = require_user(authorization)
+    res = replenish.check(email, trigger="manual")
+    return {**_supply_payload(email), "check": res}
+
+
+class PoLinesBody(BaseModel):
+    qty: dict = {}
+
+
+class PoEmailBody(BaseModel):
+    subject: str | None = None
+    body: str | None = None
+    to: str | None = None
+
+
+def _po_or_404(email: str, po_number: str) -> dict:
+    po = supply.get_po(email, po_number)
+    if not po:
+        raise HTTPException(404, "Purchase order not found.")
+    return po
+
+
+@app.get("/api/supply/po/{po_number}/detail")
+def supply_po_detail(po_number: str, authorization: str | None = Header(default=None)):
+    """Everything behind a drafted PO: the lines with each item's days of
+    supply and how its quantity was worked out, the supplier, and the email
+    the content writer drafted to send it with."""
+    email = require_user(authorization)
+    po = _po_or_404(email, po_number)
+    rows = {r["id"]: r for r in supply.compute_inventory(email)["items"]}
+    lines = []
+    for ln in po.get("lines") or []:
+        r = rows.get(ln.get("inventory_id")) or {}
+        lines.append({**ln, "now": {k: r.get(k) for k in (
+            "current_stock", "dos", "dos_threshold", "avg_daily_consumption",
+            "effective_lead_time_days", "doq", "doq_basis", "eoq", "moq",
+            "eoq_missing", "reason", "linked_products")}})
+    try:
+        draft = replenish.email_draft(email, po_number)
+    except Exception as e:  # noqa: BLE001 — details still open without an email
+        draft = {"subject": "", "body": "", "to": "", "error": str(e)}
+    return {"po": {**po, "lines": lines}, "email": draft,
+            "pdf_url": f"/api/supply/po/{po_number}/pdf?supplier=1",
+            "email_ready": messaging.smtp_configured()}
+
+
+@app.post("/api/supply/po/{po_number}/lines")
+def supply_po_lines(po_number: str, body: PoLinesBody,
+                    authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    _po_or_404(email, po_number)
+    try:
+        po = supply.set_po_line_qty(email, po_number, body.qty or {})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    cache.clear(email)
+    return {"po": po}
+
+
+@app.post("/api/supply/po/{po_number}/email")
+def supply_po_email(po_number: str, body: PoEmailBody,
+                    authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    _po_or_404(email, po_number)
+    return {"email": replenish.save_email_draft(email, po_number, body.dict())}
+
+
+@app.post("/api/supply/po/{po_number}/email/rewrite")
+def supply_po_email_rewrite(po_number: str, authorization: str | None = Header(default=None)):
+    """Ask the content writer for a fresh draft of the supplier email."""
+    email = require_user(authorization)
+    _po_or_404(email, po_number)
+    return {"email": replenish.email_draft(email, po_number, refresh=True)}
+
+
+@app.post("/api/supply/po/{po_number}/approve")
+def supply_po_approve(po_number: str, body: PoEmailBody,
+                      authorization: str | None = Header(default=None)):
+    """Approve a drafted PO: the email (as edited, or as the writer drafted
+    it) goes to the supplier with the PO attached as a PDF."""
+    email = require_user(authorization)
+    _po_or_404(email, po_number)
+    try:
+        res = replenish.send_po(email, po_number, body.subject or "", body.body or "",
+                                body.to or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {**res, "insights": smart.build_insights(email)}
 
 
 @app.post("/api/supply/item/delete")
@@ -3226,12 +3399,13 @@ def supply_po_create(body: SupplyPOBody, authorization: str | None = Header(defa
 
 
 @app.get("/api/supply/po/{po_number}/pdf")
-def supply_po_pdf(po_number: str, authorization: str | None = Header(default=None)):
+def supply_po_pdf(po_number: str, supplier: int = 0,
+                  authorization: str | None = Header(default=None)):
     email = require_user(authorization)
     po = supply.get_po(email, po_number)
     if not po:
         raise HTTPException(404, "Purchase order not found.")
-    fname, buf = supply.po_pdf_bytes(email, po)
+    fname, buf = supply.po_pdf_bytes(email, po, for_supplier=bool(supplier))
     from fastapi.responses import StreamingResponse
     return StreamingResponse(
         buf, media_type="application/pdf",
@@ -4431,6 +4605,80 @@ def social_shoot(authorization: str | None = Header(default=None)):
 # =========================================================================
 # AI provider status — so a seller can see what is writing their copy
 # =========================================================================
+class AiWriteBody(BaseModel):
+    kind: str = "general"
+    label: str | None = ""
+    current: str | None = ""
+    context: dict | None = None
+    instruction: str | None = ""
+
+
+class AiSiteCopyBody(BaseModel):
+    brief: str
+
+
+class AiProductCopyBody(BaseModel):
+    product: dict = {}
+    notes: str | None = ""
+
+
+def _ai_meta() -> dict:
+    st = aiprovider.status()
+    return {"ready": st["ready"], "active": st["active"],
+            # With nothing configured on the server the browser can still ask
+            # Puter directly (puter.js), on the seller's own Puter account.
+            "browser_puter": (os.environ.get("AI_BROWSER_PUTER", "on").lower()
+                              not in ("off", "0", "false"))}
+
+
+@app.get("/api/ai/status")
+def ai_status(authorization: str | None = Header(default=None)):
+    require_user(authorization)
+    return _ai_meta()
+
+
+@app.post("/api/ai/write")
+def ai_write(body: AiWriteBody, authorization: str | None = Header(default=None)):
+    """The ✨ on any text field: write it, or improve what is there, in the
+    brand's voice and from the seller's own facts only."""
+    email = require_user(authorization)
+    try:
+        aicaps.check(email, "text")
+    except aicaps.CapReached:
+        raise
+    except Exception:  # noqa: BLE001 — the cap is a guard, not a dependency
+        pass
+    res = writer.write_field(email, body.kind or "general", body.label or "",
+                             body.current or "", body.context or {}, body.instruction or "")
+    try:
+        if res.get("ai"):
+            aicaps.consume(email, "text")
+    except Exception:  # noqa: BLE001
+        pass
+    return {**res, **{"meta": _ai_meta()}}
+
+
+@app.post("/api/ai/site-copy")
+def ai_site_copy(body: AiSiteCopyBody, authorization: str | None = Header(default=None)):
+    """Every word on the storefront from a line or two about the shop. Nothing
+    is saved here — the builder shows it first and the seller picks what to use."""
+    email = require_user(authorization)
+    if len((body.brief or "").strip()) < 8:
+        raise HTTPException(400, "Tell us a little about your shop first — a sentence is enough.")
+    res = writer.site_copy(email, body.brief)
+    return {**res, "meta": _ai_meta()}
+
+
+@app.post("/api/ai/product-copy")
+def ai_product_copy(body: AiProductCopyBody, authorization: str | None = Header(default=None)):
+    """Description, key points and a search description for one product."""
+    email = require_user(authorization)
+    if not (body.product or {}).get("name"):
+        raise HTTPException(400, "Give the product a name first.")
+    return {**writer.product_copy(email, body.product or {}, body.notes or ""),
+            "meta": _ai_meta()}
+
+
 @app.get("/api/ai/providers")
 def ai_providers(authorization: str | None = Header(default=None)):
     require_user(authorization)

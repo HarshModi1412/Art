@@ -1078,11 +1078,12 @@ svg { width: 1em; height: 1em; flex: none; vertical-align: -0.125em; }
 .modal-body { padding-top: 6px; }
 .fld { display: block; margin-bottom: 12px; font-size: 12.5px; color: var(--text-2); }
 .fld > span { display: block; margin-bottom: 5px; font-weight: 600; color: var(--text); }
-.fld input, .fld select {
+.fld input, .fld select, .fld textarea {
   width: 100%; padding: 9px 11px; border: 1px solid var(--border);
   border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit;
 }
-.fld input:focus, .fld select:focus { outline: none; border-color: var(--primary); }
+.fld textarea { resize: vertical; line-height: 1.5; }
+.fld input:focus, .fld select:focus, .fld textarea:focus { outline: none; border-color: var(--primary); }
 
 /* ----------------------------------------------------------
    Undo
@@ -2451,3 +2452,56 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 /* ---------- the two new post states ---------- */
 .st-appr { background: var(--primary-soft); color: var(--primary); }
 .cal-post.st-approved { border-left-color: var(--primary); }
+
+/* =====================================================================
+   Step-through forms, replenishment and the AI content writer
+   ===================================================================== */
+
+/* ---------- wizard: Next / Back, submit only on the last step ---------- */
+.pf-tab.done { color: var(--green); }
+.pf-tab.done::before { content: "✓ "; }
+.wz-count { margin-right: auto; align-self: center; }
+.pf-foot-b { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+/* ---------- inventory: DOS / DOQ ---------- */
+.doq-cell { white-space: nowrap; }
+.doq-in { width: 78px; padding: 4px 6px; font-size: 12.5px; text-align: right;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
+.doq-in::placeholder { color: var(--text-2); opacity: .8; }
+.warn-t { color: var(--amber) !important; }
+.po-st { font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 99px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.po-st.st-draft { background: var(--amber-soft); color: var(--amber); }
+.po-st.st-open { background: var(--blue-soft); color: var(--blue); }
+.po-st.st-sent, .po-st.st-shipped { background: var(--primary-soft); color: var(--primary); }
+.po-st.st-received { background: var(--green-soft); color: var(--green); }
+.po-st.st-cancelled { background: var(--red-soft); color: var(--red); }
+.po-d-sup { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; background: var(--surface-2); }
+
+/* ---------- ✨ AI writing help ---------- */
+.ai-btn { display: inline-flex; align-items: center; gap: 5px; margin: 5px 0 0; padding: 3px 9px;
+  font-size: 11.5px; font-weight: 600; border-radius: 99px; cursor: pointer; width: max-content;
+  border: 1px solid var(--primary-line); background: var(--primary-soft); color: var(--primary); }
+.ai-btn:hover { background: var(--primary); color: var(--on-primary); }
+.ai-btn svg { width: 12px; height: 12px; }
+.ai-pop { margin-top: 6px; border: 1px solid var(--primary-line); border-radius: var(--radius);
+  background: var(--surface); padding: 9px 10px; box-shadow: var(--shadow-md); font-weight: 400; }
+.ai-pop-h { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; margin-bottom: 6px; }
+.ai-pop-h svg { width: 14px; height: 14px; color: var(--primary); }
+.ai-pop-h .muted { margin-left: auto; }
+.ai-pop-t { width: 100%; font: inherit; font-size: 13px; line-height: 1.5; resize: vertical; }
+.ai-pop-a { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+.ai-strip { display: grid; grid-template-columns: 1fr; gap: 8px; border: 1px dashed var(--primary-line);
+  background: var(--primary-soft); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 14px; }
+.ai-strip > div { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+.ai-strip > div svg { width: 14px; height: 14px; color: var(--primary); align-self: center; }
+.ai-strip .btn { justify-self: start; }
+.ai-brief { border-color: var(--primary-line); }
+.ai-brief .sup-sub svg { width: 14px; height: 14px; color: var(--primary); vertical-align: -2px; margin-right: 4px; }
+.ai-brief textarea { width: 100%; }
+.sc-list { display: grid; gap: 8px; max-height: 58vh; overflow: auto; padding-right: 4px; }
+.sc-row { display: grid !important; grid-template-columns: 20px 1fr; gap: 10px; align-items: start;
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 11px; cursor: pointer; }
+.sc-row input { margin-top: 3px; accent-color: var(--primary); }
+.sc-v { font-size: 13.5px; line-height: 1.5; color: var(--text); margin-top: 2px; }

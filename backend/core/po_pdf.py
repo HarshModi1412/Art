@@ -107,7 +107,11 @@ def _group_by_supplier(lines: list[dict]) -> list[tuple[str, list[dict]]]:
     return [(k, groups[k]) for k in order]
 
 
-def build_po_pdf(po: dict, buyer_email: str = "", brand: str = "Content Seller") -> io.BytesIO:
+def build_po_pdf(po: dict, buyer_email: str = "", brand: str = "Content Seller",
+                 for_supplier: bool = False) -> io.BytesIO:
+    """`for_supplier` is the copy that is emailed to the vendor: no internal
+    notes about how the quantity was worked out, and no "data-generated
+    suggestion" footer — to the supplier this is simply our order."""
     _init_fonts()
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -134,7 +138,7 @@ def build_po_pdf(po: dict, buyer_email: str = "", brand: str = "Content Seller")
     content_w = doc.width
 
     # ---- header band -----------------------------------------------------
-    status = str(po.get("status", "open")).upper()
+    status = "ISSUED" if for_supplier else str(po.get("status", "open")).upper()
     meta = (f"<b>PO No.</b>  {po.get('po_number', '')}<br/>"
             f"<b>Date</b>  {_fmt_date(po.get('created_at'))}<br/>"
             f"<b>Status</b>  {status}")
@@ -263,17 +267,25 @@ def build_po_pdf(po: dict, buyer_email: str = "", brand: str = "Content Seller")
     el.append(Spacer(1, 16))
 
     # ---- terms -----------------------------------------------------------
-    terms = ("<b>Terms &amp; notes.</b> Suggested reorder quantities use the reorder point "
-             "(daily usage &times; lead time + safety stock) and the Economic Order Quantity, "
-             "raised to the supplier's minimum order quantity where set. Please confirm price "
-             "and availability with the vendor before dispatch.")
+    if for_supplier:
+        terms = ("<b>Terms &amp; notes.</b> Please confirm availability, price and the "
+                 "dispatch date by replying to the email this order came with, and quote "
+                 f"the PO number {po.get('po_number', '')} on your invoice and delivery challan."
+                 + (f"<br/>{po.get('note')}" if po.get("note") and po.get("source") != "auto" else ""))
+    else:
+        terms = ("<b>Terms &amp; notes.</b> Quantities are the default order quantity (DOQ): "
+                 "the supplier's minimum order, or the Economic Order Quantity once ordering "
+                 "and holding costs and a month of sales are on file. An order is raised when "
+                 "days of supply fall below 1.2 &times; the supplier's lead time. Please confirm "
+                 "price and availability with the vendor before dispatch.")
     el.append(Paragraph(terms, mut))
 
     def _footer(canvas, d):
         canvas.saveState()
         canvas.setFont(_FONT, 7)
         canvas.setFillColor(MUT)
-        canvas.drawString(16 * mm, 11 * mm, DISCLAIMER[:105])
+        if not for_supplier:
+            canvas.drawString(16 * mm, 11 * mm, DISCLAIMER[:105])
         canvas.drawRightString(A4[0] - 16 * mm, 11 * mm,
                                f"{po.get('po_number', '')} · Page {d.page}")
         canvas.restoreState()

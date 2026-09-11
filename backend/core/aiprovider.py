@@ -21,7 +21,11 @@ fails, the next configured one is tried, and so on down to a deterministic
 template that needs no network at all. A seller never sees an error because an
 upstream had a bad minute.
 
-  cloudflare  free 10,000 neurons/day. Llama 3.3 70B / 3.1 8B. Default.
+  puter       Puter's OpenAI-compatible AI gateway (https://github.com/heyputer/puter)
+              — one auth token (PUTER_AUTH_TOKEN) reaches GPT, Claude, Gemini
+              and more. First in the chain when configured. Billed to the
+              Puter account that owns the token ("user pays").
+  cloudflare  free 10,000 neurons/day. Llama 3.3 70B / 3.1 8B.
   groq        free 1,000 req/day. Llama 3.3 70B. Fastest first token.
   gemini      free 1,500 req/day. NOTE: Google may train on free-tier requests.
   openai      paid. No training on API data. Reserved for seller data.
@@ -63,8 +67,15 @@ class Provider:
     """A chat-completions endpoint. Nothing vendor-specific beyond three strings."""
 
     def __init__(self, name: str, base_url: str, key_env: str, model: str,
-                 trains: bool, free: bool, note: str = ""):
+                 trains: bool, free: bool, note: str = "", writer_model: str = "",
+                 lenient: bool = False):
         self.name = name
+        # A stronger model for customer-facing copy (the content writer), when
+        # the provider offers one. Overridable with <NAME>_WRITER_MODEL.
+        self.writer_model = writer_model
+        # Some gateways route to models that reject `temperature` or
+        # `max_tokens`; a lenient provider retries once with the bare request.
+        self.lenient = lenient
         self.base_url = base_url.rstrip("/")
         self.key_env = key_env
         self.model = model
@@ -78,21 +89,45 @@ class Provider:
     def configured(self) -> bool:
         return bool(self.key()) and bool(self.base_url)
 
-    def chat(self, system: str, user: str, max_tokens: int, temperature: float) -> str:
-        body = json.dumps({
-            "model": os.environ.get(f"{self.name.upper()}_MODEL") or self.model,
-            "messages": [{"role": "system", "content": system},
-                         {"role": "user", "content": user}],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        }).encode()
+    def model_for(self, role: str = "") -> str:
+        if role == "writer":
+            w = os.environ.get(f"{self.name.upper()}_WRITER_MODEL") or self.writer_model
+            if w:
+                return w
+        return os.environ.get(f"{self.name.upper()}_MODEL") or self.model
+
+    def chat(self, system: str, user: str, max_tokens: int, temperature: float,
+             role: str = "") -> str:
+        model = self.model_for(role)
+        try:
+            return self._post(model, system, user, max_tokens, temperature)
+        except urllib.error.HTTPError as e:
+            if not self.lenient or e.code not in (400, 404, 422):
+                raise
+            # The writer model may not exist on this account, or the model may
+            # reject sampling parameters: fall back to the base model, bare.
+            base = os.environ.get(f"{self.name.upper()}_MODEL") or self.model
+            return self._post(base, system, user, None, None)
+
+    def _post(self, model: str, system: str, user: str, max_tokens, temperature) -> str:
+        req_body = {"model": model,
+                    "messages": [{"role": "system", "content": system},
+                                 {"role": "user", "content": user}]}
+        if max_tokens is not None:
+            req_body["max_tokens"] = max_tokens
+        if temperature is not None:
+            req_body["temperature"] = temperature
         req = urllib.request.Request(
-            f"{self.base_url}/chat/completions", data=body,
+            f"{self.base_url}/chat/completions", data=json.dumps(req_body).encode(),
             headers={"Authorization": f"Bearer {self.key()}",
                      "Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             payload = json.loads(r.read().decode())
-        return (payload["choices"][0]["message"]["content"] or "").strip()
+        content = payload["choices"][0]["message"]["content"]
+        if isinstance(content, list):          # some gateways return parts
+            content = "".join(str(p.get("text", "")) if isinstance(p, dict) else str(p)
+                              for p in content)
+        return (content or "").strip()
 
 
 def _cf_base() -> str:
@@ -103,6 +138,16 @@ def _cf_base() -> str:
 
 
 PROVIDERS: list[Provider] = [
+    # Puter's AI gateway (github.com/heyputer/puter). OpenAI wire format at
+    # https://api.puter.com/puterai/openai/v1/ with a Puter auth token from
+    # puter.com/dashboard. The token owner pays, so it is marked paid; the
+    # vendors it relays to (OpenAI, Anthropic, Google APIs) do not train on
+    # API traffic, so it may see private work. The writer model is the one
+    # used for customer-facing copy.
+    Provider("puter", "https://api.puter.com/puterai/openai/v1", "PUTER_AUTH_TOKEN",
+             "gpt-5.4-nano", trains=False, free=False,
+             note="Puter AI gateway — billed to the token's Puter account",
+             writer_model="claude-sonnet-5", lenient=True),
     Provider("cloudflare", _cf_base(), "CF_API_TOKEN",
              "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
              trains=False, free=True, note="10,000 neurons/day free"),
@@ -130,6 +175,9 @@ PROVIDERS: list[Provider] = [
 def _order(sensitivity: str) -> list[Provider]:
     """Providers to try, best first, filtered by what this text is allowed to touch."""
     usable = [p for p in PROVIDERS if p.configured()]
+    if (os.environ.get("AI_PROVIDER_FIRST") or "").strip():
+        first = os.environ["AI_PROVIDER_FIRST"].strip().lower()
+        usable.sort(key=lambda p: p.name != first)
     if sensitivity == "private":
         usable = [p for p in usable if not p.trains]
         # A seller's own numbers are worth paying to keep out of a training set,
@@ -158,7 +206,7 @@ def status() -> dict:
 
 def generate(system: str, user: str, *, sensitivity: str,
              max_tokens: int = 400, temperature: float = 0.7,
-             fallback: str = "") -> dict:
+             fallback: str = "", role: str = "") -> dict:
     """Write some text. Returns {text, provider, free, error}.
 
     Never raises. A caller that cannot show text is worse than a caller that
@@ -171,7 +219,7 @@ def generate(system: str, user: str, *, sensitivity: str,
     for p in _order(sensitivity):
         started = time.time()
         try:
-            text = p.chat(system, user, max_tokens, temperature)
+            text = p.chat(system, user, max_tokens, temperature, role=role)
             if text:
                 s = _STATS.setdefault(p.name, {"ok": 0, "err": 0, "ms": 0})
                 s["ok"] += 1

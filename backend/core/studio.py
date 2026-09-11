@@ -982,30 +982,25 @@ def openai_ready() -> bool:
 
 
 def generate_caption(brief: dict) -> dict:
-    """Copy for one post. Falls back to a written-by-hand template when there is
-    no API key, so Studio is never a dead screen."""
-    if not openai_ready():
-        return _fallback_caption(brief)
-    try:
-        import json as _json
-        from openai import OpenAI
-        client = OpenAI()
-        r = client.chat.completions.create(
-            model=os.environ.get("OPENAI_TEXT_MODEL", "gpt-4.1-mini"),
-            messages=[{"role": "user", "content": caption_prompt(brief)}],
-            response_format={"type": "json_object"},
-            temperature=0.8,
-        )
-        data = _json.loads(r.choices[0].message.content or "{}")
+    """Copy for one post, through the content writer's provider chain (Puter
+    first when configured, then the free tiers, then OpenAI). Falls back to a
+    written-by-hand template when nothing is reachable, so Studio is never a
+    dead screen."""
+    from backend.core import aiprovider, writer
+    res = aiprovider.generate(writer.WRITER_SYSTEM, caption_prompt(brief),
+                              sensitivity="public", max_tokens=600, temperature=0.8,
+                              fallback="", role="writer")
+    data = writer._json(res.get("text", "")) if res.get("text") else {}
+    if data.get("caption"):
         return {
             "caption": str(data.get("caption") or "").strip(),
             "hashtags": [str(h).lstrip("#") for h in (data.get("hashtags") or [])][:15],
             "first_comment": str(data.get("first_comment") or "").strip(),
-            "generated": True,
+            "generated": True, "provider": res.get("provider"),
         }
-    except Exception as e:  # noqa: BLE001
-        log.warning("caption generation failed: %s", e)
-        return _fallback_caption(brief)
+    if res.get("error"):
+        log.warning("caption generation failed: %s", res.get("error"))
+    return _fallback_caption(brief)
 
 
 def _fallback_caption(brief: dict) -> dict:
@@ -1022,7 +1017,8 @@ def _fallback_caption(brief: dict) -> dict:
     tags = [t.strip().lstrip("#") for t in (brief.get("hashtags") or "").split() if t.strip()]
     return {"caption": " ".join(lines), "hashtags": tags[:12] or ["handmade", "smallbusiness"],
             "first_comment": "", "generated": False,
-            "note": "Written from a template — add an OpenAI key for AI copy."}
+            "note": "Written from a template — connect an AI provider (Puter, or any "
+                    "in the chain) for AI copy."}
 
 
 # Every engine that can draw, in default preference order.

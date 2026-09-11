@@ -273,8 +273,11 @@ check("the order is deterministic, so it does not reshuffle between refreshes",
       "sorted(groups" in _ssrc)
 check("approving 'running low' no longer passes the insight id as item_ids",
       "supply.create_po(email, insight_id)" not in _main, "the old bug is back")
-check("it calls the per-supplier builder instead",
-      "supply.create_pos_by_supplier(email, insight_id=insight_id)" in _main)
+# Approving the running-low card now drafts one PO per supplier through the
+# replenishment check (the same path an order triggers), so each comes back
+# as a purchase-order card to review and send.
+check("it drafts per-supplier purchase orders through the replenishment check",
+      'replenish.check(email, trigger="insight")' in _main)
 check("the endpoint returns one entry per supplier",
       'payload["orders"]' in _main and '"supplier_name": p.get' in _main)
 check("each with a way to actually send it",
@@ -285,8 +288,13 @@ check("the UI offers WhatsApp and email per supplier",
 # =========================================================================
 print("\n== no supply-chain jargon in front of the seller ==")
 # =========================================================================
-for word, where in (("EOQ", "the suggestion card"), ("Reorder pt", "the table"),
-                    ("Avg/day", "the table"), ("MOQ", "the form")):
+# DOQ, MOQ, EOQ and DOS are the terms the seller asked the Supply module to use
+# (see backend/core/supply.py), so they stay — each always next to its plain
+# meaning. The old abbreviations that meant nothing to anyone are still gone.
+check("every supply abbreviation carries its plain meaning",
+      "Default order quantity" in JS and "Days of supply" in JS
+      and "the smallest quantity they will sell" in JS)
+for word, where in (("Reorder pt", "the table"), ("Avg/day", "the table")):
     # One comment in the source explains WHY these words are gone; that is the
     # only place they may appear.
     hits = [ln for ln in JS.splitlines() if word in ln and not ln.strip().startswith("//")]
@@ -296,11 +304,12 @@ check("the reason a seller reads has no jargon either",
       not any(w in _rsrc for w in ("Economic order quantity", "Reorder point {rop}",
                                    "safety{", "EOQ is")), "jargon remains")
 check("it explains itself in units the seller counts in",
-      "and your supplier takes" in _rsrc and "buy again once" in _rsrc,
+      "you have lasts about" in _rsrc and "Your supplier takes" in _rsrc
+      and "the lead time plus 20%" in _rsrc,
       _rsrc[_rsrc.find("base = (f\"You use"):][:160])
 check("and it never blocks — a missing number is worked out, not demanded",
-      "you will not have to set anything" in _rsrc)
-check("the status badge says what to do", '● Buy now' in JS)
+      "will work out how many days it lasts" in _rsrc)
+check("the status badge says what to do", '● Order now' in JS)
 
 # =========================================================================
 print("\n== dark mode you can actually read ==")

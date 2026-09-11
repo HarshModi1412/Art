@@ -533,6 +533,9 @@ def default_site(email: str) -> dict:
     return {
         "handle": "",
         "brand": "",
+        # A line or two in the seller's own words about the shop — what the
+        # content writer builds every other piece of site copy from.
+        "brief": "",
         "tagline": "",
         "logo_url": "",
         "published": False,
@@ -680,6 +683,7 @@ def save_site(email: str, patch: dict) -> dict:
 
     site["brand"] = str(site.get("brand") or "").strip()[:80]
     site["tagline"] = str(site.get("tagline") or "").strip()[:160]
+    site["brief"] = str(site.get("brief") or "").strip()[:1200]
     site["announcement"] = str(site.get("announcement") or "").strip()[:200]
     if site["theme"] not in THEME_IDS:
         site["theme"] = "basic"

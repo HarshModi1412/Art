@@ -226,6 +226,169 @@ async function download(url, filename) {
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
 }
 
+/* =====================================================================
+   ✨ AI writing help — on every field where a seller has to type.
+
+   One content writer on the server (backend/core/writer.py) with one set of
+   rules and the brand's own voice. It runs on Puter's AI gateway when the
+   server has a PUTER_AUTH_TOKEN; with no AI on the server at all, the same
+   brief is handed to puter.js in the browser (the seller's own Puter
+   account, which asks them to sign in once).
+
+   Any <textarea data-ai="kind"> or <input data-ai="kind"> anywhere in the app
+   gets a small "✨ Write" button — a MutationObserver wires new ones as
+   screens render, so a new form only has to add the attribute.
+   ===================================================================== */
+let _puterLoading = null;
+function loadPuter() {
+  if (window.puter && window.puter.ai) return Promise.resolve(window.puter);
+  if (_puterLoading) return _puterLoading;
+  _puterLoading = new Promise((resolve, reject) => {
+    const sc = document.createElement("script");
+    sc.src = "https://js.puter.com/v2/";
+    sc.onload = () => (window.puter && window.puter.ai ? resolve(window.puter) : reject(new Error("Puter did not load")));
+    sc.onerror = () => { _puterLoading = null; reject(new Error("Could not reach Puter")); };
+    document.head.appendChild(sc);
+  });
+  return _puterLoading;
+}
+
+/* The server's result, or — when the server had no AI and the browser may
+   use Puter — the same brief sent through puter.js. Returns {text, via}. */
+async function puterFallback(res) {
+  const meta = res.meta || {};
+  if (res.ai || res.provider !== "template" || !meta.browser_puter || !res.prompt) return null;
+  try {
+    const p = await loadPuter();
+    const out = await Promise.race([
+      p.ai.chat([{ role: "system", content: res.prompt.system },
+                 { role: "user", content: res.prompt.user }]),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("Puter took too long")), 45000)),
+    ]);
+    const msg = out && out.message ? out.message.content : out;
+    const text = Array.isArray(msg) ? msg.map((x) => x.text || "").join("") : String(msg || "");
+    return text.trim() ? { text: text.trim(), via: "puter" } : null;
+  } catch (e) { return null; }
+}
+function _stripAi(t) {
+  let x = String(t || "").trim().replace(/^```[a-z]*\s*|\s*```$/gi, "").trim();
+  x = x.replace(/^here(?: is|'s)[^:\n]*:\s*/i, "").trim();
+  if (x.length > 1 && /["'“”]/.test(x[0]) && /["'“”]/.test(x[x.length - 1])) x = x.slice(1, -1).trim();
+  return x;
+}
+function _aiJson(t) {
+  const m = String(t || "").match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try { return JSON.parse(m[0]); } catch (e) { return null; }
+}
+
+/* What the writer should know about the item this field belongs to. */
+function aiContextFor(el) {
+  const v = (id) => { const n = $(id); return n ? String(n.value || "").trim() : ""; };
+  const ctx = {};
+  const where = el.dataset.aiCtx || "";
+  if (where === "product") {
+    Object.assign(ctx, { name: v("pfName"), category: v("pfCat"), price: v("pfPrice"),
+      mrp: v("pfMrp"), unit: v("pfUnit"),
+      key_points: v("pfHl") ? v("pfHl").split("\n").filter(Boolean) : [],
+      description: el.id === "pfDesc" ? "" : v("pfDesc") });
+  } else if (where === "studio-product" && _studioProduct) {
+    const pr = _studioProduct.product || {};
+    Object.assign(ctx, { name: pr.name, category: pr.category, price: pr.price,
+      story: v("stStory"), materials: v("stMat"), different: v("stDiff") });
+  } else if (where === "brand") {
+    Object.assign(ctx, { name: v("sbName"), about: v("sbAbout"), audience: v("sbAud") });
+  } else if (where === "site" && typeof _site !== "undefined" && _site) {
+    Object.assign(ctx, { brand: _site.brand, tagline: _site.tagline, brief: _site.brief,
+      hero: (_site.hero || {}).heading });
+  } else if (where === "post") {
+    Object.assign(ctx, { product: (document.querySelector(".modal-head b") || {}).textContent || "" });
+  } else if (where === "po") {
+    Object.assign(ctx, { supplier: v("poSupName") });
+  }
+  if (el._aiContext) Object.assign(ctx, el._aiContext());
+  return ctx;
+}
+
+async function aiWriteField(el, instruction) {
+  const label = el.dataset.aiLabel || ((el.closest("label") || {}).firstChild || {}).textContent || "";
+  const r = await api("/api/ai/write", { method: "POST", json: {
+    kind: el.dataset.ai || "general", label: String(label).trim().slice(0, 80),
+    current: el.value || "", context: aiContextFor(el), instruction: instruction || "" } });
+  const fb = await puterFallback(r);
+  if (fb) return { text: _stripAi(fb.text), via: "Puter (your account)", ai: true };
+  return { text: r.text || "", via: r.ai ? `AI · ${r.provider}` : "template — no AI connected", ai: !!r.ai };
+}
+
+function aiAssist(el) {
+  const holder = el.closest("label") || el.parentElement;
+  let pop = holder.querySelector(":scope > .ai-pop");
+  if (pop) pop.remove();
+  pop = document.createElement("div");
+  pop.className = "ai-pop";
+  pop.innerHTML = `<div class="ai-pop-h">${sic("spark")}<b>Writing…</b></div>`;
+  el.insertAdjacentElement("afterend", pop);
+  const run = async (instruction) => {
+    pop.innerHTML = `<div class="ai-pop-h">${sic("spark")}<b>Writing…</b><span class="muted tiny">in your brand's voice, from what you have told us</span></div>`;
+    try {
+      const r = await aiWriteField(el, instruction);
+      pop.innerHTML = `
+        <div class="ai-pop-h">${sic("spark")}<b>Suggestion</b><span class="muted tiny">${esc(r.via)}</span></div>
+        <textarea class="ai-pop-t" rows="${Math.min(10, Math.max(2, Math.ceil((r.text || "").length / 70)))}">${esc(r.text)}</textarea>
+        <div class="ai-pop-a">
+          <button type="button" class="btn primary tiny" data-aiuse>Use this</button>
+          <button type="button" class="btn ghost tiny" data-aiagain>Try again</button>
+          <button type="button" class="btn ghost tiny" data-aishort>Shorter</button>
+          <button type="button" class="btn ghost tiny" data-ailong>More detail</button>
+          <button type="button" class="btn ghost tiny" data-aiclose>Close</button>
+        </div>`;
+      pop.querySelector("[data-aiuse]").onclick = () => {
+        el.value = pop.querySelector(".ai-pop-t").value;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        pop.remove();
+        paintAiBtn(el);
+      };
+      pop.querySelector("[data-aiagain]").onclick = () => run("Write a different version.");
+      pop.querySelector("[data-aishort]").onclick = () => run("Make it noticeably shorter.");
+      pop.querySelector("[data-ailong]").onclick = () => run("Add one more concrete detail from the facts given — do not invent any.");
+      pop.querySelector("[data-aiclose]").onclick = () => pop.remove();
+    } catch (e) {
+      pop.innerHTML = `<div class="ai-pop-h">${sic("alert")}<b>${esc(e.message)}</b></div>
+        <div class="ai-pop-a"><button type="button" class="btn ghost tiny" data-aiclose>Close</button></div>`;
+      pop.querySelector("[data-aiclose]").onclick = () => pop.remove();
+    }
+  };
+  run("");
+}
+
+function paintAiBtn(el) {
+  const b = el._aiBtn;
+  if (b) b.innerHTML = `${sic("spark")}${(el.value || "").trim() ? "Improve" : "Write"} with AI`;
+}
+function wireAi(scope) {
+  (scope || document).querySelectorAll("textarea[data-ai], input[data-ai]").forEach((el) => {
+    if (el._aiWired) return;
+    el._aiWired = true;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ai-btn";
+    b.title = "Let the AI content writer draft or polish this";
+    el._aiBtn = b;
+    paintAiBtn(el);
+    el.addEventListener("input", () => paintAiBtn(el));
+    b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); aiAssist(el); };
+    el.insertAdjacentElement("afterend", b);
+  });
+}
+new MutationObserver((muts) => {
+  for (const m of muts) for (const n of m.addedNodes) {
+    if (n.nodeType !== 1) continue;
+    if (n.matches && n.matches("textarea[data-ai], input[data-ai]")) wireAi(n.parentElement);
+    else if (n.querySelector && n.querySelector("[data-ai]")) wireAi(n);
+  }
+}).observe(document.documentElement, { childList: true, subtree: true });
+
 // ---------- auth ----------
 $("loginBtn").onclick = doLogin;
 $("password").addEventListener("keydown", (e) => e.key === "Enter" && doLogin());
@@ -1121,10 +1284,11 @@ function renderApprovals(insights) {
     // actually happen.
     const kind = i.kind_label ? `<span class="ins-kind ${i.kind === "reel" ? "reel" : "photo"}">${esc(i.kind_label)}</span>` : "";
     const need = i.needs_from_you ? `<div class="ins-need">${sic(i.kind === "reel" ? "play" : "image")}<span>${esc(i.needs_from_you)}</span></div>` : "";
-    const isPost = String(i.id).startsWith("post_");
+    const isPost = String(i.id).startsWith("post_") || String(i.id).startsWith("po_");
     // Why THIS product, this week — the sales signal or festival behind it.
     const why = isPost && i.plan_reason
-      ? `<div class="ins-why ${esc(i.signal || "")}">${esc(i.plan_reason)}</div>` : "";
+      ? `<div class="ins-why ${esc(i.signal || "")}">${esc(i.plan_reason)}</div>`
+      : i.purchase_order && i.reason ? `<div class="ins-why struggling">${esc(i.reason)}</div>` : "";
     return head + `
     <div class="ins-card mgr-card" data-ins="${esc(i.id)}" style="--mgr:${esc(i.manager_colour || "#5c6790")}">
       ${kind}
@@ -1166,7 +1330,9 @@ function renderApprovals(insights) {
         if (String(i.id).startsWith("post_") && decision === "approve") {
           if (btn) btn.textContent = `${label}… ${done + 1}/${actionable.length}`;
           await approvePostReady(i.id.slice(5), { batch: true });
-        } else if (String(i.id).startsWith("post_")) {
+        } else if (String(i.id).startsWith("po_") && decision === "approve") {
+          await api(`/api/supply/po/${encodeURIComponent(i.id.slice(3))}/approve`, { method: "POST", json: {} });
+        } else if (String(i.id).startsWith("post_") || String(i.id).startsWith("po_")) {
           await api(`/api/smart/insight/${i.id}/decision`, { method: "POST", json: { decision: "cancel" } });
         } else {
           await api(`/api/smart/insight/${i.id}/decision`, { method: "POST", json: { decision } });
@@ -1701,6 +1867,17 @@ async function decide(id, decision) {
     const card = (((state.lastState || {}).insights) || []).find((x) => x.id === id);
     if (card) return approveWeek(card);
   }
+  if (id && id.startsWith("po_") && decision === "approve") return approvePo(id.slice(3));
+  if (id && id.startsWith("po_") && decision === "cancel") {
+    if (!confirm("Cancel this purchase order? Nothing has been sent to the supplier yet.")) return;
+    try {
+      await api(`/api/smart/insight/${id}/decision`, { method: "POST", json: { decision: "cancel" } });
+      await refreshApprovals(true);
+      if (_currentModule === "supply" || _currentModule === "inventory") openSupply();
+      toast("Purchase order cancelled.");
+    } catch (e) { toast(e.message); }
+    return;
+  }
   // Cancel on a planned post, or on the whole week. Undecided posts only —
   // anything already approved keeps its decision.
   if (id && (id.startsWith("post_") || id.startsWith("autoplan_")) && decision === "cancel") {
@@ -1782,6 +1959,7 @@ function openDetails(id) {
   // A planned post's details ARE the post: caption, picture prompt, why this
   // product — all in the editor. The week header opens what the planner found.
   if (id && id.startsWith("post_")) return openSocialPostDetails(id.slice(5));
+  if (id && id.startsWith("po_")) return openPoDetail(id.slice(3));
   if (id && id.startsWith("autoplan_")) {
     const card = (((state.lastState || {}).insights) || []).find((x) => x.id === id);
     if (card) return openWeekBrief(card);
@@ -2468,6 +2646,57 @@ function wireImageFields(scope) {
     paintMediaPreview(inp.id, inp.value.trim()));
 }
 
+/* Step-through forms: Back / Next, and the submit button only on the last
+   step. The step titles stay on top as a progress line — a finished step can
+   be revisited with a tap, but moving forward always passes the checks for
+   the steps in between, so nobody reaches "Add" with a nameless product. */
+function wizardify(root, { tabSel, panelSel, key, submitId, validate }) {
+  const tabs = [...root.querySelectorAll(tabSel)];
+  const panels = [...root.querySelectorAll(panelSel)];
+  const keys = tabs.map((t) => t.dataset[key]);
+  const submit = root.querySelector("#" + submitId);
+  const foot = submit.parentElement;
+  const back = document.createElement("button");
+  back.type = "button"; back.className = "btn ghost"; back.textContent = "Back";
+  const next = document.createElement("button");
+  next.type = "button"; next.className = "btn primary";
+  foot.insertBefore(back, submit); foot.insertBefore(next, submit);
+  const count = document.createElement("span");
+  count.className = "wz-count muted tiny";
+  foot.insertBefore(count, foot.firstChild);
+  const errEl = root.querySelector(".pf-foot .err");
+  const err = (m) => { if (errEl) { errEl.textContent = m || ""; errEl.hidden = !m; } };
+  let i = 0;
+  const show = (n) => {
+    i = Math.max(0, Math.min(keys.length - 1, n));
+    tabs.forEach((t, k) => { t.classList.toggle("on", k === i); t.classList.toggle("done", k < i); });
+    panels.forEach((pn) => pn.classList.toggle("on", pn.dataset[key] === keys[i]));
+    back.hidden = i === 0;
+    next.hidden = i === keys.length - 1;
+    submit.hidden = i !== keys.length - 1;
+    if (tabs[i + 1]) next.textContent = `Next: ${tabs[i + 1].textContent.trim()}`;
+    count.textContent = `Step ${i + 1} of ${keys.length}`;
+    const first = panels.find((pn) => pn.dataset[key] === keys[i]);
+    if (first) { const f = first.querySelector("input:not([type=checkbox]), textarea, select"); if (f && n !== 0) f.focus({ preventScroll: true }); }
+  };
+  const passes = (upto) => {
+    for (let j = 0; j < upto; j++) {
+      const m = validate ? validate(j) : null;
+      if (m) { err(m); show(j); return false; }
+    }
+    err(""); return true;
+  };
+  next.onclick = () => { if (passes(i + 1)) show(i + 1); };
+  back.onclick = () => { err(""); show(i - 1); };
+  tabs.forEach((t, k) => { t.onclick = () => { if (k <= i || passes(k)) show(k); }; });
+  // Enter in a single-line field moves forward instead of submitting half a form
+  root.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.tagName === "INPUT" && !next.hidden) { e.preventDefault(); next.click(); }
+  });
+  show(0);
+  return { show, passes: () => passes(keys.length) };
+}
+
 // ---- product form: one field per row, storefront fields included ----------
 let _pfGallery = [];
 
@@ -2524,12 +2753,18 @@ function openProductForm(id, prefillName) {
         ${mediaWarning()}
         ${v("image_url") ? "" : `<div class="nudge">${sic("image")}<div><b>Add a photo</b>
           A product without one is the single biggest reason a storefront looks unfinished.</div></div>`}
+        <div class="ai-strip">
+          <div>${sic("spark")}<b>Let the AI write it</b>
+            <span class="muted tiny">Description and key points from the name, category, price and anything you add here — nothing invented.</span></div>
+          <input id="pfAiNotes" placeholder="Optional: fabric, fit, who it's for, how it's made…" />
+          <button type="button" class="btn primary sm" id="pfAiCopy">${sic("spark")}Write description &amp; key points</button>
+        </div>
         <div class="sup-form-grid">
           ${imageField("pfImg", v("image_url"), "Main photo", "square images look best")}
           ${imageField("pfVid", v("video_url"), "Product clip", "plays when a shopper hovers the card", true)}
-          <label>Description<textarea id="pfDesc" rows="4" placeholder="What it is, what it's made of, why someone should buy it.">${esc(v("description"))}</textarea></label>
+          <label>Description<textarea id="pfDesc" data-ai="product_description" data-ai-ctx="product" data-ai-label="Product description" rows="4" placeholder="What it is, what it's made of, why someone should buy it.">${esc(v("description"))}</textarea></label>
           <label>Key points <span class="muted tiny">one per line — shown as ticks on the product page</span>
-            <textarea id="pfHl" rows="3" placeholder="100% cotton&#10;Ships in 24 hours&#10;Free returns">${esc((v("highlights", []) || []).join("\n"))}</textarea></label>
+            <textarea id="pfHl" data-ai="product_highlights" data-ai-ctx="product" data-ai-label="Key points" rows="3" placeholder="100% cotton&#10;Ships in 24 hours&#10;Free returns">${esc((v("highlights", []) || []).join("\n"))}</textarea></label>
           <label>Sold by <span class="muted tiny">piece / kg / box — optional</span>
             <input id="pfUnit" value="${esc(v("unit_label"))}" placeholder="piece" /></label>
         </div>
@@ -2585,15 +2820,36 @@ function openProductForm(id, prefillName) {
       </div>
     </div>`;
 
-  // tabs
-  p.querySelectorAll("[data-pf]").forEach((n) => {
-    if (n.tagName !== "BUTTON") return;
-    n.onclick = () => {
-      p.querySelectorAll(".pf-tab").forEach((x) => x.classList.toggle("on", x === n));
-      p.querySelectorAll(".pf-panel").forEach((x) =>
-        x.classList.toggle("on", x.dataset.pf === n.dataset.pf));
-    };
-  });
+  // Next / Back through the four steps; Add only on the last one.
+  wizardify(p, { tabSel: ".pf-tab", panelSel: ".pf-panel", key: "pf", submitId: "pfSave",
+    validate: (step) => {
+      if (step !== 0) return null;
+      if (!$("pfName").value.trim()) return "Give the product a name first.";
+      if ($("pfPrice").value === "") return "Add the selling price — shoppers need to see one.";
+      return null;
+    } });
+  $("pfAiCopy").onclick = async () => {
+    const b = $("pfAiCopy");
+    const product = {
+      id: id || "", name: $("pfName").value.trim(), category: $("pfCat").value.trim(),
+      price: $("pfPrice").value, mrp: $("pfMrp").value, unit_label: $("pfUnit").value.trim(),
+      description: $("pfDesc").value.trim(),
+      highlights: $("pfHl").value.split("\n").map((x) => x.trim()).filter(Boolean) };
+    b.disabled = true; b.innerHTML = sic("spark") + "Writing…";
+    try {
+      const r = await api("/api/ai/product-copy", { method: "POST",
+        json: { product, notes: $("pfAiNotes").value.trim() } });
+      let out = r;
+      const fb = await puterFallback(r);
+      if (fb) { const j = _aiJson(fb.text); if (j && j.description) out = { ...j, ai: true, provider: "puter" }; }
+      $("pfDesc").value = out.description || $("pfDesc").value;
+      if ((out.highlights || []).length) $("pfHl").value = out.highlights.join("\n");
+      ["pfDesc", "pfHl"].forEach((x) => $(x).dispatchEvent(new Event("input", { bubbles: true })));
+      toast(out.ai ? "Written — read it over and change anything that is not quite right."
+                   : "No AI connected, so this is a starting draft from your details. Edit freely.", 6000);
+    } catch (e) { toast(e.message, 6000); }
+    b.disabled = false; b.innerHTML = sic("spark") + "Write description &amp; key points";
+  };
   p.querySelectorAll(".place input").forEach((cb) => {
     const paint = () => cb.closest(".place").classList.toggle("on", cb.checked);
     cb.onchange = paint; paint();
@@ -2893,9 +3149,9 @@ function renderStudio() {
         <label>Brand name <span class="req">required</span>
           <input id="sbName" value="${esc(b.name)}" placeholder="Aureva" /></label>
         <label>What you make, and why <span class="req">required</span>
-          <textarea id="sbAbout" rows="3" placeholder="Small-batch perfumes, rested six months before bottling. Made in Bengaluru.">${esc(b.about)}</textarea></label>
+          <textarea id="sbAbout" data-ai="brand_about" data-ai-ctx="brand" data-ai-label="What you make and why" rows="3" placeholder="Small-batch perfumes, rested six months before bottling. Made in Bengaluru.">${esc(b.about)}</textarea></label>
         <label>Who buys it <span class="muted tiny">the person you picture</span>
-          <textarea id="sbAud" rows="2" placeholder="People who wear one scent, not ten.">${esc(b.audience)}</textarea></label>
+          <textarea id="sbAud" data-ai="brand_audience" data-ai-ctx="brand" data-ai-label="Who buys it" rows="2" placeholder="People who wear one scent, not ten.">${esc(b.audience)}</textarea></label>
         <label>The look<select id="sbLook">${(d.looks || []).map((l) =>
           `<option value="${esc(l.id)}" ${b.look === l.id ? "selected" : ""}>${esc(l.label)}</option>`).join("")}</select></label>
         <label>How you sound<select id="sbVoice">${(d.voices || []).map((v) =>
@@ -3074,10 +3330,10 @@ function renderStudioProduct() {
         <div class="sup-sub">In your words</div>
         <div class="sup-form-grid">
           <label>The story behind it <span class="muted tiny">this is what captions are actually made of</span>
-            <textarea id="stStory" rows="3" placeholder="Rested six months before it ever met a bottle.">${esc(m.story)}</textarea></label>
+            <textarea id="stStory" data-ai="product_story" data-ai-ctx="studio-product" data-ai-label="The story behind it" rows="3" placeholder="Rested six months before it ever met a bottle.">${esc(m.story)}</textarea></label>
           <label>What it's made of<textarea id="stMat" rows="2" placeholder="Oud, amber, a little smoke">${esc(m.materials)}</textarea></label>
           <label>What makes it different <span class="muted tiny">the line that makes someone stop scrolling</span>
-            <textarea id="stDiff" rows="2" placeholder="No alcohol burn — it opens soft.">${esc(m.different)}</textarea></label>
+            <textarea id="stDiff" data-ai="product_different" data-ai-ctx="studio-product" data-ai-label="What makes it different" rows="2" placeholder="No alcohol burn — it opens soft.">${esc(m.different)}</textarea></label>
           <label>Who it's for<input id="stWho" value="${esc(m.for_who)}" placeholder="Someone who wears one scent, not ten" /></label>
           <label>Where you'd wear or use it<input id="stOcc" value="${esc(m.occasions)}" placeholder="Evenings, weddings, gifting" /></label>
         </div>
@@ -3217,7 +3473,7 @@ function renderStudioPost(post) {
         ${post.image_error ? `<div class="media-warn">${sic("shield")}<div><b>Image not generated</b>
           <span>${esc(post.image_error)}</span></div></div>` : ""}
         ${post.note ? `<p class="muted tiny" style="margin:0 0 8px;">${esc(post.note)}</p>` : ""}
-        <textarea id="stCaption" rows="7">${esc(full)}</textarea>
+        <textarea id="stCaption" data-ai="caption" data-ai-ctx="studio-product" data-ai-label="Caption" rows="7">${esc(full)}</textarea>
         ${post.first_comment ? `<p class="muted tiny" style="margin:8px 0 0;">
           First comment: ${esc(post.first_comment)}</p>` : ""}
         <div class="st-post-a">
@@ -3268,10 +3524,13 @@ async function openSupply() {
 }
 
 function _supBadge(it) {
+  if (it.on_order) return `<span class="sup-badge moq">● On order</span>`;
+  if (it.dos == null) return `<span class="sup-badge">● No sales yet</span>`;
   return it.below_reorder
-    ? `<span class="sup-badge low">● Buy now</span>`
+    ? `<span class="sup-badge low">● Order now</span>`
     : `<span class="sup-badge ok">● Fine</span>`;
 }
+const DOQ_BASIS = { eoq: "EOQ", moq: "MOQ", yours: "yours", cover: "cover" };
 
 function _sugCard(it) {
   // Plain words only. A seller who has never heard "EOQ" or "reorder point"
@@ -3279,10 +3538,10 @@ function _sugCard(it) {
   // mean — and those are the same three numbers.
   const chips = [
     ["You have left", fmt(it.current_stock) + " " + esc(it.unit_label || "")],
-    ["Selling per day", it.avg_daily_sales ?? 0],
-    ["Buy again at", fmt(it.reorder_point)],
-    ["Supplier minimum", fmt(it.moq)],
-    ["Buy this many", `<b>${fmt(it.suggested_qty)}</b>`],
+    ["Used per day", it.avg_daily_consumption ?? 0],
+    ["Lasts (DOS)", it.dos == null ? "—" : `${it.dos} days`],
+    ["Need at least", `${it.dos_threshold} days`],
+    ["Order (DOQ)", `<b>${fmt(it.doq)}</b> <span class="muted tiny">${DOQ_BASIS[it.doq_basis] || ""}</span>`],
     ["Will cost about", it.est_line_cost == null ? "—" : _rupee(it.est_line_cost)],
   ].map(([k, v]) => `<span class="sug-chip"><i>${k}</i>${v}</span>`).join("");
   const sup = it.supplier_name
@@ -3293,7 +3552,8 @@ function _sugCard(it) {
       <div class="sug-head">
         <div><b>${esc(it.name)}</b>${it.moq_applied ? ` <span class="sup-badge moq">raised to supplier minimum</span>` : ""}
           <div class="muted tiny">${sup}</div></div>
-        <button class="btn approve sm" data-openpo="${it.id}">Make the order form</button>
+        ${it.on_order ? `<span class="sup-badge moq">On order</span>`
+          : `<button class="btn approve sm" data-draftpo="${it.id}">Draft the purchase order</button>`}
       </div>
       <div class="sug-reason">${esc(it.reason || "")}</div>
       <div class="sug-metrics">${chips}</div>
@@ -3305,34 +3565,43 @@ function renderSupply(d) {
   const items = d.inventory || [];
   const pos = d.purchase_orders || [];
   const meta = d.meta || {};
-  const belowN = d.n_below || 0;
   const suggestions = d.suggestions || [];
+  const belowN = suggestions.length;
+  const onOrderN = d.n_on_order || 0;
   const waste = d.waste || [];
 
+  const rule = d.rule || { dos_multiple: 1.2, eoq_min_days: 30, window_days: 30 };
   const salesNote = meta.has_sales
-    ? `Worked out from the ${meta.days_span} day${meta.days_span === 1 ? "" : "s"} of past sales you uploaded here. In plain terms: we look at how fast each item sells, how long your supplier takes, and a little spare on top — and tell you when to buy again and how many. You can change any of it.`
-    : `Upload your past sales here once and we will tell you when to buy again and how much. Until then you can still track what you hold and who you buy it from — nothing is blocked, and we have filled in sensible starting numbers for you.`;
+    ? `Days of supply (DOS) = what you have ÷ what you use a day, read from the last ${meta.window_days || rule.window_days} days of ${meta.source === "supply_sales" ? "the past sales you uploaded here" : "your sales, website orders included"}${meta.data_to ? ` (to ${meta.data_to})` : ""}. Every order placed re-checks the materials it used, and when DOS falls below ${rule.dos_multiple} × the supplier's lead time we draft a purchase order at the DOQ for you to approve.`
+    : `Once there are sales — website orders count — we work out how many days each raw material lasts, and draft a purchase order when that falls below ${rule.dos_multiple} × the supplier's lead time. Link each item to the products that use it so product sales turn into material usage.`;
 
   const sugSection = suggestions.length ? `
     <div class="section-title" style="margin-top:8px;">Time to buy more <span class="muted tiny">(${suggestions.length} item${suggestions.length === 1 ? "" : "s"} running low)</span></div>
     <div class="sug-grid">${suggestions.map(_sugCard).join("")}</div>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px;">
-      <button class="btn approve sm" id="supGenPo">Make order forms for all ${belowN} item${belowN === 1 ? "" : "s"}</button>
+      <button class="btn approve sm" id="supGenPo">Draft purchase order${belowN === 1 ? "" : "s"} for ${belowN === 1 ? "this item" : `these ${belowN} items`}</button>
     </div>` : `
-    <div class="action-card ok" style="margin:10px 0;"><div class="do">Nothing is running low</div><div class="why">You have enough of everything for now. When something gets close to running out it will appear here with a ready order form for that supplier.</div></div>`;
+    <div class="action-card ok" style="margin:10px 0;"><div class="do">${onOrderN ? "Everything running low is already on order" : "Nothing is running low"}</div><div class="why">${onOrderN
+      ? `${onOrderN} item${onOrderN === 1 ? " is" : "s are"} below the reorder line with a purchase order already out — see Purchase orders below. Anything else that gets close to running out will appear here.`
+      : "You have enough of everything for now. When something gets close to running out it will appear here with a ready order form for that supplier."}</div></div>`;
 
   const rows = items.length ? items.map((it) => `
-      <tr class="${it.below_reorder ? "sup-below" : ""}">
-        <td>${esc(it.name)}${it.category ? `<div class="muted tiny">${esc(it.category)}</div>` : ""}</td>
+      <tr class="${it.below_reorder && !it.on_order ? "sup-below" : ""}">
+        <td>${esc(it.name)}${(it.linked_products || []).length
+            ? `<div class="muted tiny">in ${it.linked_products.map(esc).join(", ")}</div>`
+            : `<div class="muted tiny warn-t">not linked to a product</div>`}</td>
         <td>${it.supplier_name ? esc(it.supplier_name) : "<span class='muted tiny'>—</span>"}
-            ${it.supplier_phone || it.supplier_email ? `<div class="muted tiny">${esc(it.supplier_phone || "")}${it.supplier_phone && it.supplier_email ? " · " : ""}${esc(it.supplier_email || "")}</div>` : ""}</td>
+            ${it.supplier_email ? `<div class="muted tiny">${esc(it.supplier_email)}</div>` : it.supplier_name ? `<div class="muted tiny warn-t">no email</div>` : ""}</td>
         <td class="num">${fmt(it.current_stock)} <span class="muted tiny">${esc(it.unit_label || "")}</span></td>
-        <td class="num">${it.avg_daily_sales ?? 0}</td>
+        <td class="num">${it.avg_daily_consumption ?? 0}</td>
+        <td class="num"><b>${it.dos == null ? "—" : it.dos}</b></td>
         <td class="num">${_eff(it.effective_lead_time_days, it.lead_is_auto)}</td>
-        <td class="num">${_eff(it.effective_safety_stock, it.safety_is_auto)}</td>
+        <td class="num">${it.dos_threshold}</td>
         <td class="num">${fmt(it.moq)}</td>
-        <td class="num">${it.unit_cost == null ? "—" : _rupee(it.unit_cost)}</td>
-        <td class="num">${fmt(it.reorder_point)}</td>
+        <td class="num doq-cell">
+          <input class="doq-in" type="number" min="0" step="any" data-doq="${it.id}" value="${it.doq_override ?? ""}"
+                 placeholder="${fmt(it.doq)}" title="Type your own DOQ, or leave blank for the worked-out one" />
+          <span class="muted tiny" title="${esc((it.eoq_missing || []).length ? "EOQ needs: " + it.eoq_missing.join(", ") : "")}">${DOQ_BASIS[it.doq_basis] || ""}${it.eoq && it.doq_basis !== "eoq" ? ` · EOQ ${fmt(it.eoq)}` : ""}</span></td>
         <td>${_supBadge(it)}</td>
         <td class="sup-actions">
           ${it.suggestions_available ? `<button class="btn ghost tiny" data-apply="${it.id}" title="Apply the values suggested from your sales">✨</button>` : ""}
@@ -3341,21 +3610,25 @@ function renderSupply(d) {
           <button class="btn ghost tiny" data-del="${it.id}" title="Remove item">${sic("close")}</button>
         </td>
       </tr>`).join("")
-    : `<tr><td colspan="11" class="ap-empty">No inventory yet. Add an item, or pull products from your sales.</td></tr>`;
+    : `<tr><td colspan="11" class="ap-empty">No inventory yet. Add an item in Inventory Management.</td></tr>`;
 
   const poRows = pos.length ? pos.slice().reverse().map((p) => `
       <tr>
-        <td>${esc(p.po_number)}</td>
+        <td>${esc(p.po_number)}${p.source === "auto" ? ` <span class="muted tiny">auto</span>` : ""}</td>
+        <td>${esc(((p.supplier || {}).name) || (p.suppliers || []).join(", ") || "—")}</td>
         <td>${esc(String(p.created_at || "").slice(0, 16).replace("T", " "))}</td>
+        <td><span class="po-st st-${esc(p.status || "open")}">${esc(p.status === "draft" ? "waiting for you" : (p.status || "open"))}</span></td>
         <td class="num">${fmt(p.n_items)}</td>
         <td class="num">${fmt(p.total_qty)}</td>
         <td class="num">${p.total_amount == null ? "—" : _rupee(p.total_amount)}</td>
         <td class="sup-actions">
-          <button class="btn approve tiny" data-popdf="${esc(p.po_number)}">📄 Open PDF</button>
+          ${p.status === "draft" || p.status === "open"
+            ? `<button class="btn approve tiny" data-podetail="${esc(p.po_number)}">${p.status === "draft" ? "Review &amp; send" : "Send again"}</button>` : ""}
+          <button class="btn ghost tiny" data-popdf="${esc(p.po_number)}">📄 PDF</button>
           <button class="btn ghost tiny" data-poxls="${esc(p.po_number)}">⬇ Excel</button>
         </td>
       </tr>`).join("")
-    : `<tr><td colspan="6" class="ap-empty">No purchase orders yet. Open a suggestion to generate one.</td></tr>`;
+    : `<tr><td colspan="8" class="ap-empty">No purchase orders yet. They are drafted automatically when an order leaves a raw material short.</td></tr>`;
 
   const wasteRows = waste.length ? waste.slice(0, 10).map((w) => `
       <tr>
@@ -3366,15 +3639,17 @@ function renderSupply(d) {
       </tr>`).join("") : "";
 
   const inv = _supplyView === "inventory";
-  const body = inv ? `
+  const head = inv ? `
     <p class="muted">What you hold, what each sold product uses up, and what gets
       wasted. Stock falls automatically as orders come in.</p>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;">
       <button class="btn primary sm" id="supAdd">${sic("plus")}Add item</button>
+      <button class="btn ghost sm" id="supCheck">${sic("refresh")}Check stock now</button>
       <button class="btn ghost sm" id="supImport">${sic("arrow-right")}Pull items from my sales</button>
       <button class="btn ghost sm" id="supLinks">${sic("layers")}What each product uses</button>
       <button class="btn ghost sm" id="supWaste">${sic("close")}Record waste</button>
     </div>
+    <p class="muted tiny">${esc(salesNote)}</p>
 
     <div id="supForm" hidden></div>
     <div id="supPanel" hidden></div>
@@ -3383,7 +3658,7 @@ function renderSupply(d) {
     <p class="muted">${esc(salesNote)}</p>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;">
       <button class="btn ghost sm" id="supLoadSales" title="Upload &amp; map the past sales history used ONLY for these supply-chain calculations (separate from your main Sales Data)">${sic("receipt")}Upload previous sales</button>
-      <button class="btn ghost sm" id="supAdd">${sic("plus")}Add item</button>
+      <button class="btn ghost sm" id="supCheck">${sic("refresh")}Check stock now</button>
     </div>
 
     <div id="supForm" hidden></div>
@@ -3392,13 +3667,16 @@ function renderSupply(d) {
 
     ${sugSection}
 
-    <div class="section-title" style="margin-top:18px;">Every item, and when to reorder</div>
+    <div class="section-title" style="margin-top:18px;">Every item, and when to reorder</div>`;
+  const body = head + `
     <div class="table-scroll">
       <table class="sup-table">
         <thead><tr>
-          <th>Item</th><th>Supplier</th><th class="num">Left</th><th class="num">Sells/day</th>
-          <th class="num">Supplier takes</th><th class="num">Spare kept</th><th class="num">Their minimum</th>
-          <th class="num">Cost each</th><th class="num">Buy again at</th><th>Status</th><th></th>
+          <th>Item</th><th>Supplier</th><th class="num">Left</th><th class="num">Used/day</th>
+          <th class="num" title="Days of supply: what you have ÷ what you use a day">DOS</th>
+          <th class="num" title="Days the supplier takes to deliver">Lead time</th>
+          <th class="num" title="Order when DOS falls below this: ${rule.dos_multiple} × lead time">Order below</th>
+          <th class="num">MOQ</th><th class="num" title="Default order quantity — type your own to override">DOQ</th><th>Status</th><th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -3407,7 +3685,7 @@ function renderSupply(d) {
     ${inv ? "" : `<div class="section-title" style="margin-top:20px;">Purchase orders</div>
     <div class="table-scroll">
       <table class="sup-table">
-        <thead><tr><th>PO #</th><th>Created</th><th class="num">Items</th><th class="num">Qty</th><th class="num">Amount</th><th></th></tr></thead>
+        <thead><tr><th>PO #</th><th>Supplier</th><th>Created</th><th>Status</th><th class="num">Items</th><th class="num">Qty</th><th class="num">Amount</th><th></th></tr></thead>
         <tbody>${poRows}</tbody>
       </table>
     </div>`}
@@ -3430,12 +3708,34 @@ function renderSupply(d) {
   on("supLinks", openLinksPanel);
   on("supWaste", () => openWastePanel(null));
   if (!inv) renderSuppliers();
-  if ($("supGenPo")) $("supGenPo").onclick = supplyGeneratePo;
+  // same path as an order being placed: one draft PO per supplier at the DOQ,
+  // waiting in the Approval panel — then open the first so it can be sent now
+  if ($("supGenPo")) $("supGenPo").onclick = async () => {
+    try {
+      const d = await withBusy("Drafting purchase orders…", "One per supplier, at each item's DOQ.",
+        () => api("/api/supply/replenish/check", { method: "POST" }));
+      _supAfter(d);
+      const c = d.check || {}, made = [...(c.created || []), ...(c.appended || [])];
+      if (!made.length) { toast("Everything short is already on order."); return; }
+      if (made.length > 1) toast(`${made.length} purchase orders drafted — one per supplier. They are also in the Approval panel.`, 7000);
+      openPoDetail(made[0]);
+    } catch (e) { toast(e.message, 7000); }
+  };
   document.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => openSupplyForm(b.dataset.edit));
   document.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => supplyDelete(b.dataset.del));
   document.querySelectorAll("[data-waste]").forEach((b) => b.onclick = () => openWastePanel(b.dataset.waste));
   document.querySelectorAll("[data-apply]").forEach((b) => b.onclick = () => supplyApplySuggested(b.dataset.apply));
   document.querySelectorAll("[data-openpo]").forEach((b) => b.onclick = () => supplyOpenPo([b.dataset.openpo]));
+  document.querySelectorAll("[data-draftpo]").forEach((b) => b.onclick = supplyCheckNow);
+  document.querySelectorAll("[data-podetail]").forEach((b) => b.onclick = () => openPoDetail(b.dataset.podetail));
+  on("supCheck", supplyCheckNow);
+  document.querySelectorAll("[data-doq]").forEach((inp) => inp.onchange = async () => {
+    const val = inp.value === "" ? null : parseFloat(inp.value);
+    try {
+      _supAfter(await api("/api/supply/doq", { method: "POST", json: { id: inp.dataset.doq, doq: val } }));
+      toast(val ? "DOQ saved — used for every order of this item." : "Back to the worked-out DOQ.");
+    } catch (e) { toast(e.message); }
+  });
   document.querySelectorAll("[data-popdf]").forEach((b) => b.onclick = () => download(`/api/supply/po/${encodeURIComponent(b.dataset.popdf)}/pdf`, `${b.dataset.popdf}.pdf`));
   document.querySelectorAll("[data-poxls]").forEach((b) => b.onclick = () => download(`/api/supply/po/${encodeURIComponent(b.dataset.poxls)}/download`, `${b.dataset.poxls}.xlsx`));
 }
@@ -3489,7 +3789,9 @@ function editSupplier(sup) {
       ${fmt(sup.item_count)} item${sup.item_count === 1 ? "" : "s"} you buy from them.</p>
     <label class="fld"><span>Name</span><input id="seName" value="${esc(sup.name)}" /></label>
     <label class="fld"><span>Phone</span><input id="sePhone" value="${esc(sup.phone)}" placeholder="+91 …" /></label>
-    <label class="fld"><span>Email</span><input id="seEmail" value="${esc(sup.email)}" /></label>
+    <label class="fld"><span>Email <em>purchase orders are sent here</em></span><input id="seEmail" type="email" value="${esc(sup.email)}" /></label>
+    <label class="fld"><span>Lead time — days they take to deliver <em>applies to every item they supply</em></span>
+      <input id="seLead" type="number" min="0" step="any" value="${sup.lead_time_days || ""}" placeholder="7" /></label>
     <div class="modal-actions">
       <button class="btn ghost" id="seDetach">Remove from all items</button>
       <button class="btn primary" id="seSave">Save</button>
@@ -3498,7 +3800,8 @@ function editSupplier(sup) {
     try {
       await api("/api/supply/supplier", { method: "POST", json: { name: sup.name, patch: {
         name: $("seName").value.trim(), phone: $("sePhone").value.trim(),
-        email: $("seEmail").value.trim() } } });
+        email: $("seEmail").value.trim(),
+        lead_time_days: $("seLead").value === "" ? null : parseFloat($("seLead").value) } } });
       closeModal(); renderSuppliers(); toast("Supplier updated everywhere.");
     } catch (e) { toast(e.message); }
   };
@@ -3531,33 +3834,43 @@ function _closePanels() {
 }
 
 // ---- Add / edit item ----
+/* Three steps, Next / Back, Submit only at the end: the raw material and the
+   product it goes into, who you buy it from, and how much to order. Add Item
+   lives here in Inventory only — suppliers come from the items they supply. */
 function openSupplyForm(id) {
   _closePanels();
   const it = id ? (_supplyData.inventory || []).find((x) => x.id === id) : null;
   const f = $("supForm");
   f.hidden = false;
   const v = (x, dflt = "") => (it && it[x] != null ? it[x] : dflt);
-  // Eleven numeric fields in one grid, most of them optional and most of them
-  // jargon, is why this form was unusable. Three panels: what you must know,
-  // who you buy it from, and the ordering maths you can safely ignore until
-  // the app has enough sales history to fill it in for you.
+  const catalog = _supplyData.catalog || [];
+  const sups = _supplyData.suppliers || [];
+  const links = it ? (_supplyData.maps || []).filter((m) => m.inventory_id === it.id) : [];
+  const rule = _supplyData.rule || { dos_multiple: 1.2, eoq_min_days: 30 };
   f.innerHTML = `
     <div class="card sup-form pf">
       <div class="pf-head">
         <h4>${id ? "Edit item" : "Add item"}</h4>
         <p class="muted tiny">${id ? esc(it.name)
-          : "Name and current stock is enough to start. Everything else can wait."}</p>
+          : "A raw material or packing item — what it goes into, who sells it to you, and how much to order."}</p>
       </div>
 
       <div class="pf-tabs" role="tablist">
         <button type="button" class="pf-tab on" data-sf="basics">The item</button>
         <button type="button" class="pf-tab" data-sf="supplier">Supplier</button>
-        <button type="button" class="pf-tab" data-sf="reorder">Reordering</button>
+        <button type="button" class="pf-tab" data-sf="reorder">How much to order</button>
       </div>
 
       <div class="pf-panel on" data-sf="basics">
         <div class="sup-form-grid">
-          <label>Item name <span class="req">required</span>
+          <label>Which product uses it? <span class="muted tiny">from Product Management</span>
+            <select id="sfProd">
+              <option value="">— not linked to a product yet —</option>
+              ${catalog.map((pr) => `<option value="${esc(pr.name)}">${esc(pr.name)}${pr.category ? ` · ${esc(pr.category)}` : ""}</option>`).join("")}
+            </select></label>
+          <label>How much one unit of that product uses <span class="muted tiny">e.g. 2.5 (metres per kurta)</span>
+            <input id="sfQpu" type="number" min="0" step="any" value="1" /></label>
+          <label>Item name <span class="req">required</span> <span class="muted tiny">picking a product fills this in — change it to what you call the material</span>
             <input id="sfName" value="${esc(v("name"))}" placeholder="e.g. Cotton fabric, 2m roll" /></label>
           <label>How much do you have now?
             <input id="sfStock" type="number" min="0" step="any" value="${v("current_stock", 0)}" /></label>
@@ -3565,43 +3878,45 @@ function openSupplyForm(id) {
             <input id="sfUnit" value="${esc(v("unit_label", "unit"))}" placeholder="pcs" /></label>
           <label>Category <span class="muted tiny">optional</span>
             <input id="sfCat" value="${esc(v("category"))}" placeholder="Fabric" /></label>
-          <label>What one costs you ₹ <span class="muted tiny">used for order values and the holding-cost estimate</span>
+          <label>What one costs you ₹ <span class="muted tiny">used for order values</span>
             <input id="sfCost" type="number" min="0" step="any" value="${it && it.unit_cost != null ? it.unit_cost : ""}" /></label>
         </div>
+        ${links.length ? `<p class="muted tiny" style="margin:8px 0 0;">Already used in: ${links.map((m) =>
+          `<b>${esc(m.product)}</b> × ${fmt(m.qty_per_unit)}`).join(", ")}. Picking a product above adds another.</p>` : ""}
       </div>
 
       <div class="pf-panel" data-sf="supplier">
-        <p class="muted tiny" style="margin:0 0 12px;">Who you buy this from. Their name and number go
-          on the purchase order PDF, so you can send it straight to them.</p>
+        <p class="muted tiny" style="margin:0 0 12px;">Purchase orders for this item are emailed to this
+          supplier, so the email matters most. Pick someone you already buy from to fill it in.</p>
         <div class="sup-form-grid">
-          <label>Supplier name<input id="sfSupN" value="${esc(v("supplier_name"))}" placeholder="Sharma Textiles" /></label>
+          <label>Supplier name<input id="sfSupN" list="sfSupList" value="${esc(v("supplier_name"))}" placeholder="Sharma Textiles" />
+            <datalist id="sfSupList">${sups.map((x) => `<option value="${esc(x.name)}">`).join("")}</datalist></label>
+          <label>Email <span class="muted tiny">where purchase orders go</span>
+            <input id="sfSupE" type="email" value="${esc(v("supplier_email"))}" placeholder="orders@supplier.com" /></label>
           <label>Phone<input id="sfSupP" value="${esc(v("supplier_phone"))}" placeholder="+91 …" inputmode="tel" /></label>
-          <label>Email<input id="sfSupE" type="email" value="${esc(v("supplier_email"))}" placeholder="sales@supplier.com" /></label>
-          <label>Smallest quantity they will sell <span class="muted tiny">leave 0 if there is no minimum</span>
-            <input id="sfMoq" type="number" min="0" step="any" value="${v("moq", 0)}" /></label>
-          <label>How many days they take <span class="muted tiny">blank = we assume 7</span>
-            <input id="sfLead" type="number" min="0" step="any" placeholder="auto (7)"
+          <label>Lead time — days they take to deliver <span class="muted tiny">blank = we assume 7</span>
+            <input id="sfLead" type="number" min="0" step="any" placeholder="7"
                    value="${it && it.lead_time_days > 0 ? it.lead_time_days : ''}" /></label>
+          <label>Minimum order (MOQ) <span class="muted tiny">the smallest quantity they will sell — 0 if none</span>
+            <input id="sfMoq" type="number" min="0" step="any" value="${v("moq", 0)}" /></label>
         </div>
       </div>
 
       <div class="pf-panel" data-sf="reorder">
-        <div class="nudge">${sic("spark")}<div><b>You can leave all of this blank — we have already filled it in.</b>
-          Once there is enough sales history the app works these out from what you actually
-          sell, shows them marked “auto”, and offers to write them in. Fill them only if you
-          already know your own numbers.</div></div>
+        <div class="nudge">${sic("spark")}<div><b>How ordering works here</b>
+          We order when the days your stock will last fall below ${rule.dos_multiple} × the lead time.
+          Each order is for the DOQ (default order quantity): the supplier's minimum, until you
+          add both costs below and there is a month of sales — then the cheapest quantity (EOQ), if it
+          is more than the minimum. Or type your own.</div></div>
         <div class="sup-form-grid">
-          <label>Spare to always keep <span class="muted tiny">leave blank and we work it out from how much your sales move around</span>
-            <input id="sfSafe" type="number" min="0" step="any" placeholder="auto"
-                   value="${it && it.safety_stock > 0 ? it.safety_stock : ''}" /></label>
-          <label>Cost of placing one order ₹ <span class="muted tiny">blank = auto (₹200)</span>
-            <input id="sfOrder" type="number" min="0" step="any" placeholder="auto"
+          <label>Cost of placing one order ₹ <span class="muted tiny">calls, transport, paperwork</span>
+            <input id="sfOrder" type="number" min="0" step="any" placeholder="e.g. 300"
                    value="${it && it.ordering_cost != null ? it.ordering_cost : ""}" /></label>
-          <label>Cost of holding one unit for a year ₹ <span class="muted tiny">blank = auto (20% of unit cost)</span>
-            <input id="sfHold" type="number" min="0" step="any" placeholder="auto"
+          <label>Cost of holding one unit for a year ₹ <span class="muted tiny">storage, damage, money tied up</span>
+            <input id="sfHold" type="number" min="0" step="any" placeholder="e.g. 12"
                    value="${it && it.holding_cost != null ? it.holding_cost : ""}" /></label>
-          <label>Always order this many <span class="muted tiny">leave blank and we work out the cheapest quantity to order</span>
-            <input id="sfQty" type="number" min="0" step="any" placeholder="we decide"
+          <label>Your own DOQ <span class="muted tiny">leave blank and we work it out${it && it.doq ? ` — now ${fmt(it.doq)}` : ""}</span>
+            <input id="sfQty" type="number" min="0" step="any" placeholder="we work it out"
                    value="${it && it.reorder_qty != null ? it.reorder_qty : ""}" /></label>
         </div>
       </div>
@@ -3615,15 +3930,44 @@ function openSupplyForm(id) {
       </div>
     </div>`;
 
-  f.querySelectorAll(".pf-tab").forEach((n) => n.onclick = () => {
-    f.querySelectorAll(".pf-tab").forEach((x) => x.classList.toggle("on", x === n));
-    f.querySelectorAll(".pf-panel").forEach((x) =>
-      x.classList.toggle("on", x.dataset.sf === n.dataset.sf));
+  // Picking a product fills the name, which stays editable.
+  const prod = $("sfProd");
+  prod.onchange = () => {
+    const nm = $("sfName");
+    if (prod.value && (!nm.value.trim() || nm.dataset.auto === "1")) {
+      nm.value = prod.value; nm.dataset.auto = "1";
+    }
+    nm.focus(); nm.select();
+  };
+  $("sfName").addEventListener("input", (e) => { e.target.dataset.auto = ""; });
+  // An existing supplier fills in their details.
+  $("sfSupN").addEventListener("change", () => {
+    const x = sups.find((y) => y.name.toLowerCase() === $("sfSupN").value.trim().toLowerCase());
+    if (!x) return;
+    if (!$("sfSupE").value) $("sfSupE").value = x.email || "";
+    if (!$("sfSupP").value) $("sfSupP").value = x.phone || "";
+    if (!$("sfLead").value && x.lead_time_days) $("sfLead").value = x.lead_time_days;
   });
+
+  wizardify(f, { tabSel: ".pf-tab", panelSel: ".pf-panel", key: "sf", submitId: "sfSave",
+    validate: (step) => {
+      if (step === 0 && !$("sfName").value.trim()) return "Give the item a name (or pick the product it goes into).";
+      if (step === 0) {
+        const nm = $("sfName").value.trim().toLowerCase();
+        const twin = ((_supplyData || {}).inventory || []).find((x) => x.id !== id && String(x.name || "").trim().toLowerCase() === nm);
+        if (twin) return `You already have "${twin.name}". Edit that one (✎ in the list) — or, if another product uses it too, add it under "What each product uses" so its stock is counted once.`;
+      }
+      if (step === 0 && $("sfProd").value && !(parseFloat($("sfQpu").value) > 0)) return "How much of it does one unit of the product use? It has to be more than 0.";
+      if (step === 1) {
+        const e = $("sfSupE").value.trim();
+        if (e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return "That email does not look right — purchase orders are sent to it.";
+      }
+      return null;
+    } });
 
   f.scrollIntoView({ behavior: "smooth", block: "nearest" });
   $("sfCancel").onclick = () => { f.hidden = true; f.innerHTML = ""; };
-  const numOrNull = (id) => ($(id).value === "" ? null : parseFloat($(id).value));
+  const numOrNull = (x) => ($(x).value === "" ? null : parseFloat($(x).value));
   $("sfSave").onclick = async () => {
     const payload = {
       id: id || null,
@@ -3632,7 +3976,7 @@ function openSupplyForm(id) {
       unit_label: $("sfUnit").value.trim() || "unit",
       current_stock: parseFloat($("sfStock").value) || 0,
       lead_time_days: numOrNull("sfLead"),
-      safety_stock: numOrNull("sfSafe"),
+      safety_stock: it ? it.safety_stock : null,
       moq: parseFloat($("sfMoq").value) || 0,
       ordering_cost: numOrNull("sfOrder"),
       holding_cost: numOrNull("sfHold"),
@@ -3641,9 +3985,11 @@ function openSupplyForm(id) {
       supplier_name: $("sfSupN").value.trim(),
       supplier_phone: $("sfSupP").value.trim(),
       supplier_email: $("sfSupE").value.trim(),
+      link_product: $("sfProd").value,
+      qty_per_unit: numOrNull("sfQpu"),
     };
     if (!payload.name) { const e = $("sfErr"); e.textContent = "Item name is required."; e.hidden = false; return; }
-    try { _supAfter(await api("/api/supply/item", { method: "POST", json: payload })); toast("Saved"); }
+    try { _supAfter(await api("/api/supply/item", { method: "POST", json: payload })); toast(id ? "Saved" : "Item added"); }
     catch (e) { const el = $("sfErr"); el.textContent = e.message; el.hidden = false; }
   };
 }
@@ -3787,6 +4133,131 @@ async function _linkRemove(id) {
       qty_per_unit: snap.qty_per_unit } });
     _supplyData = d; _renderLinks();
   });
+}
+
+// ---- Replenishment: check now, review a drafted PO, approve & send ----
+async function supplyCheckNow() {
+  try {
+    const d = await withBusy("Checking every raw material…",
+      "Days of supply against 1.2 × each supplier's lead time — anything short gets a purchase order drafted.",
+      () => api("/api/supply/replenish/check", { method: "POST" }));
+    _supAfter(d);
+    const c = d.check || {};
+    const made = (c.created || []).length + (c.appended || []).length;
+    toast(made ? `${(c.low || []).length} item${(c.low || []).length === 1 ? "" : "s"} short — purchase order${made === 1 ? "" : "s"} drafted. Approve ${made === 1 ? "it" : "them"} in the Approval panel.`
+      : (c.low || []).length ? "Everything short is already on order." : "Every raw material has enough days of supply.", 7000);
+  } catch (e) { toast(e.message, 6000); }
+}
+
+/* Details on a drafted PO: each line with its days of supply and how its
+   quantity was worked out (editable), the supplier, and the email the content
+   writer drafted — editable too — before anything is sent. */
+async function openPoDetail(poNumber) {
+  let d;
+  try { d = await withBusy("Opening the purchase order…", "Drafting the email to the supplier if there is not one yet.",
+    () => api(`/api/supply/po/${encodeURIComponent(poNumber)}/detail`)); }
+  catch (e) { toast(e.message); return; }
+  const po = d.po, sup = po.supplier || {}, em = d.email || {};
+  const draft = po.status === "draft" || po.status === "open";
+  const rows = (po.lines || []).map((ln) => {
+    const n = ln.now || {};
+    return `<tr>
+      <td><b>${esc(ln.name)}</b>${(n.linked_products || []).length ? `<div class="muted tiny">in ${n.linked_products.map(esc).join(", ")}</div>` : ""}</td>
+      <td class="num">${n.current_stock == null ? "—" : fmt(n.current_stock)}</td>
+      <td class="num">${n.dos == null ? "—" : n.dos} <span class="muted tiny">/ ${n.dos_threshold ?? "—"}</span></td>
+      <td class="num">${n.effective_lead_time_days ?? "—"}</td>
+      <td class="num">${draft ? `<input class="doq-in" type="number" min="0" step="1" data-poqty="${esc(ln.inventory_id)}" value="${ln.order_qty}" />` : fmt(ln.order_qty)}
+        <span class="muted tiny">${esc(ln.unit_label || "")} · ${esc(DOQ_BASIS[n.doq_basis || ln.doq_basis] || "")}</span></td>
+      <td class="num">${ln.line_amount == null ? "—" : _rupee(ln.line_amount)}</td>
+    </tr>`;
+  }).join("");
+  openModal(`${po.po_number} — ${sup.name || "supplier"}`, `
+    <div class="po-d-sup">
+      <div><b>${esc(sup.name || "No supplier named")}</b>
+        <div class="muted tiny">${esc(sup.email || "no email on file")}${sup.phone ? " · " + esc(sup.phone) : ""}</div></div>
+      <span class="po-st st-${esc(po.status)}">${esc(po.status === "draft" ? "waiting for you" : po.status)}</span>
+    </div>
+    ${po.note ? `<p class="muted tiny" style="margin:6px 0 10px;">${esc(po.note)}</p>` : ""}
+    <div class="table-scroll"><table class="sup-table">
+      <thead><tr><th>Item</th><th class="num">Left</th><th class="num" title="Days of supply / what we want in hand (1.2 × lead time)">DOS / need</th>
+        <th class="num">Lead time</th><th class="num">Order</th><th class="num">Amount</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    ${(po.lines || []).map((ln) => { const nw = ln.now || {}; if (!nw.reason) return "";
+      const moved = nw.doq != null && ln.order_qty != null && Math.round(nw.doq) !== Math.round(ln.order_qty);
+      return `<p class="muted tiny" style="margin:6px 0 0;"><b>${esc(ln.name)}:</b> ${esc(nw.reason)}${moved
+        ? ` <span class="warn-t">This order was drafted for ${fmt(ln.order_qty)}; with the latest sales the DOQ is now ${fmt(nw.doq)} — change the quantity above if you want it.</span>` : ""}</p>`; }).join("")}
+
+    <div class="sup-sub" style="margin-top:16px;">${sic("mail")}Email to the supplier <span class="muted tiny">— the PO goes as a PDF attachment</span></div>
+    <label class="fld"><span>To</span><input id="poTo" type="email" value="${esc(em.to || sup.email || "")}" placeholder="orders@supplier.com" /></label>
+    <label class="fld"><span>Subject</span><input id="poSubj" value="${esc(em.subject || "")}" /></label>
+    <label class="fld"><span>Message</span><textarea id="poMsg" rows="9">${esc(em.body || "")}</textarea></label>
+    <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn ghost sm" id="poRewrite">${sic("spark")}Rewrite with AI</button>
+      <a class="btn ghost sm" id="poPdf" href="#">${sic("receipt")}See the PDF</a>
+      ${d.email_ready ? "" : `<span class="muted tiny">Email sending is not set up on this server — Approve gives you the PDF and opens your own mail app with this message.</span>`}
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-poclose>Close</button>
+      ${draft ? `<button class="btn reject" id="poCancel">Cancel order</button>
+      <button class="btn ghost" id="poSave">Save changes</button>
+      <button class="btn approve" id="poSend">${sup.email || em.to ? "Approve &amp; send" : "Approve &amp; download"}</button>` : ""}
+    </div>`, { wide: true });
+
+  document.querySelector("[data-poclose]").onclick = closeModal;
+  $("poPdf").onclick = (e) => { e.preventDefault(); download(d.pdf_url, `${po.po_number}.pdf`); };
+  $("poRewrite").onclick = async () => {
+    const b = $("poRewrite"); b.disabled = true; b.innerHTML = sic("spark") + "Writing…";
+    try {
+      const r = await api(`/api/supply/po/${encodeURIComponent(po.po_number)}/email/rewrite`, { method: "POST" });
+      $("poSubj").value = r.email.subject || ""; $("poMsg").value = r.email.body || "";
+    } catch (e) { toast(e.message); }
+    b.disabled = false; b.innerHTML = sic("spark") + "Rewrite with AI";
+  };
+  const saveAll = async () => {
+    const qty = {};
+    document.querySelectorAll("[data-poqty]").forEach((inp) => { qty[inp.dataset.poqty] = parseFloat(inp.value) || 0; });
+    if (Object.keys(qty).length) await api(`/api/supply/po/${encodeURIComponent(po.po_number)}/lines`, { method: "POST", json: { qty } });
+    await api(`/api/supply/po/${encodeURIComponent(po.po_number)}/email`, { method: "POST",
+      json: { subject: $("poSubj").value, body: $("poMsg").value, to: $("poTo").value.trim() } });
+  };
+  if ($("poSave")) $("poSave").onclick = async () => {
+    try { await saveAll(); toast("Saved."); } catch (e) { toast(e.message); }
+  };
+  if ($("poCancel")) $("poCancel").onclick = async () => {
+    closeModal();
+    await decide(`po_${po.po_number}`, "cancel");
+  };
+  if ($("poSend")) $("poSend").onclick = async () => {
+    try { await saveAll(); } catch (e) { toast(e.message); return; }
+    closeModal();
+    await approvePo(po.po_number);
+  };
+}
+
+/* Approve a drafted PO: the backend writes/uses the email, attaches the PDF
+   and sends it. If it could not be emailed from here, the seller gets the PDF
+   and their own mail app opened with the message, so it still goes today. */
+async function approvePo(poNumber) {
+  let r;
+  try {
+    r = await withBusy("Sending the purchase order…",
+      "Writing the email, attaching the PO as a PDF and sending it to the supplier.",
+      () => api(`/api/supply/po/${encodeURIComponent(poNumber)}/approve`, { method: "POST", json: {} }));
+  } catch (e) { toast(e.message, 7000); return; }
+  if (r.insights) { if (state.lastState) state.lastState.insights = r.insights; renderApprovals(r.insights); }
+  if (_currentModule === "supply" || _currentModule === "inventory") openSupply();
+  if (r.sent) { toast(`Sent to ${r.to} with the PO attached.`, 6000); return; }
+  openModal("Approved — send it yourself", `
+    <p style="margin-top:0;">${esc(r.reason || "It could not be emailed from here.")}</p>
+    <p class="muted">The order is approved. Download the PDF and send it with the ready-written message —
+      the button below opens your own mail app with it filled in; attach the PDF there.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" data-apx>Close</button>
+      <button class="btn ghost" id="apPdf">${sic("receipt")}Download PDF</button>
+      ${r.mailto ? `<a class="btn primary" href="${esc(r.mailto)}" target="_blank" rel="noopener">${sic("mail")}Open my mail app</a>` : ""}
+    </div>`);
+  document.querySelector("[data-apx]").onclick = closeModal;
+  $("apPdf").onclick = () => download(r.pdf_url, `${poNumber}.pdf`);
 }
 
 // ---- Purchase orders ----
@@ -4424,7 +4895,7 @@ async function openWinbackSend(rows) {
     </div>
 
     <label class="fld"><span>The message</span>
-      <textarea id="wbTpl" rows="5">${esc(pv.template)}</textarea></label>
+      <textarea id="wbTpl" data-ai="message" data-ai-label="Win-back message (keep the {name} placeholders)" rows="5">${esc(pv.template)}</textarea></label>
     <p class="muted tiny">{name} {brand} {item} {days} {coupon} are filled in per
       customer. Here is the first one:</p>
     <div class="wb-prev" id="wbPrev">${esc((pv.preview[0] || {}).message || "")}</div>
@@ -4709,9 +5180,9 @@ function renderContentEditor(sug) {
             <option value="facebook"  ${sug.platform==="facebook"?"selected":""}>Facebook</option>
           </select>
         </label>
-        <label>Caption <textarea id="ccCaption" rows="6">${esc(sug.caption || "")}</textarea></label>
+        <label>Caption <textarea id="ccCaption" data-ai="caption" data-ai-label="Instagram caption" rows="6">${esc(sug.caption || "")}</textarea></label>
         <label>Hashtags (space-separated) <textarea id="ccTags" rows="2">${esc(tags)}</textarea></label>
-        <label>Description <textarea id="ccDesc" rows="3">${esc(sug.description || "")}</textarea></label>
+        <label>Description <textarea id="ccDesc" data-ai="product_description" data-ai-label="Description" rows="3">${esc(sug.description || "")}</textarea></label>
       </div>
     </div>
     <div class="modal-actions cc-actions">
@@ -5181,11 +5652,30 @@ function wireBinds(scope) {
   });
 }
 
+/* Which site fields the content writer can help with, and as what. Contact
+   details, handles, prices and numbers are the seller's facts — no ✨ there. */
+const SITE_AI = {
+  "tagline": "tagline", "brief": "", "announcement": "announcement",
+  "hero.heading": "hero_heading", "hero.sub": "hero_sub", "hero.cta_text": "label",
+  "story.title": "label", "story.body": "story", "manifesto": "manifesto",
+  "copy.news_sub": "newsletter", "copy.news_title": "label", "copy.drop_title": "label",
+  "policies.shipping": "policy", "policies.returns": "policy", "policies.privacy": "policy",
+  "seo.description": "seo_description", "seo.title": "label",
+  "commerce.order_note": "general",
+};
+function siteAiAttr(path, label) {
+  let kind = SITE_AI[path];
+  if (kind === undefined && /^copy\.[a-z_]+_(title|eyebrow)$/.test(path)) kind = "label";
+  if (!kind) return "";
+  return ` data-ai="${kind}" data-ai-ctx="site" data-ai-label="${esc(String(label).replace(/<[^>]+>/g, ""))}"`;
+}
+
 function field(label, path, opts = {}) {
   const v = readPath(path);
   const hint = opts.hint ? ` <span class="muted tiny">${opts.hint}</span>` : "";
+  const ai = opts.ai === false ? "" : siteAiAttr(path, label);
   if (opts.type === "textarea")
-    return `<label>${label}${hint}<textarea rows="${opts.rows || 3}" data-bind="${path}" placeholder="${esc(opts.ph || "")}">${esc(v || "")}</textarea></label>`;
+    return `<label>${label}${hint}<textarea rows="${opts.rows || 3}" data-bind="${path}"${ai} placeholder="${esc(opts.ph || "")}">${esc(v || "")}</textarea></label>`;
   if (opts.type === "check")
     return `<label class="inline-check"><input type="checkbox" data-bind="${path}" ${v ? "checked" : ""} /> ${label}${hint}</label>`;
   if (opts.type === "select")
@@ -5197,12 +5687,28 @@ function field(label, path, opts = {}) {
       <span class="rng-val"><b id="${id}Out">${v == null ? opts.def : v}</b>${opts.hint ? ` <span class="muted tiny">${opts.hint}</span>` : ""}</span>
       <input type="range" id="${id}" data-bind="${path}" data-num="1" min="${opts.min}" max="${opts.max}" step="${opts.step || 1}" value="${v == null ? opts.def : v}" /></label>`;
   }
-  return `<label>${label}${hint}<input type="${opts.type || "text"}" data-bind="${path}" ${opts.num ? 'data-num="1" min="0" step="any"' : ""} value="${esc(v == null ? "" : v)}" placeholder="${esc(opts.ph || "")}" /></label>`;
+  return `<label>${label}${hint}<input type="${opts.type || "text"}" data-bind="${path}"${(opts.type || "text") === "text" && !opts.num ? ai : ""} ${opts.num ? 'data-num="1" min="0" step="any"' : ""} value="${esc(v == null ? "" : v)}" placeholder="${esc(opts.ph || "")}" /></label>`;
 }
 
 /* ============================== STEP 1: SETUP ============================ */
 function stepSetup() {
   return `
+  <div class="card sup-form form-v ai-brief">
+    <div class="sup-sub">${sic("spark")}Tell us about your shop</div>
+    <p class="muted tiny" style="margin:0 0 10px;">A sentence or two in your own words — what you sell,
+      who makes it, who buys it, what makes it yours. The AI content writer turns it into every
+      piece of text on your site: headline, story, promises, newsletter line and the words Google
+      and WhatsApp show. You see it all before anything changes.</p>
+    <div class="sup-form-grid" style="grid-template-columns:1fr;margin-bottom:10px;">
+      <label>About your shop
+        <textarea id="siteBrief" rows="3" data-bind="brief" placeholder="Hand-block printed cotton kurtas from Jaipur. My mother and I run it with four karigars. Our buyers are working women who want something comfortable that doesn't look like everyone else's.">${esc(_site.brief || "")}</textarea></label>
+    </div>
+    <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button class="btn primary sm" id="siteWriteAll" type="button">${sic("spark")}Write my website</button>
+      <span class="muted tiny">Uses your products and Product Studio brand profile too.</span>
+    </div>
+  </div>
+
   <div class="card sup-form form-v">
     <div class="sup-sub">Your brand</div>
     <div class="sup-form-grid">
@@ -5843,6 +6349,7 @@ function wireStep() {
   const body = $("siteBody");
   wireBinds(body);
   wireImageFields(body);
+  if ($("siteWriteAll")) $("siteWriteAll").onclick = writeWholeSite;
 
   const map = { siteLogo: "logo_url", edLogo: "logo_url", edHero: "hero.image_url",
                 edHeroVid: "hero.video_url", edStory: "story.image_url" };
@@ -5936,6 +6443,76 @@ function wireStep() {
     const inp = $("shareUrl"); inp.select();
     try { await navigator.clipboard.writeText(inp.value); toast("Link copied"); }
     catch (e) { document.execCommand("copy"); toast("Link copied"); }
+  };
+}
+
+/* "Write my website": the content writer drafts every piece of copy from the
+   seller's brief; they tick what to use, and it goes straight into the site. */
+const SITE_COPY_FIELDS = [
+  ["tagline", "Tagline", (v) => { _site.tagline = v; }],
+  ["hero_heading", "Hero headline", (v) => { _site.hero.heading = v; }],
+  ["hero_sub", "Hero sub-headline", (v) => { _site.hero.sub = v; }],
+  ["hero_cta", "Hero button", (v) => { _site.hero.cta_text = v; }],
+  ["announcement", "Announcement bar", (v) => { _site.announcement = v; }],
+  ["story_title", "Story title", (v) => { _site.story.title = v; }],
+  ["story_body", "Our story", (v) => { _site.story.body = v; }],
+  ["manifesto", "Brand statement", (v) => { _site.manifesto = v; _site.sections.manifesto = true; }],
+  ["highlights", "Promise strip", (v) => {
+    const icons = ["truck", "shield", "refresh"];
+    _site.highlights = (v || []).slice(0, 3).map((h, i) => ({
+      icon: ((_site.highlights || [])[i] || {}).icon || icons[i], title: h.title, text: h.text }));
+  }],
+  ["news_title", "Newsletter heading", (v) => { _site.copy.news_title = v; }],
+  ["news_sub", "Newsletter line", (v) => { _site.copy.news_sub = v; }],
+  ["shop_title", "All-products heading", (v) => { _site.copy.shop_title = v; }],
+  ["feat_title", "Featured heading", (v) => { _site.copy.feat_title = v; }],
+  ["seo_title", "Search / link title", (v) => { _site.seo.title = v; }],
+  ["seo_description", "Search / link description", (v) => { _site.seo.description = v; }],
+  ["seo_keywords", "Search keywords", (v) => { _site.seo.keywords = v; }],
+];
+
+async function writeWholeSite() {
+  const brief = ($("siteBrief") || {}).value || _site.brief || "";
+  if (brief.trim().length < 8) { toast("Write a sentence or two about your shop first."); return; }
+  _site.brief = brief.trim();
+  let r;
+  try {
+    r = await withBusy("Writing your website…",
+      "The content writer is drafting your headline, story, promises and search text from what you told us.",
+      () => api("/api/ai/site-copy", { method: "POST", json: { brief } }));
+  } catch (e) { toast(e.message, 6000); return; }
+  let copy = r.copy || {};
+  let via = r.ai ? `Written by AI (${r.provider})` : "No AI connected on the server — a starting draft from your words";
+  const fb = await puterFallback(r);
+  if (fb) { const j = _aiJson(fb.text); if (j && j.hero_heading) { copy = j; via = "Written by AI (Puter, your account)"; } }
+  const rows = SITE_COPY_FIELDS.filter(([k]) => copy[k] && (!Array.isArray(copy[k]) || copy[k].length));
+  if (!rows.length) { toast("Nothing came back — try again in a moment."); return; }
+  const show = (v) => Array.isArray(v) ? v.map((h) => `<b>${esc(h.title || "")}</b> — ${esc(h.text || "")}`).join("<br>") : esc(v);
+  openModal("Your website, written", `
+    <p class="muted tiny" style="margin-top:0;">${esc(via)}. Untick anything you want to keep as it is,
+      then use the rest. Every line stays editable afterwards.</p>
+    <div class="sc-list">${rows.map(([k, label]) => `
+      <label class="sc-row"><input type="checkbox" data-sc="${k}" checked />
+        <div><span class="muted tiny">${esc(label)}</span><div class="sc-v">${show(copy[k])}</div></div></label>`).join("")}</div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-scx>Cancel</button>
+      <button class="btn ghost" id="scAgain">${sic("spark")}Try again</button>
+      <button class="btn primary" id="scUse">Use the ticked ones</button>
+    </div>`, { wide: true });
+  document.querySelector("[data-scx]").onclick = closeModal;
+  $("scAgain").onclick = () => { closeModal(); writeWholeSite(); };
+  $("scUse").onclick = async () => {
+    let n = 0;
+    document.querySelectorAll("[data-sc]").forEach((cb) => {
+      if (!cb.checked) return;
+      const f = SITE_COPY_FIELDS.find(([k]) => k === cb.dataset.sc);
+      if (f) { f[2](copy[f[0]]); n++; }
+    });
+    closeModal();
+    siteMark();
+    try { await saveSite({ quiet: true }); } catch (e) { /* saveSite already said why */ }
+    renderStep();
+    toast(`${n} part${n === 1 ? "" : "s"} of your site written — see them in the editor.`, 6000);
   };
 }
 
@@ -6314,8 +6891,8 @@ async function renderSocial() {
   } catch (e) { return moduleShell("Social Media Manager", failed(e.message, () => openModule(_currentModule))); }
   _socialCal = cal;
 
-  const aiLine = ai.free_ready
-    ? `<span class="sm-ok">${sic("check")}Writing with ${esc(ai.active)} — free tier</span>`
+  const aiLine = ai.ready
+    ? `<span class="sm-ok">${sic("check")}Writing with ${esc(ai.active)}${ai.free_ready && !(ai.providers || []).some((x) => x.name === ai.active && !x.free) ? " — free tier" : ""}</span>`
     : `<span class="sm-warn">${sic("alert")}No AI connected — captions come from a template.</span>`;
 
   // Decisions for these posts live in the Approval panel now (the next-7-days
@@ -6718,12 +7295,12 @@ function openSocialEditor(post) {
   openModal(`${esc(shortWhen(post.scheduled_at))} — ${esc(post.product_name || "")}`, `
     ${topHtml}
     <label class="fld"><span>Hook <em id="smHookCount">${(c.hook || "").length} / 125</em></span>
-      <textarea id="smHook" rows="2">${esc(c.hook || "")}</textarea></label>
+      <textarea id="smHook" data-ai="caption_hook" data-ai-ctx="post" data-ai-label="Hook" rows="2">${esc(c.hook || "")}</textarea></label>
     <p class="sm-hint">Instagram cuts the caption at 125 characters. Everything past
       that hides behind "… more", so the product and the reason to care both belong here.</p>
 
     <label class="fld"><span>Body</span>
-      <textarea id="smBody" rows="4">${esc(c.body || "")}</textarea></label>
+      <textarea id="smBody" data-ai="caption" data-ai-ctx="post" data-ai-label="Caption body, under 30 words" rows="4">${esc(c.body || "")}</textarea></label>
     <p class="sm-hint">Under 30 words performs best across nine million posts studied.</p>
 
     <label class="fld"><span>Question</span>
@@ -7603,7 +8180,7 @@ function openManualPo(suppliers) {
         <div id="poTotal"></div>
       </div>
       <label class="fld"><span>Note to the supplier</span>
-        <textarea id="poNote" rows="2"></textarea></label>
+        <textarea id="poNote" data-ai="po_note" data-ai-ctx="po" data-ai-label="Note to the supplier" rows="2"></textarea></label>
     </div>
     <div class="modal-actions">
       <button class="btn ghost" data-mclose7>Cancel</button>

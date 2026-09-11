@@ -103,6 +103,7 @@ def assign(card: dict) -> str:
     if cid in BY_ID:
         return BY_ID[cid]
     for prefix, who in (("content_", "social"), ("post_", "social"), ("autoplan_", "social"),
+                        ("po_", "supply"),
                         ("supplier_", "supply"), ("stock_", "operations")):
         if cid.startswith(prefix):
             return who
@@ -179,14 +180,14 @@ def _reorder(card: dict) -> dict:
         "headline": f"Order {n} item{'s' if n != 1 else ''} before we run out",
         "body": (f"{_n(cover)} days of cover left on the tightest. Quantities worked out."
                  if cover else f"{names[:60]} at or below reorder point."),
-        "why": (f"{names} {'are' if n != 1 else 'is'} at or below the point where "
-                f"lead time eats the remaining stock."
+        "why": (f"{names} {'are' if n != 1 else 'is'} down to fewer days of supply "
+                f"than 1.2 × the supplier's lead time, and no order is on its way."
                 + (f" The tightest is down to {_n(cover)} days of cover." if cover else "")
-                + f" I have worked out the order quantity for each from your own "
-                  f"usage rate — economic order quantity, respecting each "
-                  f"supplier's minimum. Approve and the purchase order is "
-                  f"written and ready to send."),
-        "cta": "Raise the purchase order",
+                + f" Each quantity is the default order quantity — the supplier's "
+                  f"minimum, or the economic order quantity once your ordering and "
+                  f"holding costs are in. Approve and I will draft one purchase "
+                  f"order per supplier for you to check and send."),
+        "cta": "Draft the purchase orders",
     }
 
 
@@ -331,6 +332,27 @@ def _autoplan_week(card: dict) -> dict:
             "body": body, "why": why, "cta": f"Approve all {n}"}
 
 
+def _purchase_order(card: dict) -> dict:
+    """A purchase order the replenishment check drafted after an order."""
+    sup = card.get("supplier_name") or "the supplier"
+    n = _n(card.get("n_items"))
+    dos = card.get("tightest_dos")
+    amt = _rupees(card.get("total_amount")) if card.get("total_amount") else ""
+    body = (f"{card.get('detail') or ''}"[:120]
+            + (f" · {amt}" if amt else ""))
+    why = (f"{card.get('reason') or ''} "
+           f"Days of supply fell below 1.2 × the lead time, so I drafted this order to {sup} "
+           f"at each item's default order quantity."
+           + (f" The tightest item has {dos:g} days left." if isinstance(dos, (int, float)) else "")
+           + (" Approve and I will write the email, attach the PO as a PDF and send it to "
+              f"{card.get('supplier_email')}." if card.get("has_email") else
+              " There is no email on file for this supplier, so Approve gives you the PDF "
+              "and a ready email to send yourself — add their email in Suppliers for next time."))
+    return {"headline": f"Send {sup} an order for {n} item{'s' if n != 1 else ''}",
+            "body": body, "why": why.strip(),
+            "cta": card.get("cta") or "Approve & send"}
+
+
 WRITERS = {
     "winback": _winback, "festival": _festival, "reorder": _reorder,
     "overstock": _overstock, "supplier_risk": _supplier_risk,
@@ -339,7 +361,7 @@ WRITERS = {
 # Dynamic ids (one per social post, e.g. "post_a1b2c3") can't live in WRITERS
 # by exact match, so they're matched by prefix instead, checked in dress().
 PREFIX_WRITERS = [("post_", _social_post), ("content_", _social),
-                  ("autoplan_", _autoplan_week)]
+                  ("autoplan_", _autoplan_week), ("po_", _purchase_order)]
 
 
 def dress(card: dict) -> dict:

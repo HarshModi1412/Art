@@ -40,7 +40,13 @@ os.makedirs(IMG_DIR, exist_ok=True)
 # Public helpers
 # ---------------------------------------------------------
 def is_openai_available() -> bool:
-    return bool(os.environ.get("OPENAI_API_KEY"))
+    """Kept for callers that ask; true when ANY text provider is reachable now
+    (Puter, the free tiers or OpenAI) — the copy goes through aiprovider."""
+    try:
+        from backend.core import aiprovider
+        return bool(aiprovider.status().get("ready"))
+    except Exception:  # noqa: BLE001
+        return bool(os.environ.get("OPENAI_API_KEY"))
 
 
 # Simple bank of "trending" topics per product type — a stand-in for real
@@ -91,12 +97,19 @@ def generate_suggestion(email: str, product_type: str | None = None,
     if engine == "openai":
         try:
             copy = _openai_copy(pt, topic)
-            image_url = _openai_image(pt, topic) if with_image else None
+            engine = "ai"
         except Exception as e:
             # never fail the whole call — fall back so the panel keeps working
             copy = _template_copy(pt, topic)
-            image_url = None
-            engine = f"template (openai_error: {str(e)[:80]})"
+            engine = f"template (ai_error: {str(e)[:80]})"
+        # The picture is a separate, OpenAI-only call: its failure must not
+        # throw away copy the writer already produced.
+        image_url = None
+        if with_image and os.environ.get("OPENAI_API_KEY"):
+            try:
+                image_url = _openai_image(pt, topic)
+            except Exception:  # noqa: BLE001
+                image_url = None
     else:
         copy = _template_copy(pt, topic)
         image_url = None
@@ -119,24 +132,21 @@ def generate_suggestion(email: str, product_type: str | None = None,
 # OpenAI engines
 # ---------------------------------------------------------
 def _openai_copy(product_type: str, topic: str) -> dict:
+    """Post copy through the content writer's provider chain (Puter first when
+    configured). Name kept for the callers; it is no longer OpenAI-only."""
     import json
-    from openai import OpenAI
-    client = OpenAI()
-    system = ("You write short, conversion-friendly Instagram posts for small "
-              "product sellers. Voice: warm, confident, human, never salesy. "
-              "Return ONLY JSON with keys caption (<=220 chars), hashtags "
-              "(list of 10-15 lowercase strings without #), description "
-              "(1-2 sentence Product Description).")
+    from backend.core import aiprovider, writer
+    system = writer.WRITER_SYSTEM + (
+        "\nFor this task you write short, conversion-friendly Instagram posts. "
+        "Return ONLY JSON with keys caption (<=220 chars), hashtags (list of 10-15 "
+        "lowercase strings without #), description (1-2 sentence product description).")
     user = (f"Product type: {product_type}. Trend / topic to lean on: {topic}. "
             f"Write one Instagram post.")
-    resp = client.chat.completions.create(
-        model=os.environ.get("OPENAI_TEXT_MODEL", "gpt-4o-mini"),
-        temperature=0.8,
-        response_format={"type": "json_object"},
-        messages=[{"role": "system", "content": system},
-                  {"role": "user", "content": user}],
-    )
-    data = json.loads(resp.choices[0].message.content)
+    res = aiprovider.generate(system, user, sensitivity="public", max_tokens=600,
+                              temperature=0.8, fallback="", role="writer")
+    data = writer._json(res.get("text", ""))
+    if not data.get("caption"):
+        raise RuntimeError(res.get("error") or "no copy came back")
     tags = data.get("hashtags") or []
     if isinstance(tags, str):
         tags = [t.strip().lstrip("#") for t in tags.split() if t.strip()]

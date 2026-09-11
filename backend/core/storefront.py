@@ -475,6 +475,14 @@ def place_order(seller: str, customer: dict, lines: list[dict],
     _save_orders(seller, rows)
 
     _consume_stock(seller, order["items"], sign=-1)
+    # Every order re-checks the raw materials it used: any whose days of
+    # supply fell below 1.2 × lead time gets a purchase order drafted for the
+    # Approval panel. Never raises — see replenish.after_order.
+    try:
+        from backend.core import replenish
+        replenish.after_order(seller, order)
+    except Exception:  # noqa: BLE001
+        pass
     # remember the shopper's address for next time
     try:
         update_customer(seller, customer["id"], {"address": addr, "phone": phone,

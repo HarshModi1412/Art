@@ -1195,8 +1195,10 @@ from backend.core import aiprovider as _aip
 _aistat = _aip.status()
 must(isinstance(_aistat["providers"], list) and len(_aistat["providers"]) >= 4,
      "the provider chain is declared")
-must(_aistat["providers"][0]["name"] == "cloudflare",
-     "Cloudflare leads — it is the free one")
+must(_aistat["providers"][0]["name"] == "puter",
+     "Puter leads the chain when its token is set (github.com/heyputer/puter)")
+must(next(p for p in _aistat["providers"] if p["free"])["name"] == "cloudflare",
+     "Cloudflare is the first free one")
 _gem = next(p for p in _aistat["providers"] if p["name"] == "gemini")
 must(_gem["trains"] is True, "Gemini's free tier is marked as training on requests")
 

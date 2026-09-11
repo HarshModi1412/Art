@@ -9,15 +9,20 @@ orders (`purchase_orders`).
 
 Pipeline:
 
-    sales history ─▶ per-product daily units
-    product recipe ─▶ how much of each item a product consumes
+    sales history ─▶ per-product daily units (last 30 days of the data)
+    product recipe ─▶ how much of each raw material a product consumes
                        │
     (fallback: match item name to product name)
                        ▼
-              item average daily usage
+          raw-material average daily consumption
                        │
-    lead time + safety stock ─▶ reorder point ─▶ below-ROP?
-    ordering cost + holding cost ─▶ EOQ ─▶ order qty (bounded below by MOQ)
+    DOS (days of supply) = current stock ÷ average daily consumption
+    rule: DOS must stay ≥ 1.2 × the supplier's lead time, else raise a PO
+    DOQ (default order quantity) = the supplier's MOQ, until the seller has
+        entered their ordering cost and holding cost AND there is a month of
+        sales — then monthly consumption × 12 = annual demand, EOQ =
+        √(2·D·S/H), and DOQ = EOQ if EOQ > MOQ, else MOQ. The seller can
+        always type their own DOQ, which wins.
 
 Each item gets its own restock suggestion. "Open" on a suggestion builds a
 proper Purchase Order PDF (backend.core.po_pdf) with a PO number saved in the
@@ -391,6 +396,14 @@ DEFAULT_LEAD_DAYS = 7       # supplier lead time fallback (not sales-derivable)
 SERVICE_Z = 1.65            # ~95% service level for safety stock
 MIN_DAYS_FOR_AUTO = 5       # need at least this many days of sales to suggest
 
+# Replenishment rule. Stock must cover the supplier's lead time with 20% to
+# spare: a 10-day supplier means ordering once fewer than 12 days of supply
+# are left. The 20% is the buffer for a slow delivery or a good sales week,
+# so it replaces a separate safety-stock figure in the trigger.
+DOS_LEAD_MULTIPLE = 1.2
+RECENT_WINDOW_DAYS = 30     # consumption rate is read over the latest month
+EOQ_MIN_DAYS = 30           # a month of sales before annual demand is trusted
+
 
 def _demand_stats(email: str):
     """(product_daily_mean, daily_matrix, meta).
@@ -400,9 +413,10 @@ def _demand_stats(email: str):
                   product, values = units that day, 0-filled) or None if the
                   sales data has no usable dates. Used for demand variability.
     """
-    txns = smart.load_supply_sales(email)
+    txns, source = _sales_source(email)
     if txns is None or not len(txns) or "product" not in getattr(txns, "columns", []):
-        return {}, None, {"has_sales": False, "days_span": 0}
+        return {}, None, {"has_sales": False, "days_span": 0, "source": "",
+                          "window_days": 0, "data_to": ""}
     try:
         from backend.core import products as _products
         txns = _products.canonicalize_df(email, txns)
@@ -424,13 +438,36 @@ def _demand_stats(email: str):
             full = pd.date_range(dmin, dmax, freq="D")
             piv = dd.pivot_table(index="_d", columns="_prod", values="_q",
                                  aggfunc="sum", fill_value=0.0).reindex(full, fill_value=0.0)
-            product_daily = {c: float(piv[c].mean()) for c in piv.columns}
-            return product_daily, piv, {"has_sales": True, "days_span": int(days)}
+            # The consumption rate is read over the latest month of the data,
+            # not the whole history: a product that sold well last winter and
+            # not since should not keep ordering winter quantities.
+            window = int(min(RECENT_WINDOW_DAYS, len(piv)))
+            recent = piv.tail(window)
+            product_daily = {c: float(recent[c].mean()) for c in piv.columns}
+            return product_daily, piv, {"has_sales": True, "days_span": int(days),
+                                        "window_days": window, "source": source,
+                                        "data_to": dmax.date().isoformat()}
 
     # No usable dates: fall back to totals / 1-day span.
     totals = df.groupby("_prod")["_q"].sum()
     return ({k: float(v) for k, v in totals.items()}, None,
-            {"has_sales": True, "days_span": 1})
+            {"has_sales": True, "days_span": 1, "window_days": 1, "source": source,
+             "data_to": ""})
+
+
+def _sales_source(email: str):
+    """The sales history Supply works from: the separate 'previous sales' set
+    when the seller uploaded one here, otherwise their main Sales data — which
+    already includes every order from their own website. Without the second
+    route a seller who never used the Supply upload had no consumption rate at
+    all, so days of supply could never be worked out."""
+    txns = smart.load_supply_sales(email)
+    if txns is not None and len(txns) and "product" in getattr(txns, "columns", []):
+        return txns, "supply_sales"
+    txns = smart.load_sales(email)
+    if txns is not None and len(txns) and "product" in getattr(txns, "columns", []):
+        return txns, "sales"
+    return None, ""
 
 
 def _maps_by_item(email: str) -> dict:
@@ -487,14 +524,65 @@ def _eoq(annual_demand: float, ordering_cost, holding_cost) -> float | None:
     return None
 
 
-def _enrich(item: dict, product_daily: dict, piv, maps_by_item: dict, meta: dict) -> dict:
+def doq_for(avg_daily: float, moq: float, ordering_cost, holding_cost,
+            days_span: int, lead_days: float, override=None) -> dict:
+    """The default order quantity for one raw material, and why.
+
+    The rule the seller asked for, in order:
+
+      1. Their own number, if they typed one, always wins.
+      2. Until they have entered BOTH what placing an order costs them and
+         what holding one unit for a year costs them, AND there is at least a
+         month of sales, the supplier's MOQ is the DOQ. Anything cleverer would
+         be built on numbers we made up.
+      3. Once all three exist: the last month's consumption × 12 is the annual
+         demand D, EOQ = √(2·D·S/H), and the DOQ is the EOQ when it is larger
+         than the MOQ — otherwise the MOQ, because the supplier will not sell
+         fewer.
+
+    With no MOQ on file either, it falls back to enough to cover the lead time
+    with the same 20% to spare the trigger uses, so a PO is never for zero."""
+    moq = max(0.0, _num(moq))
+    S, H = _opt_num(ordering_cost), _opt_num(holding_cost)
+    monthly = avg_daily * 30.0
+    annual = monthly * 12.0
+    eoq = None
+    eoq_ready = bool(S and S > 0 and H and H > 0 and days_span >= EOQ_MIN_DAYS and annual > 0)
+    if eoq_ready:
+        eoq = math.sqrt(2.0 * annual * S / H)
+    missing = []
+    if not (S and S > 0):
+        missing.append("ordering cost")
+    if not (H and H > 0):
+        missing.append("holding cost")
+    if days_span < EOQ_MIN_DAYS:
+        missing.append(f"a month of sales ({int(days_span)} of {EOQ_MIN_DAYS} days so far)")
+
+    if not _blank(override) and _num(override) > 0:
+        qty, basis = int(math.ceil(_num(override))), "yours"
+    elif eoq_ready and eoq > moq:
+        qty, basis = int(math.ceil(eoq)), "eoq"
+    elif moq > 0:
+        qty, basis = int(math.ceil(moq)), "moq"
+    else:
+        qty = int(max(1, math.ceil(avg_daily * lead_days * DOS_LEAD_MULTIPLE)))
+        basis = "cover"
+    return {"doq": qty, "doq_basis": basis,
+            "doq_eoq": int(round(eoq)) if eoq else None,
+            "eoq_ready": eoq_ready, "eoq_missing": missing,
+            "monthly_consumption": round(monthly, 2),
+            "annual_demand": round(annual, 1)}
+
+
+def _enrich(item: dict, product_daily: dict, piv, maps_by_item: dict, meta: dict,
+            linked: list[str] | None = None) -> dict:
     avg_daily, via_recipe = _item_daily_usage(item, product_daily, maps_by_item)
     std_daily = _item_daily_std(item, piv, maps_by_item)
     current = _num(item.get("current_stock"))
     moq = _int(item.get("moq"))
     annual_demand = avg_daily * 365.0
-    enough = bool(meta.get("has_sales") and meta.get("days_span", 0) >= MIN_DAYS_FOR_AUTO
-                  and avg_daily > 0)
+    span = int(meta.get("days_span", 0) or 0)
+    enough = bool(meta.get("has_sales") and span >= MIN_DAYS_FOR_AUTO and avg_daily > 0)
 
     # --- lead time: not sales-derivable; fall back to a default when unset ---
     lead_raw = _num(item.get("lead_time_days"))
@@ -522,41 +610,49 @@ def _enrich(item: dict, product_daily: dict, piv, maps_by_item: dict, meta: dict
     ordering_is_auto = (not ordering_raw or ordering_raw <= 0) and auto_ordering is not None
     eff_ordering = ordering_raw if (ordering_raw and ordering_raw > 0) else auto_ordering
 
-    reorder_point = int(math.ceil(avg_daily * eff_lead + eff_safety))
-    below = reorder_point > 0 and current <= reorder_point
+    # --- days of supply, and the 1.2 × lead-time rule ---
+    dos = round(current / avg_daily, 1) if avg_daily > 0 else None
+    dos_threshold = round(DOS_LEAD_MULTIPLE * eff_lead, 1)
+    needs_po = dos is not None and dos < dos_threshold
+    # The same rule said as a stock level, for the seller who thinks in units:
+    # order once stock falls below 1.2 × lead time × daily use.
+    reorder_point = int(math.ceil(avg_daily * eff_lead * DOS_LEAD_MULTIPLE)) if avg_daily > 0 else 0
+    below = bool(needs_po)
 
-    eoq_raw = _eoq(annual_demand, eff_ordering, eff_holding)
-
-    if not _blank(item.get("reorder_qty")):
-        base = max(1, _int(item.get("reorder_qty")))
-        basis = "manual"
-    elif eoq_raw:
-        base = max(1, int(math.ceil(eoq_raw)))
-        basis = "eoq"
-    else:
-        base = int(max(1, math.ceil(reorder_point - current + avg_daily * eff_lead)))
-        basis = "cover"
-
-    order_qty = base
-    moq_applied = False
-    if moq > 0 and moq > order_qty:
-        order_qty = moq
-        moq_applied = True
+    # --- DOQ: MOQ until the seller's own S and H and a month of sales exist ---
+    dq = doq_for(avg_daily, moq, ordering_raw, holding_raw, span, eff_lead,
+                 override=item.get("reorder_qty"))
+    order_qty = dq["doq"]
+    basis = {"yours": "manual", "eoq": "eoq", "moq": "moq", "cover": "cover"}[dq["doq_basis"]]
+    moq_applied = dq["doq_basis"] == "moq" and dq["doq_eoq"] is not None
+    eoq_raw = (math.sqrt(2.0 * dq["annual_demand"] * ordering_raw / holding_raw)
+               if dq["eoq_ready"] else None)
 
     est_line_cost = round(order_qty * float(uc), 2) if uc else None
-    days_of_cover = round(current / avg_daily, 1) if avg_daily > 0 else None
+    days_of_cover = dos
     suggestions_available = bool(enough and (safety_is_auto or holding_is_auto
                                              or ordering_is_auto or lead_is_auto))
 
     out = dict(item)
     out.update({
         "avg_daily_sales": round(avg_daily, 3),
+        "avg_daily_consumption": round(avg_daily, 3),
         "std_daily": (round(std_daily, 3) if std_daily is not None else None),
         "usage_via_recipe": via_recipe,
-        "annual_demand": round(annual_demand, 1),
-        "eoq": (int(round(eoq_raw)) if eoq_raw else None),
+        "linked_products": list(linked or []),
+        "annual_demand": dq["annual_demand"] if dq["eoq_ready"] else round(annual_demand, 1),
+        "monthly_consumption": dq["monthly_consumption"],
+        "eoq": dq["doq_eoq"],
+        "dos": dos,
+        "dos_threshold": dos_threshold,
+        "needs_po": bool(needs_po),
+        "doq": dq["doq"],
+        "doq_basis": dq["doq_basis"],
+        "doq_override": (None if _blank(item.get("reorder_qty")) else _num(item.get("reorder_qty"))),
+        "eoq_ready": dq["eoq_ready"],
+        "eoq_missing": dq["eoq_missing"],
         "reorder_point": reorder_point,
-        "below_reorder": bool(below),
+        "below_reorder": below,
         "order_qty": int(order_qty),
         "order_basis": basis,
         "moq_applied": moq_applied,
@@ -577,50 +673,48 @@ def _enrich(item: dict, product_daily: dict, piv, maps_by_item: dict, meta: dict
         "ordering_is_auto": ordering_is_auto,
         "has_enough_sales": enough,
         "suggestions_available": suggestions_available,
-        "reason": _reason_text(item, avg_daily, reorder_point, current, eoq_raw,
-                               basis, order_qty, moq, moq_applied, below,
-                               eff_lead, eff_safety, safety_is_auto, lead_is_auto,
-                               holding_is_auto, ordering_is_auto, enough),
+        "reason": _reason_text(item, avg_daily, dos, dos_threshold, current, eoq_raw,
+                               dq, eff_lead, lead_is_auto, below),
     })
     return out
 
 
-def _reason_text(item, avg_daily, rop, current, eoq_raw, basis, order_qty, moq,
-                 moq_applied, below, eff_lead, eff_safety, safety_is_auto,
-                 lead_is_auto, holding_is_auto, ordering_is_auto, enough) -> str:
+def _reason_text(item, avg_daily, dos, dos_threshold, current, eoq_raw, dq,
+                 eff_lead, lead_is_auto, below) -> str:
     """The sentence the seller reads. Written for someone who has never taken a
     supply-chain class, because that is who this is for.
 
-    The maths is unchanged — reorder point is still daily usage x lead time plus
-    safety stock, and the quantity is still EOQ bounded below by MOQ. What
-    changed is that none of those five words appear. "You sell about 3 a day,
-    your supplier takes 7 days, so buy again once you are down to 25" says the
-    same thing and can be checked by the person reading it, which is the whole
-    point of showing a reason at all.
-    """
+    "You use about 3 a day, so what you have lasts 9 days; your supplier takes
+    10, and we want 12 days in hand" says the same thing as "DOS below 1.2 × LT"
+    and can be checked by the person reading it, which is the whole point of
+    showing a reason at all."""
     unit = item.get("unit_label") or "unit"
     if avg_daily <= 0:
-        return ("We do not know how fast this one sells yet. Tell us which products "
-                "use it, or upload your past sales, and we will work out when to buy "
-                "again and how many — you will not have to set anything.")
-    days = int(eff_lead)
-    base = (f"You use about {round(avg_daily, 2)} {unit} a day, and your supplier takes "
-            f"about {days} day{'s' if days != 1 else ''} to deliver. So buy again once "
-            f"you are down to {rop} — that covers the wait, with {int(eff_safety)} "
-            f"spare in case sales pick up.")
+        return ("We do not know how fast this is used up yet. Link it to the products "
+                "that use it (and how much each uses), and once there are sales we "
+                "will work out how many days it lasts and when to order.")
+    days = int(round(eff_lead))
+    base = (f"You use about {round(avg_daily, 2)} {unit} a day, so the {int(current)} "
+            f"you have lasts about {dos:g} day{'s' if dos != 1 else ''}. Your supplier takes "
+            f"{days} day{'s' if days != 1 else ''}{' (assumed — add the real number)' if lead_is_auto else ''}, "
+            f"and we keep {dos_threshold:g} days in hand — the lead time plus 20%.")
     if not below:
-        return base + f" You have {int(current)} right now, so there is no hurry."
-    if basis == "eoq":
-        base += (f" Buying {int(round(eoq_raw))} at a time works out cheapest — "
-                 f"big enough to be worth the trip, small enough that cash is not "
-                 f"sitting on a shelf.")
-    elif basis == "manual":
-        base += " Using the quantity you set yourself."
+        return base + " Plenty for now."
+    b = dq["doq_basis"]
+    if b == "yours":
+        q = f" Ordering {dq['doq']} {unit}, the quantity you set."
+    elif b == "eoq":
+        q = (f" Ordering {dq['doq']} {unit}: with your ordering and holding costs, that "
+             f"is the cheapest amount to buy at a time (above the supplier's minimum).")
+    elif b == "moq":
+        q = (f" Ordering {dq['doq']} {unit}, the supplier's minimum."
+             + (f" Add {', '.join(dq['eoq_missing'])} and we will work out the "
+                f"cheapest quantity instead." if dq["eoq_missing"] else
+                " The cheapest quantity works out below it, so the minimum stands."))
     else:
-        base += " Ordering enough to cover the wait comfortably."
-    if moq_applied:
-        base += f" Your supplier will not sell fewer than {moq}, so that is the number."
-    return base + f" Order {order_qty} {unit}."
+        q = (f" Ordering {dq['doq']} {unit} — enough to cover the wait. Add the supplier's "
+             f"minimum order to use that instead.")
+    return base + " Time to order." + q
 
 def _disp(v) -> str:
     """Trim without destroying case — _norm() lowercases, which is right for
@@ -726,7 +820,11 @@ def compute_inventory(email: str) -> dict:
     email = _email(email)
     product_daily, piv, meta = _demand_stats(email)
     mbi = _maps_by_item(email)
-    rows = [_enrich(it, product_daily, piv, mbi, meta) for it in get_inventory(email)]
+    linked: dict[str, list[str]] = {}
+    for m in get_maps(email):
+        linked.setdefault(m["inventory_id"], []).append(m["product"])
+    rows = [_enrich(it, product_daily, piv, mbi, meta, linked.get(it["id"]))
+            for it in get_inventory(email)]
     rows.sort(key=lambda r: (not r["below_reorder"], _norm(r.get("name"))))
     below = [r for r in rows if r["below_reorder"]]
     return {"items": rows, "below": below, "meta": meta, "n_below": len(below)}
@@ -780,7 +878,18 @@ def clear_reorder_handled(email: str) -> None:
 
 
 def build_reorder_insight(email: str) -> dict | None:
+    """Raw materials below the DOS rule with no purchase order on its way.
+
+    Items already on a draft/open/sent order are left out — they have their
+    own purchase-order card, and listing them twice would invite a second
+    order to the same supplier."""
     below = compute_inventory(email)["below"]
+    try:
+        from backend.core import replenish
+        covered = replenish.covered_item_ids(email)
+        below = [r for r in below if r["id"] not in covered]
+    except Exception:  # noqa: BLE001
+        pass
     if not below:
         return None
     names = ", ".join(r.get("name", "?") for r in below[:4])
@@ -790,18 +899,17 @@ def build_reorder_insight(email: str) -> dict | None:
     return {
         "id": "reorder", "module": "supply", "page": "supply", "icon": "📦",
         "title": f"{len(below)} item{plural} running low — order more",
-        "detail": (f"{names} {'are' if len(below) != 1 else 'is'} down to the level where "
-                   "the next order should go out, going by how fast it sells and how long "
-                   "your supplier takes. Approve and we will make the order form for each "
-                   "supplier, with the quantity already worked out — saved to your account and "
-                   "downloaded as a PDF."),
-        "action_label": "Approve → generate purchase order",
+        "detail": (f"{names} {'are' if len(below) != 1 else 'is'} down to fewer days of supply "
+                   "than 1.2 × the supplier's lead time. Approve and we will draft one purchase "
+                   "order per supplier at each item's default order quantity, for you to check "
+                   "and send."),
+        "action_label": "Approve → draft purchase orders",
         "count": len(below), "names": names,
         # the tightest item, so Operations can lead with the real urgency
         # rather than a count
         "min_cover": min((_num(r.get("days_of_cover")) for r in below
                           if _num(r.get("days_of_cover")) > 0), default=None),
-        "has_download": True,
+        "has_download": False,
     }
 
 
@@ -1130,7 +1238,125 @@ def create_manual_po(email: str, supplier: dict, lines: list[dict],
     return po
 
 
-PO_STATUSES = ["open", "sent", "shipped", "received", "cancelled"]
+# "draft" — raised automatically by the replenishment check and waiting in the
+# Approval panel. Nothing has gone to the supplier yet.
+PO_STATUSES = ["draft", "open", "sent", "shipped", "received", "cancelled"]
+ACTIVE_PO_STATUSES = ("draft", "open", "sent", "shipped")
+
+
+def _save_po_rows(email: str, pos: list[dict]) -> None:
+    user_store.set_key(_email(email), PO_KEY, pos)
+
+
+def update_po(email: str, po_number: str, patch: dict) -> dict | None:
+    """Change fields on one PO (lines, totals, supplier, status, history)."""
+    email = _email(email)
+    pos = get_purchase_orders(email)
+    target = next((p for p in pos if str(p.get("po_number")) == str(po_number)), None)
+    if target is None:
+        return None
+    target.update(patch or {})
+    if _tables():
+        db.update(T_PO, {"email": email, "po_number": str(po_number)}, dict(patch or {}))
+    else:
+        _save_po_rows(email, pos)
+    return target
+
+
+def _totals(lines: list[dict]) -> dict:
+    total_qty, total_amount, has_cost = 0, 0.0, False
+    for ln in lines:
+        total_qty += int(ln.get("order_qty") or 0)
+        if ln.get("line_amount") is not None:
+            total_amount += float(ln["line_amount"])
+            has_cost = True
+    return {"n_items": len(lines), "total_qty": int(total_qty),
+            "total_amount": round(total_amount, 2) if has_cost else None}
+
+
+def auto_po_line(r: dict) -> dict:
+    """One PO line from an enriched inventory row: the DOQ, plus why."""
+    line = _po_line(r)
+    line.update({
+        "dos": r.get("dos"), "dos_threshold": r.get("dos_threshold"),
+        "doq_basis": r.get("doq_basis"), "linked_products": r.get("linked_products") or [],
+        "moq": _num(r.get("moq")),
+    })
+    return line
+
+
+def create_auto_po(email: str, rows: list[dict], supplier: dict, note: str = "",
+                   trigger: str = "") -> dict:
+    """A DRAFT purchase order raised by the replenishment check — one supplier,
+    one or more raw materials, each at its DOQ. It waits in the Approval panel
+    until the seller approves it, which is when it is emailed."""
+    email = _email(email)
+    lines = [auto_po_line(r) for r in rows]
+    number = _next_po_number(email)
+    po = {
+        "id": number, "po_number": number, "insight_id": None,
+        "created_at": _now_iso(), "status": "draft", "source": "auto",
+        "supplier": {"name": _disp(supplier.get("name"))[:120],
+                     "phone": _disp(supplier.get("phone"))[:20],
+                     "email": _disp(supplier.get("email"))[:120],
+                     "address": ""},
+        "expected_on": "", "terms": "",
+        "note": str(note or "")[:400],
+        "suppliers": [supplier.get("name")] if supplier.get("name") else [],
+        "lines": lines,
+        "history": [{"at": _now_iso(), "status": "draft", "by": "auto",
+                     "note": str(trigger or "")[:200]}],
+        **_totals(lines),
+    }
+    if _tables():
+        row = dict(po); row["email"] = email
+        db.insert(T_PO, row)
+    else:
+        pos = user_store.get_key(email, PO_KEY, []) or []
+        pos.append(po)
+        user_store.set_key(email, PO_KEY, pos)
+    return po
+
+
+def append_to_po(email: str, po_number: str, rows: list[dict], trigger: str = "") -> dict | None:
+    """Add raw materials to a draft PO that is already waiting for the same
+    supplier, instead of raising a second order to the same person."""
+    po = get_po(email, po_number)
+    if not po:
+        return None
+    lines = list(po.get("lines") or [])
+    have = {ln.get("inventory_id") for ln in lines}
+    for r in rows:
+        if r.get("id") not in have:
+            lines.append(auto_po_line(r))
+    hist = list(po.get("history") or []) + [
+        {"at": _now_iso(), "status": "draft", "by": "auto", "note": str(trigger or "")[:200]}]
+    return update_po(email, po_number, {"lines": lines, "history": hist, **_totals(lines)})
+
+
+def set_po_line_qty(email: str, po_number: str, qty_by_item: dict) -> dict | None:
+    """Change quantities on a draft PO before it is sent. A quantity of 0 drops
+    the line."""
+    po = get_po(email, po_number)
+    if not po:
+        return None
+    if po.get("status") not in ("draft", "open"):
+        raise ValueError("Only an order that has not been sent can be changed.")
+    lines = []
+    for ln in po.get("lines") or []:
+        iid = ln.get("inventory_id")
+        if iid in qty_by_item:
+            q = int(max(0, round(_num(qty_by_item[iid]))))
+            if q <= 0:
+                continue
+            ln = dict(ln)
+            ln["order_qty"] = q
+            uc = ln.get("unit_cost")
+            ln["line_amount"] = round(q * float(uc), 2) if not _blank(uc) else None
+        lines.append(ln)
+    if not lines:
+        raise ValueError("An order needs at least one line — cancel it instead.")
+    return update_po(email, po_number, {"lines": lines, **_totals(lines)})
 
 
 def set_po_status(email: str, po_number: str, status: str,
@@ -1181,10 +1407,15 @@ def set_po_status(email: str, po_number: str, status: str,
 # ---------------------------------------------------------
 # exports
 # ---------------------------------------------------------
-def po_pdf_bytes(email: str, po: dict) -> tuple[str, io.BytesIO]:
+def po_pdf_bytes(email: str, po: dict, for_supplier: bool = False) -> tuple[str, io.BytesIO]:
     """Render the PO to a professional PDF. Returns (filename, BytesIO)."""
     from backend.core import po_pdf
-    buf = po_pdf.build_po_pdf(po, buyer_email=email)
+    try:
+        from backend.core import brandname
+        brand = brandname.display(email)
+    except Exception:  # noqa: BLE001
+        brand = "Your shop"
+    buf = po_pdf.build_po_pdf(po, buyer_email=email, brand=brand, for_supplier=for_supplier)
     return f"{po.get('po_number', 'purchase_order')}.pdf", buf
 
 

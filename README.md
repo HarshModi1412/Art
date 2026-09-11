@@ -334,6 +334,54 @@ the item ids it cleared so the undo can put them back — once the last item is
 cleared there is no supplier left to look up by name. Removing a supplier never
 removes stock.
 
+## Automatic replenishment (DOS → PO → supplier)
+
+Every raw material is judged on **days of supply**:
+
+    DOS = current stock ÷ average daily consumption
+
+Consumption comes from product sales (website orders included, or the past
+sales uploaded under Suppliers) over the last 30 days, converted to raw
+material through the recipe links (`qty_per_unit` in *What each product
+uses*). Each item stores its supplier's **lead time**.
+
+**The trigger.** Every order placed (`storefront.place_order` →
+`replenish.after_order`) re-checks the materials that order used; *Check stock
+now* re-checks everything. The rule is `DOS ≥ 1.2 × lead time`. If it holds,
+nothing happens. If not, a **draft PO** is made for that material at its DOQ,
+grouped one PO per supplier; an item already on a draft/open/sent/shipped PO
+is never ordered twice.
+
+**DOQ (default order quantity)**, per item, saved in `supply_doq_table`:
+
+1. the seller's own DOQ, if typed in the table — always wins;
+2. else, once ordering cost (S) and holding cost (H) are entered **and** there
+   is at least a month of sales: annual demand D = monthly consumption × 12,
+   `EOQ = √(2DS/H)`; DOQ = EOQ if EOQ > MOQ, otherwise MOQ;
+3. else the supplier's MOQ;
+4. with no MOQ either, enough to cover 1.2 × lead time.
+
+**Approval panel.** Each draft PO is a card with *Approve*, *Details* and
+*Cancel*. Details shows every line with its DOS, lead time and editable
+quantity, plus the email the content writer drafted (editable, *Rewrite with
+AI*). Approve renders the PO PDF (`po_pdf.py`, supplier copy) and emails it as an
+attachment to the address saved in the Supplier module, with Reply-To set to
+the seller. **This needs SMTP** (`SMTP_HOST` …); without it the PO is marked
+approved, and the seller gets the PDF plus a ready-filled `mailto:` to send it
+themselves.
+
+Behaviour changes worth knowing: "below reorder" now means the DOS rule above
+(the old safety-stock field is gone from the form), and approving the reorder
+insight drafts POs through this same path instead of making order sheets.
+
+## Forms are step-by-step
+
+*Add item* lives only in Inventory Management. It is a three-step form
+(item → supplier → how much to order), with Next/Back and the submit button on
+the last step only; the product is picked from Product Management and its name
+can then be edited. *Add product* is the same shape in four steps (basics → photos &
+copy → sizes & stock → on my site).
+
 ## Storefront sections
 
 Featured, Spotlight and the product grid all used to slice the top of the same
@@ -578,19 +626,45 @@ free daily allowance on posts they may skip.
 
 ## Free AI
 
-`aiprovider.py` puts a provider chain behind every text call: Cloudflare
-Workers AI (10,000 neurons/day free) → Groq (1,000 req/day) → Gemini (1,500
-req/day) → OpenAI → a deterministic template that needs no network.
+`aiprovider.py` puts a provider chain behind every text call: **Puter**
+(when `PUTER_AUTH_TOKEN` is set) → Cloudflare Workers AI (10,000 neurons/day
+free) → Groq (1,000 req/day) → Gemini (1,500 req/day) → Hugging Face →
+OpenAI → a deterministic template that needs no network.
+
+Puter ([github.com/heyputer/puter](https://github.com/heyputer/puter)) is
+reached through its OpenAI-compatible endpoint
+`https://api.puter.com/puterai/openai/v1` with an auth token from the Puter
+dashboard; one token reaches GPT, Claude and Gemini models, billed to that
+token's Puter account. `PUTER_MODEL` sets the everyday model and
+`PUTER_WRITER_MODEL` the one used for customer-facing copy. When the server has
+no provider, the browser can fall back to `puter.js` (the seller's own Puter
+account signs in and pays); turn that off with `AI_BROWSER_PUTER=off`.
+`AI_PROVIDER_FIRST=<name>` moves any provider to the front.
 
 Every call declares a `sensitivity`. `"public"` is copy written to be
 published, so free tiers are fine. `"private"` is anything derived from a
-seller's own sales or customers, and may only reach providers marked
-`trains=False` — which excludes Gemini's free tier. It is a required argument
-rather than an optional flag because getting it wrong leaks a seller's revenue
-into somebody else's training set.
+seller's own sales or customers (a PO email included), and may only reach
+providers marked `trains=False` — which excludes Gemini's free tier. It is a
+required argument rather than an optional flag because getting it wrong leaks
+a seller's revenue into somebody else's training set.
 
-Environment: `CF_ACCOUNT_ID` + `CF_API_TOKEN`, `GROQ_API_KEY`, `GEMINI_API_KEY`,
-`OPENAI_API_KEY`. None are required — the app writes usable copy with none set.
+**The content writer** (`writer.py`) is one system prompt used everywhere text
+is written for the seller: plain, specific, no invented facts, a list of banned
+filler phrases, and the brand voice from Product Studio and the site. It backs:
+
+* **Website** — the seller writes a sentence or two about the shop (*About your
+  shop*), and *Write my website* drafts the tagline, hero, story, promises,
+  newsletter line and SEO/WhatsApp text; each line is ticked on or off before
+  anything changes.
+* **Product description** — description and key points from the name, category,
+  price and optional notes.
+* **Every other text box** marked `data-ai` gets a ✨ *Write with AI* / *Improve
+  with AI* button with Use / Try again / Shorter / More detail.
+* **PO emails** to suppliers.
+
+Environment: `PUTER_AUTH_TOKEN`, `CF_ACCOUNT_ID` + `CF_API_TOKEN`,
+`GROQ_API_KEY`, `GEMINI_API_KEY`, `HF_API_TOKEN`, `OPENAI_API_KEY`. None are
+required — the app writes usable copy with none set.
 
 ## Media storage
 

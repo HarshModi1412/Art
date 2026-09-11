@@ -59,10 +59,17 @@ def _remember(kind: str, to: str, subject: str, body: str, reason: str) -> None:
 # ---------------------------------------------------------------------------
 # channels
 # ---------------------------------------------------------------------------
-def _send_email(to: str, subject: str, text: str, html: str = "") -> bool:
+_LAST_ERROR = {"reason": ""}
+
+
+def _send_email(to: str, subject: str, text: str, html: str = "",
+                attachments: list | None = None, reply_to: str = "") -> bool:
+    _LAST_ERROR["reason"] = ""
     if not smtp_configured():
         _remember("email", to, subject, text, "SMTP_HOST not set")
         log.info("email to %s not sent (no SMTP configured): %s", to, subject)
+        _LAST_ERROR["reason"] = ("Email is not set up on this server yet (SMTP_HOST), "
+                                 "so it could not be sent from here.")
         return False
 
     host = (os.environ.get("SMTP_HOST") or "").strip()
@@ -83,9 +90,17 @@ def _send_email(to: str, subject: str, text: str, html: str = "") -> bool:
     msg["Subject"] = subject
     msg["From"] = formataddr((BRAND, sender))
     msg["To"] = to
+    if reply_to:
+        msg["Reply-To"] = reply_to
     msg.set_content(text)
     if html:
         msg.add_alternative(html, subtype="html")
+    for att in attachments or []:
+        # (filename, bytes, mime) — a purchase order PDF, for one
+        fname, data, mime = att
+        maintype, _, subtype = (mime or "application/octet-stream").partition("/")
+        msg.add_attachment(data, maintype=maintype, subtype=subtype or "octet-stream",
+                           filename=fname)
 
     try:
         if port == 465:
@@ -105,6 +120,7 @@ def _send_email(to: str, subject: str, text: str, html: str = "") -> bool:
     except Exception as e:  # noqa: BLE001 — a send must never break a request
         log.warning("email to %s failed: %s", to, e)
         _remember("email", to, subject, text, f"send failed: {e}")
+        _LAST_ERROR["reason"] = f"The mail server refused it: {e}"
         return False
 
 
@@ -133,6 +149,15 @@ def send(to_email: str = "", subject: str = "", text: str = "", html: str = "",
         out["whatsapp"] = _send_whatsapp(phone, whatsapp_text or text)
     out["delivered"] = out["email"] or out["whatsapp"]
     return out
+
+
+def send_with_attachments(to_email: str, subject: str, text: str, html: str = "",
+                          attachments: list | None = None, reply_to: str = "") -> dict:
+    """One email with files attached — a purchase order to a supplier.
+    Returns {email: bool, reason: str}. Never raises."""
+    ok = _send_email(to_email, subject, text, html, attachments=attachments,
+                     reply_to=reply_to)
+    return {"email": ok, "delivered": ok, "reason": "" if ok else _LAST_ERROR["reason"]}
 
 
 # ---------------------------------------------------------------------------

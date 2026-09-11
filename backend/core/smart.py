@@ -343,6 +343,15 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
         from backend.core import social as _social_mod
         out.extend(_social_mod.pending_insight_cards(email))
 
+    # 7) purchase orders the replenishment check drafted after an order came
+    # in. Like posts, the PO's own status is the decision.
+    if not include_decided:
+        try:
+            from backend.core import replenish as _replenish
+            out.extend(_replenish.insight_cards(email))
+        except Exception:  # noqa: BLE001 — never let this take the panel down
+            pass
+
     # attach each card's decision; hide decided ones from the active panel
     # unless the caller explicitly asked for the full list.
     visible = []
