@@ -112,7 +112,7 @@ check("alert mail is throttled per bug, because alert fatigue is the failure mod
 check("the 500 handler records before it answers", "errors.record(exc" in MAIN)
 check("and tells the seller it was reported, so they need not write in",
       "even if you do not tell us" in MAIN)
-check("with a reference they can quote", "reference {ref}" in MAIN)
+check("with a reference they can quote", "reference {tag}" in MAIN and "(ref, spot)" in MAIN)
 check("Sentry is initialised at startup if configured", "errors.init_sentry()" in MAIN)
 check("it is documented for whoever deploys this", "OPERATOR_EMAIL" in ENV and "SENTRY_DSN" in ENV)
 

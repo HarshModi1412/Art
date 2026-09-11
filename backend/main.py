@@ -196,22 +196,28 @@ async def _state_scope(request, call_next):
 @app.exception_handler(Exception)
 async def _unhandled(request: Request, exc: Exception):
     log.exception("unhandled error on %s %s", request.method, request.url.path)
-    ref = ""
+    ref, spot = "", ""
     try:
         who = optional_user(request.headers.get("authorization")) or ""
     except Exception:  # noqa: BLE001
         who = ""
     try:
-        ref = (errors.record(exc, where=f"{request.method} {request.url.path}",
-                             email=who) or {}).get("fingerprint", "")
+        entry = errors.record(exc, where=f"{request.method} {request.url.path}",
+                              email=who) or {}
+        ref, spot = entry.get("fingerprint", ""), entry.get("location", "")
     except Exception:  # noqa: BLE001 — reporting must not break the response
         ref = ""
+    # The type and line go in the message too. It names no data — only where
+    # the code broke — and it turns "send us a screenshot" into a fix, where a
+    # bare reference needed someone with the admin token to look it up.
+    tag = " · ".join(x for x in (ref, spot) if x)
     return JSONResponse(
         status_code=500,
         content={"detail": "Something went wrong on our side. Try that again in a "
                            "moment — and it has been reported, so we will see it "
                            "even if you do not tell us."
-                           + (f" (reference {ref})" if ref else "")},
+                           + (f" (reference {tag})" if tag else ""),
+                 "reference": ref, "location": spot},
     )
 
 
@@ -5135,15 +5141,27 @@ def social_attach_video(body: SocialAttachBody,
     p = social.attach_video(email, body.post_id, url)
     if p.get("error"):
         raise HTTPException(404, p["error"])
+    # Everything below is bookkeeping. The clip is on the post by now, and a
+    # failure ticking task steps must not turn a finished upload into an error.
     if url and p.get("state") == "approved":
-        smart_tasks_for = [t for t in smart.post_tasks(email)
-                           if t.get("post_id") == body.post_id and not t.get("done")]
-        # A clip on the post means every step before the upload happened too.
-        for t in smart_tasks_for:
-            for step in ("copy", "flow", "make", "upload"):
-                smart.task_progress(email, t["id"], step, True)
-    cache.clear(email)
-    return {**p, "watermark": report, "tasks": smart.get_tasks(email)}
+        try:
+            smart_tasks_for = [t for t in smart.post_tasks(email)
+                               if t.get("post_id") == body.post_id and not t.get("done")]
+            # A clip on the post means every step before the upload happened too.
+            for t in smart_tasks_for:
+                for step in ("copy", "flow", "make", "upload"):
+                    smart.task_progress(email, t["id"], step, True)
+        except Exception as e:  # noqa: BLE001
+            errors.record(e, where="POST /api/social/attach-video (task steps)", email=email)
+    try:
+        cache.clear(email)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        tasks = smart.get_tasks(email)
+    except Exception:  # noqa: BLE001
+        tasks = None
+    return {**p, "watermark": report, **({"tasks": tasks} if tasks is not None else {})}
 
 
 @app.get("/api/managers")

@@ -24,6 +24,7 @@ import contextvars
 import copy
 import hashlib
 import json
+import math
 import os
 import pickle
 import tempfile
@@ -159,8 +160,32 @@ def _read_state(email: str) -> dict:
         return {}
 
 
+def _jsonb_safe(v):
+    """Postgres JSONB refuses NaN and ±Infinity, and ONE of them anywhere in an
+    account's state makes the whole save fail — every write for that account,
+    whatever it was saving. They are how pandas says "no value", so they get
+    in easily (an average over no rows, a ratio over zero). Stored as null,
+    which is what they meant. numpy numbers become plain ones on the way."""
+    if isinstance(v, float):               # numpy float64 is a float too
+        return float(v) if math.isfinite(v) else None
+    if isinstance(v, dict):
+        return {k: _jsonb_safe(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_jsonb_safe(x) for x in v]
+    if v is None or isinstance(v, (str, bool, int)):
+        return v
+    try:                                   # numpy scalars and friends
+        import numpy as _np
+        if isinstance(v, _np.generic):
+            return _jsonb_safe(v.item())
+    except Exception:  # noqa: BLE001
+        pass
+    return v
+
+
 def save_state(email: str, state: dict) -> None:
     if db.SUPABASE_ENABLED:
+        state = _jsonb_safe(state)
         db.upsert("user_state", {"email": _norm_email(email), "state": state},
                   on_conflict="email")
         _scope_put(email, state)
@@ -181,6 +206,7 @@ def update_state(email: str, patch: dict) -> dict:
         state = load_state(email)
         state.update(patch)
         if db.SUPABASE_ENABLED:
+            state = _jsonb_safe(state)
             db.upsert("user_state", {"email": _norm_email(email), "state": state},
                       on_conflict="email")
             _scope_put(email, state)

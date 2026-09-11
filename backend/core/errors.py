@@ -73,6 +73,29 @@ def _path() -> str:
     return os.path.join(auth.BASE_DIR, "errors.jsonl")
 
 
+def location(exc: BaseException) -> str:
+    """Where it broke, short enough to read out of a screenshot: the exception
+    type, the deepest line in this app's own code, and the line it finally
+    failed on if that was inside a library — e.g.
+    "APIError at social.py:1681 → request_builder.py:78". Never raises."""
+    try:
+        ours, last = "", ""
+        tb = exc.__traceback__
+        while tb is not None:
+            fn = tb.tb_frame.f_code.co_filename.replace("\\", "/")
+            here = f"{os.path.basename(fn)}:{tb.tb_lineno}"
+            if "/backend/" in fn:
+                ours = here
+            last = here
+            tb = tb.tb_next
+        spot = ours or last
+        if last and last != spot:
+            spot = f"{spot} → {last}"
+        return f"{type(exc).__name__} at {spot}" if spot else type(exc).__name__
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _fingerprint(exc: BaseException, where: str) -> str:
     """Groups the same bug together across occurrences.
 
@@ -103,6 +126,7 @@ def record(exc: BaseException, where: str = "", email: str = "",
             # the key everything else in this app is stored under.
             "account": (email or "")[:120],
             "fingerprint": _fingerprint(exc, where),
+            "location": location(exc),
             "traceback": _redact("".join(traceback.format_exception(
                 type(exc), exc, exc.__traceback__)))[-4000:],
         }

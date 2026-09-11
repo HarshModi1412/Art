@@ -134,7 +134,11 @@ check("as JSON, not text/plain", r.headers.get("content-type", "").startswith("a
       r.headers.get("content-type"))
 detail = (r.json() or {}).get("detail") if r.headers.get("content-type", "").startswith("application/json") else None
 check("with a sentence the seller can read", bool(detail) and len(str(detail)) > 20, detail)
-check("and it does not leak the traceback", "RuntimeError" not in str(detail), detail)
+check("and it does not leak the traceback or the error's own text",
+      "Traceback" not in str(detail) and "simulated failure" not in str(detail)
+      and 'File "' not in str(detail), detail)
+check("only where it broke — the type and the line — so a screenshot is enough to fix it",
+      "RuntimeError at main.py:" in str(detail), detail)
 
 print("\n== 4. the client can never render a blank error ==")
 
