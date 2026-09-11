@@ -515,6 +515,9 @@ class StudioImageOnlyBody(BaseModel):
 class SocialAttachBody(BaseModel):
     post_id: str
     url: str
+    # False attaches the clip exactly as uploaded — the app's fallback when
+    # the watermark pass could not run, so a clip is never lost to it.
+    clean: bool = True
 
 
 class MappingBody(BaseModel):
@@ -897,6 +900,7 @@ def connector_pull(body: PullBody, x_session_id: str | None = Header(default=Non
     email = optional_user(authorization)
     if email:
         smart.save_sales(email, sess.txns_df, {"files": sess.file_names[fid]})
+        replenish.after_sales(email, "sales upload")
     return {"file": _file_info(fid, sess), "rows": int(len(df)),
             "from": start.isoformat(), "to": end.isoformat(), "mapped": True}
 
@@ -1697,6 +1701,7 @@ def confirm_mapping(body: MappingBody, x_session_id: str | None = Header(default
     email = optional_user(authorization)
     if email:
         smart.save_sales(email, sess.txns_df, {"files": sess.file_names.get(body.file_id, "Sales upload")})
+        replenish.after_sales(email, "sales upload")
 
     return {"ok": True, "rows": diagnostics["rows_after"],
             "columns": [str(c) for c in sess.txns_df.columns], "warning": warning}
@@ -2539,10 +2544,12 @@ def smart_map(body: SmartMapBody, x_session_id: str | None = Header(default=None
                                     mode=body.mode)
             combined = smart.load_supply_sales(email)
             total = int(len(combined)) if combined is not None else diag["rows_after"]
+            replenish.after_sales(email, "past sales uploaded")
         else:
             smart.save_sales(email, txns,
                              {"files": sess.file_names.get(pending_key, "Sales upload")},
                              mode=body.mode)
+            replenish.after_sales(email, "sales upload")
             combined = smart.load_sales(email)
             sess.txns_df = combined if combined is not None else txns
             sess.mapped_file_id = "smart_sales"
@@ -2718,6 +2725,7 @@ def smart_records_add(body: SmartRecordsBody,
         if new_df.empty:
             raise HTTPException(400, "Each row needs a valid date and amount.")
         smart.save_sales(email, new_df, {"files": "Manual entry"}, mode="append")
+        replenish.after_sales(email, "sales added by hand")
         combined = smart.load_sales(email)
         try:
             sess = bind_session(get_session(x_session_id), email)
@@ -2812,6 +2820,7 @@ def commerce_pull(body: CommercePullBody, x_session_id: str | None = Header(defa
     if diag["rows_after"] == 0:
         raise HTTPException(400, "Orders pulled but none had a usable date + amount.")
     smart.save_sales(email, txns, {"files": f"🔌 {body.connector} ({body.days}d)"})
+    replenish.after_sales(email, f"orders pulled from {body.connector}")
     sess = get_session(x_session_id)
     sess.txns_df = txns
     sess.mapped_file_id = "smart_sales"
@@ -3690,11 +3699,21 @@ async def site_image(files: list[UploadFile] = File(...),
     is_video = ext in _VIDEO_EXT
     if ext not in _IMAGE_EXT and not is_video:
         raise HTTPException(400, "Use a PNG, JPG, WEBP, GIF or SVG image, or an MP4/WEBM video.")
-    content = await f.read()
     cap = 48 * 1024 * 1024 if is_video else 10 * 1024 * 1024
-    if len(content) > cap:
-        raise HTTPException(400, f"That file is over {cap // (1024 * 1024)}MB — "
-                                 f"{'compress the clip (1080p, ~8 seconds is plenty)' if is_video else 'please compress it first'}.")
+    # Read in pieces and stop at the cap, rather than pulling a file of any
+    # size into the server's memory before finding out it is too big.
+    parts, size = [], 0
+    while True:
+        chunk = await f.read(1024 * 1024)
+        if not chunk:
+            break
+        size += len(chunk)
+        if size > cap:
+            raise HTTPException(400, f"That file is over {cap // (1024 * 1024)}MB — "
+                                     f"{'compress the clip (1080p, ~8 seconds is plenty)' if is_video else 'please compress it first'}.")
+        parts.append(chunk)
+    content = b"".join(parts)
+    parts = []
     import uuid as _uuid
     saved = media.save(f"{_uuid.uuid4().hex}{ext}", content, email)
     url = saved["url"]
@@ -5103,7 +5122,10 @@ def social_attach_video(body: SocialAttachBody,
     if not social.get_post(email, body.post_id):
         raise HTTPException(404, "not found")
     url, report = body.url, None
-    if url:
+    if url and not body.clean:
+        report = {"checked": False, "removed": False,
+                  "reason": "attached as uploaded — the watermark remover was skipped"}
+    if url and body.clean:
         # A reel clip is almost always generated somewhere else — Google Flow,
         # Kling — and comes back with that tool's mark in a corner. It goes
         # through the watermark remover on the way in; the clean copy is saved

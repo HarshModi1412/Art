@@ -211,6 +211,96 @@ check("a locked-off clip with no mark is not 'cleaned' just because nothing move
 bad, brep = watermark.clean_video_bytes(b"\x00\x01nope", "x.mp4")
 check("an unreadable clip never raises — the original comes back",
       bad == b"\x00\x01nope" and brep["reason"], brep)
+
+# =========================================================================
+print("\n== videos: a reel cannot take the server down ==")
+# =========================================================================
+# The bug: cleaning an 8-second 1080x1920 reel inside the web server peaked at
+# ~730 MB, plus ~340 MB in ffmpeg. On a 512 MB instance the server was killed
+# and every request came back 502 ("the server is waking up") — for every
+# retry of the same upload, too.
+import json as _json  # noqa: E402
+import subprocess as _sp  # noqa: E402
+
+RW, RH, RN = 1080, 1920, 48
+reel_frames = [stamp(scene(RW, RH, shift=6 * i))[0] for i in range(RN)]
+reel = os.path.join(tmp, "reel.mp4")
+write_clip(reel, reel_frames)
+del reel_frames
+probe = (
+    "import json,resource,sys;sys.path.insert(0,%r);"
+    "from backend.core import watermark as w;"
+    "d=open(%r,'rb').read();o,r=w.clean_video_bytes(d,'reel.mp4');"
+    "hwm=[int(l.split()[1])//1024 for l in open('/proc/self/status') if l.startswith('VmHWM')][0];"
+    "print(json.dumps({'self':hwm,"
+    "'child':resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss//1024,"
+    "'removed':r.get('removed'),'reason':r.get('reason')}))"
+) % (os.path.dirname(os.path.dirname(os.path.abspath(__file__))), reel)
+out = _sp.run([sys.executable, "-c", probe], capture_output=True, timeout=600)
+m = _json.loads(out.stdout.decode().strip().splitlines()[-1]) if out.returncode == 0 else {}
+check("a 1080x1920 reel is cleaned", m.get("removed") is True, (m, out.stderr[-300:]))
+check("the web-server process stays small while it happens (<150 MB)",
+      0 < m.get("self", 0) < 150, m)
+check("the cleaner itself stays well inside a 512 MB instance (<320 MB)",
+      0 < m.get("child", 0) < 320, m)
+
+# the heavy work happens in a child process
+calls = []
+_real_run = _sp.run
+
+
+def _spy(cmd, *a, **k):
+    calls.append(cmd)
+    return _real_run(cmd, *a, **k)
+
+
+watermark.subprocess.run = _spy
+watermark.clean_video_bytes(data, "flow.mp4")
+watermark.subprocess.run = _real_run
+check("cleaning runs in a separate process",
+      calls and calls[0][1:3] == ["-m", "backend.core.watermark"], calls[:1])
+
+
+def _killed(cmd, *a, **k):
+    return _sp.CompletedProcess(cmd, -9, b"", b"")
+
+
+watermark.subprocess.run = _killed
+kout, krep = watermark.clean_video_bytes(data, "flow.mp4")
+watermark.subprocess.run = _real_run
+check("if the cleaner is killed for memory, the original clip comes back — nothing raises",
+      kout == data and not krep["removed"] and "memory" in krep["reason"], krep)
+
+
+def _slow(cmd, *a, **k):
+    raise _sp.TimeoutExpired(cmd, 1)
+
+
+watermark.subprocess.run = _slow
+tout, trep = watermark.clean_video_bytes(data, "flow.mp4")
+watermark.subprocess.run = _real_run
+check("a clip that takes too long is attached as it is", tout == data and "longer" in trep["reason"], trep)
+
+_real_free = watermark._cgroup_free_mb
+watermark._cgroup_free_mb = lambda: 120.0
+os.environ["WATERMARK_INPROCESS"] = "1"
+gout, grep_ = watermark.clean_video_bytes(data, "flow.mp4")
+os.environ.pop("WATERMARK_INPROCESS")
+watermark._cgroup_free_mb = _real_free
+check("with too little free memory it does not even start — and says why",
+      gout == data and not grep_["removed"] and "not enough free memory" in grep_["reason"], grep_)
+check("the estimate for a 1080p reel is what was measured, with room to spare",
+      280 <= watermark.video_need_mb(1080, 1920) <= 360, watermark.video_need_mb(1080, 1920))
+
+JS = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       "Smart CafeX", "smart.js"), encoding="utf-8").read()
+check("the app attaches the clip unchanged if cleaning fails, instead of losing it",
+      "async function attachClip" in JS and "clean: false" in JS
+      and JS.count("attachClip(post.id") >= 3)
+MAIN = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "backend", "main.py"), encoding="utf-8").read()
+check("the upload is read in pieces and stopped at the size cap",
+      "await f.read(1024 * 1024)" in MAIN and "clean: bool = True" in MAIN)
 shutil.rmtree(tmp, ignore_errors=True)
 
 print(f"\n{PASS} passed, {FAIL} failed")

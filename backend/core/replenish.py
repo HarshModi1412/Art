@@ -139,7 +139,9 @@ def check(email: str, trigger: str = "order", product_names: list[str] | None = 
                for p in draft_pos(email)}
     label = {"order": f"Order {ref} placed" if ref else "An order was placed",
              "manual": "Checked by hand", "insight": "Approved from the running-low card",
-             "sales": "New sales data"}.get(trigger, trigger)
+             "sales": f"New sales data ({ref})" if ref else "New sales data",
+             "restored": f"Order {ref} restored" if ref else "A cancelled order was restored",
+             }.get(trigger, trigger)
     for key, grp in sorted(groups.items()):
         names = ", ".join(f"{r['name']} ({r['dos']:g} days left, needs {r['dos_threshold']:g})"
                           for r in grp)
@@ -178,6 +180,28 @@ def after_order(seller: str, order: dict) -> dict | None:
         return check(seller, "order", names, ref=str((order or {}).get("order_no") or ""))
     except Exception as e:  # noqa: BLE001 — never lose an order over this
         log.warning("replenishment check failed after order: %s", e)
+        return None
+
+
+def after_sales(email: str, source: str = "") -> dict | None:
+    """Hook for every other way orders arrive — a sales upload, rows added by
+    hand, orders pulled from a connected store. New sales change every
+    material's daily usage, so all of them are re-checked. Never raises."""
+    try:
+        return check(email, "sales", None, ref=str(source or "")[:60])
+    except Exception as e:  # noqa: BLE001 — never lose an upload over this
+        log.warning("replenishment check failed after new sales: %s", e)
+        return None
+
+
+def after_restore(seller: str, order: dict) -> dict | None:
+    """A cancelled order put back takes its stock out again — same check as a
+    new order, on the materials it uses. Never raises."""
+    try:
+        names = [str(it.get("name") or "") for it in (order or {}).get("items") or []]
+        return check(seller, "restored", names, ref=str((order or {}).get("order_no") or ""))
+    except Exception as e:  # noqa: BLE001
+        log.warning("replenishment check failed after restoring an order: %s", e)
         return None
 
 

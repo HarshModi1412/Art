@@ -566,6 +566,13 @@ def set_status(seller: str, order_id: str, status: str, by: str = "seller",
     elif was == "cancelled" and status != "cancelled":
         _consume_stock(seller, order["items"], sign=-1)
     sync_sales(seller)
+    if was == "cancelled" and status != "cancelled":
+        # the stock left again, so this counts as an order placement
+        try:
+            from backend.core import replenish
+            replenish.after_restore(seller, order)
+        except Exception:  # noqa: BLE001
+            pass
     return order
 
 

@@ -555,6 +555,29 @@ clips are re-encoded to H.264 with ffmpeg (`imageio-ffmpeg` ships one) keeping t
 audio. The clean copy is saved under a new name and the original upload kept.
 Invisible provenance (SynthID/C2PA) is not touched, and posts keep their AI flag.
 
+**Video cleaning cannot take the server down.** Cleaning a clip used to run
+inside the web server and peaked at ~730 MB for an 8-second 1080×1920 reel, plus
+~340 MB in ffmpeg — more than a 512 MB Render instance has. The server was
+killed mid-request, the host answered 502, the app showed "the server is waking
+up", and retrying the same upload did it again. Now:
+
+* detection keeps only the four corner crops of the sampled frames, built one
+  frame at a time;
+* decoder, OpenCV and x264 are capped at 2 threads (`WATERMARK_THREADS`), and
+  x264 runs `ultrafast` with no look-ahead (`WATERMARK_X264` to change);
+* the whole job runs in a **child process** (`python -m backend.core.watermark`)
+  that puts itself first in line for the out-of-memory killer, with a timeout
+  (`WATERMARK_TIMEOUT`, 240 s);
+* before starting it checks the container's free memory against what a clip
+  of that size needs (`video_need_mb`, ~306 MB for 1080p) and skips with a
+  plain reason if there is not enough;
+* the app attaches the clip unchanged (`clean: false`) if the cleaning step
+  fails for any reason, and tells the seller the mark was not checked.
+
+Measured: the web server stays at its normal ~140 MB during a clean; the
+cleaner and encoder together peak at ~275 MB. Uploads are read in 1 MB pieces
+and stopped at the size cap (48 MB for video).
+
 Tests: `python scripts/test_autoplan.py`, `python scripts/test_watermark.py`.
 
 ## The approval panel, staffed

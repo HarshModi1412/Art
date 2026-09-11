@@ -156,8 +156,8 @@ const HTTP_MSG = {
   413: "That file is too large.",
   429: "Too many requests just now - wait a few seconds.",
   500: "Something went wrong on our side. Try that again in a moment.",
-  502: "The server is waking up. Give it a few seconds.",
-  503: "The server is waking up. Give it a few seconds.",
+  502: "The server did not answer — it may be starting up. Try again in a few seconds.",
+  503: "The server did not answer — it may be starting up. Try again in a few seconds.",
   504: "The server took too long to answer. Try again in a moment.",
 };
 
@@ -305,7 +305,12 @@ function aiContextFor(el) {
     Object.assign(ctx, { product: (document.querySelector(".modal-head b") || {}).textContent || "" });
   } else if (where === "po") {
     Object.assign(ctx, { supplier: v("poSupName") });
+  } else if (where === "reel" && typeof _smScript !== "undefined" && _smScript) {
+    Object.assign(ctx, { shots: (_smScript.beats || []).map((b) =>
+      [b.sec, b.shot, b.on_screen_text].filter(Boolean).join(" · ")).filter(Boolean) });
   }
+  if (where === "brand") Object.assign(ctx, { look: v("sbLook"), voice: v("sbVoice"), colours: v("sbPal") });
+  if (where === "post") Object.assign(ctx, { caption: v("ccCaption") });
   if (el._aiContext) Object.assign(ctx, el._aiContext());
   return ctx;
 }
@@ -1623,13 +1628,11 @@ async function openVideoTask(taskId, postHint) {
           const up = await api("/api/site/image", { method: "POST", body: fd });
           const u = up.url || up.image_url;
           if (!u) throw new Error("The upload did not come back with a file.");
-          return api("/api/social/attach-video", { method: "POST", json: { post_id: post.id, url: u } });
+          return attachClip(post.id, u);
         });
       post.video_url = att.video_url;
       $("vtSlot").innerHTML = `<video src="${esc(att.video_url)}" controls playsinline preload="metadata"></video>`;
-      const wm = att.watermark || {};
-      $("vtWm").textContent = wm.removed ? "Watermark found and removed."
-        : wm.checked ? "Checked — no watermark on this clip." : (wm.reason || "");
+      $("vtWm").textContent = clipNote(att);
       $("vtPick").innerHTML = sic("arrow-up-right") + "Replace clip";
       $("vtPick").className = "btn ghost sm";
       ["copy", "flow", "make"].forEach((x) => done.add(x));
@@ -1768,19 +1771,18 @@ function openReelPrompt(post, script) {
         return toast("That clip is over 48MB. Export it at 1080p — a reel rarely "
                      + "needs more.", 7000);
       }
-      await withBusy("Uploading your clip",
-        "Large videos take a moment on a phone connection.", async () => {
+      const att = await withBusy("Uploading your clip",
+        "Large videos take a moment on a phone connection. Then the watermark remover checks every corner.", async () => {
           const fd = new FormData(); fd.append("files", f);
           const up = await api("/api/site/image", { method: "POST", body: fd });
           const u = up.url || up.image_url;
           if (!u) throw new Error("The upload did not come back with a file.");
-          await api("/api/social/attach-video", { method: "POST",
-            json: { post_id: post.id, url: u } });
+          return attachClip(post.id, u);
         });
       closeModal();
       if (_currentModule === "social") { _socialData = await api("/api/social"); await renderSocial(); }
       refreshApprovals(true);
-      toast("Clip attached. This reel is ready to go out.");
+      toast(`Clip attached. This reel is ready to go out.${clipNote(att) ? " " + clipNote(att) : ""}`, att.fallback ? 9000 : 5000);
     } catch (e) { toast(e.message, 7000); }
   };
   $("rpMake").onclick = async () => { closeModal(); await reopen(); };
@@ -2533,6 +2535,33 @@ function renderProducts(d) {
   document.querySelectorAll("[data-um-new]").forEach((b) => b.onclick = () => openProductForm(null, b.dataset.umNew));
 }
 
+/* Attach an uploaded clip to a post, through the watermark remover.
+   The upload itself is already stored by then. If the cleaning step cannot
+   finish — the server is short of memory, restarting, or too slow — the clip
+   is attached exactly as uploaded rather than lost, and the seller is told the
+   mark was not checked. Returns the attach result plus `fallback`. */
+async function attachClip(postId, url) {
+  try {
+    return { ...(await api("/api/social/attach-video", { method: "POST",
+      json: { post_id: postId, url } })), fallback: false };
+  } catch (e) {
+    if (e.status && e.status < 500 && e.status !== 408) throw e;   // a real "no", e.g. post gone
+    await nap(1500);            // give a restarting server a moment
+    const r = await api("/api/social/attach-video", { method: "POST",
+      json: { post_id: postId, url, clean: false } });
+    return { ...r, fallback: true,
+      watermark: { checked: false, removed: false,
+        reason: "The watermark remover could not run this time, so the clip is attached as you uploaded it." } };
+  }
+}
+
+function clipNote(att) {
+  const wm = (att && att.watermark) || {};
+  return wm.removed ? "Watermark found and removed."
+    : wm.checked ? "Checked — no watermark on this clip."
+    : (wm.reason ? wm.reason.charAt(0).toUpperCase() + wm.reason.slice(1) : "");
+}
+
 // ---- shared image picker: uploads to /api/site/image and returns the URL ----
 function pickImage(onUrl, multiple, accept) {
   const inp = document.createElement("input");
@@ -3157,10 +3186,10 @@ function renderStudio() {
         <label>How you sound<select id="sbVoice">${(d.voices || []).map((v) =>
           `<option value="${esc(v.id)}" ${b.voice === v.id ? "selected" : ""}>${esc(v.label)}</option>`).join("")}</select></label>
         <label>Your colours <span class="muted tiny">in words — generated images follow these</span>
-          <input id="sbPal" value="${esc(b.palette)}" placeholder="amber, deep brown, brass" /></label>
+          <input id="sbPal" data-ai="brand_palette" data-ai-ctx="brand" data-ai-label="Your colours" value="${esc(b.palette)}" placeholder="amber, deep brown, brass" /></label>
         <label>Never say <span class="muted tiny">words or looks to stay away from</span>
-          <input id="sbAvoid" value="${esc(b.avoid)}" placeholder="cheap, discount, sale" /></label>
-        <label>Hashtags you always use<input id="sbTags" value="${esc(b.hashtags)}" placeholder="#madeinindia #smallbatch" /></label>
+          <input id="sbAvoid" data-ai="brand_avoid" data-ai-ctx="brand" data-ai-label="Never say" value="${esc(b.avoid)}" placeholder="cheap, discount, sale" /></label>
+        <label>Hashtags you always use<input id="sbTags" data-ai="hashtags" data-ai-ctx="brand" data-ai-label="Hashtags you always use" value="${esc(b.hashtags)}" placeholder="#madeinindia #smallbatch" /></label>
       </div>
       <button class="btn primary sm" id="sbSave">Save brand</button>
     </div>
@@ -3331,11 +3360,11 @@ function renderStudioProduct() {
         <div class="sup-form-grid">
           <label>The story behind it <span class="muted tiny">this is what captions are actually made of</span>
             <textarea id="stStory" data-ai="product_story" data-ai-ctx="studio-product" data-ai-label="The story behind it" rows="3" placeholder="Rested six months before it ever met a bottle.">${esc(m.story)}</textarea></label>
-          <label>What it's made of<textarea id="stMat" rows="2" placeholder="Oud, amber, a little smoke">${esc(m.materials)}</textarea></label>
+          <label>What it's made of<textarea id="stMat" data-ai="product_materials" data-ai-ctx="studio-product" data-ai-label="What it's made of" rows="2" placeholder="Oud, amber, a little smoke">${esc(m.materials)}</textarea></label>
           <label>What makes it different <span class="muted tiny">the line that makes someone stop scrolling</span>
             <textarea id="stDiff" data-ai="product_different" data-ai-ctx="studio-product" data-ai-label="What makes it different" rows="2" placeholder="No alcohol burn — it opens soft.">${esc(m.different)}</textarea></label>
-          <label>Who it's for<input id="stWho" value="${esc(m.for_who)}" placeholder="Someone who wears one scent, not ten" /></label>
-          <label>Where you'd wear or use it<input id="stOcc" value="${esc(m.occasions)}" placeholder="Evenings, weddings, gifting" /></label>
+          <label>Who it's for<input id="stWho" data-ai="product_for" data-ai-ctx="studio-product" data-ai-label="Who it's for" value="${esc(m.for_who)}" placeholder="Someone who wears one scent, not ten" /></label>
+          <label>Where you'd wear or use it<input id="stOcc" data-ai="product_occasions" data-ai-ctx="studio-product" data-ai-label="Where you'd wear or use it" value="${esc(m.occasions)}" placeholder="Evenings, weddings, gifting" /></label>
         </div>
         <button class="btn primary sm" id="stSave">Save material</button>
       </div>
@@ -5181,7 +5210,7 @@ function renderContentEditor(sug) {
           </select>
         </label>
         <label>Caption <textarea id="ccCaption" data-ai="caption" data-ai-label="Instagram caption" rows="6">${esc(sug.caption || "")}</textarea></label>
-        <label>Hashtags (space-separated) <textarea id="ccTags" rows="2">${esc(tags)}</textarea></label>
+        <label>Hashtags (space-separated) <textarea id="ccTags" data-ai="hashtags" data-ai-ctx="post" data-ai-label="Hashtags" rows="2">${esc(tags)}</textarea></label>
         <label>Description <textarea id="ccDesc" data-ai="product_description" data-ai-label="Description" rows="3">${esc(sug.description || "")}</textarea></label>
       </div>
     </div>
@@ -5701,7 +5730,7 @@ function stepSetup() {
       and WhatsApp show. You see it all before anything changes.</p>
     <div class="sup-form-grid" style="grid-template-columns:1fr;margin-bottom:10px;">
       <label>About your shop
-        <textarea id="siteBrief" rows="3" data-bind="brief" placeholder="Hand-block printed cotton kurtas from Jaipur. My mother and I run it with four karigars. Our buyers are working women who want something comfortable that doesn't look like everyone else's.">${esc(_site.brief || "")}</textarea></label>
+        <textarea id="siteBrief" rows="3" data-bind="brief" data-ai="site_brief" data-ai-ctx="site" data-ai-label="About your shop" placeholder="Hand-block printed cotton kurtas from Jaipur. My mother and I run it with four karigars. Our buyers are working women who want something comfortable that doesn't look like everyone else's.">${esc(_site.brief || "")}</textarea></label>
     </div>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <button class="btn primary sm" id="siteWriteAll" type="button">${sic("spark")}Write my website</button>
@@ -7426,9 +7455,9 @@ function openSocialEditor(post) {
             const up = await api("/api/site/image", { method: "POST", body: fd });
             const u = up.url || up.image_url;
             if (!u) throw new Error("The upload did not come back with a file.");
-            await api("/api/social/attach-video", { method: "POST",
-              json: { post_id: post.id, url: u } });
-            return u;
+            const att = await attachClip(post.id, u);
+            if (clipNote(att)) toast(clipNote(att), att.fallback ? 9000 : 4000);
+            return att.video_url || u;     // the cleaned copy when a mark was removed
           });
         post.video_url = url;
         const slotEl = $("smVidSlot");
@@ -7644,7 +7673,7 @@ function renderScriptSection(post) {
     <div class="sm-script-rows" id="smBeats"></div>
     <button class="btn ghost sm" id="smAddBeat">${sic("plus")}Add beat</button>
     <label class="fld" style="margin-top:12px;"><span>Voiceover <em>optional</em></span>
-      <textarea id="smVoiceover" rows="2">${esc(_smScript.voiceover || "")}</textarea></label>
+      <textarea id="smVoiceover" data-ai="voiceover" data-ai-ctx="reel" data-ai-label="Voiceover" rows="2">${esc(_smScript.voiceover || "")}</textarea></label>
 
     ${_smScript.ai_prompt ? `
     <div class="sm-prompt">

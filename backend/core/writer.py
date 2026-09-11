@@ -167,6 +167,14 @@ FIELD_KINDS = {
     "message": "a short WhatsApp message from the seller to a customer, warm, under 60 words.",
     "po_note": "a short, polite note to a supplier to go on a purchase order, under 40 words.",
     "label": "a short website section label or heading, 1-5 words.",
+    "site_brief": "a 2-3 sentence description of the shop in the seller's own voice — what they sell, who makes it, who buys it, what makes it theirs. It will be used to write their whole website, so stick to facts given here.",
+    "product_materials": "what the product is made of, as a short comma-separated list under 12 words. Only materials stated in the facts or the current text; if none are given, return a fill-in line like '[main material], [finish or trim]'.",
+    "product_for": "who this product is for, one line under 14 words, a person not a demographic.",
+    "product_occasions": "where or when it is worn or used, a comma-separated list of 3-5 occasions, under 10 words.",
+    "hashtags": "8 to 15 Instagram hashtags, space-separated, each starting with #, a mix of broad and niche, relevant to Indian shoppers, no spaces inside a tag, nothing else.",
+    "brand_palette": "the brand's colours in words, 3-5 colour names separated by commas, matching the look and products.",
+    "brand_avoid": "words and looks this brand should never use, 4-8 items separated by commas.",
+    "voiceover": "a voiceover for a short reel, spoken, under 30 words, following the shots given.",
     "general": "the text for this field.",
 }
 
@@ -178,7 +186,13 @@ def write_field(email: str, kind: str, label: str = "", current: str = "",
     ctx = context or {}
     facts = "\n".join(f"- {k}: {v}" for k, v in ctx.items()
                       if v not in (None, "", [], {}) and not str(k).startswith("_"))
-    user = (f"{brand_context(email)}\n\n"
+    extra = ""
+    if kind == "site_brief":
+        try:
+            extra = catalogue_context(email) + "\n"
+        except Exception:  # noqa: BLE001
+            extra = ""
+    user = (f"{brand_context(email)}\n\n{extra}"
             + (f"About this item:\n{facts}\n\n" if facts else "")
             + (f"The field is: {label}\n" if label else "")
             + f"Write {FIELD_KINDS[kind]}\n"
@@ -193,7 +207,8 @@ def write_field(email: str, kind: str, label: str = "", current: str = "",
 
 def _template_field(kind: str, label: str, current: str, ctx: dict, email: str) -> str:
     """No AI reachable. Still something the seller can edit, built only from
-    what they told us."""
+    what they told us — where a fact is missing it is left as a [bracketed]
+    gap to fill in, never guessed."""
     name = ctx.get("name") or ctx.get("product") or "This piece"
     cat = (ctx.get("category") or "").lower()
     mat = ctx.get("materials") or ctx.get("fabric") or ""
@@ -201,22 +216,30 @@ def _template_field(kind: str, label: str, current: str, ctx: dict, email: str) 
         return current.strip()
     if kind == "product_description":
         s = f"{name}" + (f" — {cat}" if cat else "") + "."
-        if mat:
-            s += f" Made of {mat}."
+        s += f" Made of {mat}." if mat else " Made of [what it is made of]."
         if ctx.get("key_points"):
             s += " " + " ".join(str(x).rstrip(".") + "." for x in ctx["key_points"][:3])
+        else:
+            s += " [How it feels or fits, and who it is for.]"
         return s + " Message us for sizes, colours and delivery to your PIN code."
     if kind == "product_highlights":
-        pts = [f"Made of {mat}" if mat else "", "Packed by hand", "Ships from India"]
-        return "\n".join(p for p in pts if p)
+        pts = [f"Made of {mat}" if mat else "[What it is made of]",
+               "[How it fits or feels]", "[Care or delivery detail]"]
+        return "\n".join(pts)
     if kind == "hero_heading":
-        return "Made to be kept"
+        return ctx.get("brand") or name if (ctx.get("brand") or ctx.get("name")) else "Everything we make, in one place"
     if kind == "hero_sub":
-        return "Small batches, finished by hand, shipped across India."
+        return (ctx.get("tagline") or "Browse the full range and order in a few taps.")
     if kind == "story":
-        return ("We started with a handful of pieces and a simple rule: make fewer things, "
-                "and make them properly. Everything here is checked and packed by the people "
-                "who made it — and we answer our own phone.")
+        return ((ctx.get("brief") or "").strip()
+                or "[Who you are, what you make and why — one concrete detail a customer would remember.]")
+    if kind == "site_brief":
+        return "[What you sell]. [Who makes it, and where]. [Who buys it, and why they choose you]."
+    if kind == "product_materials":
+        return mat or "[main material], [finish or trim]"
+    if kind == "hashtags":
+        words = [w for w in re.split(r"[^a-z0-9]+", f"{name} {cat}".lower()) if len(w) > 2][:5]
+        return " ".join(f"#{w}" for w in words) or "#[yourbrand] #[category]"
     return label or ""
 
 
@@ -328,9 +351,9 @@ def site_copy(email: str, brief: str) -> dict:
                 "prompt": {"system": WRITER_SYSTEM, "user": user}}
     first = (brief or "").strip().split(".")[0][:90]
     return {"copy": {
-        "tagline": first or "Made in small batches",
+        "tagline": first or "Browse the range and order in a few taps",
         "hero_heading": "Made to be kept",
-        "hero_sub": (first + ".") if first else "Small batches, finished by hand.",
+        "hero_sub": (first + ".") if first else "Browse the full range and order in a few taps.",
         "hero_cta": "Shop now",
         "story_title": "Our story",
         "story_body": (brief or "").strip()[:600],

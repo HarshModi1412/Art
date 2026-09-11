@@ -168,6 +168,35 @@ check("'time to buy more' leaves out what is already on order",
       all(r["id"] != fab["id"] for r in st2["suggestions"]) and st2["n_on_order"] >= 1,
       ([r["name"] for r in st2["suggestions"]], st2.get("n_on_order")))
 
+# every other way an order arrives re-checks stock too
+from backend.core import storefront  # noqa: E402
+n_log = len(replenish.recent_log(email, 100))
+sales_cols = list(smart.load_sales(email).columns)
+row = {c_: "" for c_ in sales_cols}
+row.update({"date": date.today().isoformat(), "amount": "1499", "quantity": "1"})
+for k in ("product", "item", "Product", "item_name"):
+    if k in row:
+        row[k] = "Cotton Kurta"
+r = c.post("/api/smart/records/add", headers=H, json={"kind": "sales", "rows": [row]})
+check("sales added by hand go through", r.status_code == 200, r.text[:200])
+lg = replenish.recent_log(email, 100)
+check("…and re-check every raw material against the DOS rule",
+      len(lg) > n_log and lg[0]["trigger"] == "sales" and "by hand" in lg[0]["ref"], lg[:1])
+MAIN = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "backend", "main.py"), encoding="utf-8").read()
+check("uploads, past-sales uploads and orders pulled from a connected store re-check too",
+      MAIN.count("replenish.after_sales(") >= 6 and 'f"orders pulled from {body.connector}"' in MAIN)
+ords = storefront.get_orders(email)
+o = ords[-1]
+storefront.set_status(email, o["id"], "cancelled")
+n_log = len(replenish.recent_log(email, 100))
+storefront.set_status(email, o["id"], "new")
+lg = replenish.recent_log(email, 100)
+check("a cancelled order put back takes its stock again — and is checked like a new order",
+      len(lg) > n_log and lg[0]["trigger"] == "restored" and lg[0]["ref"] == o["order_no"], lg[:1])
+check("nothing already on order is ordered twice by these checks",
+      len([p for p in supply.get_purchase_orders(email) if p.get("status") == "draft"]) == 1)
+
 # =========================================================================
 print("\n== 5. Approval panel: Approve / Details / Cancel ==")
 # =========================================================================
@@ -267,6 +296,15 @@ check("/api/ai/write answers", r.status_code == 200 and j.get("text"), r.text[:2
 check("with no AI configured here it says so, and hands the brief to the browser",
       j["provider"] == "template" and j["prompt"]["user"] and j["meta"]["browser_puter"] is True, j.get("meta"))
 check("the template uses only what it was told", "handloom cotton" in j["text"], j["text"])
+for kind in ("product_highlights", "hero_sub", "story"):
+    t = writer.write_field(email, kind, context={"name": "Cotton Kurta"})["text"]
+    check(f"with no AI, the '{kind}' starting draft claims nothing the seller did not say",
+          not any(w in t.lower() for w in ("by hand", "across india", "ships from", "small batch")), t)
+t = writer.write_field(email, "product_highlights", context={"name": "Kurta", "materials": "linen"})["text"]
+check("…and leaves [gaps] to fill where a fact is missing", "Made of linen" in t and "[" in t, t)
+for kind in ("site_brief", "product_materials", "product_for", "product_occasions", "hashtags",
+             "brand_palette", "brand_avoid", "voiceover"):
+    check(f"the writer knows the '{kind}' field", kind in writer.FIELD_KINDS)
 r = c.post("/api/ai/site-copy", headers=H, json={"brief": "Handloom kurtas from Pune, cut small-batch for people who hate fast fashion."})
 sc = r.json()
 check("site copy from a one-line brief", r.status_code == 200 and sc["copy"].get("hero_heading"), r.text[:200])
@@ -348,7 +386,10 @@ check("approving sends through the backend, with a PDF + mail-app fallback",
 check("purchase-order cards get Approve / Details / Cancel",
       'String(i.id).startsWith("po_")' in JS)
 check("✨ on text fields everywhere, wired as screens render",
-      "MutationObserver" in JS and JS.count('data-ai="') >= 12)
+      "MutationObserver" in JS and JS.count('data-ai="') >= 22)
+for fid in ("siteBrief", "stMat", "stWho", "stOcc", "sbPal", "sbAvoid", "sbTags", "ccTags", "smVoiceover"):
+    i0 = JS.find(f'id="{fid}"')
+    check(f"#{fid} has the AI helper", i0 > 0 and "data-ai=" in JS[i0:i0 + 220], JS[i0:i0 + 120])
 check("the website gets written from the seller's brief",
       'id="siteBrief"' in JS and "/api/ai/site-copy" in JS and "function writeWholeSite" in JS)
 check("product description and key points in one tap", "/api/ai/product-copy" in JS)

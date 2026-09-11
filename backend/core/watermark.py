@@ -57,10 +57,12 @@ says why, because cleaning is a nicety and must never cost a seller their clip.
 from __future__ import annotations
 
 import io
+import json
 import logging
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 
 import numpy as np
@@ -80,6 +82,79 @@ KNOWN_CLEAN_ENGINES = {"openai", "cloudflare", "huggingface"}
 # A clip longer than this is not a reel and is not worth re-encoding here.
 MAX_VIDEO_FRAMES = 3600          # ~2 minutes at 30fps
 SAMPLE_FRAMES = 36
+# Memory the sampled corner crops may take. A 1080×1920 reel's four corners
+# are ~1.3 MB a frame, so all 36 samples fit; a 4K clip gets fewer samples
+# rather than more memory. The web server has 512 MB in all on Render's
+# starter plan — the old full-frame sampling alone took ~450 MB of it.
+SAMPLE_BUDGET = 48 * 1024 * 1024
+MIN_SAMPLES = 12
+# Threads for the decoder, OpenCV and the x264 encoder. Left alone they size
+# themselves to the HOST's core count, and every thread brings its own frame
+# buffers — on a shared host that is dozens of threads on half a CPU.
+VIDEO_THREADS = str(max(1, int(os.environ.get("WATERMARK_THREADS") or 2)))
+# x264 settings for the re-encode. Measured on a 1080×1920 reel: "veryfast"
+# needs ~300 MB in the encoder alone, which with the web server beside it is
+# more than a 512 MB instance has; these keep it near 150 MB. The clip is
+# re-compressed by Instagram on upload anyway, so the file being somewhat
+# larger here costs nothing a viewer sees.
+X264_OPTS = tuple((os.environ.get("WATERMARK_X264") or
+                   "-preset ultrafast -crf 21 -x264-params rc-lookahead=0").split())
+# A clip that has not been cleaned in this long is left as it is.
+VIDEO_TIMEOUT = int(os.environ.get("WATERMARK_TIMEOUT") or 240)
+
+
+# ---------------------------------------------------------------- memory
+def _cgroup_free_mb() -> float | None:
+    """Memory this container can still use, in MB — its cgroup limit minus
+    what is in use, not counting page cache the kernel can drop. None when
+    there is no limit to read (a laptop, a test box)."""
+    for lim_p, cur_p, stat_p, key in (
+            ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory.current",
+             "/sys/fs/cgroup/memory.stat", "inactive_file"),
+            ("/sys/fs/cgroup/memory/memory.limit_in_bytes",
+             "/sys/fs/cgroup/memory/memory.usage_in_bytes",
+             "/sys/fs/cgroup/memory/memory.stat", "total_inactive_file")):
+        try:
+            with open(lim_p) as fh:
+                lim = fh.read().strip()
+            with open(cur_p) as fh:
+                cur = int(fh.read().strip())
+        except (OSError, ValueError):
+            continue
+        if lim == "max" or not lim.isdigit() or int(lim) >= 1 << 50:
+            return None
+        cache = 0
+        try:
+            with open(stat_p) as fh:
+                for line in fh:
+                    k, _, v = line.partition(" ")
+                    if k == key:
+                        cache = int(v)
+                        break
+        except (OSError, ValueError):
+            pass
+        return (int(lim) - max(0, cur - cache)) / 2 ** 20
+    return None
+
+
+def video_need_mb(w: int, h: int) -> int:
+    """Working memory to clean a w×h clip, for the cleaner and its encoder
+    together: libraries, the corner samples, one decoded frame at a time and
+    x264's reference frames. Measured on a 1080×1920 reel at 275 MB (it used
+    to be over 1 GB, most of it inside the web server); 10% on top."""
+    frame_mb = w * h * 3 / 2 ** 20
+    return int((130 + SAMPLE_BUDGET / 2 ** 20 + frame_mb * 17) * 1.1)
+
+
+def _memory_short_mb(w: int, h: int) -> int:
+    """How many MB short this server is of cleaning a w×h clip; 0 when fine."""
+    if os.environ.get("WATERMARK_SKIP_MEMORY_CHECK") == "1":
+        return 0
+    free = _cgroup_free_mb()
+    if free is None:
+        return 0
+    need = video_need_mb(w, h)
+    return 0 if free >= need else int(need - free) + 1
 
 
 # ---------------------------------------------------------------- helpers
@@ -272,21 +347,43 @@ def detect_video_frames(frames: list[np.ndarray]) -> tuple[np.ndarray, list[dict
     `frames` are BGR/RGB uint8 arrays of the same size, sampled across the clip.
     Returns (mask, regions, mode) where mode says which cue decided it."""
     H, W = frames[0].shape[:2]
+    crops = {name: [f[by:by + bh, bx:bx + bw] for f in frames]
+             for name, bx, by, bw, bh in _corners(W, H)}
+    return detect_video_corners(crops, W, H)
+
+
+def detect_video_corners(crops: dict[str, list[np.ndarray]], W: int, H: int
+                         ) -> tuple[np.ndarray, list[dict], str]:
+    """The same detection from the four corner boxes only (`_corners(W, H)`,
+    RGB uint8). A clip is judged on its corners anyway, and keeping only those
+    is what lets a 1080p reel be checked in a fraction of the memory that
+    holding every sampled frame whole used to take."""
     mask = np.zeros((H, W), dtype=bool)
     regions: list[dict] = []
     modes = []
     sigma = max(2.5, min(W, H) / 110.0)
     for box in _corners(W, H):
         name, bx, by, bw, bh = box
-        stack = np.stack([f[by:by + bh, bx:bx + bw] for f in frames]).astype(np.float32)
-        gray = stack @ np.array([0.299, 0.587, 0.114], dtype=np.float32)   # n,h,w
+        if not crops.get(name):
+            continue
+        gray = contrast = motion = None     # free the previous corner's arrays first
+        # Built one frame at a time: stacking every sample as float32 and
+        # converting in one go is what used to need ~170 MB for a 1080p reel.
+        frames_c = crops[name]
+        n = len(frames_c)
+        wts = np.array([0.299, 0.587, 0.114], dtype=np.float32)
+        gray = np.empty((n, bh, bw), dtype=np.float32)                     # n,h,w
+        for k, fr in enumerate(frames_c):
+            gray[k] = fr.astype(np.float32) @ wts
         motion = gray.std(axis=0)
         moving_frac = float((motion > 6.0).mean())
-        med_rgb = np.median(stack, axis=0).astype(np.uint8)
+        med_rgb = np.median(np.stack(frames_c), axis=0).astype(np.uint8)
         if moving_frac >= 0.18:
             # The strong cue: brighter than its own surroundings in nearly
             # every frame, while the corner around it moves.
-            contrast = np.stack([g - _blur(g, sigma) for g in gray])
+            contrast = np.empty_like(gray)
+            for k in range(n):
+                contrast[k] = gray[k] - _blur(gray[k], sigma)
             persistent = np.percentile(contrast, 20, axis=0) > 8.0
             sat = _saturation(med_rgb)
             steady = motion < np.percentile(motion, 60) + 1e-3
@@ -414,8 +511,8 @@ def _encode_cmd(ff: str, w: int, h: int, fps: float, src: str, dst: str, codec: 
             "-i", "-", "-i", src,
             "-map", "0:v:0", "-map", "1:a:0?",
             "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
-            "-c:v", codec, "-pix_fmt", "yuv420p"]  + (
-        ["-preset", "veryfast", "-crf", "20"] if codec == "libx264" else []) + [
+            "-c:v", codec, "-pix_fmt", "yuv420p", "-threads", VIDEO_THREADS] + (
+        list(X264_OPTS) if codec == "libx264" else []) + [
             "-movflags", "+faststart", "-c:a", "aac", "-b:a", "128k", "-shortest", dst]
 
 
@@ -429,6 +526,10 @@ def clean_video_file(src: str, dst: str, source: str = "") -> dict:
     if cv2 is None or not ff:
         report["reason"] = capabilities()["video_note"]
         return report
+    try:
+        cv2.setNumThreads(int(VIDEO_THREADS))
+    except Exception:  # noqa: BLE001
+        pass
     cap = None
     try:
         cap = cv2.VideoCapture(src)
@@ -437,35 +538,60 @@ def clean_video_file(src: str, dst: str, source: str = "") -> dict:
             return report
         n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         fps = float(cap.get(cv2.CAP_PROP_FPS) or 0) or 24.0
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
         if n > MAX_VIDEO_FRAMES:
             report["reason"] = "clip is longer than a reel — left as it is"
             return report
-        # Pass 1: sample frames across the clip for detection.
-        step = max(1, (n or SAMPLE_FRAMES) // SAMPLE_FRAMES)
-        samples, i = [], 0
+        if w and h:
+            short = _memory_short_mb(w, h)
+            if short:
+                report["reason"] = (f"not enough free memory on this server to clean a "
+                                    f"{w}×{h} clip right now (about {short} MB short) — "
+                                    "attached as it is")
+                return report
+        # Pass 1: sample the four corners across the clip for detection. Only
+        # the corners are kept (converted to RGB, which detection expects);
+        # each full frame is dropped as soon as its corners are copied out.
+        samples: dict[str, list[np.ndarray]] = {}
+        boxes = None
+        target, step, i, taken = SAMPLE_FRAMES, 1, 0, 0
         while True:
             ok, frame = cap.read()
             if not ok:
                 break
+            if boxes is None:
+                h, w = frame.shape[:2]
+                boxes = _corners(w, h)
+                per = sum(bw * bh * 3 for _, _, _, bw, bh in boxes)
+                target = max(MIN_SAMPLES, min(SAMPLE_FRAMES, SAMPLE_BUDGET // max(1, per)))
+                step = max(1, (n or target) // target)
+                samples = {b[0]: [] for b in boxes}
             if i % step == 0:
-                samples.append(frame)
+                for name, bx, by, bw, bh in boxes:
+                    samples[name].append(cv2.cvtColor(frame[by:by + bh, bx:bx + bw],
+                                                      cv2.COLOR_BGR2RGB))
+                taken += 1
+                if taken >= 2 * target:
+                    # frame count was unknown: thin out and sample more sparsely
+                    samples = {k: v[::2] for k, v in samples.items()}
+                    taken, step = len(next(iter(samples.values()))), step * 2
             i += 1
+            del frame
         cap.release()
         cap = None
         total = i
-        if len(samples) < 3:
+        if boxes is None or taken < 3:
             report["reason"] = "too few frames to judge"
             return report
         report["checked"] = True
-        # OpenCV decodes to BGR; detection weighs channels as RGB.
-        mask, regions, mode = detect_video_frames(
-            [cv2.cvtColor(f, cv2.COLOR_BGR2RGB) for f in samples])
+        mask, regions, mode = detect_video_corners(samples, w, h)
+        samples = {}
         if not regions:
             report["reason"] = "no visible watermark found"
             return report
 
         # Pass 2: inpaint every frame and pipe it to ffmpeg as H.264.
-        h, w = samples[0].shape[:2]
         grow = max(2, int(min(h, w) * 0.004))
         m = _dilate(mask, grow)
         y0, y1, x0, x1 = _roi(m, max(8, grow * 4))
@@ -518,6 +644,59 @@ def clean_video_file(src: str, dst: str, source: str = "") -> dict:
             cap.release()
 
 
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def clean_video_isolated(src: str, dst: str, source: str = "") -> dict:
+    """`clean_video_file`, run in a child process.
+
+    Decoding, inpainting and re-encoding a clip is the heaviest thing this app
+    does. Inside the web server, a clip that needed more memory than the host
+    allows took the whole server down — every seller then saw a 502 ("the
+    server is waking up") until it restarted, and the same upload did it
+    again. In a child process the worst case is that the child dies: it marks
+    itself first in line for the kernel's out-of-memory killer, the server
+    stays up, and the clip is attached as it was uploaded."""
+    if os.environ.get("WATERMARK_INPROCESS") == "1":
+        return clean_video_file(src, dst, source)
+    env = dict(os.environ)
+    env["PYTHONPATH"] = _REPO_ROOT + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    env["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = f"threads;{VIDEO_THREADS}"
+    for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        env[k] = VIDEO_THREADS
+    base = {"checked": False, "removed": False, "regions": [], "kind": "video", "method": ""}
+    try:
+        r = subprocess.run([sys.executable, "-m", "backend.core.watermark", src, dst, source or ""],
+                           cwd=_REPO_ROOT, env=env, capture_output=True, timeout=VIDEO_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        _rm(dst)
+        return {**base, "reason": f"cleaning took longer than {VIDEO_TIMEOUT // 60} minutes — attached as it is"}
+    except Exception as e:  # noqa: BLE001
+        _rm(dst)
+        return {**base, "reason": f"could not start the cleaner: {e}"}
+    if r.returncode != 0:
+        _rm(dst)
+        killed = r.returncode in (-9, 137) or r.returncode < 0
+        tail = (r.stderr or b"").decode(errors="replace").strip()[-240:]
+        log.warning("watermark child exited %s: %s", r.returncode, tail)
+        return {**base, "reason": ("the server ran out of memory cleaning this clip — attached as it is"
+                                   if killed else f"the cleaner stopped: {tail or r.returncode}")}
+    try:
+        line = [ln for ln in (r.stdout or b"").decode(errors="replace").splitlines() if ln.strip()][-1]
+        return json.loads(line)
+    except Exception:  # noqa: BLE001
+        _rm(dst)
+        return {**base, "reason": "the cleaner gave no answer — attached as it is"}
+
+
+def _rm(path: str) -> None:
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except OSError:
+        pass
+
+
 def clean_video_bytes(data: bytes, filename_hint: str = "clip.mp4",
                       source: str = "") -> tuple[bytes, dict]:
     """Bytes in, bytes out. The original comes back when nothing was removed."""
@@ -527,7 +706,7 @@ def clean_video_bytes(data: bytes, filename_hint: str = "clip.mp4",
     try:
         with open(src, "wb") as fh:
             fh.write(data)
-        rep = clean_video_file(src, dst, source)
+        rep = clean_video_isolated(src, dst, source)
         if rep.get("removed"):
             with open(dst, "rb") as fh:
                 return fh.read(), rep
@@ -570,3 +749,18 @@ def clean_media_url(url: str, email: str = "", source: str = "") -> dict:
         out["url"] = saved["url"]
         out["original_url"] = url
     return out
+
+
+# ---------------------------------------------------------------- child entry
+if __name__ == "__main__":
+    # First in line if the container runs out of memory, so the kernel stops
+    # this cleaner rather than the web server that started it.
+    try:
+        with open("/proc/self/oom_score_adj", "w") as _fh:
+            _fh.write("1000")
+    except OSError:
+        pass
+    _args = sys.argv[1:] + ["", "", ""]
+    _rep = clean_video_file(_args[0], _args[1], _args[2])
+    sys.stdout.write(json.dumps(_rep, default=str) + "\n")
+    sys.stdout.flush()
