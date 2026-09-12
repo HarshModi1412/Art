@@ -532,6 +532,74 @@ on Instagram Login at first, which used to be the one real reason to force
 sellers through a Facebook Page. It is available now, so the Page is needed for
 nothing this app does.
 
+## Why "Connected" did not mean "will post"
+
+Three separate things were missing between a connected account and a post
+appearing. Each failed silently, which is the worst way to fail.
+
+**1. Nothing published the calendar.** `social.py` contained no Instagram code
+at all. `post_image` was called from exactly one place — the older Content
+Creator module — and even there only when someone hit an endpoint by hand.
+There was no scheduler, and `published` was a state in `social.STATES` that
+nothing ever set. A seller could connect, approve a week of posts, watch them
+sit on the calendar with times against them, and none would ever go out, with
+no error anywhere, because nothing had tried. `backend/core/publisher.py` is
+that wire, riding the same ticker as the weekly plan and the weekly win-back.
+
+**2. Reels had no publisher.** `post_image` was the only one, and the entire
+Social Media Manager is built around reels — the research it rests on says
+single images lost 22% of their reach year on year, so the planner deliberately
+produces reels. `instagram.post_video` publishes them properly, including the
+transcode wait: a container is not publishable the instant it is created, so
+this polls with a budget instead of publishing optimistically and getting a
+confusing error.
+
+**3. Every generated picture was a PNG, and Instagram accepts JPEG only.**
+This is the one that would have broken every photo post on every account
+forever. `studio.py` and `content_gen.py` both save `.png`; Meta's
+content-publishing documentation says "JPEG is the only image format
+supported", and a PNG is refused at container creation with subcode 2207005
+before the post exists — an error nobody would have traced back to a file
+extension. `media.instagram_jpeg()` now makes a JPEG twin the first time a
+picture is published and caches it beside the original. The PNG is untouched,
+because the storefront and the editor still use it and rewriting those URLs
+would break links already in the world. The same pass fixes the other three
+silent rejections: aspect ratio padded into 4:5–1.91:1 (2207009), width clamped
+to 320–1440 (36001), quality stepped down under 8 MB (2207004). **Padded, never
+cropped** — these are product photographs, and a crop that satisfies Instagram
+by removing the top of a kurta has published the wrong picture.
+
+### Finding out in ten seconds instead of on a Saturday night
+
+`POST /api/instagram/preflight`, behind **Check posting works** on the
+Instagram screen. Connecting proves the login worked and nothing else. This
+checks, in cost order:
+
+1. the scopes recorded at connect time — `exchange_code` now captures the
+   `permissions` field from the short-lived token exchange, which is the **only**
+   place Meta ever discloses them (the long-lived exchange drops it, and
+   `graph.instagram.com` has no permissions endpoint). Miss it there and the
+   question is unanswerable forever;
+2. `GET /{ig-user-id}/content_publishing_limit` — part of the publishing
+   surface, so it answers the scope question without creating anything;
+3. a real media container against a real JPEG this server hosts, which makes
+   Meta both check the publish permission *and* fetch the picture. The container
+   is never published and expires by itself in 24 hours.
+
+Meta answers media problems with a number rather than a sentence, so the ones
+that actually happen are mapped to what to change: 2207052 (cannot download the
+picture), 2207005 (not a JPEG), 2207009 (wrong shape), 2207004 (too big),
+2207042 (100-posts-a-day limit), 2207050 (account restricted).
+
+**Worth knowing: App Review is not the blocker for a tester.** Meta's content
+publishing docs list Standard Access as an eligible access level, so an app
+with only Standard Access can publish to an account holding an app role — a
+tester who has accepted the invite. Advanced Access is needed to serve accounts
+with *no* role. The invite must be accepted at **instagram.com in a desktop
+browser** (Profile → Edit profile → Apps and websites → Tester invitations); it
+does not appear in the phone app, and a pending invite still allows some reads,
+which is exactly what "connected but cannot post" looks like.
+
 **Where the seller actually finds it.** This was the gap: the connection screen
 existed, worked, and was unreachable. No tile on the home grid, no entry in
 `openModule`'s dispatch, nothing anywhere linking to it — a seller could not

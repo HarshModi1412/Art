@@ -37,7 +37,7 @@ from backend.core import commerce, secrets_store, db, supply, products
 from backend.core import sitebuilder, storefront
 from backend.core import messaging, password_reset, today as today_mod
 from backend.core import winback_proof
-from backend.core import loginguard, google_auth, winback_auto
+from backend.core import loginguard, google_auth, winback_auto, publisher
 from backend.core import media
 from backend.core import cache
 from backend.core import cancellations
@@ -1223,7 +1223,8 @@ setTimeout(function(){{ try{{window.close();}}catch(e){{}} }}, 900);
     if not check.get("ok"):
         return _reply(False, check.get("error", "Could not verify the connected account."))
     instagram.save_credentials(email, user_token, ig_user_id,
-                               account_username=check.get("username"))
+                               account_username=check.get("username"),
+                               granted=tok.get("granted"))
     return _reply(True, f"Connected @{check.get('username','—')}", username=check.get("username"))
 
 
@@ -1281,6 +1282,76 @@ def instagram_connect(body: IGConnectBody, authorization: str | None = Header(de
     creds = instagram.save_credentials(email, body.access_token, body.ig_user_id,
                                        account_username=check.get("username"))
     return {"ok": True, "status": instagram.status(email), "username": creds.get("account_username")}
+
+
+_PREFLIGHT_JPEG: bytes | None = None
+
+
+@app.get("/preflight-image.jpg")
+def preflight_image():
+    """A plain square JPEG, on a public URL with no authentication.
+
+    This exists so `POST /api/instagram/preflight` has something real for Meta
+    to fetch. It must satisfy Instagram's own rules or the test would fail for
+    the wrong reason: JPEG (not PNG, which Instagram refuses), and an aspect
+    ratio inside 4:5 to 1.91:1 — square is safely in the middle.
+
+    Served from this app, over the same public HTTPS the seller's real pictures
+    go out on, so a successful fetch proves the route Meta will actually use.
+    Built once and held in memory: it is the same twelve kilobytes every time."""
+    global _PREFLIGHT_JPEG
+    if _PREFLIGHT_JPEG is None:
+        from PIL import Image, ImageDraw
+        img = Image.new("RGB", (1080, 1080), (247, 248, 250))
+        d = ImageDraw.Draw(img)
+        d.rectangle([40, 40, 1040, 1040], outline=(92, 103, 144), width=6)
+        d.text((90, 520), "One Tap Manager - connection test", fill=(60, 66, 86))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=82)
+        _PREFLIGHT_JPEG = buf.getvalue()
+    return Response(content=_PREFLIGHT_JPEG, media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.post("/api/instagram/preflight")
+def instagram_preflight(request: Request,
+                        authorization: str | None = Header(default=None)):
+    """Answer "will this actually post?" in about ten seconds, without posting.
+
+    Connecting proves the LOGIN worked. It proves nothing about publishing, and
+    the three things that break publishing all fail silently until a real post
+    is due on a Saturday evening. This creates a media container and throws it
+    away: Meta validates the publishing permission AND fetches the image before
+    it answers, so a container id coming back is proof of the whole chain. An
+    unpublished container expires by itself in 24 hours and never appears on
+    the seller's profile."""
+    email = require_user(authorization)
+    probe = _public_base_url(request) + "/preflight-image.jpg"
+    res = instagram.preflight(email, probe)
+    res["probe_url"] = probe
+    return res
+
+
+@app.get("/api/social/publisher")
+def social_publisher_status(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return publisher.status(email)
+
+
+@app.post("/api/social/publish-due")
+def social_publish_due(request: Request,
+                       authorization: str | None = Header(default=None)):
+    """Publish this seller's due posts now instead of waiting for the ticker."""
+    email = require_user(authorization)
+    return publisher.run_for(email, _public_base_url(request))
+
+
+@app.post("/api/admin/social/publish-due")
+def admin_social_publish_due(request: Request,
+                             x_admin_token: str | None = Header(default=None)):
+    """Cron target, for a deployment that runs the ticker externally."""
+    _require_admin(x_admin_token)
+    return publisher.run_due(_public_base_url(request))
 
 
 @app.post("/api/instagram/disconnect")
@@ -4527,7 +4598,11 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # Paths that belong to the app itself, whatever host they arrive on. Everything
 # else on a seller's own domain is their shop.
 _APP_PATHS = ("/api/", "/smart", "/smart-static/", "/static/", "/generated_images/",
-              "/s/", "/docs", "/openapi.json", "/redoc", "/health", "/favicon.ico")
+              "/s/", "/docs", "/openapi.json", "/redoc", "/health", "/favicon.ico",
+              # Meta fetches this to prove it can reach us. If a seller's custom
+              # domain swallowed it and served their storefront instead, the
+              # connection test would fail on every account that has one.
+              "/preflight-image.jpg")
 
 
 @app.middleware("http")

@@ -1450,6 +1450,45 @@ def week(email: str) -> list[dict]:
     return sorted(live, key=lambda p: p.get("scheduled_at") or "")
 
 
+def all_posts(email: str) -> list[dict]:
+    """Every post on the account, any week, any state.
+
+    The calendar only ever loads one month, which is right for a calendar and
+    wrong for the publisher — a post scheduled for the 1st is due while the
+    seller is still looking at the previous month."""
+    return list(_posts(email))
+
+
+def record_publish(email: str, post_id: str, result: dict) -> dict:
+    """What Instagram did with this post, written onto the post itself.
+
+    A post that failed must LOOK failed on the calendar. The alternative — the
+    one this replaces — is a post that stays "scheduled" forever while the
+    seller believes it went out, which is worse than an error because they only
+    find out when a customer asks why they have gone quiet."""
+    rows = _posts(email)
+    for p in rows:
+        if p.get("id") != post_id:
+            continue
+        if result.get("ok"):
+            p["state"] = "published"
+            p["published_at"] = _now()
+            p["permalink"] = result.get("permalink") or ""
+            p["media_id"] = result.get("media_id") or ""
+            p["publish_error"] = ""
+        else:
+            # "missed" is not a failure of ours — the time simply passed — but
+            # it has to leave the scheduled queue or it is retried forever.
+            p["state"] = "failed"
+            p["failed_at"] = _now()
+            p["publish_error"] = str(result.get("error") or "")[:400]
+            p["publish_missed"] = bool(result.get("missed"))
+        _save_posts(email, rows)
+        _sync_tasks(email, p)
+        return p
+    return {"error": "not found"}
+
+
 def set_state(email: str, post_id: str, state: str) -> dict:
     if state not in STATES:
         return {"error": "bad state"}

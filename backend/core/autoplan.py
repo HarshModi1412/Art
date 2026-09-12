@@ -905,4 +905,14 @@ def _loop() -> None:
             winback_auto.run_due()
         except Exception as e:  # noqa: BLE001
             log.warning("win-back tick failed: %s", e)
+        # And the posts themselves. Until this existed, a seller could approve a
+        # week of posts, watch them sit on the calendar with times against them,
+        # and none of them would ever go out — with no error anywhere, because
+        # nothing had tried. PUBLIC_BASE_URL matters: Meta fetches the picture
+        # or the clip from us, so a relative path is useless to it.
+        try:
+            from backend.core import publisher
+            publisher.run_due(os.environ.get("PUBLIC_BASE_URL", ""))
+        except Exception as e:  # noqa: BLE001
+            log.warning("publishing tick failed: %s", e)
         time.sleep(TICK_SECONDS)

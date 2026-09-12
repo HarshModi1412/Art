@@ -5730,7 +5730,16 @@ async function openInstagramModule() {
           </div>
           ${s.connected ? `<button class="btn ghost sm" id="igDisconnect">Disconnect</button>` : ""}
         </div>
-        ${s.connected ? `<p class="muted tiny" style="margin-top:10px;">Ready. When you approve a Content Creator suggestion, we'll post it on this Instagram account.</p>` : connectPanel}
+        ${s.connected ? `
+          <p class="muted tiny" style="margin-top:10px;">Approved posts on your
+            calendar go out on this account at the time you scheduled them —
+            reels as reels, photos as photos. Nothing is posted that you have
+            not approved.</p>
+          <div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;">
+            <button class="btn primary sm" id="igPreflight">${sic("check")}Check posting works</button>
+            <span class="muted tiny">Tests the whole chain without putting anything on your profile.</span>
+          </div>
+          <div id="igPfMsg" style="margin-top:10px;"></div>` : connectPanel}
       </div>
       ${!s.connected ? `
       <div class="card">
@@ -5791,6 +5800,36 @@ async function openInstagramModule() {
         } catch (e) { $("igMsg").innerHTML = `<span style='color:var(--red)'>${esc(e.message)}</span>`; }
       };
     } else {
+      /* WHY A TEST BUTTON EXISTS AT ALL: "Connected" only means the login
+         worked. Whether a post can go out depends on three other things — the
+         publish permission the seller may have unticked, whether Instagram can
+         reach this server to fetch the picture, and whether the account is
+         eligible. All three fail silently until a real post is due on a
+         Saturday evening. Ten seconds now beats finding out then. */
+      const pf = $("igPreflight");
+      if (pf) pf.onclick = async () => {
+        const box = $("igPfMsg");
+        pf.disabled = true; pf.textContent = "Checking…";
+        box.innerHTML = `<span class="muted tiny">Asking Instagram to accept a test picture. Nothing is posted.</span>`;
+        try {
+          const r = await api("/api/instagram/preflight", { method: "POST" });
+          if (r.can_publish) {
+            box.innerHTML = `<div class="focus-box" style="background:var(--green-soft,var(--surface-2));border-radius:8px;padding:10px 12px;">
+              <b style="color:var(--green);">✓ Posting works.</b>
+              <div class="muted tiny" style="margin-top:3px;">Instagram accepted a test picture from this server and
+                confirmed permission to publish on @${esc(r.username || "")}. The test was thrown away — nothing
+                appeared on your profile. Your scheduled posts will go out.</div></div>`;
+          } else {
+            box.innerHTML = `<div class="focus-box" style="background:var(--amber-soft,var(--surface-2));border-radius:8px;padding:10px 12px;">
+              <b style="color:var(--amber);">Posting will not work yet.</b>
+              <div class="muted tiny" style="margin-top:3px;">${esc(r.hint || "")}</div>
+              ${r.error ? `<div class="muted tiny" style="margin-top:6px;opacity:.8;">Instagram said: ${esc(r.error)}</div>` : ""}</div>`;
+          }
+        } catch (e) {
+          box.innerHTML = `<span class="err">${esc(e.message)}</span>`;
+        }
+        pf.disabled = false; pf.innerHTML = `${sic("check")}Check again`;
+      };
       $("igDisconnect").onclick = async () => {
         if (!confirm("Disconnect Instagram? Scheduled posts will fail until you reconnect.")) return;
         await api("/api/instagram/disconnect", { method: "POST" }); openInstagramModule();

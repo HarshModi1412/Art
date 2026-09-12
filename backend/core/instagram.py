@@ -61,6 +61,8 @@ OAUTH_SCOPES = ("instagram_business_basic,"
                 "instagram_business_content_publish,"
                 "instagram_business_manage_insights")
 
+PUBLISH_SCOPE = "instagram_business_content_publish"
+
 _KEY = "instagram_creds"          # metadata only — never the token
 _CONNECTOR = "instagram"          # encrypted credential store
 
@@ -130,6 +132,13 @@ def exchange_code(code: str, redirect_url: str) -> dict:
                                           or str(d.get("error"))}
         short = d.get("access_token")
         user_id = d.get("user_id")
+        # WHAT WAS ACTUALLY GRANTED. Scopes are baked into a token when it is
+        # issued, and Instagram lets the seller untick permissions on the
+        # consent screen. This field is the only place Meta ever tells us which
+        # ones survived — the long-lived exchange below does not return it — so
+        # if it is not captured here it can never be recovered, and "why will it
+        # not post" becomes unanswerable.
+        granted = str(d.get("permissions") or "")
         if not short:
             return {"ok": False, "error": "Instagram returned no short-lived token."}
 
@@ -144,8 +153,10 @@ def exchange_code(code: str, redirect_url: str) -> dict:
             # fall back to the short-lived token (still works for ~1 hour,
             # better than erroring the whole flow out).
             return {"ok": True, "access_token": short, "user_id": user_id,
+                    "granted": granted,
                     "warning": "Could not get a long-lived token; using a short-lived one."}
-        return {"ok": True, "access_token": d2.get("access_token") or short, "user_id": user_id}
+        return {"ok": True, "access_token": d2.get("access_token") or short,
+                "user_id": user_id, "granted": granted}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -180,19 +191,24 @@ def get_credentials(email: str) -> dict:
 
 def save_credentials(email: str, access_token: str, ig_user_id: str,
                      account_username: str | None = None,
-                     connected_at: str | None = None) -> dict:
+                     connected_at: str | None = None,
+                     granted: str | None = None) -> dict:
     from backend.core import secrets_store
     token = (access_token or "").strip()
     ig_id = str(ig_user_id or "").strip()
     secrets_store.save_connection(email, _CONNECTOR,
                                   {"access_token": token, "ig_user_id": ig_id},
                                   {"ig_user_id": ig_id})
+    prev = user_store.get_key(email, _KEY, {}) or {}
     meta = {
         "ig_user_id": ig_id,
         "account_username": account_username,
         "connected_at": connected_at or _now_iso(),
         "token_at": _now_iso(),          # when THIS token was issued
         "expires_at": _plus_days(TOKEN_TTL_DAYS),
+        # A refresh keeps the same grant, so the previous value stands unless a
+        # fresh authorization tells us otherwise.
+        "granted": (granted if granted is not None else prev.get("granted", "")),
     }
     user_store.set_key(email, _KEY, meta)
     return {**meta, "access_token": token}
@@ -289,6 +305,11 @@ def status(email: str) -> dict:
         "expires_in_days": days_left,
         # Said plainly rather than left for the seller to work out from a date.
         "needs_attention": bool(days_left is not None and days_left <= 7),
+        "granted": c.get("granted", ""),
+        # None means "connected before we started recording this" — which is
+        # not the same as "not granted", and must not be shown as a failure.
+        "can_publish": (None if not c.get("granted")
+                        else PUBLISH_SCOPE in str(c.get("granted"))),
     }
 
 
@@ -384,3 +405,242 @@ def post_image(email: str, image_url: str, caption: str, timeout: int = 60) -> d
 def _now_iso() -> str:
     import pandas as pd
     return pd.Timestamp.now().isoformat(timespec="seconds")
+
+
+# ---------------------------------------------------------
+# Reels, and the check that says whether any of this will work
+# ---------------------------------------------------------
+# WHY REELS NEEDED THEIR OWN FUNCTION. `post_image` was the only publisher in
+# this file, and the entire Social Media Manager is built around reels — the
+# research it is based on says single images lost 22% of their reach year on
+# year, so the planner deliberately produces reels and carousels. A seller
+# could approve a reel, upload the clip, watch it appear on the calendar as
+# "scheduled", and nothing would ever happen, because there was no code path
+# that could publish a video.
+#
+# The flow is the same three steps as an image with one difference that
+# matters: Instagram TRANSCODES the video, which takes time. A container is
+# not publishable the instant it is created — it goes IN_PROGRESS, then
+# FINISHED — so this polls, with a budget, instead of publishing optimistically
+# and getting a confusing error back.
+REEL_MIN_SECONDS = 3
+REEL_MAX_SECONDS = 90          # longer is accepted but drops out of the Reels tab
+REEL_MAX_BYTES = 100 * 1024 * 1024
+
+
+def post_video(email: str, video_url: str, caption: str, cover_url: str = "",
+               share_to_feed: bool = True, timeout: int = 60,
+               poll_seconds: int = 300) -> dict:
+    """Publish a reel. Returns {ok, media_id?, permalink?, error?}.
+
+    `video_url` must be reachable over public HTTPS — Meta's servers fetch it
+    themselves, there is no upload from here. This app serves media at
+    /generated_images/<file> with no authentication, which is exactly what
+    makes that work; if that route ever goes behind a login, every reel stops
+    publishing and the error will come from Meta rather than from us."""
+    creds = get_credentials(email)
+    if not (creds.get("access_token") and creds.get("ig_user_id")):
+        raise InstagramError("Instagram is not connected. Connect your account first.")
+    token, ig_id = creds["access_token"], creds["ig_user_id"]
+
+    payload = {"media_type": "REELS", "video_url": video_url, "caption": caption,
+               "share_to_feed": "true" if share_to_feed else "false",
+               "access_token": token}
+    if cover_url:
+        payload["cover_url"] = cover_url
+    try:
+        r = requests.post(f"{GRAPH}/{ig_id}/media", data=payload, timeout=timeout)
+        d = r.json()
+        if r.status_code != 200 or d.get("error"):
+            return {"ok": False, "step": "create_media",
+                    "error": (d.get("error") or {}).get("message") or r.text}
+        creation_id = d.get("id")
+        if not creation_id:
+            return {"ok": False, "step": "create_media", "error": "No creation id returned"}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "step": "create_media", "error": str(e)}
+
+    # Transcoding. A 30-second clip is usually ready in under a minute; the
+    # budget is generous because the alternative is a post that silently never
+    # goes out. Backs off rather than hammering: a tight poll loop against a
+    # rate-limited API is its own failure.
+    waited, delay = 0, 5
+    while waited < poll_seconds:
+        time.sleep(delay)
+        waited += delay
+        delay = min(delay + 5, 20)
+        try:
+            s = requests.get(f"{GRAPH}/{creation_id}",
+                             params={"fields": "status_code,status", "access_token": token},
+                             timeout=20).json()
+        except Exception:  # noqa: BLE001 — one bad poll is not a failed post
+            continue
+        code = s.get("status_code")
+        if code == "FINISHED":
+            break
+        if code in ("ERROR", "EXPIRED"):
+            return {"ok": False, "step": "process_media",
+                    "error": f"Instagram could not process the video ({code}). "
+                             f"{s.get('status') or ''}".strip()}
+    else:
+        return {"ok": False, "step": "process_media",
+                "error": "Instagram is still processing the video after "
+                         f"{poll_seconds // 60} minutes. It may still publish — "
+                         "check the account before trying again."}
+
+    try:
+        r = requests.post(f"{GRAPH}/{ig_id}/media_publish",
+                          data={"creation_id": creation_id, "access_token": token},
+                          timeout=timeout)
+        d = r.json()
+        if r.status_code != 200 or d.get("error"):
+            return {"ok": False, "step": "publish",
+                    "error": (d.get("error") or {}).get("message") or r.text}
+        media_id = d.get("id")
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "step": "publish", "error": str(e)}
+
+    permalink = None
+    try:
+        permalink = requests.get(f"{GRAPH}/{media_id}",
+                                 params={"fields": "permalink", "access_token": token},
+                                 timeout=15).json().get("permalink")
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True, "media_id": media_id, "permalink": permalink, "kind": "reel"}
+
+
+def publish(email: str, kind: str, url: str, caption: str, cover_url: str = "") -> dict:
+    """One door for both formats, so callers do not each decide what a reel is."""
+    if str(kind or "").lower() in ("reel", "video"):
+        return post_video(email, url, caption, cover_url=cover_url)
+    return post_image(email, url, caption)
+
+
+def preflight(email: str, probe_image_url: str) -> dict:
+    """Answer "will this actually post?" without posting anything.
+
+    WHY THIS EXISTS: connecting proves the LOGIN worked. It does not prove
+    publishing will, and the three things that break publishing all fail
+    silently until a real post is due at 7pm on a Saturday:
+
+      * the seller unticked "publish content" on Instagram's permission screen
+        (it is a checkbox, and people untick things they do not understand);
+      * this server is not reachable from the public internet, so Meta cannot
+        fetch the picture it is being asked to post;
+      * the account is not eligible to publish through the API.
+
+    Creating a media container exercises every one of those — Meta validates
+    the token's scope AND fetches the image before it answers — and a container
+    that is never published simply expires in 24 hours. So this is a real
+    end-to-end test that leaves nothing on the seller's profile."""
+    out = {"connected": False, "token_ok": False, "can_publish": False,
+           "media_reachable": False, "error": "", "hint": "", "username": ""}
+    creds = get_credentials(email)
+    if not (creds.get("access_token") and creds.get("ig_user_id")):
+        out["error"] = "Instagram is not connected."
+        return out
+    out["connected"] = True
+    token, ig_id = creds["access_token"], creds["ig_user_id"]
+
+    check = test_connection(token, ig_id)
+    if not check.get("ok"):
+        out["error"] = check.get("error", "The saved connection no longer works.")
+        out["hint"] = "Disconnect and connect again — the access token has expired or been revoked."
+        return out
+    out["token_ok"] = True
+    out["username"] = check.get("username", "")
+
+    # What the seller actually granted, if we recorded it. Cheapest possible
+    # answer and it needs no network call at all.
+    meta = user_store.get_key(email, _KEY, {}) or {}
+    grant = str(meta.get("granted") or "")
+    if grant and PUBLISH_SCOPE not in grant:
+        out["error"] = ("Permission to publish was not granted when this account "
+                        "was connected.")
+        out["hint"] = ("Disconnect below and connect again — and on Instagram's "
+                       "permission screen leave every box ticked. Permissions are "
+                       "fixed at the moment you connect, so they cannot be added "
+                       "afterwards.")
+        return out
+
+    # The quota endpoint is part of the publishing surface, so it answers the
+    # scope question without creating anything. A token missing the publish
+    # permission gets an error here; one that has it gets a quota. This is the
+    # cheap half of the test, and it separates "no permission" from "cannot
+    # fetch the picture" — two problems with completely different fixes.
+    try:
+        q = requests.get(f"{GRAPH}/{ig_id}/content_publishing_limit",
+                         params={"fields": "config,quota_usage", "access_token": token},
+                         timeout=20).json()
+        if (q.get("error") or {}).get("message"):
+            msg = q["error"]["message"]
+            out["error"] = msg
+            out["hint"] = ("Instagram did not grant permission to publish. Disconnect "
+                           "below, connect again, and keep every box ticked on "
+                           "Instagram's permission screen. If it still fails, check "
+                           "the account has accepted the tester invite at "
+                           "instagram.com on a desktop browser.")
+            return out
+        usage = ((q.get("data") or [{}])[0] or {}).get("quota_usage")
+        if usage is not None:
+            out["quota_used"] = usage
+        out["scope_ok"] = True
+    except Exception:  # noqa: BLE001 — fall through to the real container test
+        pass
+
+    try:
+        r = requests.post(f"{GRAPH}/{ig_id}/media",
+                          data={"image_url": probe_image_url,
+                                "caption": "", "access_token": token}, timeout=45)
+        d = r.json()
+    except Exception as e:  # noqa: BLE001
+        out["error"] = f"Could not reach Instagram: {e}"
+        return out
+
+    if r.status_code == 200 and d.get("id"):
+        # Deliberately NOT published. It expires by itself in 24 hours.
+        out["can_publish"] = True
+        out["media_reachable"] = True
+        return out
+
+    err = (d.get("error") or {})
+    msg = err.get("message") or r.text
+    out["error"] = err.get("error_user_msg") or msg
+    sub = err.get("error_subcode")
+    low = str(msg).lower()
+
+    # Meta answers media problems with a number, not a sentence. These are the
+    # ones that actually happen, each with the thing to change.
+    SUBCODES = {
+        2207052: "Instagram could not download the picture from this server. It has to be reachable on the public internet, over https, with no login and no bot protection in front of it.",
+        2207003: "Instagram timed out downloading the picture. The server may be asleep — open the app once and try again.",
+        2207005: "Instagram refused the image format. It accepts JPEG only, never PNG.",
+        2207004: "The picture is larger than Instagram's 8 MB limit.",
+        2207009: "The picture's shape is outside what Instagram accepts — it must be between 4:5 (tall) and 1.91:1 (wide).",
+        36001: "The picture's resolution is outside what Instagram accepts.",
+        2207042: "This account has hit Instagram's limit of 100 posts in 24 hours.",
+        2207050: "Instagram has restricted this account. Open the Instagram app and clear anything it is asking for.",
+        2207051: "Instagram blocked the request as suspected spam.",
+    }
+    if sub in SUBCODES:
+        out["media_reachable"] = sub not in (2207052, 2207003)
+        out["hint"] = SUBCODES[sub]
+        return out
+    # Meta's wording is not written for shop owners. Say what to do instead.
+    if "permission" in low or "scope" in low or err.get("code") == 200:
+        out["hint"] = ("Instagram did not grant permission to publish. Disconnect "
+                       "below, connect again, and make sure every box on "
+                       "Instagram's permission screen stays ticked.")
+    elif "media" in low and ("fetch" in low or "download" in low or "url" in low):
+        out["media_reachable"] = False
+        out["hint"] = ("Instagram could not download the picture from this server. "
+                       "It has to be reachable on the public internet over HTTPS — "
+                       "check the app's address is public and not behind a password.")
+    elif "not a business" in low or "professional" in low:
+        out["hint"] = ("This Instagram account is not a Business or Creator "
+                       "account. Instagram app → Settings → Account type and "
+                       "tools → Switch to professional account.")
+    else:
+        out["hint"] = "Instagram refused the test. The message above is theirs, not ours."
+    return out

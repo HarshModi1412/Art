@@ -292,3 +292,109 @@ def backfill() -> dict:
         except Exception:  # noqa: BLE001
             failed += 1
     return {"ran": True, "moved": moved, "failed": failed}
+
+
+# ---------------------------------------------------------------------------
+# Making a picture Instagram will actually accept
+# ---------------------------------------------------------------------------
+# THE BUG THIS FIXES, and it is a big one: every picture this app generates is
+# saved as PNG (studio.py, content_gen.py), and Meta's content-publishing
+# documentation is unambiguous — "JPEG is the only image format supported."
+# A PNG is refused at container creation with error subcode 2207005 before the
+# post exists, so EVERY scheduled photo post would have failed, on every
+# account, forever, with an error nobody would have connected to the file
+# format.
+#
+# The PNG is left exactly where it is: the storefront, the editor and every
+# saved URL still use it, and rewriting those would break links that are
+# already out in the world. What happens instead is that a JPEG twin is made
+# the first time a picture is published, cached beside the original, and it is
+# that twin's URL that Instagram is given.
+#
+# The other three rules are enforced in the same pass, because each of them is
+# its own silent rejection:
+#   * aspect ratio must sit between 4:5 and 1.91:1   (subcode 2207009)
+#   * width between 320 and 1440                     (subcode 36001)
+#   * under 8 MB                                     (subcode 2207004)
+IG_MIN_RATIO = 4 / 5          # 0.8  — taller than this is refused
+IG_MAX_RATIO = 1.91           #      — wider than this is refused
+IG_MIN_WIDTH = 320
+IG_MAX_WIDTH = 1440
+IG_MAX_BYTES = 8 * 1024 * 1024
+_IG_SUFFIX = "_ig.jpg"
+
+
+def _fit_for_instagram(img):
+    """Pad (never crop) into a ratio Instagram accepts, then size it.
+
+    PADDING, NOT CROPPING, on purpose. These are product photographs. A crop
+    that satisfies Instagram by removing the top of a kurta has published the
+    wrong picture, and the seller finds out from a customer. Bars in a sampled
+    background colour are honest and look deliberate."""
+    from PIL import Image
+
+    if img.mode != "RGB":
+        # JPEG has no alpha. Flattening onto white rather than black, because a
+        # transparent product cut-out on black looks like a mistake.
+        bg = Image.new("RGB", img.size, (255, 255, 255))
+        bg.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
+        img = bg
+
+    w, h = img.size
+    ratio = w / h if h else 1.0
+    if ratio < IG_MIN_RATIO or ratio > IG_MAX_RATIO:
+        target = min(max(ratio, IG_MIN_RATIO), IG_MAX_RATIO)
+        if ratio < target:                      # too tall -> widen
+            new_w, new_h = int(round(h * target)), h
+        else:                                   # too wide -> heighten
+            new_w, new_h = w, int(round(w / target))
+        # The corner pixel is the most reliable cheap read of the backdrop.
+        canvas = Image.new("RGB", (new_w, new_h), img.getpixel((0, 0)))
+        canvas.paste(img, ((new_w - w) // 2, (new_h - h) // 2))
+        img = canvas
+        w, h = img.size
+
+    if w > IG_MAX_WIDTH:
+        img = img.resize((IG_MAX_WIDTH, max(1, int(round(h * IG_MAX_WIDTH / w)))),
+                         Image.LANCZOS)
+    elif w < IG_MIN_WIDTH:
+        img = img.resize((IG_MIN_WIDTH, max(1, int(round(h * IG_MIN_WIDTH / w)))),
+                         Image.LANCZOS)
+    return img
+
+
+def instagram_jpeg(filename: str, email: str = "") -> str:
+    """The filename of a JPEG twin Instagram will accept, or "" if it cannot
+    be made. Cached — built once, then reused on every later publish."""
+    import io
+
+    name = str(filename or "").strip()
+    if not name or is_video(name):
+        return ""
+    if name.lower().endswith(_IG_SUFFIX):
+        return name                               # already a twin
+
+    stem = os.path.splitext(os.path.basename(name))[0]
+    twin = f"{stem}{_IG_SUFFIX}"
+    if local_path(twin):
+        return twin
+    try:
+        got = read(name)
+        if not got:
+            return ""
+        from PIL import Image
+        img = _fit_for_instagram(Image.open(io.BytesIO(got[0])))
+        buf = io.BytesIO()
+        quality = 88
+        img.save(buf, format="JPEG", quality=quality, optimize=True)
+        # 8 MB is generous for a 1440px photo, but a noisy one can exceed it.
+        while buf.tell() > IG_MAX_BYTES and quality > 55:
+            quality -= 10
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality, optimize=True)
+        if buf.tell() > IG_MAX_BYTES:
+            return ""
+        save(twin, buf.getvalue(), email)
+        return twin
+    except Exception:  # noqa: BLE001 — a conversion problem must not crash a post
+        return ""
