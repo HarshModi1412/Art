@@ -1332,6 +1332,33 @@ def instagram_preflight(request: Request,
     return res
 
 
+class PostNowBody(BaseModel):
+    post_id: str
+
+
+@app.post("/api/social/post-now")
+def social_post_now(body: PostNowBody, request: Request,
+                    authorization: str | None = Header(default=None)):
+    """Publish one post immediately, whatever its scheduled time says.
+
+    WHY THIS EXISTS: the only way to find out whether posting really works was
+    to schedule something and wait — for the time to come round AND for the
+    fifteen-minute ticker after it. That is a forty-minute feedback loop on a
+    thing that either works or does not, and it is the reason "is it posting?"
+    went unanswered for so long. This makes it immediate, and it returns the
+    real result rather than a cheerful acknowledgement."""
+    email = require_user(authorization)
+    post = social.get_post(email, body.post_id)
+    if not post:
+        raise HTTPException(404, "That post is not there any more.")
+    if not social.post_ready(post):
+        raise HTTPException(400, "This post has no picture or clip yet.")
+    if post.get("state") in ("published",):
+        raise HTTPException(400, "That one has already gone out.")
+    res = publisher.publish_post(email, post, _public_base_url(request))
+    return {**res, "post": social.get_post(email, body.post_id)}
+
+
 @app.get("/api/social/publisher")
 def social_publisher_status(authorization: str | None = Header(default=None)):
     email = require_user(authorization)

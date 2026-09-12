@@ -8194,8 +8194,41 @@ function openSocialEditor(post) {
           ? `<button class="btn approve" id="smSched">Save &amp; schedule</button>`
           : post.state === "draft"
             ? `<button class="btn approve" id="smApprove">${isReel ? "Approve & add the video task" : "Approve & make the picture"}</button>` : ""}
+      ${post.state === "scheduled" && !needsMedia
+        ? `<button class="btn ghost" id="smNow" title="Send this to Instagram right now instead of waiting for its time">${sic("instagram")}Post now</button>` : ""}
       <button class="btn primary" id="smSave">Save</button>
-    </div>`);
+    </div>
+    <div id="smNowMsg"></div>`);
+
+  /* WHY "POST NOW" EXISTS: the only way to find out whether posting really
+     works was to schedule something and then wait — for the time to arrive,
+     and then for the fifteen-minute ticker after it. A forty-minute feedback
+     loop on a thing that either works or does not is why "is it even posting?"
+     went unanswered for so long. This answers it in ten seconds, with the real
+     result rather than a cheerful acknowledgement. */
+  const nowBtn = $("smNow");
+  if (nowBtn) nowBtn.onclick = async () => {
+    if (!confirm("Send this to Instagram now? It goes out immediately and cannot be unsent from here.")) return;
+    const box = $("smNowMsg");
+    nowBtn.disabled = true; nowBtn.textContent = "Posting…";
+    box.innerHTML = `<p class="muted tiny">Sending to Instagram. A reel can take a minute while Instagram processes the video.</p>`;
+    try {
+      const r = await api("/api/social/post-now", { method: "POST", json: { post_id: post.id } });
+      if (r.ok) {
+        box.innerHTML = `<div class="focus-box" style="background:var(--green-soft,var(--surface-2));border-radius:8px;padding:10px 12px;">
+          <b style="color:var(--green);">✓ Posted.</b>
+          ${r.permalink ? ` <a href="${esc(r.permalink)}" target="_blank" rel="noopener">See it on Instagram</a>` : ""}</div>`;
+        warmModClearAll();
+      } else {
+        box.innerHTML = `<div class="focus-box" style="background:var(--amber-soft,var(--surface-2));border-radius:8px;padding:10px 12px;">
+          <b style="color:var(--amber);">It did not go out.</b>
+          <div class="muted tiny" style="margin-top:3px;">${esc(r.error || "Instagram refused it.")}</div></div>`;
+      }
+    } catch (e) {
+      box.innerHTML = `<span class="err">${esc(e.message)}</span>`;
+    }
+    nowBtn.disabled = false; nowBtn.innerHTML = `${sic("instagram")}Post now`;
+  };
 
   if (isReel) renderScriptSection(post);
 

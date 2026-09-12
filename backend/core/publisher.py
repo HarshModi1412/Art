@@ -156,6 +156,23 @@ def _release(email: str, post_id: str) -> None:
         _save_state(email, st)
 
 
+def _fail_now(email: str, pid: str, reason: str) -> dict:
+    social.record_publish(email, pid, {"ok": False, "error": reason})
+    return {"ok": False, "post_id": pid, "error": reason}
+
+
+def _reel_ready(email: str, url: str) -> tuple[str, dict]:
+    """Swap a clip for one Instagram accepts, when that is possible."""
+    from backend.core import media
+
+    u = str(url or "")
+    if "/generated_images/" not in u:
+        return u, {}
+    name = u.split("/generated_images/")[-1].split("?")[0]
+    twin, report = media.instagram_mp4(name, email)
+    return (u.replace(name, twin) if twin and twin != name else u), (report or {})
+
+
 def _instagram_ready(email: str, url: str) -> str:
     """Swap a locally-served picture for a JPEG twin Instagram will accept.
 
@@ -199,6 +216,18 @@ def publish_post(email: str, post: dict, base_url: str = "") -> dict:
     # still what the storefront and the editor use.
     if not is_reel:
         raw = _instagram_ready(email, raw)
+    else:
+        # A clip only reaches the watermark remover's clean H.264/AAC/faststart
+        # encode if something was actually removed from it — `clean_video_bytes`
+        # returns the original untouched otherwise. So a clip with no watermark
+        # arrives exactly as the seller downloaded it, and may be VP9, or .webm,
+        # or have its metadata at the end of the file where Meta's ranged fetch
+        # cannot find it. Checked here, and converted when converting can help.
+        raw, vreport = _reel_ready(email, raw)
+        blocking = (vreport or {}).get("blocking") or []
+        if blocking and not (vreport or {}).get("converted"):
+            return _fail_now(email, pid, "This clip cannot go out as a reel. "
+                             + " ".join(blocking))
     url = _absolute(raw, base_url)
 
     def _fail(reason: str) -> dict:

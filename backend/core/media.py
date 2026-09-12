@@ -398,3 +398,57 @@ def instagram_jpeg(filename: str, email: str = "") -> str:
         return twin
     except Exception:  # noqa: BLE001 — a conversion problem must not crash a post
         return ""
+
+
+_IG_MP4_SUFFIX = "_ig.mp4"
+
+
+def instagram_mp4(filename: str, email: str = "") -> tuple[str, dict]:
+    """(filename Instagram will accept, report). The same twin idea as
+    `instagram_jpeg`, for clips.
+
+    A clip only gets re-encoded when the probe says Instagram would refuse it.
+    Re-encoding a good file would cost a minute of CPU, lose a generation of
+    quality, and change nothing — so a clip that is already H.264/AAC/MP4 with
+    its metadata at the front is sent exactly as it is."""
+    import os
+    import tempfile
+
+    from backend.core import videotools
+
+    name = str(filename or "").strip()
+    if not name or not is_video(name):
+        return name, {}
+    if name.lower().endswith(_IG_MP4_SUFFIX):
+        return name, {}
+
+    src = local_path(name)
+    if not src:
+        got = read(name)
+        if not got:
+            return name, {}
+        tmpdir = tempfile.mkdtemp(prefix="igmp4_")
+        src = os.path.join(tmpdir, os.path.basename(name))
+        with open(src, "wb") as fh:
+            fh.write(got[0])
+
+    report = videotools.reel_report(src)
+    if report.get("ok") or report.get("unknown"):
+        return name, report                      # nothing to fix
+    if not report.get("fixable"):
+        return name, report                      # too long, or too short — say so
+
+    stem = os.path.splitext(os.path.basename(name))[0]
+    twin = f"{stem}{_IG_MP4_SUFFIX}"
+    if local_path(twin):
+        return twin, report
+    out = os.path.join(tempfile.mkdtemp(prefix="igmp4_"), twin)
+    res = videotools.make_reel_ready(src, out)
+    if not res.get("ok"):
+        return name, {**report, "convert_error": res.get("error", "")}
+    try:
+        with open(out, "rb") as fh:
+            save(twin, fh.read(), email)
+    except Exception:  # noqa: BLE001
+        return name, report
+    return twin, {**report, "converted": True}

@@ -226,9 +226,13 @@ def _festival_insight(email: str) -> dict | None:
     festival because they are not equal: Diwali wants roughly two and a half
     weeks of run-up, Dhanteras about five days."""
     try:
-        from backend.core import social as _social
+        from backend.core import localtime as _lt, social as _social
         s = _social.get_settings(email)
-        upcoming = _social.upcoming_festivals(category=s.get("category") or "")
+        # The seller's date. A festival card that fires on the server's day is
+        # a day early or late for anyone not living in UTC, and this card is
+        # the one that says "start posting on the 22nd".
+        upcoming = _social.upcoming_festivals(_lt.today(email),
+                                              category=s.get("category") or "")
     except Exception:  # noqa: BLE001
         return None
     due = [f for f in upcoming if f.get("start_in_days", 99) <= 7]

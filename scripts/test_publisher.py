@@ -400,5 +400,204 @@ publisher.run_for(EMAIL, BASE, NOW)
 check("a reel still sends the video untouched",
       CALLS[0]["url"].endswith(".mp4"), CALLS[0]["url"])
 
+section("Reels: the clip Instagram is given must be one it accepts")
+
+# THE GAP THIS CLOSES. The watermark remover re-encodes properly — H.264,
+# yuv420p, AAC, +faststart — but ONLY when it removed something.
+# `clean_video_bytes` says it outright: "The original comes back when nothing
+# was removed." So a clip with no watermark reaches Instagram exactly as the
+# seller downloaded it: possibly .webm, possibly VP9, possibly with its moov
+# atom at the end where Meta's ranged fetch cannot find it. Nothing checked.
+import shutil as _shutil  # noqa: E402
+import subprocess as _sub  # noqa: E402
+from backend.core import videotools  # noqa: E402
+
+_FF = _shutil.which("ffmpeg")
+if not _FF:
+    try:
+        import imageio_ffmpeg
+        _FF = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:  # noqa: BLE001
+        _FF = None
+
+if not _FF or not videotools._ffprobe():
+    print("  (ffmpeg/ffprobe unavailable here — reel checks skipped)")
+else:
+    import tempfile as _tf  # noqa: E402
+    _vdir = _tf.mkdtemp(prefix="vids_")
+
+    def clip(name, seconds=8, size="1080x1920", vcodec="libx264", acodec="aac",
+             faststart=True, container=None):
+        """A real encoded file — mocks would prove nothing about ffprobe."""
+        path = os.path.join(_vdir, name)
+        cmd = [_FF, "-y", "-v", "error",
+               "-f", "lavfi", "-i", f"testsrc=size={size}:rate=24:duration={seconds}",
+               "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
+               "-c:v", vcodec, "-pix_fmt", "yuv420p", "-c:a", acodec, "-shortest"]
+        if faststart and name.endswith((".mp4", ".mov")):
+            cmd += ["-movflags", "+faststart"]
+        if container:
+            cmd += ["-f", container]
+        cmd.append(path)
+        _sub.run(cmd, capture_output=True, timeout=180)
+        return path
+
+    good = clip("good.mp4")
+    rep = videotools.reel_report(good)
+    check("a proper 9:16 H.264 clip passes", rep["ok"], str(rep["blocking"]))
+    check("with no warnings either", not rep["warnings"], str(rep["warnings"]))
+    info = rep["info"]
+    check("the probe reads its real duration", 7 < info["duration"] < 9, str(info["duration"]))
+    check("and its real size", info["width"] == 1080 and info["height"] == 1920, str(info))
+    check("and its real codec", info["vcodec"] == "h264", info["vcodec"])
+
+    landscape = clip("wide.mp4", size="1920x1080")
+    rep = videotools.reel_report(landscape)
+    check("a landscape clip still publishes", rep["ok"], str(rep["blocking"]))
+    check("but is warned about, because only 9:16 reaches the Reels tab",
+          any("Reels tab" in w for w in rep["warnings"]), str(rep["warnings"]))
+
+    short = clip("short.mp4", seconds=1)
+    rep = videotools.reel_report(short)
+    check("a one-second clip is refused", not rep["ok"], str(rep))
+    check("and told how long it actually is",
+          any("second" in b for b in rep["blocking"]), str(rep["blocking"]))
+    check("and is NOT offered as fixable — no encode adds seconds",
+          not rep["fixable"])
+
+    long_tab = clip("longish.mp4", seconds=120)
+    rep = videotools.reel_report(long_tab)
+    check("a two-minute clip still publishes", rep["ok"], str(rep["blocking"]))
+    check("with a warning about the Reels tab window",
+          any("Reels tab" in w for w in rep["warnings"]), str(rep["warnings"]))
+
+    webm = clip("odd.webm", vcodec="libvpx-vp9", acodec="libopus")
+    if os.path.exists(webm) and os.path.getsize(webm) > 0:
+        rep = videotools.reel_report(webm)
+        check("a VP9 .webm is refused", not rep["ok"], str(rep))
+        check("naming the codec, not just 'invalid file'",
+              any("H.264" in b for b in rep["blocking"]), str(rep["blocking"]))
+        check("and it IS fixable, because re-encoding solves it", rep["fixable"])
+
+        fixed = os.path.join(_vdir, "fixed.mp4")
+        res = videotools.make_reel_ready(webm, fixed)
+        check("converting it succeeds", res.get("ok"), str(res))
+        rep2 = videotools.reel_report(fixed)
+        check("and the result passes", rep2["ok"], str(rep2["blocking"]))
+        check("as H.264", rep2["info"]["vcodec"] == "h264", rep2["info"]["vcodec"])
+        check("with AAC sound", rep2["info"]["acodec"] == "aac", rep2["info"]["acodec"])
+
+    check("a file that cannot be probed is sent as-is rather than blocked",
+          videotools.reel_report(os.path.join(_vdir, "nope.mp4"))["ok"])
+
+    section("Publishing a reel uses the checked clip")
+
+    media.save("realclip.mp4", open(good, "rb").read(), EMAIL)
+    CALLS.clear()
+    seed([post("okreel", fmt="reel", vid="/generated_images/realclip.mp4")])
+    res = publisher.run_for(EMAIL, BASE, NOW)
+    check("a good clip publishes", res["published"] == 1, str(res))
+    check("and is sent untouched — no pointless re-encode",
+          CALLS[0]["url"].endswith("realclip.mp4"), CALLS[0]["url"])
+
+    CALLS.clear()
+    media.save("tooshort.mp4", open(short, "rb").read(), EMAIL)
+    seed([post("badreel", fmt="reel", vid="/generated_images/tooshort.mp4")])
+    res = publisher.run_for(EMAIL, BASE, NOW)
+    check("a clip Instagram would refuse is never sent", CALLS == [], str(CALLS))
+    check("it is failed locally instead", res["failed"] == 1, str(res))
+    p = next(x for x in social.all_posts(EMAIL) if x["id"] == "badreel")
+    check("with the real reason on the post",
+          "second" in (p.get("publish_error") or ""), p.get("publish_error"))
+    check("and it leaves the queue rather than retrying forever",
+          p["state"] == "failed", p["state"])
+
+section("One clock: the planner and the publisher must agree on what time it is")
+
+# THE BUG CLASS THIS LOCKS OUT. Every scheduled_at in this app is a NAIVE
+# wall-clock time in the seller's own timezone — "14 Sep, 7:00 pm" means seven
+# in the evening where they live. Render runs in UTC. So the moment any part of
+# this chain reads the server clock instead of the seller's, the two halves
+# disagree: the planner writes 7pm meaning IST, the publisher reads 7pm meaning
+# UTC, and the post goes out at half past midnight. Nothing crashes. The seller
+# just finds their reel was published while they were asleep.
+#
+# social.py read `date.today()` in eight places. Between midnight and 5:30am
+# IST that is still yesterday — the calendar highlighted the wrong square, the
+# festival countdown was a day out, and a week planned in that window started
+# on the wrong Monday.
+import inspect  # noqa: E402
+from backend.core import localtime  # noqa: E402
+
+_pub_src = inspect.getsource(publisher)
+check("the publisher reads the seller's clock", "localtime.now(email)" in _pub_src)
+check("and never the server's for deciding what is due",
+      "datetime.now()" not in inspect.getsource(publisher.due_posts),
+      inspect.getsource(publisher.due_posts))
+check("nor for deciding what has gone stale",
+      "datetime.now()" not in inspect.getsource(publisher.stale_posts))
+
+_soc_src = inspect.getsource(social)
+# Comment lines stripped: the note explaining this fix quotes `date.today()`,
+# and a test that fails because someone documented the bug is a bad test.
+_soc_code = "\n".join(l for l in _soc_src.splitlines()
+                      if not l.lstrip().startswith("#"))
+check("the planner no longer reads the server's date",
+      _soc_code.count("date.today()") <= 1,
+      f"{_soc_code.count('date.today()')} left — the one survivor is the "
+      "fallback in upcoming_festivals(), which takes no account")
+check("the calendar's highlighted day is the seller's day",
+      "localtime.today(email).isoformat()" in _soc_src)
+check("and the week is planned from the seller's day",
+      "start = start or localtime.today(email)" in _soc_src)
+
+# Both sides must resolve to the SAME function, not two that merely agree today.
+check("both read the one timezone module",
+      social.localtime is localtime and publisher.localtime is localtime)
+
+
+class _FakeTZ:
+    """Pin the account to a zone far from UTC and check both halves move."""
+
+
+_real_get = localtime.get
+try:
+    localtime.get = lambda email="": {"country": "IN", "country_name": "India",
+                                      "tz": "Pacific/Kiritimati",   # UTC+14
+                                      "note": "", "set": True}
+    planner_day = social.localtime.today(EMAIL)
+    publisher_now = publisher.localtime.now(EMAIL)
+    check("the planner follows the account's timezone",
+          planner_day == publisher_now.date(),
+          f"{planner_day} vs {publisher_now.date()}")
+
+    localtime.get = lambda email="": {"country": "US", "country_name": "United States",
+                                      "tz": "Pacific/Honolulu",     # UTC-10
+                                      "note": "", "set": True}
+    check("and both move together when it changes",
+          social.localtime.today(EMAIL) == publisher.localtime.now(EMAIL).date(),
+          "a 24-hour swing must not split the two halves apart")
+finally:
+    localtime.get = _real_get
+
+# The end-to-end check: a post scheduled for the seller's evening is due at the
+# seller's evening, and not at the server's.
+_real_now = localtime.now
+try:
+    # 7pm for the seller, while the server believes it is 1:30pm UTC.
+    localtime.now = lambda email="": datetime(2026, 9, 14, 19, 0)
+    seed([{"id": "tz", "state": "scheduled", "scheduled_at": "2026-09-14T19:00",
+           "format": "photo", "image_url": "/generated_images/a.jpg",
+           "video_url": "", "caption": "evening", "hashtags": []}])
+    check("a 7pm post is due at the seller's 7pm",
+          [p["id"] for p in publisher.due_posts(EMAIL)] == ["tz"])
+
+    localtime.now = lambda email="": datetime(2026, 9, 14, 13, 30)
+    check("and is NOT due at the same wall-clock hour in a different zone",
+          publisher.due_posts(EMAIL) == [],
+          "5.5 hours early is exactly the India/UTC mistake")
+finally:
+    localtime.now = _real_now
+
 print(f"\n{PASSED} passed, {FAILED} failed")
 sys.exit(1 if FAILED else 0)

@@ -569,6 +569,24 @@ to 320–1440 (36001), quality stepped down under 8 MB (2207004). **Padded, neve
 cropped** — these are product photographs, and a crop that satisfies Instagram
 by removing the top of a kurta has published the wrong picture.
 
+**4. Nothing checked the clip.** The watermark remover re-encodes properly —
+H.264, yuv420p, AAC, `+faststart` — but only when it actually removed
+something. `clean_video_bytes` says it outright: *"The original comes back when
+nothing was removed."* So a clip with no watermark reached Instagram exactly as
+the seller downloaded it: possibly `.webm`, possibly VP9, possibly with its
+`moov` atom at the end of the file, where Meta's ranged fetch cannot find it
+(which surfaces as "could not fetch the media" and sends you looking at your
+server instead of at the file). `videotools.reel_report()` now probes every
+clip before it goes, and `media.instagram_mp4()` re-encodes the ones that can
+be fixed. A clip that is already fine is sent untouched — re-encoding a good
+file costs a minute of CPU and a generation of quality for nothing.
+
+The split between **blocking** and **warning** is deliberate. Wrong codec,
+wrong container, over 100 MB, under 3 seconds: Instagram refuses those, so the
+post fails here with the real reason rather than at Meta with a subcode. Not
+9:16, or outside the 5–90 second window: those publish perfectly well and only
+cost the Reels tab, so they are the seller's call, not ours.
+
 ### Finding out in ten seconds instead of on a Saturday night
 
 `POST /api/instagram/preflight`, behind **Check posting works** on the
@@ -590,6 +608,13 @@ Meta answers media problems with a number rather than a sentence, so the ones
 that actually happen are mapped to what to change: 2207052 (cannot download the
 picture), 2207005 (not a JPEG), 2207009 (wrong shape), 2207004 (too big),
 2207042 (100-posts-a-day limit), 2207050 (account restricted).
+
+**Post now** (`POST /api/social/post-now`), on any scheduled post, sends it
+immediately and reports what actually happened. Before it existed, the only way
+to find out whether posting worked was to schedule something and wait — for the
+time to arrive, and then for the fifteen-minute ticker after it. A forty-minute
+feedback loop on a thing that either works or does not is the reason "is it
+even posting?" went unanswered for so long.
 
 **Worth knowing: App Review is not the blocker for a tester.** Meta's content
 publishing docs list Standard Access as an eligible access level, so an app

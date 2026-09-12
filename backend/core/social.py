@@ -53,7 +53,7 @@ import re
 import secrets
 from datetime import date, datetime, timedelta, timezone
 
-from backend.core import aiprovider, user_store
+from backend.core import aiprovider, localtime, user_store
 
 PLAN_KEY = "social_plan"
 POSTS_KEY = "social_posts"
@@ -445,7 +445,15 @@ def upcoming_festivals(today: date | None = None, category: str = "",
 
 def radar(email: str, today: date | None = None) -> dict:
     s = get_settings(email)
-    today = today or date.today()
+    # THE SELLER'S DATE, NOT THE SERVER'S. Every scheduled_at in this app is a
+    # naive wall-clock time in the seller's own timezone, and Render runs in
+    # UTC. `date.today()` here meant that between midnight and 5:30am IST the
+    # app believed it was still yesterday: the calendar highlighted the wrong
+    # day, festival countdowns were a day out, and a week planned in that
+    # window started on the wrong Monday. The publisher reads
+    # `localtime.now(email)`, so leaving these on the server clock would also
+    # have meant the planner and the publisher disagreeing about what day it is.
+    today = today or localtime.today(email)
     fest = upcoming_festivals(today, s.get("category") or "")
     wed = WEDDING_MONTHS.get(today.month, "low")
     lines = []
@@ -1260,7 +1268,7 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
     and anything already scheduled by hand are left alone, because those are
     decisions the seller made and re-planning is not permission to undo them."""
     s = get_settings(email)
-    start = start or date.today()
+    start = start or localtime.today(email)
     shape = slate_shape(s.get("cadence") or "standard")
     pool = [p for p in catalogue if p.get("name")] or [{"name": "your product"}]
     rows = _posts(email)
@@ -1344,7 +1352,6 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
     # that reads.
     n_slots = len(shape)
     times = []
-    from backend.core import localtime
     now = localtime.now(email)          # the seller's wall clock, not the server's
     for i in range(n_slots):
         offset = (best_weekdays[i % len(best_weekdays)] - start.weekday()) % 7
@@ -1436,7 +1443,7 @@ def plan_ahead(email: str, catalogue: list[dict], weeks: int = 4,
                start: date | None = None) -> list[dict]:
     """Plan several weeks out, so a festival that is a month away already has
     posts on the calendar when the seller flips forward to look."""
-    start = start or date.today()
+    start = start or localtime.today(email)
     made = []
     for w in range(max(1, min(8, weeks))):
         made += build_week(email, catalogue, start + timedelta(days=7 * w),
@@ -1563,7 +1570,6 @@ def pending_insight_cards(email: str) -> list[dict]:
     still fully approvable by opening them from the calendar, which is what
     "explain me complete logic" below documents."""
     from datetime import datetime, timedelta
-    from backend.core import localtime
     _now = localtime.now(email)
     horizon = _now + timedelta(days=PENDING_WINDOW_DAYS)
     cards = []
@@ -1881,7 +1887,7 @@ def campaign_preview(email: str, festival_key: str,
     agreeing to it."""
     from backend.core import playbook
     s = get_settings(email)
-    today = today or date.today()
+    today = today or localtime.today(email)
     # Matched on key, not on name — name matching broke the moment two entries
     # shared a library key (Christmas and New Year's Eve both map to one).
     dated = [x for x in FESTIVALS_2026 if x.get("key") == festival_key
@@ -1940,7 +1946,7 @@ def start_campaign(email: str, festival_key: str, catalogue: list[dict],
     prev = campaign_preview(email, festival_key, today)
     if prev.get("error"):
         return prev
-    today = today or date.today()
+    today = today or localtime.today(email)
     s = get_settings(email)
     pb = playbook.brief(festival_key, s.get("category") or "clothing", get_settings(email))
 
@@ -2081,7 +2087,9 @@ def month(email: str, year: int, mon: int) -> dict:
         "label": first.strftime("%B %Y"),
         "days_in_month": last.day,
         "starts_on": first.weekday(),
-        "today": date.today().isoformat(),
+        # The highlighted cell. On the server clock this was the wrong square
+        # for the first five and a half hours of every Indian seller's day.
+        "today": localtime.today(email).isoformat(),
         "days": [{"date": f"{year:04d}-{mon:02d}-{d:02d}",
                   "posts": by_day.get(f"{year:04d}-{mon:02d}-{d:02d}", [])}
                  for d in range(1, last.day + 1)],
@@ -2095,7 +2103,7 @@ def month(email: str, year: int, mon: int) -> dict:
 def upcoming(email: str, days: int = 5) -> list[dict]:
     """The next few days, for the home screen. Undecided posts first, because
     those are the ones that need the seller rather than just informing them."""
-    today = date.today()
+    today = localtime.today(email)
     horizon = today + timedelta(days=max(1, days))
     out = []
     for p in _posts(email):
