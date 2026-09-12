@@ -213,6 +213,84 @@ check("an unreadable clip never raises — the original comes back",
       bad == b"\x00\x01nope" and brep["reason"], brep)
 
 # =========================================================================
+print("\n== videos: Gemini's sparkle ==")
+# =========================================================================
+# A filled four-point star, semi-transparent white, bottom-right — the mark
+# on Veo/Gemini clips. The first version only knew text-like marks: it caught
+# a sparkle's rim on a moving shot and left its middle and tips, and on a shot
+# that barely moves (most product clips) video compression softened the edges
+# until it found nothing at all.
+def sparkle(w, h, size_frac=0.045, margin_frac=0.035):
+    s_ = int(w * size_frac); m_ = int(w * margin_frac)
+    cx, cy = w - m_ - s_ // 2, h - m_ - s_ // 2
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    u, v = np.abs(xx - cx) / (s_ / 2), np.abs(yy - cy) / (s_ / 2)
+    return (u ** 0.7 + v ** 0.7) <= 1.0
+
+
+def overlay(frame, mask, alpha):
+    out = frame.astype(np.float32)
+    out[mask] = out[mask] * (1 - alpha) + 255 * alpha
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def smooth_scene(w, h, shift=0):
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    xs = x + shift
+    base = np.stack([90 + 60 * xs / w, 70 + 40 * y / h, 60 + 30 * np.sin(xs / 37.0)], axis=2)
+    base += (4 * np.sin(xs / 23.0) * np.cos(y / 7.1))[..., None]
+    return np.clip(base, 0, 255).astype(np.uint8)
+
+
+def sparkle_clip(name, W_, H_, n, speed, alpha, marked=True):
+    mk = sparkle(W_, H_)
+    truth = [smooth_scene(W_, H_, int(6 * i * speed)) for i in range(n)]
+    frames = [overlay(f, mk, alpha) for f in truth] if marked else truth
+    path = os.path.join(tmp2, name)
+    write_clip(path, frames)
+    return open(path, "rb").read(), truth, frames, mk
+
+
+def residual(out_bytes, truth, mk):
+    p_ = os.path.join(tmp2, "chk.mp4")
+    open(p_, "wb").write(out_bytes)
+    cap_ = cv2.VideoCapture(p_)
+    got = []
+    while True:
+        ok, fr = cap_.read()
+        if not ok:
+            break
+        got.append(cv2.cvtColor(fr, cv2.COLOR_BGR2RGB).astype(int))
+    cap_.release()
+    idx = [3, len(got) // 2, len(got) - 3]
+    return float(np.mean([((got[i] - truth[i].astype(int)).mean(axis=2)[mk] > 25).mean() for i in idx]))
+
+
+tmp2 = tempfile.mkdtemp()
+os.environ["WATERMARK_INPROCESS"] = "1"          # same code, faster here
+for label, speed in (("moving", 1.0), ("barely moving", 0.0)):
+    data_, truth_, _, mk_ = sparkle_clip(f"sp_{speed}.mp4", 720, 1280, 40, speed, 0.55)
+    out_, rep_ = watermark.clean_video_bytes(data_, "sp.mp4")
+    check(f"a sparkle on a {label} shot is found", rep_["removed"], rep_)
+    if rep_["removed"]:
+        left = residual(out_, truth_, mk_)
+        check(f"…and all of it goes, tips and middle (left visible: {left:.0%})", left < 0.05, left)
+
+data_, truth_, _, mk_ = sparkle_clip("faint.mp4", 720, 1280, 40, 0.0, 0.35)
+_, rep_ = watermark.clean_video_bytes(data_, "faint.mp4")
+out_, rep_h = watermark.clean_video_bytes(data_, "faint.mp4", corner="bottom-right")
+check("a faint sparkle the seller points at is removed", rep_h["removed"], (rep_, rep_h))
+if rep_h["removed"]:
+    check("…completely", residual(out_, truth_, mk_) < 0.05)
+pdata_, _, _, _ = sparkle_clip("plain_sp.mp4", 720, 1280, 40, 0.0, 0.55, marked=False)
+pout_, prep_ = watermark.clean_video_bytes(pdata_, "plain_sp.mp4", corner="bottom-right")
+check("pointing at a corner with no mark changes nothing", pout_ == pdata_ and not prep_["removed"], prep_)
+pout_, prep_ = watermark.clean_video_bytes(pdata_, "plain_sp.mp4")
+check("and a clean still shot is left alone on its own too", pout_ == pdata_ and not prep_["removed"], prep_)
+os.environ.pop("WATERMARK_INPROCESS")
+shutil.rmtree(tmp2, ignore_errors=True)
+
+# =========================================================================
 print("\n== videos: a reel cannot take the server down ==")
 # =========================================================================
 # The bug: cleaning an 8-second 1080x1920 reel inside the web server peaked at

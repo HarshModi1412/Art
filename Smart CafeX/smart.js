@@ -1556,13 +1556,14 @@ async function openVideoTask(taskId, postHint) {
           <button class="btn ghost sm" id="vtMade">${sic("check")}I have the clip</button>
         </div>
       </li>
-      <li data-step="upload">
+      <li data-step="upload" class="${post.video_url ? "open" : ""}">
         <div class="vs-h"><i></i><b>Upload the clip here</b></div>
         <div class="vs-b">
           <div class="sm-vid-slot" id="vtSlot">${post.video_url
             ? `<video src="${esc(post.video_url)}" controls playsinline preload="metadata"></video>`
             : `<div class="sm-vid-empty">${sic("play")}<b>No clip yet</b><span>MP4 or WEBM, up to 48MB.</span></div>`}</div>
-          <div id="vtWm" class="muted tiny" style="margin:6px 0;"></div>
+          <div id="vtWm" class="muted tiny" style="margin:6px 0;">${post.video_watermark ? esc(clipNote({ watermark: post.video_watermark })) : ""}</div>
+          ${wmFixRow("vtWmFix")}
           <button class="btn ${post.video_url ? "ghost" : "primary"} sm" id="vtPick">${sic("arrow-up-right")}${post.video_url ? "Replace clip" : "Choose the clip"}</button>
           <input type="file" id="vtFile" accept="video/mp4,video/webm,video/quicktime" hidden />
         </div>
@@ -1612,6 +1613,7 @@ async function openVideoTask(taskId, postHint) {
   // Copy again on the way out, so the paste on the other side always works.
   $("vtFlow").onclick = () => { copyPrompt(); mark("copy"); mark("flow"); };
   $("vtMade").onclick = () => mark("make");
+  wireWmFix("vtWmFix", post, $("vtSlot"), $("vtWm"));
   $("vtPick").onclick = () => $("vtFile").click();
   $("vtFile").onchange = async () => {
     const f = $("vtFile").files[0];
@@ -1633,11 +1635,17 @@ async function openVideoTask(taskId, postHint) {
       post.video_url = att.video_url;
       $("vtSlot").innerHTML = `<video src="${esc(att.video_url)}" controls playsinline preload="metadata"></video>`;
       $("vtWm").textContent = clipNote(att);
+      if ($("vtWmFix")) $("vtWmFix").hidden = false;
       $("vtPick").innerHTML = sic("arrow-up-right") + "Replace clip";
       $("vtPick").className = "btn ghost sm";
       ["copy", "flow", "make"].forEach((x) => done.add(x));
       done.add("upload");
       paintSteps();
+      // stays open once there is a clip: it holds the clip, what the remover
+      // did and the "still see a watermark?" corners, and painting the steps
+      // moves "current" on to scheduling, which would otherwise fold them away
+      const upStep = document.querySelector('#vtSteps li[data-step="upload"]');
+      if (upStep) upStep.classList.add("open");
       if (att.tasks) refreshTaskList(att.tasks);
     } catch (e) { toast(e.message, 7000); }
     $("vtFile").value = "";
@@ -2553,6 +2561,44 @@ async function attachClip(postId, url) {
       watermark: { checked: false, removed: false,
         reason: "The watermark remover could not run this time, so the clip is attached as you uploaded it." } };
   }
+}
+
+/* "Still see a watermark?" — the seller points at the corner, and the remover
+   runs again on the original upload, allowed to accept a fainter or smaller
+   mark there (and one on a shot that barely moves). `slot` is the element
+   holding the <video>, `note` the line that reports what happened. */
+const WM_CORNERS = [["bottom-right", "◢", "Bottom right"], ["bottom-left", "◣", "Bottom left"],
+                    ["top-right", "◥", "Top right"], ["top-left", "◤", "Top left"]];
+function wmFixRow(id) {
+  return `<div class="wm-fix" id="${id}">
+    <span class="muted tiny">Still see a watermark? Show us where:</span>
+    ${WM_CORNERS.map(([c, icon, label]) =>
+      `<button type="button" class="btn ghost tiny" data-wmcorner="${c}" title="${label}">${icon} ${label}</button>`).join("")}
+  </div>`;
+}
+function wireWmFix(id, post, slot, note, onDone) {
+  const row = $(id);
+  if (!row) return;
+  row.hidden = !post.video_url;
+  row.querySelectorAll("[data-wmcorner]").forEach((b) => b.onclick = async () => {
+    try {
+      const r = await withBusy("Removing the watermark…",
+        "Looking again at that corner of your original clip.",
+        () => api("/api/social/reclean-video", { method: "POST", json: { post_id: post.id, corner: b.dataset.wmcorner } }));
+      const wm = r.watermark || {};
+      if (wm.removed) {
+        post.video_url = r.video_url;
+        if (slot) slot.innerHTML = `<video src="${esc(r.video_url)}" controls playsinline preload="metadata"></video>`;
+        if (note) note.textContent = "Watermark removed from that corner.";
+        toast("Watermark removed. Play the clip to check it.", 6000);
+      } else {
+        const why = wm.reason || "nothing to remove there";
+        if (note) note.textContent = `Could not find a mark there: ${why}.`;
+        toast(`Could not find a mark in that corner (${why}). Try another corner.`, 8000);
+      }
+      if (onDone) onDone(r);
+    } catch (e) { toast(e.message, 8000); }
+  });
 }
 
 function clipNote(att) {
@@ -7261,6 +7307,8 @@ function openSocialEditor(post) {
           : ""}
         <input type="file" id="smVidFile" accept="video/mp4,video/webm,video/quicktime" hidden />
       </div>
+      <div id="smVidWm" class="muted tiny" style="margin:6px 0 0;">${post.video_url && post.video_watermark ? esc(clipNote({ watermark: post.video_watermark })) : ""}</div>
+      ${wmFixRow("smWmFix")}
       <div id="rpTools"></div>
     </div>`;
 
@@ -7465,6 +7513,7 @@ function openSocialEditor(post) {
           slotEl.innerHTML =
             `<video src="${esc(url)}" controls playsinline preload="metadata"></video>`;
           vidPick.innerHTML = sic("arrow-up-right") + "Replace clip";
+          if ($("smWmFix")) $("smWmFix").hidden = false;
           vidPick.className = "btn ghost sm";
         }
         _socialData = await api("/api/social");
@@ -7516,6 +7565,7 @@ function openSocialEditor(post) {
       if (slot) {
         slot.innerHTML = `<video src="${esc(vid.url)}" controls playsinline preload="metadata"></video>`;
         if (vidPick) { vidPick.innerHTML = sic("arrow-up-right") + "Replace clip"; vidPick.className = "btn ghost sm"; }
+        if ($("smWmFix")) $("smWmFix").hidden = false;
       }
       _socialData = await api("/api/social");
       toast("Clip made and attached. Check it before you schedule — the product "
@@ -7523,6 +7573,7 @@ function openSocialEditor(post) {
     } catch (e) { toast(e.message, 8000); }
   };
 
+  wireWmFix("smWmFix", post, $("smVidSlot"), $("smVidWm"));
   const vidClear = $("smVidClear");
   if (vidClear) vidClear.onclick = async () => {
     try {

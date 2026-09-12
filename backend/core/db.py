@@ -203,7 +203,17 @@ def _write(table_name: str, build, op: str):
     return None
 
 
+def _clean(v):
+    """NaN/±Infinity → null and numpy numbers → plain ones, for any row going
+    to Postgres. One NaN anywhere in a row makes PostgREST refuse the whole
+    write (JSON has no NaN), and pandas produces them for "no value"."""
+    from backend.core import user_store   # local: user_store imports this module
+    return user_store._jsonb_safe(v)
+
+
 def upsert(table_name: str, row: dict, on_conflict: str | None = None):
+    row = _clean(row)
+
     def build(c):
         q = c.table(table_name)
         return q.upsert(row, on_conflict=on_conflict) if on_conflict else q.upsert(row)
@@ -212,11 +222,14 @@ def upsert(table_name: str, row: dict, on_conflict: str | None = None):
 
 
 def insert(table_name: str, row: dict):
+    row = _clean(row)
     return _write(table_name, lambda c: c.table(table_name).insert(row), "insert")
 
 
 def update(table_name: str, match: dict, patch: dict):
     """UPDATE ... SET patch WHERE match. Returns the PostgREST response."""
+    patch = _clean(patch)
+
     def build(c):
         q = c.table(table_name).update(patch)
         for k, v in match.items():

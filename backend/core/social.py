@@ -1657,7 +1657,8 @@ def attach_image(email: str, post_id: str, url: str, generated: bool = False,
     return {"error": "not found"}
 
 
-def attach_video(email: str, post_id: str, url: str) -> dict:
+def attach_video(email: str, post_id: str, url: str, original_url: str | None = None,
+                 watermark: dict | None = None) -> dict:
     """Put the finished clip on a planned post.
 
     WHY THIS EXISTS: a reel slot could be planned, scripted and given a
@@ -1678,6 +1679,19 @@ def attach_video(email: str, post_id: str, url: str) -> dict:
     for p in rows:
         if p.get("id") == post_id:
             p["video_url"] = str(url or "")
+            # The upload as it came in, so "still see a watermark?" re-cleans
+            # the original rather than an already re-encoded copy — and the
+            # result of the last pass, so the editor can say what happened.
+            if not url:
+                p.pop("video_original_url", None)
+                p.pop("video_watermark", None)
+            else:
+                if original_url is not None:
+                    p["video_original_url"] = str(original_url or "")
+                if watermark is not None:
+                    p["video_watermark"] = {k: watermark.get(k) for k in
+                                            ("checked", "removed", "reason", "regions", "corner")
+                                            if k in watermark}
             _save_posts(email, rows)
             return p
     return {"error": "not found"}

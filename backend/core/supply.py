@@ -1005,11 +1005,75 @@ def build_supplier_risk_insight(email: str) -> dict | None:
 # ---------------------------------------------------------
 # purchase orders
 # ---------------------------------------------------------
+# The columns the Supabase `purchase_orders` table has (supabase/schema.sql).
+# A PO carries more than that now — the supplier it goes to, who raised it,
+# its history, the note on it. PostgREST refuses a row with ANY column the
+# table does not have, so writing the whole PO failed on every live account
+# ("TransportProblem at db.py:201" on Draft the purchase orders) while working
+# perfectly in local JSON mode, where there are no columns. So only these go
+# to the table; the rest of each PO is kept with the account's other data
+# (PO_EXTRA_KEY) and merged back on read. No migration needed — and one that
+# adds the columns later changes nothing here.
+PO_COLUMNS = frozenset({"id", "email", "po_number", "status", "n_items", "total_qty",
+                        "total_amount", "suppliers", "lines", "insight_id", "created_at"})
+PO_EXTRA_KEY = "smart_po_extra"
+
+
+def _po_split(doc: dict) -> tuple[dict, dict]:
+    core = {k: v for k, v in (doc or {}).items() if k in PO_COLUMNS}
+    extra = {k: v for k, v in (doc or {}).items() if k not in PO_COLUMNS}
+    return core, extra
+
+
+def _po_extras(email: str) -> dict:
+    d = user_store.get_key(email, PO_EXTRA_KEY, {}) or {}
+    return d if isinstance(d, dict) else {}
+
+
+def _save_po_extra(email: str, po_number: str, extra: dict) -> None:
+    if not extra:
+        return
+    d = _po_extras(email)
+    cur = d.get(str(po_number)) or {}
+    cur.update(extra)
+    d[str(po_number)] = cur
+    user_store.set_key(email, PO_EXTRA_KEY, d)
+
+
+def _po_insert(email: str, po: dict) -> None:
+    """Persist a new PO: table columns to the table, the rest beside it."""
+    email = _email(email)
+    if _tables():
+        core, extra = _po_split(po)
+        core["email"] = email
+        db.insert(T_PO, core)
+        _save_po_extra(email, po["po_number"], extra)
+    else:
+        pos = user_store.get_key(email, PO_KEY, []) or []
+        pos.append(po)
+        user_store.set_key(email, PO_KEY, pos)
+
+
+def _po_patch(email: str, po_number: str, patch: dict) -> None:
+    """Persist changed fields of a PO in table mode (split the same way)."""
+    core, extra = _po_split(patch)
+    core.pop("email", None)
+    core.pop("po_number", None)
+    if core:
+        db.update(T_PO, {"email": _email(email), "po_number": str(po_number)}, core)
+    _save_po_extra(_email(email), po_number, extra)
+
+
 def get_purchase_orders(email: str) -> list[dict]:
     email = _email(email)
     if _tables():
         rows = _safe_fetch(T_PO, {"email": email})
         rows = sorted(rows, key=lambda r: str(r.get("created_at", "")))
+        extras = _po_extras(email) if rows else {}
+        for r in rows:
+            for k, v in (extras.get(str(r.get("po_number"))) or {}).items():
+                if k not in PO_COLUMNS:
+                    r[k] = v
     else:
         rows = user_store.get_key(email, PO_KEY, []) or []
         rows = rows if isinstance(rows, list) else []
@@ -1102,14 +1166,7 @@ def create_po(email: str, item_ids: list[str] | None = None,
     }
     po["id"] = po["po_number"]
 
-    if _tables():
-        row = dict(po)
-        row["email"] = email
-        db.insert(T_PO, row)
-    else:
-        pos = user_store.get_key(email, PO_KEY, []) or []
-        pos.append(po)
-        user_store.set_key(email, PO_KEY, pos)
+    _po_insert(email, po)
 
     if not item_ids:
         mark_reorder_handled(email, "approved")
@@ -1228,13 +1285,7 @@ def create_manual_po(email: str, supplier: dict, lines: list[dict],
         "history": [{"at": _now_iso(), "status": "open", "by": "seller"}],
     }
 
-    if _tables():
-        row = dict(po); row["email"] = email
-        db.insert(T_PO, row)
-    else:
-        pos = user_store.get_key(email, PO_KEY, []) or []
-        pos.append(po)
-        user_store.set_key(email, PO_KEY, pos)
+    _po_insert(email, po)
     return po
 
 
@@ -1257,7 +1308,7 @@ def update_po(email: str, po_number: str, patch: dict) -> dict | None:
         return None
     target.update(patch or {})
     if _tables():
-        db.update(T_PO, {"email": email, "po_number": str(po_number)}, dict(patch or {}))
+        _po_patch(email, po_number, dict(patch or {}))
     else:
         _save_po_rows(email, pos)
     return target
@@ -1308,13 +1359,7 @@ def create_auto_po(email: str, rows: list[dict], supplier: dict, note: str = "",
                      "note": str(trigger or "")[:200]}],
         **_totals(lines),
     }
-    if _tables():
-        row = dict(po); row["email"] = email
-        db.insert(T_PO, row)
-    else:
-        pos = user_store.get_key(email, PO_KEY, []) or []
-        pos.append(po)
-        user_store.set_key(email, PO_KEY, pos)
+    _po_insert(email, po)
     return po
 
 
@@ -1392,8 +1437,7 @@ def set_po_status(email: str, po_number: str, status: str,
                     pass
 
     if _tables():
-        db.update(T_PO, {"email": email, "po_number": str(po_number)},
-                  {"status": status, "history": target.get("history")})
+        _po_patch(email, po_number, {"status": status, "history": target.get("history")})
     else:
         rows = user_store.get_key(email, PO_KEY, []) or []
         for r in rows:

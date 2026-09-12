@@ -37,6 +37,8 @@ def check(label, cond, extra=""):
 
 
 c = TestClient(app, raise_server_exceptions=False)
+JS = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       "Smart CafeX", "smart.js"), encoding="utf-8").read()
 email = f"up{int(time.time() * 1000)}@t.co"
 tok = c.post("/api/register", json={"email": email, "password": "Test12345!"}).json()["token"]
 H = {"Authorization": "Bearer " + tok, "X-Session-Id": "up"}
@@ -96,6 +98,44 @@ except Exception as e:  # noqa: BLE001
     loc = errors.location(e)
 check("a failure inside our code names the line", " at mapper.py:" in loc, loc)
 
+print("\n== 'Still see a watermark? Show us where' ==")
+import cv2  # noqa: E402
+import tempfile  # noqa: E402
+Wv, Hv = 720, 1280
+yy, xx = np.mgrid[0:Hv, 0:Wv].astype(np.float32)
+sz, mg = int(Wv * 0.045), int(Wv * 0.035)
+cx, cy = Wv - mg - sz // 2, Hv - mg - sz // 2
+spark = ((np.abs(xx - cx) / (sz / 2)) ** 0.7 + (np.abs(yy - cy) / (sz / 2)) ** 0.7) <= 1.0
+bg = np.clip(np.stack([90 + 60 * xx / Wv, 70 + 40 * yy / Hv, 60 + 30 * np.sin(xx / 37.0)], axis=2), 0, 255)
+fr = bg.copy()
+fr[spark] = fr[spark] * 0.65 + 255 * 0.35                  # faint: the automatic pass leaves it
+fr = fr.astype(np.uint8)
+tmpd = tempfile.mkdtemp()
+vp = os.path.join(tmpd, "faint.mp4")
+vw = cv2.VideoWriter(vp, cv2.VideoWriter_fourcc(*"mp4v"), 24, (Wv, Hv))
+for _ in range(30):
+    vw.write(cv2.cvtColor(fr, cv2.COLOR_RGB2BGR))
+vw.release()
+up = c.post("/api/site/image", headers=H, files={"files": ("faint.mp4", open(vp, "rb").read(), "video/mp4")})
+orig_url = up.json()["url"]
+r = c.post("/api/social/attach-video", headers=H, json={"post_id": reel["id"], "url": orig_url})
+post = social.get_post(email, reel["id"])
+check("the post remembers the original upload and what the remover did",
+      post.get("video_original_url") == orig_url and "video_watermark" in post, post.get("video_watermark"))
+r = c.post("/api/social/reclean-video", headers=H, json={"post_id": reel["id"], "corner": "bottom-right"})
+d = r.json()
+check("pointing at the corner removes it", r.status_code == 200 and d["watermark"]["removed"], d.get("watermark"))
+check("the post now has the clean copy, the original kept",
+      d["video_url"] != orig_url and social.get_post(email, reel["id"])["video_original_url"] == orig_url)
+r2 = c.post("/api/social/reclean-video", headers=H, json={"post_id": reel["id"], "corner": "top-left"})
+check("a corner with nothing in it says so, and the clip stays as it was",
+      r2.status_code == 200 and not r2.json()["watermark"]["removed"]
+      and social.get_post(email, reel["id"])["video_url"] == d["video_url"], r2.json().get("watermark"))
+check("a made-up corner is refused",
+      c.post("/api/social/reclean-video", headers=H, json={"post_id": reel["id"], "corner": "middle"}).status_code == 400)
+check("the buttons are in the task popup and the post editor",
+      JS.count('wmFixRow("') == 2 and "/api/social/reclean-video" in JS)
+
 print("\n== NaN / Infinity never reach Postgres ==")
 dirty = {"a": float("nan"), "b": [1.5, float("inf"), {"c": -math.inf}], "d": np.float64(2.5),
          "e": np.int64(3), "f": np.float32("nan"), "g": "text", "h": None, "i": True}
@@ -108,8 +148,6 @@ check("numpy numbers become plain ones, everything else is kept",
 import json as _json  # noqa: E402
 check("the result is valid JSON for JSONB", _json.dumps(clean, allow_nan=False))
 
-JS = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                       "Smart CafeX", "smart.js"), encoding="utf-8").read()
 check("the app retries the attach without cleaning when cleaning fails",
       "async function attachClip" in JS and "clean: false" in JS)
 

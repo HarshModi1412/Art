@@ -5138,7 +5138,8 @@ def social_attach_video(body: SocialAttachBody,
         # under a new name and the original upload is kept.
         cleaned = watermark.clean_media_url(url, email)
         url, report = cleaned["url"], cleaned["report"]
-    p = social.attach_video(email, body.post_id, url)
+    p = social.attach_video(email, body.post_id, url, original_url=body.url or "",
+                            watermark=report or {})
     if p.get("error"):
         raise HTTPException(404, p["error"])
     # Everything below is bookkeeping. The clip is on the post by now, and a
@@ -5162,6 +5163,41 @@ def social_attach_video(body: SocialAttachBody,
     except Exception:  # noqa: BLE001
         tasks = None
     return {**p, "watermark": report, **({"tasks": tasks} if tasks is not None else {})}
+
+
+class SocialRecleanBody(BaseModel):
+    post_id: str
+    corner: str = "bottom-right"
+
+
+@app.post("/api/social/reclean-video")
+def social_reclean_video(body: SocialRecleanBody,
+                         authorization: str | None = Header(default=None)):
+    """"Still see a watermark?" — run the remover again on the ORIGINAL upload,
+    told which corner the mark is in. Pointing at a corner lets it accept a
+    fainter or smaller mark, and one on a shot that barely moves, which it
+    will not risk guessing at on its own."""
+    email = require_user(authorization)
+    if body.corner not in watermark.CORNER_NAMES:
+        raise HTTPException(400, "Pick a corner: " + ", ".join(watermark.CORNER_NAMES))
+    post = social.get_post(email, body.post_id)
+    if not post:
+        raise HTTPException(404, "That post no longer exists.")
+    src = post.get("video_original_url") or post.get("video_url") or ""
+    if not src:
+        raise HTTPException(400, "This post has no clip yet — upload one first.")
+    cleaned = watermark.clean_media_url(src, email, corner=body.corner)
+    report = {**(cleaned.get("report") or {}), "corner": body.corner}
+    if report.get("removed"):
+        p = social.attach_video(email, body.post_id, cleaned["url"], original_url=src, watermark=report)
+    else:
+        p = social.attach_video(email, body.post_id, post.get("video_url") or src,
+                                original_url=src, watermark=report)
+    try:
+        cache.clear(email)
+    except Exception:  # noqa: BLE001
+        pass
+    return {**p, "watermark": report}
 
 
 @app.get("/api/managers")

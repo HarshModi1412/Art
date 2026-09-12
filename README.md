@@ -578,6 +578,38 @@ Measured: the web server stays at its normal ~140 MB during a clean; the
 cleaner and encoder together peak at ~275 MB. Uploads are read in 1 MB pieces
 and stopped at the size cap (48 MB for video).
 
+**Filled icons, and shots that barely move.** The first version knew text-like
+marks. Gemini's four-point sparkle is mostly interior, and video compression
+softens its edges: on a moving shot only its rim came off, and on a locked-off
+product shot — most AI clips — nothing was found at all. Now detection also
+takes a coarse pass (brighter than its surroundings at the scale of the mark
+itself, not just at an edge), fills the inside of what it finds and grows the
+mask a little further, so tips and middle go with it.
+
+**"Still see a watermark? Show us where."** Under the clip, in the reel task
+and in the post editor. The seller picks a corner, `POST /api/social/reclean-video`
+runs the remover again on the ORIGINAL upload (kept as `video_original_url`)
+with `corner=` — which relaxes what counts as a mark in that corner only:
+fainter, smaller, and judged as less colourful than its surroundings rather
+than grey. A corner with nothing in it is left exactly as it was and says so.
+
+## Purchase orders on Supabase
+
+`purchase_orders` in supabase/schema.sql has eleven columns; a PO carries more
+than that — the supplier it goes to, its note, its history, whether it was
+raised automatically. PostgREST refuses a row with any column the table does
+not have, so writing the whole PO failed on every live account (a 500,
+`TransportProblem at db.py:201`) while passing every local test, where POs are
+JSON with no columns at all. `supply._po_insert()` / `_po_patch()` now write
+the table's own columns to the table and keep the rest of each PO with the
+account's other data (`smart_po_extra`), merged back in `get_purchase_orders`.
+No migration is needed; adding the columns later changes nothing.
+
+`scripts/test_supabase_mode.py` runs the app against a fake Supabase whose
+tables have exactly the columns in schema.sql and which refuses NaN — the two
+things local JSON mode cannot catch. Any row the app writes to a real table is
+covered by it.
+
 Tests: `python scripts/test_autoplan.py`, `python scripts/test_watermark.py`.
 
 ## The approval panel, staffed

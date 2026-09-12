@@ -242,13 +242,15 @@ def _saturation(rgb: np.ndarray) -> np.ndarray:
 
 # ---------------------------------------------------------------- detection
 def _accept_group(cand: np.ndarray, box: tuple, W: int, H: int,
-                  strict: bool) -> tuple[np.ndarray | None, str]:
+                  strict: bool, relaxed: bool = False) -> tuple[np.ndarray | None, str]:
     """Given raw candidate pixels in one corner box, decide whether they form a
     watermark and return the (box-local) mask if so. Returns (None, reason)
     when they do not, which is the common case."""
     name, bx, by, bw, bh = box
     raw_area = int(cand.sum())
-    min_area = (0.00025 if strict else 0.00012) * W * H
+    # `relaxed`: the seller has said there IS a mark in this corner, so a
+    # faint or small one is accepted and busier surroundings are tolerated.
+    min_area = (0.00025 if strict else 0.00005 if relaxed else 0.00012) * W * H
     if raw_area < min_area:
         return None, "nothing mark-like"
 
@@ -289,7 +291,7 @@ def _accept_group(cand: np.ndarray, box: tuple, W: int, H: int,
         fill = area / max(1, w * h)
         # Text and glyphs are strokes. A solid bright block is a highlight, a
         # white product, a sticker — leave it alone.
-        if not (0.04 <= fill <= (0.55 if strict else 0.7)):
+        if not (0.04 <= fill <= (0.55 if strict else 0.85 if relaxed else 0.7)):
             continue
         keep[y:y + h, x:x + w] |= comp
 
@@ -308,7 +310,7 @@ def _accept_group(cand: np.ndarray, box: tuple, W: int, H: int,
     ring = cand[ry0:ry1, rx0:rx1].copy()
     ring[y0 - ry0:y1 - ry0, x0 - rx0:x1 - rx0] = False
     ring_area = max(1, (ry1 - ry0) * (rx1 - rx0) - (y1 - y0) * (x1 - x0))
-    if ring.sum() / ring_area > (0.06 if strict else 0.12):
+    if ring.sum() / ring_area > (0.06 if strict else 0.25 if relaxed else 0.12):
         return None, "part of a bright textured area, not an overlay"
     return keep, "ok"
 
@@ -320,6 +322,46 @@ def _image_candidates(rgb: np.ndarray, gray: np.ndarray, strict: bool) -> np.nda
     sat = _saturation(rgb)
     c_thr, g_thr, s_thr = (22, 165, 0.16) if strict else (16, 120, 0.26)
     return (contrast > c_thr) & (gray > g_thr) & (sat < s_thr)
+
+
+def _coarse_candidates(rgb: np.ndarray, gray: np.ndarray, relaxed: bool = False) -> np.ndarray:
+    """Pixels brighter than their neighbourhood at the scale of a whole mark.
+
+    The fine-scale test above looks at edges. That is right for crisp text on
+    a still photo, but a filled icon — Gemini's four-point sparkle — is mostly
+    interior, and video compression blurs its edges until almost none pass.
+    Against a background blurred at roughly the mark's own size, the whole
+    shape stands out instead: a 55%-white sparkle is 40-60 levels brighter
+    than what is behind it, edge or middle."""
+    H, W = gray.shape
+    big = max(6.0, min(W, H) / 28.0)
+    excess = gray - _blur(gray, big)
+    sat = _saturation(rgb)
+    if relaxed:
+        # A faint white mark over a coloured picture keeps some of the colour
+        # behind it, so "is it grey?" is too strict. What it always is: less
+        # colourful than the picture around it, and brighter.
+        whiter = (sat < 0.55) & (sat < _blur(sat, big) - 0.04)
+        return (excess > 9) & (gray > 105) & whiter
+    return (excess > 13) & (gray > 115) & (sat < 0.28)
+
+
+def _fill_holes(mask: np.ndarray) -> np.ndarray:
+    """Close the inside of a found outline (a sparkle, the counter of an 'o')
+    so the fill covers the mark and not just its rim."""
+    cv2 = _cv2()
+    if cv2 is None or not mask.any():
+        return mask
+    m = mask.astype(np.uint8) * 255
+    h, w = m.shape
+    ys, xs = np.nonzero(m == 0)
+    if not len(ys):
+        return mask
+    # flood the background from a pixel that is certainly outside the mark
+    seed = (0, 0) if m[0, 0] == 0 else (int(xs[0]), int(ys[0]))
+    ff = m.copy()
+    cv2.floodFill(ff, np.zeros((h + 2, w + 2), np.uint8), seed, 255)
+    return mask | (ff == 0)
 
 
 def detect_image(rgb: np.ndarray, strict: bool = False) -> tuple[np.ndarray, list[dict]]:
@@ -352,8 +394,8 @@ def detect_video_frames(frames: list[np.ndarray]) -> tuple[np.ndarray, list[dict
     return detect_video_corners(crops, W, H)
 
 
-def detect_video_corners(crops: dict[str, list[np.ndarray]], W: int, H: int
-                         ) -> tuple[np.ndarray, list[dict], str]:
+def detect_video_corners(crops: dict[str, list[np.ndarray]], W: int, H: int,
+                         only: str | None = None) -> tuple[np.ndarray, list[dict], str]:
     """The same detection from the four corner boxes only (`_corners(W, H)`,
     RGB uint8). A clip is judged on its corners anyway, and keeping only those
     is what lets a 1080p reel be checked in a fraction of the memory that
@@ -364,8 +406,9 @@ def detect_video_corners(crops: dict[str, list[np.ndarray]], W: int, H: int
     sigma = max(2.5, min(W, H) / 110.0)
     for box in _corners(W, H):
         name, bx, by, bw, bh = box
-        if not crops.get(name):
+        if not crops.get(name) or (only and name != only):
             continue
+        relaxed = bool(only)                # the seller pointed at this corner
         gray = contrast = motion = None     # free the previous corner's arrays first
         # Built one frame at a time: stacking every sample as float32 and
         # converting in one go is what used to need ~170 MB for a 1080p reel.
@@ -387,8 +430,16 @@ def detect_video_corners(crops: dict[str, list[np.ndarray]], W: int, H: int
             persistent = np.percentile(contrast, 20, axis=0) > 8.0
             sat = _saturation(med_rgb)
             steady = motion < np.percentile(motion, 60) + 1e-3
-            cand = persistent & (sat < 0.3) & (np.median(gray, axis=0) > 95) & steady
-            local, why = _accept_group(cand, box, W, H, strict=False)
+            med_gray = np.median(gray, axis=0)
+            cand = persistent & (sat < 0.3) & (med_gray > 95) & steady
+            # the whole of a filled icon, not just its rim: brighter than its
+            # surroundings at the mark's own scale, in nearly every frame
+            big = max(6.0, min(W, H) / 28.0)
+            for k in range(n):
+                contrast[k] = gray[k] - _blur(gray[k], big)
+            coarse = np.percentile(contrast, 20, axis=0) > (7.0 if relaxed else 10.0)
+            cand = cand | (coarse & (sat < 0.3) & (med_gray > 95) & steady & _dilate(cand, max(3, int(min(W, H) * 0.02))))
+            local, why = _accept_group(cand, box, W, H, strict=False, relaxed=relaxed)
             mode = "static-overlay"
         else:
             # Locked-off shot (or a slow pan over something smooth): nothing
@@ -397,8 +448,9 @@ def detect_video_corners(crops: dict[str, list[np.ndarray]], W: int, H: int
             # an unknown source. Video compression softens a thin mark, which
             # is why these are not the strict limits.
             med_gray = np.median(gray, axis=0)
-            cand = _image_candidates(med_rgb, med_gray, strict=False)
-            local, why = _accept_group(cand, box, W, H, strict=False)
+            cand = (_image_candidates(med_rgb, med_gray, strict=False)
+                    | _coarse_candidates(med_rgb, med_gray, relaxed))
+            local, why = _accept_group(cand, box, W, H, strict=False, relaxed=relaxed)
             mode = "still-rules"
         if local is None:
             continue
@@ -516,7 +568,10 @@ def _encode_cmd(ff: str, w: int, h: int, fps: float, src: str, dst: str, codec: 
             "-movflags", "+faststart", "-c:a", "aac", "-b:a", "128k", "-shortest", dst]
 
 
-def clean_video_file(src: str, dst: str, source: str = "") -> dict:
+CORNER_NAMES = ("bottom-right", "bottom-left", "top-right", "top-left")
+
+
+def clean_video_file(src: str, dst: str, source: str = "", corner: str = "") -> dict:
     """Clean `src` into `dst`. On any failure `dst` is not written and the
     report says why; callers then keep the original."""
     report = {"checked": False, "removed": False, "regions": [], "kind": "video",
@@ -585,15 +640,19 @@ def clean_video_file(src: str, dst: str, source: str = "") -> dict:
             report["reason"] = "too few frames to judge"
             return report
         report["checked"] = True
-        mask, regions, mode = detect_video_corners(samples, w, h)
+        only = corner if corner in CORNER_NAMES else None
+        mask, regions, mode = detect_video_corners(samples, w, h, only=only)
         samples = {}
         if not regions:
             report["reason"] = "no visible watermark found"
             return report
 
         # Pass 2: inpaint every frame and pipe it to ffmpeg as H.264.
-        grow = max(2, int(min(h, w) * 0.004))
-        m = _dilate(mask, grow)
+        # A little past the mark, and its inside filled: compression leaves a
+        # soft halo and thin tips (a sparkle's points) past the detected
+        # pixels, and a ring of them left behind reads as "still there".
+        grow = max(3, int(min(h, w) * 0.007))
+        m = _dilate(_fill_holes(mask), grow)
         y0, y1, x0, x1 = _roi(m, max(8, grow * 4))
         mroi = (m[y0:y1, x0:x1] * 255).astype(np.uint8)
         radius = max(3, grow * 2)
@@ -647,7 +706,7 @@ def clean_video_file(src: str, dst: str, source: str = "") -> dict:
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
-def clean_video_isolated(src: str, dst: str, source: str = "") -> dict:
+def clean_video_isolated(src: str, dst: str, source: str = "", corner: str = "") -> dict:
     """`clean_video_file`, run in a child process.
 
     Decoding, inpainting and re-encoding a clip is the heaviest thing this app
@@ -658,7 +717,7 @@ def clean_video_isolated(src: str, dst: str, source: str = "") -> dict:
     itself first in line for the kernel's out-of-memory killer, the server
     stays up, and the clip is attached as it was uploaded."""
     if os.environ.get("WATERMARK_INPROCESS") == "1":
-        return clean_video_file(src, dst, source)
+        return clean_video_file(src, dst, source, corner)
     env = dict(os.environ)
     env["PYTHONPATH"] = _REPO_ROOT + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     env["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = f"threads;{VIDEO_THREADS}"
@@ -666,7 +725,8 @@ def clean_video_isolated(src: str, dst: str, source: str = "") -> dict:
         env[k] = VIDEO_THREADS
     base = {"checked": False, "removed": False, "regions": [], "kind": "video", "method": ""}
     try:
-        r = subprocess.run([sys.executable, "-m", "backend.core.watermark", src, dst, source or ""],
+        r = subprocess.run([sys.executable, "-m", "backend.core.watermark", src, dst, source or "",
+                            corner or ""],
                            cwd=_REPO_ROOT, env=env, capture_output=True, timeout=VIDEO_TIMEOUT)
     except subprocess.TimeoutExpired:
         _rm(dst)
@@ -698,7 +758,7 @@ def _rm(path: str) -> None:
 
 
 def clean_video_bytes(data: bytes, filename_hint: str = "clip.mp4",
-                      source: str = "") -> tuple[bytes, dict]:
+                      source: str = "", corner: str = "") -> tuple[bytes, dict]:
     """Bytes in, bytes out. The original comes back when nothing was removed."""
     ext = os.path.splitext(filename_hint or "")[1].lower() or ".mp4"
     tmp = tempfile.mkdtemp(prefix="wm_")
@@ -706,7 +766,7 @@ def clean_video_bytes(data: bytes, filename_hint: str = "clip.mp4",
     try:
         with open(src, "wb") as fh:
             fh.write(data)
-        rep = clean_video_isolated(src, dst, source)
+        rep = clean_video_isolated(src, dst, source, corner)
         if rep.get("removed"):
             with open(dst, "rb") as fh:
                 return fh.read(), rep
@@ -719,7 +779,7 @@ def clean_video_bytes(data: bytes, filename_hint: str = "clip.mp4",
 
 
 # ---------------------------------------------------------------- public: stored media
-def clean_media_url(url: str, email: str = "", source: str = "") -> dict:
+def clean_media_url(url: str, email: str = "", source: str = "", corner: str = "") -> dict:
     """Clean a file already in the media store and return where the clean copy
     lives. The clean copy is saved under a NEW name, so the original upload is
     kept (a wrong guess can be undone) and no cached copy of the old bytes can
@@ -736,7 +796,7 @@ def clean_media_url(url: str, email: str = "", source: str = "") -> dict:
         return out
     data, _ctype = got
     if media.is_video(name):
-        new, rep = clean_video_bytes(data, name, source)
+        new, rep = clean_video_bytes(data, name, source, corner)
         ext = ".mp4"
     else:
         new, rep = clean_image(data, source)
@@ -760,7 +820,7 @@ if __name__ == "__main__":
             _fh.write("1000")
     except OSError:
         pass
-    _args = sys.argv[1:] + ["", "", ""]
-    _rep = clean_video_file(_args[0], _args[1], _args[2])
+    _args = sys.argv[1:] + ["", "", "", ""]
+    _rep = clean_video_file(_args[0], _args[1], _args[2], _args[3])
     sys.stdout.write(json.dumps(_rep, default=str) + "\n")
     sys.stdout.flush()
