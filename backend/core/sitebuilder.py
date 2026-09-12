@@ -528,10 +528,79 @@ def _b(v, default=False) -> bool:
     return str(v).strip().lower() in ("1", "true", "yes", "on", "y")
 
 
+# A seller's own address, e.g. korastudio.com. The site is always reachable at
+# /s/<handle>; a custom domain is an ADDITIONAL front door, pointed here with a
+# CNAME. Kept apart from `handle` on purpose: handles are ours to validate and
+# guarantee unique, domains are the seller's and can be taken away by whoever
+# they bought them from.
+_DOMAIN_RE = re.compile(r"^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$")
+DOMAIN_KEY = "custom_domains"          # domain -> handle, in the same index file
+
+
+def normalise_domain(domain: str) -> str:
+    d = str(domain or "").strip().lower()
+    for prefix in ("https://", "http://"):
+        if d.startswith(prefix):
+            d = d[len(prefix):]
+    d = d.split("/")[0].split(":")[0].strip().strip(".")
+    return d
+
+
+def valid_domain(domain: str) -> bool:
+    d = normalise_domain(domain)
+    return bool(d) and len(d) <= 253 and bool(_DOMAIN_RE.match(d))
+
+
+def _domain_index() -> dict:
+    with _lock:
+        return dict((_read_index().get(DOMAIN_KEY) or {}))
+
+
+def resolve_domain(domain: str) -> str:
+    """Which handle answers on this domain, or "" — how a request that arrived
+    on korastudio.com finds the shop to render."""
+    d = normalise_domain(domain)
+    if not d:
+        return ""
+    idx = _domain_index()
+    return idx.get(d) or idx.get(d[4:] if d.startswith("www.") else "www." + d) or ""
+
+
+def claim_domain(handle: str, domain: str, previous: str = "") -> None:
+    """Point a domain at a handle. Also claims the www. twin, because a seller
+    who buys korastudio.com and gives customers www.korastudio.com expects both
+    to work and will not think to add it."""
+    h = normalise_handle(handle)
+    d = normalise_domain(domain)
+    with _lock:
+        idx = _read_index()
+        doms = dict(idx.get(DOMAIN_KEY) or {})
+        for old in {normalise_domain(previous), "www." + normalise_domain(previous)}:
+            if old and doms.get(old) == h:
+                doms.pop(old, None)
+        if d:
+            doms[d] = h
+            if not d.startswith("www."):
+                doms.setdefault("www." + d, h)
+        idx[DOMAIN_KEY] = doms
+        _write_index(idx)
+
+
+def domain_owner(domain: str, for_email: str = "") -> str:
+    """The account using this domain, if it is already taken by someone else."""
+    handle = resolve_domain(domain)
+    if not handle:
+        return ""
+    owner = resolve_handle(handle) or ""
+    return "" if owner == (for_email or "").strip().lower() else owner
+
+
 def default_site(email: str) -> dict:
     t = theme("basic")
     return {
         "handle": "",
+        # the seller's own web address, once they point one here
+        "custom_domain": "",
         "brand": "",
         # A line or two in the seller's own words about the shop — what the
         # content writer builds every other piece of site copy from.
@@ -697,6 +766,20 @@ def save_site(email: str, patch: dict) -> dict:
     if wanted in RESERVED_HANDLES or len(wanted) < 3:
         raise ValueError("Pick an address of at least 3 letters that isn't a reserved word.")
     site["handle"] = wanted
+
+    # ---- the seller's own domain ----
+    previous_domain = normalise_domain(current.get("custom_domain") or "")
+    wanted_domain = normalise_domain(site.get("custom_domain") or "")
+    if wanted_domain:
+        if not valid_domain(wanted_domain):
+            raise ValueError("That does not look like a domain. Enter it like korastudio.com "
+                             "— no https://, no slashes.")
+        taken_by = domain_owner(wanted_domain, email)
+        if taken_by:
+            raise ValueError(f"{wanted_domain} is already pointed at another shop here.")
+    site["custom_domain"] = wanted_domain
+    if wanted_domain != previous_domain or wanted != previous_handle:
+        claim_domain(wanted, wanted_domain, previous_domain)
 
     # ---- style ----
     st = site["style"]

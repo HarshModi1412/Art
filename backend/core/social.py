@@ -48,6 +48,7 @@ OTHER EVIDENCE ENCODED HERE
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import secrets
 from datetime import date, datetime, timedelta, timezone
@@ -764,9 +765,80 @@ def write_caption(email: str, product: dict, pillar_id: str,
 # list: what to film, in what order, with what text on screen -- something
 # they can act on directly with no crew and no edit rig.
 
-def _script_system(settings: dict) -> str:
+# Not every reel is a slow cinematic product film. A week of those looks like
+# one long advert, and the sellers who grow post in several registers: a hand
+# demo, a making-of, an order being packed, a question answered to camera. The
+# style is chosen per post (see _reel_style) so a week has variety by default,
+# and it changes the beats AND the pacing of the prompt handed to the video AI.
+REEL_STYLES = {
+    "hand_demo": {
+        "label": "hands-on demo",
+        "brief": "One continuous hand demo. Hands do everything — pick it up, open it, turn it, "
+                 "put it down. No people's faces, no location change. Calm and plain.",
+        "pace": "one take, no cuts, natural hand speed",
+    },
+    "quick_cuts": {
+        "label": "quick cuts",
+        "brief": "Six to eight very short shots, each one a different angle or detail, cut fast on "
+                 "the beat. Energy comes from the cutting, not from camera moves.",
+        "pace": "fast cuts, roughly one second a shot, hard cuts only",
+    },
+    "making": {
+        "label": "how it is made",
+        "brief": "The work behind it: hands cutting, stitching, printing, polishing, finishing. "
+                 "The product appears finished only in the last shot.",
+        "pace": "unhurried, medium and close shots, real working sounds",
+    },
+    "packing": {
+        "label": "packing an order",
+        "brief": "An order being packed for a real customer: item folded, wrapped, note added, "
+                 "box or pouch closed, label on. Ends with it ready to go.",
+        "pace": "steady, top-down and over-the-shoulder shots",
+    },
+    "styling": {
+        "label": "styled two ways",
+        "brief": "The same product presented two different ways — two settings, two pairings, two "
+                 "occasions — with a clear switch in the middle.",
+        "pace": "two halves with one clean transition",
+    },
+    "before_after": {
+        "label": "before and after",
+        "brief": "Start with the plain or empty version, end with it in use and looking its best. "
+                 "The change is the whole point.",
+        "pace": "slow build, hold on the final state",
+    },
+    "story": {
+        "label": "a quiet film",
+        "brief": "A short, cinematic piece: light, texture, one slow move, the product at rest. "
+                 "Mood over information.",
+        "pace": "slow, one or two long takes, shallow depth of field",
+    },
+    "to_camera": {
+        "label": "talking to camera",
+        "brief": "The seller answers one real question a customer asks, holding the product. "
+                 "Voiceover carries it; the shots just show what is being talked about.",
+        "pace": "medium shots, cut only when the point changes",
+    },
+}
+REEL_STYLE_IDS = list(REEL_STYLES)
+# What a video AI can actually make in one go today, and what the reel task
+# tells the seller to export from Google Flow.
+AI_CLIP_SECONDS = 8
+
+
+def _reel_style(product_name: str = "", pillar: str = "", when: str = "") -> str:
+    """Pick a style. Deterministic on the slot, so re-planning the same week
+    gives the same answer, and spread so a week is not eight of one kind."""
+    key = f"{product_name}|{pillar}|{when}"
+    return REEL_STYLE_IDS[int(hashlib.md5(key.encode()).hexdigest(), 16) % len(REEL_STYLE_IDS)]
+
+
+def _script_system(settings: dict, style: str = "") -> str:
     lang = LANGUAGES.get(settings.get("language") or "hinglish")
-    return f"""You write Instagram Reel scripts for a small Indian D2C seller who films on their own phone -- no crew, no studio lights, no editor.
+    st = REEL_STYLES.get(style) or {}
+    style_line = (f"\nTHIS ONE IS: {st['label']}. {st['brief']}\n" if st else "")
+    return f"""You write short vertical video scripts for a small Indian D2C seller who films on their own phone -- no crew, no studio lights, no editor.
+{style_line}
 
 Write on-screen text and voiceover in {lang}.
 
@@ -774,7 +846,8 @@ A script is 4 to 6 beats. Each beat is ONE camera instruction a seller can actua
 
 Hard rules:
 - Every beat names the ACTION, not the mood: "Turn the wallet over to show the stitching" beats "show the craftsmanship".
-- On-screen text is short -- 3 to 6 words a beat, not a caption pasted onto the screen.
+- On-screen text is short -- 3 to 6 words a beat, not a caption pasted onto the screen. It is a NOTE FOR THE SELLER to add in the app afterwards, never something burnt into the footage.
+- Match the style above. A hand demo is not a mood film; a making-of is not quick cuts. Two reels in a week should not read the same.
 - Voiceover is optional. Leave it blank if text-and-music carries the reel better -- most reels under 5K followers do.
 - Never invent a discount, a price, a delivery time or a material you were not given.
 - The last beat is always the one clear thing to do (DM, link, visit).
@@ -830,7 +903,7 @@ def _fallback_script(product: dict, occasion: dict | None = None) -> dict:
 
 def build_video_prompt(script: dict, product: dict, settings: dict,
                        occasion: dict | None = None, shot_type: str = "",
-                       aesthetic: str = "", theme: str = "") -> str:
+                       aesthetic: str = "", theme: str = "", style: str = "") -> str:
     """The reel script as ONE block a seller can paste straight into a video AI.
 
     WHY THIS SHAPE: the shot list is what you use if you are filming it
@@ -846,22 +919,34 @@ def build_video_prompt(script: dict, product: dict, settings: dict,
     audio, on-screen text) last."""
     name = product.get("name") or "the product"
     cat = product.get("category") or settings.get("category") or "product"
-    seconds = FORMATS["reel"]["target_seconds"]
+    # The shot list is a 45-second reel the seller films. THIS prompt goes to a
+    # video AI, and those make one short clip — Flow/Veo cap out around 8
+    # seconds, which is also what the task tells the seller to export. Asking
+    # for 45 got a clip that either raced through the shots or ignored most.
+    seconds = AI_CLIP_SECONDS
     beats = script.get("beats") or []
 
     look = aesthetic.strip() or ("clean, natural daylight, uncluttered "
                                  "background, shallow depth of field")
-    subject = f"{name}, a {cat}"
+    subject = f"{name} ({cat})"
     if product.get("fabric"):
         subject += f" in {product['fabric']}"
     if product.get("description"):
         subject += f". {str(product['description'])[:180]}"
 
+    st = REEL_STYLES.get(style) or {}
     lines = [
-        "Create a vertical short-form video ad for Instagram Reels.",
+        # No platform named on purpose. Saying "Instagram Reel" to a video model
+        # is what produced clips with a phone frame, an app interface and a
+        # caption bar drawn into the footage — the seller wanted a video, and
+        # got a picture of a post.
+        "Create a vertical 9:16 video. Real footage only: no app interface, no "
+        "phone frame, no social media layout, no borders, no split screen.",
         "",
         f"SUBJECT: {subject}",
     ]
+    if st:
+        lines.append(f"STYLE: {st['label']} — {st['brief']}")
     if theme:
         lines.append(f"STORY: {theme}")
     if occasion and occasion.get("name"):
@@ -870,32 +955,36 @@ def build_video_prompt(script: dict, product: dict, settings: dict,
     if shot_type:
         lines.append(f"TREATMENT: {shot_type.replace('_', ' ')}")
 
-    lines += ["", "SHOT SEQUENCE:"]
-    for i, b in enumerate(beats, 1):
+    # Three shots is what fits in eight seconds. The rest stay in the shot list
+    # for the seller filming it themselves.
+    lines += ["", f"SHOT SEQUENCE (fit all of it into {seconds} seconds):"]
+    for i, b in enumerate(beats[:3], 1):
         sec = (b.get("sec") or "").strip()
         shot = (b.get("shot") or "").strip()
         ost = (b.get("on_screen_text") or "").strip()
         seg = f"{i}. " + (f"({sec}) " if sec else "") + shot
-        if ost:
-            seg += f'  [on-screen text: "{ost}"]'
-        lines.append(seg)
+        lines.append(seg)          # the on-screen line is the seller's, added later
 
     vo = (script.get("voiceover") or "").strip()
+    pace = st.get("pace") or ("handheld phone, eye level, slow deliberate moves; "
+                              "one clean cut between shots")
     lines += [
         "",
-        f"CAMERA: handheld phone, eye level, slow deliberate moves; one clean "
-        f"cut between shots, no whip pans or zoom effects.",
+        f"CAMERA AND PACE: {pace}. Handheld phone, eye level. No whip pans, no zoom effects.",
         f"LIGHTING AND STYLE: {look}",
         f"DURATION: about {seconds} seconds total.",
-        "ASPECT RATIO: 9:16 vertical, subject in the middle third, headroom at "
-        "top and bottom for Instagram's own UI.",
-        f"AUDIO: {'voiceover — ' + vo if vo else 'no voiceover; ambient sound and a calm music bed'}.",
-        "ON-SCREEN TEXT: exactly the lines given above, nothing else, large "
-        "enough to read on a phone, kept clear of the bottom third.",
+        "FRAMING: 9:16 vertical, filling the whole frame edge to edge. The "
+        "product stays fully in frame and in focus.",
+        f"AUDIO: {'voiceover — ' + vo if vo else 'no voiceover; ambient sound only'}.",
+        # The on-screen lines stay in the shot list for the seller to add in the
+        # app, where they can move and style them. Asking the model for them got
+        # centred white lettering burnt into the picture, which cannot be undone.
+        "TEXT: none. No captions, titles, subtitles, watermarks, logos, stickers "
+        "or lettering of any kind anywhere in the frame.",
         "",
         "DO NOT: change the product's shape, colour, material or any brand name, "
-        "logo or lettering on it; add captions, watermarks, logos or text beyond "
-        "the lines above; invent a price, a discount or a delivery promise.",
+        "logo or lettering on it; add a person's face unless the shots ask for "
+        "one; invent a price, a discount or a delivery promise.",
     ]
     return "\n".join(lines).strip()
 
@@ -939,8 +1028,10 @@ def write_reel_script(email: str, product: dict, pillar_id: str,
     except Exception:  # noqa: BLE001 — the prompt is still useful without it
         aesthetic = ""
 
+    # Which register this one is in — a hand demo, a making-of, a quiet film.
+    style = _reel_style(product.get("name") or "", pillar_id, angle or shot_type)
     fb = _fallback_script(product, occasion)
-    res = aiprovider.generate(_script_system(s), user, sensitivity="public",
+    res = aiprovider.generate(_script_system(s, style), user, sensitivity="public",
                               max_tokens=500, temperature=0.8, fallback="")
     parsed = _parse_script(res["text"]) if res["text"] else {}
     if not res["text"] or not parsed.get("beats"):
@@ -949,8 +1040,10 @@ def write_reel_script(email: str, product: dict, pillar_id: str,
                         else "model did not return the expected shape"}
     else:
         out = {**parsed, "provider": res["provider"], "free": res["free"], "error": ""}
+    out["style"] = style
+    out["style_label"] = REEL_STYLES[style]["label"]
     out["ai_prompt"] = build_video_prompt(out, product, s, occasion, shot_type,
-                                          aesthetic, theme)
+                                          aesthetic, theme, style)
     return out
 
 
@@ -1635,7 +1728,10 @@ def update_post(email: str, post_id: str, patch: dict) -> dict:
                     ({"name": p["occasion"], "days_away": p.get("occasion_days") or 0}
                      if p.get("occasion") else None),
                     p.get("shot_type") or "",
-                    "", p.get("theme_note") or "")
+                    "", p.get("theme_note") or "",
+                    (p.get("script") or {}).get("style") or "")
+                script["style"] = (p.get("script") or {}).get("style") or ""
+                script["style_label"] = REEL_STYLES.get(script["style"], {}).get("label", "")
                 p["script"] = script
             _save_posts(email, rows)
             return p

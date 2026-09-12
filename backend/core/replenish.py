@@ -28,6 +28,7 @@ because a purchase order could not be drafted.
 from __future__ import annotations
 
 import logging
+import os
 import re
 
 import pandas as pd
@@ -310,23 +311,20 @@ def send_po(email: str, po_number: str, subject: str = "", body: str = "",
     pdf = buf.getvalue()
 
     reply_to = supply._email(email)
-    sent, reason = False, ""
+    sent, reason, sent_from = False, "", ""
     if not to:
         reason = "No email address on file for this supplier — add it in the Supplier module."
     elif not _EMAIL_RE.match(to):
         reason = f"“{to}” does not look like an email address."
     else:
-        res = messaging.send_with_attachments(
-            to, subject, body, attachments=[(fname, pdf, "application/pdf")],
-            reply_to=reply_to)
-        sent = bool(res.get("email"))
-        if not sent:
-            reason = res.get("reason") or "The mail server did not accept it."
+        sent, reason, sent_from = _deliver(
+            email, to, subject, body, [(fname, pdf, "application/pdf")], reply_to)
 
     hist = list(po.get("history") or [])
     status = "mailed" if sent else "open"
     hist.append({"at": _now(), "status": status, "by": "seller",
-                 "note": (f"Emailed to {to}" if sent else f"Approved — not emailed: {reason}")[:200]})
+                 "note": (f"Emailed to {to} from {sent_from}" if sent
+                          else f"Approved — not emailed: {reason}")[:200]})
     supply.update_po(email, po_number, {"status": status, "history": hist})
     try:
         from backend.core import cache
@@ -338,10 +336,67 @@ def send_po(email: str, po_number: str, subject: str = "", body: str = "",
         from urllib.parse import quote
         mailto = f"mailto:{to}?subject={quote(subject)}&body={quote(body[:1800])}"
     return {"sent": sent, "status": status, "to": to, "reason": reason,
-            "subject": subject, "body": body, "po_number": po_number,
+            "from": sent_from, "subject": subject, "body": body, "po_number": po_number,
             "pdf_url": f"/api/supply/po/{po_number}/pdf?supplier=1",
             "mailto": mailto}
 
 
-def cancel_po(email: str, po_number: str) -> dict | None:
-    return supply.set_po_status(email, po_number, "cancelled", note="Cancelled from the Approval panel")
+def _deliver(email: str, to: str, subject: str, body: str,
+             attachments: list, reply_to: str = "") -> tuple[bool, str, str]:
+    """Send as the SELLER when they have connected their mailbox, and fall back
+    to the server's. A purchase order from the shop's own address is the one a
+    supplier recognises, replies to, and does not treat as spam."""
+    from backend.core import messaging, seller_mail
+    own = seller_mail.send(email, to, subject, body, attachments=attachments)
+    if own.get("sent"):
+        return True, "", own.get("from", "")
+    own_reason = own.get("reason") or ""
+    res = messaging.send_with_attachments(to, subject, body, attachments=attachments,
+                                          reply_to=reply_to)
+    if res.get("email"):
+        return True, "", (os.environ.get("SMTP_FROM") or os.environ.get("SMTP_USER") or "this server")
+    server_reason = res.get("reason") or "The mail server did not accept it."
+    if own_reason and own_reason != "no seller mailbox connected":
+        # their own mailbox was the one that failed: that is the one to fix
+        return False, own_reason, ""
+    return False, server_reason, ""
+
+
+def cancel_po(email: str, po_number: str, tell_supplier: bool = False,
+              note: str = "") -> dict:
+    """Cancel an order. Once it has gone out, cancelling it quietly is how a
+    supplier ends up delivering something nobody wants — so a PO that was
+    mailed offers to tell them, in writing, with the PO number."""
+    po = supply.get_po(email, po_number)
+    if not po:
+        return {"error": "Purchase order not found."}
+    was = supply.po_status(po)
+    told = {"sent": False, "reason": "", "to": "", "from": ""}
+    if tell_supplier and was in ("mailed", "replied", "confirmed"):
+        to = _supplier_email(po)
+        if not to:
+            told["reason"] = "No email address on file for this supplier."
+        else:
+            from backend.core import brandname, writer
+            brand = brandname.display(email)
+            subject = f"Cancelling purchase order {po_number}"
+            body = writer.po_cancel_email(email, po, note)
+            ok, why, frm = _deliver(email, to, subject, body, [], supply._email(email))
+            told = {"sent": ok, "reason": "" if ok else why, "to": to, "from": frm}
+            del brand
+    hist = list(po.get("history") or [])
+    # Both facts, always: why it was cancelled AND whether the supplier knows.
+    # With only the seller's reason recorded, a PO cancelled months ago cannot
+    # answer the one question that matters later — were they told?
+    said = (f"Supplier told at {told['to']}" if told["sent"]
+            else f"Supplier NOT told: {told['reason']}" if tell_supplier and was in ("mailed", "replied", "confirmed")
+            else "Nothing had gone to the supplier")
+    hist.append({"at": _now(), "status": "cancelled", "by": "seller",
+                 "note": (f"{note.strip()} — {said}" if note.strip() else said)[:200]})
+    supply.update_po(email, po_number, {"status": "cancelled", "history": hist})
+    try:
+        from backend.core import cache
+        cache.clear(email)
+    except Exception:  # noqa: BLE001
+        pass
+    return {"po": supply.get_po(email, po_number), "told_supplier": told, "was": was}

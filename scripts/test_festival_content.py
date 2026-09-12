@@ -430,17 +430,23 @@ if _reels:
     _sc = _reels[0]["script"]
     _pr = _sc.get("ai_prompt", "")
     check("a reel carries a paste-ready prompt", bool(_pr), list(_sc))
-    for _needle in ("SUBJECT:", "SHOT SEQUENCE:", "CAMERA:", "DURATION:",
-                    "ASPECT RATIO:", "ON-SCREEN TEXT:", "DO NOT:"):
+    # The prompt goes to a video AI, so it names no platform (saying "Instagram
+    # Reel" got clips with an app interface drawn into them), asks for no text
+    # in the picture, and is sized to the one short clip those tools make.
+    for _needle in ("SUBJECT:", "STYLE:", "SHOT SEQUENCE", "CAMERA AND PACE:", "DURATION:",
+                    "FRAMING:", "TEXT: none", "DO NOT:"):
         check(f"the prompt has a {_needle.rstrip(':')} section", _needle in _pr, _pr[:160])
     check("the prompt names the actual product", "Women Wallet" in _pr, _pr[:200])
     check("the prompt carries the week's story", "STORY:" in _pr, _pr[:300])
     check("the prompt forbids changing the brand marking",
           "brand name" in _pr and "logo" in _pr, _pr[-260:])
     check("the prompt asks for 9:16 vertical", "9:16" in _pr, _pr[-400:])
-    check("every filmed beat reaches the prompt",
-          all((b.get("shot") or "")[:18] in _pr for b in _sc.get("beats", [])),
+    # Only the shots that fit in one AI clip go in the prompt; the rest stay in
+    # the shot list for the seller filming the full reel themselves.
+    check("the shots that fit in the clip reach the prompt",
+          all((b.get("shot") or "")[:18] in _pr for b in _sc.get("beats", [])[:3]),
           _pr[:400])
+    check("and the shot list keeps the rest", len(_sc.get("beats", [])) >= 1)
 
     # Editing a beat must rewrite the prompt, not leave a stale one behind.
     _rid = _reels[0]["id"]

@@ -1528,7 +1528,7 @@ async function openVideoTask(taskId, postHint) {
   };
 
   openModal(`Make the reel — ${post.product_name || "your post"}`, `
-    <p class="sm-hint" style="margin-top:0;">Goes out <b>${esc(shortWhen(post.scheduled_at))}</b>${post.occasion ? ` · ${esc(post.occasion)}` : ""}.
+    <p class="sm-hint" style="margin-top:0;">Goes out <b>${esc(shortWhen(post.scheduled_at))}</b>${post.occasion ? ` · ${esc(post.occasion)}` : ""}${(post.script || {}).style_label ? ` · <b>${esc(post.script.style_label)}</b>` : ""}.
       Five steps; each one ticks itself off as you go.</p>
     <ol class="vt-steps2" id="vtSteps">
       <li data-step="copy">
@@ -3768,12 +3768,18 @@ function renderSupply(d) {
       <button class="btn ghost sm" id="supSign">${sic("plus")}${(d.signature || {}).url ? "Replace signature" : "Add signature"}</button>
       ${(d.signature || {}).url ? `<img class="po-sign-pv" src="${esc(d.signature.url)}" alt="Your signature" />
         <button class="btn ghost tiny" id="supSignClear">Remove</button>` : ""}
+      <button class="btn ${(d.mail_account || {}).connected ? "ghost" : "primary"} sm" id="supMail">${sic("mail")}${(d.mail_account || {}).connected ? "Sending from " + esc((d.mail_account || {}).address) : "Send orders from my email"}</button>
     </div>
-    ${d.email_ready === false ? `<div class="action-card warn" style="margin:8px 0;">
-      <div class="do">Approving cannot email a supplier yet</div>
-      <div class="why">This server has no mail account set up (SMTP_HOST and friends), so
-        Approve gives you the PDF and opens your own mail app instead of sending it for you.
-        Once it is set, Approve sends the order with the PDF attached.</div></div>` : ""}
+    ${(d.mail_account || {}).connected
+      ? ((d.mail_account || {}).error ? `<div class="action-card warn" style="margin:8px 0;">
+          <div class="do">Your email stopped accepting the password</div>
+          <div class="why">${esc(d.mail_account.error)}</div></div>` : "")
+      : `<div class="action-card warn" style="margin:8px 0;">
+      <div class="do">Purchase orders will not come from your address yet</div>
+      <div class="why">Connect your own email and every order goes out from it, so your
+        supplier recognises it and their reply lands in your inbox.${d.email_ready
+          ? " Until then this server's mailbox sends them."
+          : " Until then nothing can be emailed from here at all — Approve just gives you the PDF."}</div></div>`}
 
     <div id="supForm" hidden></div>
     <div id="supPanel" hidden></div>
@@ -3846,6 +3852,7 @@ function renderSupply(d) {
   document.querySelectorAll("[data-pomove]").forEach((b) => b.onclick = () => movePo(b.dataset.pomove, b.dataset.postatus));
   on("supCheck", supplyCheckNow);
   on("supSign", pickSignature);
+  on("supMail", openMailAccount);
   on("supSignClear", () => saveSignature(""));
   document.querySelectorAll("[data-doq]").forEach((inp) => inp.onchange = async () => {
     const val = inp.value === "" ? null : parseFloat(inp.value);
@@ -4273,13 +4280,115 @@ async function movePo(poNumber, status) {
   const WORD = { mailed: "marked as mailed", replied: "marked as replied",
                  confirmed: "marked as confirmed", received: "received — the quantities are back in stock",
                  cancelled: "cancelled" };
-  if (status === "cancelled" && !confirm(`Cancel ${poNumber}? The supplier is not told — send them a note yourself.`)) return;
+  if (status === "cancelled") return cancelPo(poNumber);
   try {
     const d = await api("/api/supply/po/move", { method: "POST",
       json: { po_number: poNumber, status } });
     _supAfter(d);
     toast(`${poNumber} ${WORD[status] || status}.`, status === "received" ? 7000 : 4000);
   } catch (e) { toast(e.message, 7000); }
+}
+
+/* Cancelling an order. One that has already gone out is the dangerous case:
+   cancel it quietly and the supplier still makes it, still delivers it, still
+   bills for it. So the note to them is written for the seller and sent by
+   default, with the PO number in it. */
+async function cancelPo(poNumber) {
+  const po = ((_supplyData || {}).purchase_orders || []).find((p) => p.po_number === poNumber) || {};
+  const out = ["mailed", "replied", "confirmed"].includes(po.status);
+  openModal(`Cancel ${poNumber}?`, `
+    <p style="margin-top:0;">${out
+      ? `This order is already with ${esc((po.supplier || {}).name || "the supplier")}. Unless they are told, they can keep making it and bill you for it.`
+      : "Nothing has gone to the supplier, so this just closes the order here."}</p>
+    ${out ? `<label class="inline-check" style="display:flex;gap:8px;align-items:flex-start;margin:10px 0;">
+      <input type="checkbox" id="cpTell" checked />
+      <span>Email ${esc((po.supplier || {}).email || "the supplier")} to call it off — we write it, with the PO number in it.</span></label>
+    <label class="fld"><span>Anything to add? <em>optional</em></span>
+      <input id="cpWhy" placeholder="e.g. the festival order is covered, we no longer need it" /></label>` : ""}
+    <div class="modal-actions">
+      <button class="btn ghost" data-cpx>Keep the order</button>
+      <button class="btn danger" id="cpGo">${sic("close")}Cancel the order</button>
+    </div>`);
+  document.querySelector("[data-cpx]").onclick = closeModal;
+  $("cpGo").onclick = async () => {
+    const tell = out && ($("cpTell") || {}).checked;
+    try {
+      const d = await withBusy("Cancelling the order…",
+        tell ? "Writing to the supplier so nothing is made or dispatched." : "Closing it here.",
+        () => api("/api/supply/po/cancel", { method: "POST", json: {
+          po_number: poNumber, tell_supplier: !!tell, note: (($("cpWhy") || {}).value || "").trim() } }));
+      closeModal();
+      _supAfter(d);
+      const t = d.told_supplier || {};
+      if (tell && t.sent) toast(`${poNumber} cancelled, and ${t.to} has been told.`, 7000);
+      else if (tell) toast(`${poNumber} cancelled here, but the email did not go: ${t.reason || "no address on file"}. Tell them yourself.`, 10000);
+      else toast(`${poNumber} cancelled.`, 5000);
+    } catch (e) { toast(e.message, 8000); }
+  };
+}
+
+/* Connecting the seller's own email. A purchase order from no-reply@ourapp is
+   an order from a stranger; from their own address it is the shop the supplier
+   already deals with, and the reply comes back to them without us in the way. */
+async function openMailAccount() {
+  let d;
+  try { d = await api("/api/mail/account"); } catch (e) { return toast(e.message); }
+  const g = d.guess || {};
+  openModal("Send purchase orders from your email", `
+    ${d.connected ? `<div class="action-card ok" style="margin:0 0 10px;">
+      <div class="do">Connected — orders go out from ${esc(d.address)}</div>
+      <div class="why">${d.checked_at ? `Tested ${esc(String(d.checked_at).slice(0, 16).replace("T", " "))}. ` : ""}A supplier's reply comes straight to that inbox.</div></div>` : ""}
+    <p class="muted tiny" style="margin-top:0;">${esc(g.help || "")}</p>
+    <div class="sup-form-grid">
+      <label>Your email address<input id="maAddr" type="email" value="${esc(d.address || "")}" placeholder="you@yourshop.com" /></label>
+      <label>App password<input id="maPass" type="password" placeholder="${d.connected ? "saved — type a new one to replace it" : "from your email provider"}" autocomplete="new-password" /></label>
+      <label>Mail server <span class="muted tiny">filled in for you</span>
+        <input id="maHost" value="${esc(g.host || "")}" /></label>
+      <label>Port <span class="muted tiny">587, or 465 if that is blocked</span>
+        <input id="maPort" type="number" value="${esc(String(g.port || 587))}" /></label>
+      <label>Name suppliers see<input id="maName" placeholder="Kora Studio" /></label>
+    </div>
+    <p class="sm-hint">We send with this, never read your mail. The password is
+      stored encrypted and never shown again. Connecting sends a test message to
+      yourself, so you can see it arrive before a supplier ever does.</p>
+    <div class="modal-actions">
+      <button class="btn ghost" data-mamx>Close</button>
+      ${d.connected ? `<button class="btn ghost danger" id="maOff">Disconnect</button>` : ""}
+      <button class="btn primary" id="maSave">${sic("mail")}Connect &amp; send test</button>
+    </div>`);
+  document.querySelector("[data-mamx]").onclick = closeModal;
+  // Fill the server as they type the address. Same table as the server's, so
+  // the common providers need no thought and a business domain gets a sensible
+  // guess in an editable box.
+  const MAIL_HOSTS = { "gmail.com": "smtp.gmail.com", "googlemail.com": "smtp.gmail.com",
+    "outlook.com": "smtp-mail.outlook.com", "hotmail.com": "smtp-mail.outlook.com",
+    "live.com": "smtp-mail.outlook.com", "yahoo.com": "smtp.mail.yahoo.com",
+    "yahoo.in": "smtp.mail.yahoo.com", "zoho.com": "smtp.zoho.in", "zohomail.in": "smtp.zoho.in",
+    "icloud.com": "smtp.mail.me.com", "me.com": "smtp.mail.me.com",
+    "rediffmail.com": "smtp.rediffmail.com" };
+  const addr = $("maAddr");
+  addr.oninput = () => {
+    const dom = (addr.value.split("@")[1] || "").trim().toLowerCase();
+    if (dom) $("maHost").value = MAIL_HOSTS[dom] || `smtp.${dom}`;
+  };
+  if ($("maOff")) $("maOff").onclick = async () => {
+    if (!confirm("Disconnect your email? Purchase orders stop going out from your address.")) return;
+    try { await api("/api/mail/account", { method: "DELETE" }); closeModal(); openSupply(); toast("Disconnected."); }
+    catch (e) { toast(e.message); }
+  };
+  $("maSave").onclick = async () => {
+    try {
+      const r = await withBusy("Checking your email…",
+        "Signing in and sending a test message to yourself.",
+        () => api("/api/mail/account", { method: "POST", json: {
+          address: addr.value.trim(), password: $("maPass").value,
+          host: $("maHost").value.trim(), port: Number($("maPort").value) || 587,
+          display_name: $("maName").value.trim() } }));
+      closeModal();
+      openSupply();
+      toast(`Connected. Check ${r.address} — a test message is waiting there.`, 8000);
+    } catch (e) { toast(e.message, 9000); }
+  };
 }
 
 /* The signature that goes on every PO. Optional — without one the PO still
@@ -5864,11 +5973,34 @@ function stepSetup() {
     </div>
 
     <div class="sup-sub">Web address</div>
-    <p class="muted tiny" style="margin:0 0 10px;">Your site lives here today. A domain of your own can be attached later — this address keeps working either way.</p>
+    <p class="muted tiny" style="margin:0 0 10px;">Your site always lives here. Pointing your own domain at it below does not take this address away.</p>
     <div class="handle-row">
       <span class="handle-pre">${esc(location.origin)}/s/</span>
       <input id="siteHandle" value="${esc(_site.handle || "")}" placeholder="your-brand" />
       <span class="handle-state" id="handleState"></span>
+    </div>
+
+    <div class="sup-sub">Your own domain <span class="muted tiny">optional</span></div>
+    <div class="sup-form-grid" style="grid-template-columns:1fr;">
+      <label>Domain you own
+        <input id="siteDomain" value="${esc(_site.custom_domain || "")}" placeholder="korastudio.com" /></label>
+    </div>
+    <div class="dom-help">
+      <p class="muted tiny" style="margin:0 0 6px;">Buy the domain anywhere (GoDaddy, Namecheap, Hostinger). Then, in that
+        provider's DNS settings, add two records pointing at this app:</p>
+      <table class="tbl dom-dns"><thead><tr><th>Type</th><th>Name</th><th>Points to</th></tr></thead>
+        <tbody>
+          <tr><td>CNAME</td><td>www</td><td><code>${esc(location.host)}</code></td></tr>
+          <tr><td>ALIAS / ANAME / CNAME flattening</td><td>@ <span class="muted tiny">(the bare domain)</span></td><td><code>${esc(location.host)}</code></td></tr>
+        </tbody></table>
+      <p class="muted tiny" style="margin:6px 0 0;">If your provider has no ALIAS for the bare domain, point <b>www</b> only and
+        set the bare domain to forward to it. DNS usually takes a few minutes, sometimes a few hours.
+        Your host also has to be told to accept the domain — on Render that is Settings → Custom Domains.
+        Both the bare and www versions are answered here once they resolve.</p>
+      <div class="row" style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+        <button class="btn ghost sm" id="siteDomCheck" type="button">${sic("refresh")}Check it</button>
+        <span class="muted tiny" id="siteDomState"></span>
+      </div>
     </div>
 
     <div class="sup-sub">Contact shown on your site</div>
@@ -6507,6 +6639,30 @@ function wireStep() {
     n.addEventListener("change", push);
     n.addEventListener("blur", push);
   });
+
+  const dom = $("siteDomain");
+  if (dom) {
+    dom.addEventListener("input", () => {
+      const clean = dom.value.trim().toLowerCase()
+        .replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/\s+/g, "");
+      if (clean !== dom.value) dom.value = clean;
+      _site.custom_domain = clean; _siteDirty = true;
+      const b = $("siteSave"); if (b) { b.disabled = false; b.textContent = "Save"; }
+      const d = $("siteDirty"); if (d) d.hidden = false;
+    });
+  }
+  const domBtn = $("siteDomCheck");
+  if (domBtn) domBtn.onclick = async () => {
+    const st = $("siteDomState");
+    const d = ($("siteDomain").value || "").trim();
+    if (!d) { st.textContent = "Enter your domain first."; return; }
+    st.textContent = "Checking…";
+    try {
+      const r = await api(`/api/site/domain-check?domain=${encodeURIComponent(d)}`);
+      st.textContent = r.message;
+      st.className = "muted tiny " + (r.ok ? "good-t" : "warn-t");
+    } catch (e) { st.textContent = e.message; st.className = "muted tiny warn-t"; }
+  };
 
   const h = $("siteHandle");
   if (h) {

@@ -140,7 +140,34 @@ have seen it.
 
 - `/` — marketing landing page (MSME positioning, multilingual sample-story wall, pricing)
 - `/s/<handle>` — a seller's own storefront (Website Builder)
+- `www.theirshop.com` — the same storefront on the seller's own domain
 - `/app` — the analytics application
+
+## Their own domain
+
+A shop at `/s/kora-studio` reads as somebody's sub-page. The same shop at
+`korastudio.com` is a business, and it is the address that goes on a card, a
+label and a bio.
+
+The seller types the domain they bought into step one of the builder.
+`sitebuilder.normalise_domain()` strips the `https://`, the trailing slash and
+the path people paste, refuses an IP or a bare word, and `claim_domain()` writes
+it to a global index — one domain, one shop, checked before it is saved, so two
+accounts cannot claim the same name. The bare domain and its `www` twin are
+registered together and both resolve.
+
+Serving it is a Host-header middleware in `main.py`: a request whose Host is not
+the app's own looks the domain up, and a hit renders that storefront at `/`
+(paths the app owns — `/api`, `/app`, `/static`, `/s` — are excluded first).
+`window.__STORE_HANDLE__` is injected into the page, so `store.js` knows which
+shop it is without a handle in the URL.
+
+The builder shows the two DNS records to add (CNAME on `www`, ALIAS/ANAME on the
+bare domain) and a **Check it** button that says what is actually wrong:
+not resolving yet, resolving somewhere else, or resolving here but not accepted
+by the host. On Render the last step is Settings → Custom Domains; DNS being
+correct while the host has never heard of the domain is the failure that wastes
+an afternoon, so it is named.
 
 ## Pricing model — two ways to pay, offered side by side
 
@@ -365,9 +392,10 @@ is never ordered twice.
 *Cancel*. Details shows every line with its DOS, lead time and editable
 quantity, plus the email the content writer drafted (editable, *Rewrite with
 AI*). Approve renders the PO PDF (`po_pdf.py`, supplier copy) and emails it as an
-attachment to the address saved in the Supplier module, with Reply-To set to
-the seller. **This needs SMTP** (`SMTP_HOST` …); without it the PO is marked
-approved, and the seller gets the PDF plus a ready-filled `mailto:` to send it
+attachment to the address saved in the Supplier module — **from the seller's own
+mailbox** once they connect it (`seller_mail.py`), otherwise from the server's
+SMTP account with Reply-To set to the seller. With neither, the PO is marked
+approved and the seller gets the PDF plus a ready-filled `mailto:` to send it
 themselves.
 
 Behaviour changes worth knowing: "below reorder" now means the DOS rule above
@@ -542,6 +570,34 @@ cap reached) leaves the post `approved` with a photo task — never scheduled
 with an empty frame. Tasks close themselves when their post is scheduled or
 cancelled.
 
+## The video prompt
+
+`social.build_video_prompt()`. The prompt is pasted into Google Flow, and a
+video model does exactly what the prompt says — so everything wrong in the
+output was written in the prompt.
+
+Three things were, and are fixed:
+
+* **It described a post, not a video.** Saying "Instagram Reel, 9:16" made the
+  model draw the app: a phone frame, a caption bar, a username. The prompt now
+  asks for a video and states the framing as *vertical, fills the frame*
+  — no platform named anywhere.
+* **It asked for on-screen text.** Every clip came back with a line of white
+  type across the middle, in the model's own font, usually misspelled. The line
+  is now `TEXT: none` and the words live in the caption, where they can be
+  edited.
+* **Every clip was cinematic.** A slow push-in on a hero object is the right
+  film for one post out of eight and a parody by the third. `REEL_STYLES` holds
+  eight: hands demonstrating, quick cuts, making it, packing an order, styling,
+  before/after, a customer's story, talking to camera — each with its own brief
+  and pace. `_reel_style()` picks one from a hash of product, pillar and date,
+  so a week's plan varies by itself and the same post always re-renders the
+  same way.
+
+The shot list is capped at three beats and the prompt says to fit all of it into
+`AI_CLIP_SECONDS` (8) — a six-beat list in an eight-second clip is why generated
+video comes back as a slideshow.
+
 ## Watermark remover
 
 `backend/core/watermark.py`. Every generated picture, every clip we generate and
@@ -610,20 +666,54 @@ Every waiting PO is its own card in the Approval panel, hand-written drafts
 included.
 
 **Tracking one.** `draft → mailed → replied → confirmed → received`, plus
-`open` (approved, but this server has no mail account) and `cancelled`.
-`PO_NEXT` in supply.py says which move is legal from where; the Suppliers page
-gathers POs under those headings and shows only the moves that apply. Receiving
-posts the ordered quantities back into stock. The old `sent`/`shipped` names
-still read correctly (`PO_STATUS_ALIASES`).
+`open` (approved, but no mailbox is connected) and `cancelled`. `PO_NEXT` in
+supply.py says which move is legal from where; the Suppliers page gathers POs
+under those headings and shows only the moves that apply. Receiving posts the
+ordered quantities back into stock. The old `sent`/`shipped` names still read
+correctly (`PO_STATUS_ALIASES`).
 
-Marking *Replied* is a button today. Detecting it automatically needs access to
-the mailbox the supplier replies into — the seller's own inbox, since the mail
-carries their address in Reply-To — so it waits for a decision about IMAP
-credentials rather than a half-working guess.
+Marking *Replied* is a button today. Detecting it automatically needs to read
+the mailbox the supplier replies into — the seller's own inbox, since the order
+now goes out from their address — and reading a seller's mail is a bigger
+permission than sending on their behalf. It waits for that decision rather than
+a half-working guess.
+
+**Cancelling one.** Any PO that has not been received can be called off
+(`replenish.cancel_po`). If it already went to the supplier the dialog offers to
+tell them, and the content writer writes that mail with the PO number in it; the
+history line records both the cancellation and whether the supplier was actually
+told, because "cancelled" on a screen means nothing if a crate still arrives on
+Thursday. A PO that never left the shop says so instead.
 
 **The signature.** Optional, uploaded on the Suppliers page, drawn above
 "authorised signatory" on every PO PDF. Without one the PO still carries the
 shop's name.
+
+## The purchase order comes from the seller, not from us
+
+`backend/core/seller_mail.py`. A PO that arrives from `no-reply@someapp` is an
+order from a stranger. The supplier already knows the shop's address — it is on
+their WhatsApp, their invoices, the last twenty orders — so that is the address
+the order has to come from, or it lands in spam and nobody rings to confirm.
+
+The seller connects their mailbox once, on the Suppliers page: address plus an
+app password. `guess()` fills the host and port from the domain (Gmail, Outlook,
+Yahoo, Zoho, iCloud, Rediffmail; a business domain gets `smtp.<domain>` as an
+editable suggestion). Connecting performs a real login and sends a real test
+mail to the seller's own address — "connected" is something they can see in
+their inbox, not a claim this app makes. Credentials are encrypted with the same
+Fernet key as every other third-party credential (`secrets_store`) and are never
+shown again.
+
+`replenish._deliver()` then tries the seller's mailbox first and falls back to
+the server's SMTP account, and records which one carried it, so `from` on the PO
+is the address the supplier will actually reply to. Send-only: this never opens
+the seller's inbox. Failures come back as instructions ("Gmail refused that
+password — Security → App passwords"), not as SMTP exception text.
+
+Setting `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` is
+still worth doing: it covers password resets and digests, and it is the fallback
+for accounts that have not connected a mailbox of their own.
 
 ## Local time, by country
 

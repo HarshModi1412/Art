@@ -58,6 +58,7 @@ from backend.core import playbook
 from backend.core import autoplan
 from backend.core import watermark
 from backend.core import localtime
+from backend.core import seller_mail
 from backend.core import replenish
 from backend.core import writer
 
@@ -2955,8 +2956,9 @@ def smart_decision(insight_id: str, body: SmartDecisionBody,
             except ValueError as e:
                 raise HTTPException(400, str(e))
         elif body.decision in ("disapprove", "cancel"):
-            if not replenish.cancel_po(email, po_number):
-                raise HTTPException(404, "Purchase order not found.")
+            out = replenish.cancel_po(email, po_number)
+            if out.get("error"):
+                raise HTTPException(404, out["error"])
         cache.clear(email)
         return {"ok": True, "download": False, "download_url": None, "send": send,
                 "insights": smart.build_insights(email),
@@ -3150,6 +3152,7 @@ def _supply_payload(email: str) -> dict:
         "purchase_orders": supply.get_purchase_orders(email),
         "replenish_log": replenish.recent_log(email),
         "signature": supply.get_signature(email),
+        "mail_account": seller_mail.status(email),
         "po_flow": {"statuses": supply.PO_STATUSES, "next": supply.PO_NEXT,
                     "labels": supply.PO_STATUS_LABELS},
         "email_ready": messaging.smtp_configured(),
@@ -3240,6 +3243,67 @@ def supply_signature(body: SignatureBody, authorization: str | None = Header(def
     supply.set_signature(email, body.url)
     cache.clear(email)
     return _supply_payload(email)
+
+
+class SellerMailBody(BaseModel):
+    address: str
+    password: str
+    host: str | None = ""
+    port: int | None = 0
+    display_name: str | None = ""
+
+
+@app.get("/api/mail/account")
+def mail_account(authorization: str | None = Header(default=None)):
+    """Which address this seller's purchase orders go out from."""
+    email = require_user(authorization)
+    st = seller_mail.status(email)
+    return {**st, "guess": seller_mail.guess(st.get("address") or email),
+            "server_fallback": messaging.smtp_configured()}
+
+
+@app.post("/api/mail/account")
+def mail_account_connect(body: SellerMailBody,
+                         authorization: str | None = Header(default=None)):
+    """Connect the seller's own email. Saves only after a real login and a real
+    test message to themselves, so "connected" means something arrived."""
+    email = require_user(authorization)
+    try:
+        st = seller_mail.connect(email, body.address, body.password,
+                                 body.host or "", int(body.port or 0),
+                                 body.display_name or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    cache.clear(email)
+    return {**st, "server_fallback": messaging.smtp_configured()}
+
+
+@app.delete("/api/mail/account")
+def mail_account_disconnect(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    st = seller_mail.disconnect(email)
+    cache.clear(email)
+    return {**st, "server_fallback": messaging.smtp_configured()}
+
+
+class PoCancelBody(BaseModel):
+    po_number: str
+    tell_supplier: bool = True
+    note: str | None = ""
+
+
+@app.post("/api/supply/po/cancel")
+def supply_po_cancel(body: PoCancelBody, authorization: str | None = Header(default=None)):
+    """Cancel a purchase order — including one already sent, in which case the
+    supplier is told in writing rather than left to deliver it."""
+    email = require_user(authorization)
+    out = replenish.cancel_po(email, body.po_number, bool(body.tell_supplier),
+                              body.note or "")
+    if out.get("error"):
+        raise HTTPException(404, out["error"])
+    cache.clear(email)
+    return {**_supply_payload(email), "told_supplier": out["told_supplier"],
+            "was": out["was"], "po": out["po"]}
 
 
 class PoMoveBody(BaseModel):
@@ -3757,6 +3821,44 @@ def site_handle_check(handle: str, authorization: str | None = Header(default=No
     return {"handle": h, "available": sitebuilder.handle_available(h, email)}
 
 
+@app.get("/api/site/domain-check")
+def site_domain_check(domain: str, request: Request,
+                      authorization: str | None = Header(default=None)):
+    """Is this domain pointed here yet, and if not, what is wrong with it.
+
+    Three things have to be true before a seller's own address works, and they
+    fail in different places: the name has to be valid, DNS has to point at this
+    app, and the host has to be told to answer for it. A single "not working
+    yet" would leave the seller guessing which one."""
+    email = require_user(authorization)
+    d = sitebuilder.normalise_domain(domain)
+    if not sitebuilder.valid_domain(d):
+        return {"domain": d, "ok": False,
+                "message": "Enter it like korastudio.com — no https://, no slashes."}
+    taken = sitebuilder.domain_owner(d, email)
+    if taken:
+        return {"domain": d, "ok": False,
+                "message": "That domain is already pointed at another shop here."}
+    import socket
+    here = (request.url.hostname or "").lower()
+    try:
+        mine = {a[4][0] for a in socket.getaddrinfo(here, None)}
+    except OSError:
+        mine = set()
+    try:
+        theirs = {a[4][0] for a in socket.getaddrinfo(d, None)}
+    except OSError:
+        return {"domain": d, "ok": False, "dns": False,
+                "message": f"{d} does not resolve yet. Add the DNS record at your domain "
+                           f"provider, then check again — it can take a few hours."}
+    if mine and not (theirs & mine):
+        return {"domain": d, "ok": False, "dns": True,
+                "message": f"{d} resolves, but not to this app yet. Check the CNAME points "
+                           f"to {here}, and that your host is set to accept this domain."}
+    return {"domain": d, "ok": True, "dns": True,
+            "message": f"{d} points here. Save, and your shop answers on it."}
+
+
 @app.get("/api/site/preview")
 def site_preview(authorization: str | None = Header(default=None)):
     return sitebuilder.preview_site(require_user(authorization))
@@ -4228,6 +4330,10 @@ def _render_store(handle: str, request: Request, product_id: str = "") -> Respon
     with open(index, encoding="utf-8") as fh:
         html = fh.read()
     html = html.replace("<title>Store</title>", _meta_tags(meta, url))
+    # On the seller's own domain the path carries no handle, so the page says
+    # which shop it is. Harmless under /s/<handle>, where it agrees.
+    html = html.replace("</head>",
+                        f"<script>window.__STORE_HANDLE__={json.dumps(handle)};</script></head>", 1)
     return Response(content=html, media_type="text/html",
                     headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
 
@@ -4273,6 +4379,39 @@ def smart_page():
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# Paths that belong to the app itself, whatever host they arrive on. Everything
+# else on a seller's own domain is their shop.
+_APP_PATHS = ("/api/", "/smart", "/smart-static/", "/static/", "/generated_images/",
+              "/s/", "/docs", "/openapi.json", "/redoc", "/health", "/favicon.ico")
+
+
+@app.middleware("http")
+async def _custom_domain(request, call_next):
+    """A request that arrived on korastudio.com renders that seller's shop.
+
+    The site is always reachable at /s/<handle>; a custom domain is a second
+    front door pointed here with a CNAME, so the seller can give customers an
+    address that is theirs. The app's own paths (the API, the seller's console,
+    static files) keep working on every host, which is what lets one deployment
+    answer for the app AND for every shop domain."""
+    path = request.url.path
+    if path.startswith(_APP_PATHS):
+        return await call_next(request)
+    try:
+        handle = sitebuilder.resolve_domain(request.url.hostname or "")
+    except Exception:  # noqa: BLE001 — never break a request over this
+        handle = ""
+    if not handle:
+        return await call_next(request)
+    if path in ("/", ""):
+        return _render_store(handle, request)
+    if path.startswith("/p/"):
+        return _render_store(handle, request, path[len("/p/"):].split("/")[0])
+    if path == "/sitemap.xml":
+        return storefront_sitemap(handle, request)
+    return await call_next(request)
+
 
 @app.get("/")
 def landing():

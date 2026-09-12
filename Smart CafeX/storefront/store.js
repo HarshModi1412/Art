@@ -17,7 +17,11 @@
    no network round-trip and no reload.
    ========================================================================= */
 
-const HANDLE = decodeURIComponent(location.pathname.split("/s/")[1] || "").replace(/\/.*$/, "");
+/* Which shop this page is. Normally the address carries it (/s/<handle>), but
+   on the seller's own domain the path is just "/" — so the server stamps the
+   handle into the page and that wins. */
+const HANDLE = (window.__STORE_HANDLE__
+  || decodeURIComponent(location.pathname.split("/s/")[1] || "").replace(/\/.*$/, ""));
 const LS_CART = "cs_cart_" + HANDLE;
 const LS_TOKEN = "cs_tok_" + HANDLE;
 const QS = new URLSearchParams(location.search);

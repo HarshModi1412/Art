@@ -367,6 +367,37 @@ def site_copy(email: str, brief: str) -> dict:
 
 
 # --------------------------------------------------------------- supplier email
+def po_cancel_email(email: str, po: dict, reason: str = "") -> str:
+    """The note that calls off an order already with the supplier.
+
+    Short, apologetic without grovelling, and specific: the PO number, what it
+    was for, and whether anything already made is being paid for. Private —
+    it names what this shop buys and from whom."""
+    from backend.core import brandname
+    brand = brandname.display(email)
+    sup = (po.get("supplier") or {}).get("name") or ""
+    items = "\n".join(f"- {ln.get('name')}: {ln.get('order_qty')} {ln.get('unit_label') or 'units'}"
+                       for ln in (po.get("lines") or []))
+    user = (f"Write a short email cancelling a purchase order already sent to a supplier.\n"
+            f"From: {brand}\nTo: {sup or 'the supplier'}\n"
+            f"PO number: {po.get('po_number')}\nItems:\n{items}\n"
+            + (f"The seller's reason: {reason}\n" if reason else "")
+            + "Ask them to confirm they have stopped it, and to tell us if anything has "
+              "already been made or dispatched so it can be settled. Polite, brief, "
+              "Indian business English, no grovelling. Return the email body only, no subject.")
+    res = aiprovider.generate(WRITER_SYSTEM, user, sensitivity="private",
+                              max_tokens=400, temperature=0.4, fallback="", role="writer")
+    body = _clean(res.get("text", ""))
+    if body:
+        return body
+    greet = f"Dear {sup}," if sup else "Hello,"
+    return (f"{greet}\n\nPlease cancel our purchase order {po.get('po_number')}:\n\n{items}\n\n"
+            + (f"{reason}\n\n" if reason else "")
+            + "Kindly confirm that it has been stopped. If anything has already been made or "
+              "dispatched, please tell us so we can settle it.\n\n"
+              f"Thank you,\nTeam {brand}")
+
+
 def po_email(email: str, po: dict) -> dict:
     """The email that carries a purchase order to the supplier.
 
