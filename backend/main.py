@@ -57,6 +57,7 @@ from backend.core import personas
 from backend.core import playbook
 from backend.core import autoplan
 from backend.core import watermark
+from backend.core import localtime
 from backend.core import replenish
 from backend.core import writer
 
@@ -455,6 +456,10 @@ class ManualPoBody(BaseModel):
     expected_on: str | None = ""
     terms: str | None = ""
     note: str | None = ""
+    # The form's "Create & send" button asks for this explicitly. It defaults
+    # to off so that nothing else — an older client, a script — can put mail
+    # in front of a supplier by accident.
+    send: bool = False
 
 
 class PoStatusBody(BaseModel):
@@ -3144,6 +3149,10 @@ def _supply_payload(email: str) -> dict:
         "waste": supply.get_waste(email),
         "purchase_orders": supply.get_purchase_orders(email),
         "replenish_log": replenish.recent_log(email),
+        "signature": supply.get_signature(email),
+        "po_flow": {"statuses": supply.PO_STATUSES, "next": supply.PO_NEXT,
+                    "labels": supply.PO_STATUS_LABELS},
+        "email_ready": messaging.smtp_configured(),
         "rule": {"dos_multiple": supply.DOS_LEAD_MULTIPLE,
                  "eoq_min_days": supply.EOQ_MIN_DAYS,
                  "window_days": supply.RECENT_WINDOW_DAYS},
@@ -3189,6 +3198,76 @@ def supply_supplier_attach(body: SupplierBody, authorization: str | None = Heade
 def supply_state(authorization: str | None = Header(default=None)):
     email = require_user(authorization)
     return _supply_payload(email)
+
+
+class LocaleBody(BaseModel):
+    country: str
+
+
+@app.get("/api/settings/locale")
+def locale_get(authorization: str | None = Header(default=None)):
+    """Which country this account schedules in, and the list to pick from."""
+    email = require_user(authorization)
+    return {**localtime.get(email), "label": localtime.label(email),
+            "now": localtime.now(email).strftime("%a %d %b, %I:%M %p").replace(" 0", " "),
+            "options": localtime.options()}
+
+
+@app.post("/api/settings/locale")
+def locale_set(body: LocaleBody, authorization: str | None = Header(default=None)):
+    """Change it. Every scheduled time in the app is wall-clock time here, so
+    this moves the weekly planner's trigger and every new post's slot with it."""
+    email = require_user(authorization)
+    try:
+        localtime.set_country(email, body.country)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    cache.clear(email)
+    return {**localtime.get(email), "label": localtime.label(email),
+            "now": localtime.now(email).strftime("%a %d %b, %I:%M %p").replace(" 0", " "),
+            "options": localtime.options()}
+
+
+class SignatureBody(BaseModel):
+    url: str = ""
+
+
+@app.post("/api/supply/signature")
+def supply_signature(body: SignatureBody, authorization: str | None = Header(default=None)):
+    """The signature image printed on every purchase order. Optional — a PO
+    without one still carries the shop's name and "authorised signatory"."""
+    email = require_user(authorization)
+    supply.set_signature(email, body.url)
+    cache.clear(email)
+    return _supply_payload(email)
+
+
+class PoMoveBody(BaseModel):
+    po_number: str
+    status: str
+    note: str | None = ""
+
+
+@app.post("/api/supply/po/move")
+def supply_po_move(body: PoMoveBody, authorization: str | None = Header(default=None)):
+    """Move a PO along its track: mailed → replied → confirmed → received.
+    Receiving posts the ordered quantities back into stock."""
+    email = require_user(authorization)
+    po = supply.get_po(email, body.po_number)
+    if not po:
+        raise HTTPException(404, "Purchase order not found")
+    allowed = supply.PO_NEXT.get(supply.po_status(po), [])
+    if body.status not in allowed:
+        raise HTTPException(400, f"A {supply.PO_STATUS_LABELS.get(supply.po_status(po), 'that')} "
+                                 f"order can only go to: {', '.join(allowed) or 'nowhere — it is finished'}.")
+    try:
+        supply.set_po_status(email, body.po_number, body.status, body.note or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    cache.clear(email)
+    payload = _supply_payload(email)
+    payload["po"] = supply.get_po(email, body.po_number)
+    return payload
 
 
 @app.post("/api/supply/item")
@@ -4453,8 +4532,18 @@ def po_manual(body: ManualPoBody, authorization: str | None = Header(default=Non
                                      body.note or "")
     except ValueError as e:
         raise HTTPException(400, str(e))
+    send = {}
+    if body.send:
+        # Straight out to the supplier, PO attached, no draft to approve — the
+        # seller already said what to order and to whom.
+        try:
+            send = replenish.send_po(email, po["po_number"])
+        except Exception as e:  # noqa: BLE001 — the PO exists either way
+            errors.record(e, where="POST /api/purchase-orders/manual (send)", email=email)
+            send = {"sent": False, "reason": str(e)[:200]}
     cache.clear(email)
-    return po
+    return {**(supply.get_po(email, po["po_number"]) or po), "send": send,
+            "supply": _supply_payload(email)}
 
 
 @app.post("/api/purchase-orders/status")

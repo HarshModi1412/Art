@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import io
 import math
+import os
 import secrets
 
 import pandas as pd
@@ -1074,9 +1075,12 @@ def get_purchase_orders(email: str) -> list[dict]:
             for k, v in (extras.get(str(r.get("po_number"))) or {}).items():
                 if k not in PO_COLUMNS:
                     r[k] = v
+            r["status"] = po_status(r)
     else:
         rows = user_store.get_key(email, PO_KEY, []) or []
         rows = rows if isinstance(rows, list) else []
+        for r in rows:
+            r["status"] = po_status(r)
     return rows
 
 
@@ -1237,8 +1241,17 @@ def create_manual_po(email: str, supplier: dict, lines: list[dict],
     if not lines:
         raise ValueError("A purchase order needs at least one line.")
 
+    # A line can name an inventory item by id — that is what the Create PO
+    # form sends now, so the seller picks from what they actually stock
+    # instead of retyping a name the receiving step then cannot match.
+    stock = {it["id"]: it for it in get_inventory(email)}
     clean, total_qty, total_amount, has_cost = [], 0, 0.0, False
     for r in lines:
+        src = stock.get(str(r.get("inventory_id") or ""))
+        if src:
+            r = {**{"name": src.get("name"), "unit_label": src.get("unit_label"),
+                    "category": src.get("category"), "unit_cost": src.get("unit_cost")},
+                 **{k: v for k, v in r.items() if v not in (None, "")}}
         name = str(r.get("name") or "").strip()[:120]
         if not name:
             continue
@@ -1270,7 +1283,10 @@ def create_manual_po(email: str, supplier: dict, lines: list[dict],
     number = _next_po_number(email)
     po = {
         "id": number, "po_number": number, "insight_id": None,
-        "created_at": _now_iso(), "status": "open", "source": "manual",
+        # A hand-made PO starts as a draft like an automatic one: if it is not
+        # being sent straight away it belongs in the Approval panel, waiting,
+        # rather than looking like an order that already went out.
+        "created_at": _now_iso(), "status": "draft", "source": "manual",
         "supplier": {"name": str(supplier.get("name") or "").strip()[:120],
                      "phone": str(supplier.get("phone") or "").strip()[:20],
                      "email": str(supplier.get("email") or "").strip()[:120],
@@ -1282,7 +1298,7 @@ def create_manual_po(email: str, supplier: dict, lines: list[dict],
         "total_amount": round(total_amount, 2) if has_cost else None,
         "suppliers": [supplier.get("name")] if supplier.get("name") else [],
         "lines": clean,
-        "history": [{"at": _now_iso(), "status": "open", "by": "seller"}],
+        "history": [{"at": _now_iso(), "status": "draft", "by": "seller"}],
     }
 
     _po_insert(email, po)
@@ -1291,8 +1307,33 @@ def create_manual_po(email: str, supplier: dict, lines: list[dict],
 
 # "draft" — raised automatically by the replenishment check and waiting in the
 # Approval panel. Nothing has gone to the supplier yet.
-PO_STATUSES = ["draft", "open", "sent", "shipped", "received", "cancelled"]
-ACTIVE_PO_STATUSES = ("draft", "open", "sent", "shipped")
+# What a purchase order goes through, in the words the seller uses:
+#   draft      raised automatically, waiting in the Approval panel
+#   open       approved, but the email could not be sent from here
+#   mailed     sent to the supplier
+#   replied    the supplier has written back
+#   confirmed  the supplier has accepted the order
+#   received   it arrived — the quantities go back into stock
+#   cancelled
+PO_STATUSES = ["draft", "open", "mailed", "replied", "confirmed", "received", "cancelled"]
+ACTIVE_PO_STATUSES = ("draft", "open", "mailed", "replied", "confirmed")
+# The names used before this flow existed. Read, never written.
+PO_STATUS_ALIASES = {"sent": "mailed", "shipped": "confirmed"}
+# Where a PO can go from where it is. Cancelling is allowed until it arrives.
+PO_NEXT = {"draft": ["mailed", "cancelled"], "open": ["mailed", "cancelled"],
+           "mailed": ["replied", "confirmed", "received", "cancelled"],
+           "replied": ["confirmed", "received", "cancelled"],
+           "confirmed": ["received", "cancelled"],
+           "received": [], "cancelled": []}
+PO_STATUS_LABELS = {"draft": "waiting for you", "open": "not sent yet", "mailed": "mailed",
+                    "replied": "supplier replied", "confirmed": "confirmed by supplier",
+                    "received": "received", "cancelled": "cancelled"}
+
+
+def po_status(po: dict) -> str:
+    """The status of a PO in today's words, whatever it was stored as."""
+    st = str((po or {}).get("status") or "open")
+    return PO_STATUS_ALIASES.get(st, st)
 
 
 def _save_po_rows(email: str, pos: list[dict]) -> None:
@@ -1409,6 +1450,7 @@ def set_po_status(email: str, po_number: str, status: str,
     """Move a PO along. Receiving posts stock back into Inventory, because a PO
     that arrives and does not update stock is worse than no PO at all — the
     seller now has to remember to do it manually and will not."""
+    status = PO_STATUS_ALIASES.get(status, status)
     if status not in PO_STATUSES:
         raise ValueError(f"status must be one of {PO_STATUSES}")
     email = _email(email)
@@ -1451,6 +1493,34 @@ def set_po_status(email: str, po_number: str, status: str,
 # ---------------------------------------------------------
 # exports
 # ---------------------------------------------------------
+SIGNATURE_KEY = "supply_signature"
+
+
+def get_signature(email: str) -> dict:
+    """The seller's signature image for purchase orders, if they uploaded one."""
+    d = user_store.get_key(_email(email), SIGNATURE_KEY, {}) or {}
+    return d if isinstance(d, dict) else {}
+
+
+def set_signature(email: str, url: str) -> dict:
+    """Save (or, with an empty url, remove) the signature shown on every PO."""
+    url = str(url or "").strip()[:300]
+    user_store.set_key(_email(email), SIGNATURE_KEY, {"url": url} if url else {})
+    return get_signature(email)
+
+
+def _signature_file(email: str) -> str:
+    """A path on this box for the signature image, or "" — never raises."""
+    try:
+        from backend.core import media
+        url = (get_signature(email) or {}).get("url") or ""
+        if not url:
+            return ""
+        return media.local_path(os.path.basename(url.split("?", 1)[0])) or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def po_pdf_bytes(email: str, po: dict, for_supplier: bool = False) -> tuple[str, io.BytesIO]:
     """Render the PO to a professional PDF. Returns (filename, BytesIO)."""
     from backend.core import po_pdf
@@ -1459,7 +1529,8 @@ def po_pdf_bytes(email: str, po: dict, for_supplier: bool = False) -> tuple[str,
         brand = brandname.display(email)
     except Exception:  # noqa: BLE001
         brand = "Your shop"
-    buf = po_pdf.build_po_pdf(po, buyer_email=email, brand=brand, for_supplier=for_supplier)
+    buf = po_pdf.build_po_pdf(po, buyer_email=email, brand=brand, for_supplier=for_supplier,
+                              signature_path=_signature_file(email))
     return f"{po.get('po_number', 'purchase_order')}.pdf", buf
 
 

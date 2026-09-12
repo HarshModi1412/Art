@@ -3687,22 +3687,53 @@ function renderSupply(d) {
       </tr>`).join("")
     : `<tr><td colspan="11" class="ap-empty">No inventory yet. Add an item in Inventory Management.</td></tr>`;
 
-  const poRows = pos.length ? pos.slice().reverse().map((p) => `
+  // Every purchase order, one row each, gathered under where it has got to —
+  // waiting on you, out with the supplier, arrived. A seller's question is
+  // almost always "what is still open?", and a single list sorted by date
+  // answered it only by reading every row.
+  const flow = d.po_flow || { labels: {}, next: {} };
+  const PO_STEP = { mailed: "Mailed", replied: "Replied", confirmed: "Confirmed",
+                    received: "Received", cancelled: "Cancel" };
+  const PO_STEP_WHY = { mailed: "I sent this myself", replied: "The supplier has written back",
+                        confirmed: "The supplier has accepted the order",
+                        received: "It arrived — put the quantities back into stock" };
+  const poActions = (p) => {
+    const st = p.status || "open";
+    const nexts = (flow.next || {})[st] || [];
+    const send = st === "draft" || st === "open";
+    return `
+      ${send ? `<button class="btn approve tiny" data-posend="${esc(p.po_number)}" title="Emails the PO to the supplier with the PDF attached">${sic("mail")}${st === "draft" ? "Approve &amp; send" : "Send again"}</button>` : ""}
+      <button class="btn ghost tiny" data-podetail="${esc(p.po_number)}">Details</button>
+      ${nexts.filter((x) => x !== "cancelled" && !(send && x === "mailed")).map((x) =>
+        `<button class="btn ghost tiny" data-pomove="${esc(p.po_number)}" data-postatus="${x}"
+                 title="${esc(PO_STEP_WHY[x] || "")}">${PO_STEP[x] || x}</button>`).join("")}
+      <button class="btn ghost tiny" data-popdf="${esc(p.po_number)}" title="Download the PDF">📄</button>
+      <button class="btn ghost tiny" data-poxls="${esc(p.po_number)}" title="Download as Excel">⬇</button>
+      ${nexts.includes("cancelled") ? `<button class="btn ghost tiny danger" data-pomove="${esc(p.po_number)}" data-postatus="cancelled" title="Cancel this order">${sic("close")}</button>` : ""}`;
+  };
+  const poRow = (p) => `
       <tr>
         <td>${esc(p.po_number)}${p.source === "auto" ? ` <span class="muted tiny">auto</span>` : ""}</td>
         <td>${esc(((p.supplier || {}).name) || (p.suppliers || []).join(", ") || "—")}</td>
         <td>${esc(String(p.created_at || "").slice(0, 16).replace("T", " "))}</td>
-        <td><span class="po-st st-${esc(p.status || "open")}">${esc(p.status === "draft" ? "waiting for you" : (p.status || "open"))}</span></td>
+        <td><span class="po-st st-${esc(p.status || "open")}">${esc((flow.labels || {})[p.status] || p.status || "open")}</span></td>
         <td class="num">${fmt(p.n_items)}</td>
         <td class="num">${fmt(p.total_qty)}</td>
         <td class="num">${p.total_amount == null ? "—" : _rupee(p.total_amount)}</td>
-        <td class="sup-actions">
-          ${p.status === "draft" || p.status === "open"
-            ? `<button class="btn approve tiny" data-podetail="${esc(p.po_number)}">${p.status === "draft" ? "Review &amp; send" : "Send again"}</button>` : ""}
-          <button class="btn ghost tiny" data-popdf="${esc(p.po_number)}">📄 PDF</button>
-          <button class="btn ghost tiny" data-poxls="${esc(p.po_number)}">⬇ Excel</button>
-        </td>
-      </tr>`).join("")
+        <td class="sup-actions">${poActions(p)}</td>
+      </tr>`;
+  const PO_GROUPS = [
+    ["draft", "Waiting for you"], ["open", "Approved — not sent"], ["mailed", "With the supplier"],
+    ["replied", "They have replied"], ["confirmed", "Confirmed, on the way"],
+    ["received", "Received"], ["cancelled", "Cancelled"],
+  ];
+  const byStatus = {};
+  pos.slice().reverse().forEach((p) => (byStatus[p.status || "open"] ||= []).push(p));
+  const poRows = pos.length
+    ? PO_GROUPS.filter(([k]) => (byStatus[k] || []).length).map(([k, label]) => `
+        <tr class="po-grp"><td colspan="8">${esc(label)}
+          <span class="muted tiny">${byStatus[k].length}</span></td></tr>
+        ${byStatus[k].map(poRow).join("")}`).join("")
     : `<tr><td colspan="8" class="ap-empty">No purchase orders yet. They are drafted automatically when an order leaves a raw material short.</td></tr>`;
 
   const wasteRows = waste.length ? waste.slice(0, 10).map((w) => `
@@ -3734,7 +3765,15 @@ function renderSupply(d) {
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;">
       <button class="btn ghost sm" id="supLoadSales" title="Upload &amp; map the past sales history used ONLY for these supply-chain calculations (separate from your main Sales Data)">${sic("receipt")}Upload previous sales</button>
       <button class="btn ghost sm" id="supCheck">${sic("refresh")}Check stock now</button>
+      <button class="btn ghost sm" id="supSign">${sic("plus")}${(d.signature || {}).url ? "Replace signature" : "Add signature"}</button>
+      ${(d.signature || {}).url ? `<img class="po-sign-pv" src="${esc(d.signature.url)}" alt="Your signature" />
+        <button class="btn ghost tiny" id="supSignClear">Remove</button>` : ""}
     </div>
+    ${d.email_ready === false ? `<div class="action-card warn" style="margin:8px 0;">
+      <div class="do">Approving cannot email a supplier yet</div>
+      <div class="why">This server has no mail account set up (SMTP_HOST and friends), so
+        Approve gives you the PDF and opens your own mail app instead of sending it for you.
+        Once it is set, Approve sends the order with the PDF attached.</div></div>` : ""}
 
     <div id="supForm" hidden></div>
     <div id="supPanel" hidden></div>
@@ -3803,7 +3842,11 @@ function renderSupply(d) {
   document.querySelectorAll("[data-openpo]").forEach((b) => b.onclick = () => supplyOpenPo([b.dataset.openpo]));
   document.querySelectorAll("[data-draftpo]").forEach((b) => b.onclick = supplyCheckNow);
   document.querySelectorAll("[data-podetail]").forEach((b) => b.onclick = () => openPoDetail(b.dataset.podetail));
+  document.querySelectorAll("[data-posend]").forEach((b) => b.onclick = () => approvePo(b.dataset.posend));
+  document.querySelectorAll("[data-pomove]").forEach((b) => b.onclick = () => movePo(b.dataset.pomove, b.dataset.postatus));
   on("supCheck", supplyCheckNow);
+  on("supSign", pickSignature);
+  on("supSignClear", () => saveSignature(""));
   document.querySelectorAll("[data-doq]").forEach((inp) => inp.onchange = async () => {
     const val = inp.value === "" ? null : parseFloat(inp.value);
     try {
@@ -4222,6 +4265,34 @@ async function supplyCheckNow() {
     toast(made ? `${(c.low || []).length} item${(c.low || []).length === 1 ? "" : "s"} short — purchase order${made === 1 ? "" : "s"} drafted. Approve ${made === 1 ? "it" : "them"} in the Approval panel.`
       : (c.low || []).length ? "Everything short is already on order." : "Every raw material has enough days of supply.", 7000);
   } catch (e) { toast(e.message, 6000); }
+}
+
+/* Moving a purchase order along its track. Receiving one puts the ordered
+   quantities back into stock, which is the whole reason to record it. */
+async function movePo(poNumber, status) {
+  const WORD = { mailed: "marked as mailed", replied: "marked as replied",
+                 confirmed: "marked as confirmed", received: "received — the quantities are back in stock",
+                 cancelled: "cancelled" };
+  if (status === "cancelled" && !confirm(`Cancel ${poNumber}? The supplier is not told — send them a note yourself.`)) return;
+  try {
+    const d = await api("/api/supply/po/move", { method: "POST",
+      json: { po_number: poNumber, status } });
+    _supAfter(d);
+    toast(`${poNumber} ${WORD[status] || status}.`, status === "received" ? 7000 : 4000);
+  } catch (e) { toast(e.message, 7000); }
+}
+
+/* The signature that goes on every PO. Optional — without one the PO still
+   carries the shop's name over "authorised signatory". */
+function pickSignature() {
+  pickImage(async (url) => saveSignature(url), false, "image/png,image/jpeg,image/webp");
+}
+
+async function saveSignature(url) {
+  try {
+    _supAfter(await api("/api/supply/signature", { method: "POST", json: { url } }));
+    toast(url ? "Signature saved — it will appear on every purchase order." : "Signature removed.");
+  } catch (e) { toast(e.message); }
 }
 
 /* Details on a drafted PO: each line with its days of supply and how its
@@ -7185,7 +7256,7 @@ function autoplanStrip(ap) {
         ${sic("clock")}
         <div>
           <b>${ap.enabled
-            ? `Plans next week by itself every ${esc(ap.day_name)} at ${esc(hr(ap.hour))}`
+            ? `Plans next week by itself every ${esc(ap.day_name)} at ${esc(hr(ap.hour))}${ap.tz_label ? ` ${esc(ap.tz_label)}` : ""}`
             : "Automatic weekly planning is off"}</b>
           <span class="muted tiny">${ap.enabled
             ? (ap.pending_week ? `Next week is due now — it runs in the background as soon as it can.`
@@ -7844,8 +7915,17 @@ async function openShootList() {
   document.querySelector("[data-mclose3]").onclick = closeModal;
 }
 
-function openSocialSetup() {
+let _locale = null;                       // {country, tz, label, options[]}
+
+async function loadLocale(force) {
+  if (_locale && !force) return _locale;
+  try { _locale = await api("/api/settings/locale"); } catch (e) { _locale = null; }
+  return _locale;
+}
+
+async function openSocialSetup() {
   const d = _socialData, s = d.settings || {};
+  const loc = await loadLocale();
   openModal("Social setup", `
     <label class="fld"><span>What do you sell?</span>
       <select id="soCat">${["clothing", "jewellery", "perfume"].map(c =>
@@ -7878,6 +7958,12 @@ function openSocialSetup() {
         and which products are selling or stuck, then tops next week up to your number of
         posts — never past it. The posts wait in your Approval panel; nothing goes out
         until you approve it.</p>
+      ${loc ? `<label class="fld"><span>Times are local to</span>
+        <select id="soCountry">${(loc.options || []).map((o) =>
+          `<option value="${esc(o.code)}"${o.code === loc.country ? " selected" : ""}>${esc(o.name)}${o.note ? ` — ${esc(o.note)}` : ""} · ${esc(o.now)} now</option>`).join("")}</select></label>
+      <p class="sm-hint" id="soTzWhy">Every posting time and this weekly check run on
+        ${esc(loc.label)}${loc.set ? "" : " — the default until you pick your country"}. The server
+        itself runs on UTC, so without this a 7:00 pm post goes out at the server's 7:00 pm.</p>` : ""}
     </div>
 
     <label class="fld"><span>Your city</span><input id="soCity" value="${esc(s.city || "")}" /></label>
@@ -7905,6 +7991,11 @@ function openSocialSetup() {
         order_cta: $("soCta").value } } });
       await api("/api/social/autoplan/settings", { method: "POST", json: {
         enabled: $("apOn").checked, day: Number($("apDay").value), hour: Number($("apHour").value) } });
+      const cSel = $("soCountry");
+      if (cSel && (!_locale || cSel.value !== _locale.country)) {
+        _locale = await api("/api/settings/locale", { method: "POST", json: { country: cSel.value } });
+        toast(`Times now follow ${_locale.label}.`, 6000);
+      }
       closeModal(); await openSocial();
     } catch (e) { toast(e.message); }
   };
@@ -8194,10 +8285,33 @@ async function openInvoiceFor(orderId) {
    ===================================================================== */
 let _poLines = [];
 
+/* A line is an item you already stock, picked from a dropdown. Typing the
+   name by hand is still possible (a first order from a new supplier, a sample)
+   but it is no longer the default: a typed name cannot be matched when the
+   order arrives, so receiving it never puts the stock back. */
+function poItemOptions(selectedId, supplierName) {
+  const inv = ((_supplyData || {}).inventory || []);
+  const mine = supplierName
+    ? inv.filter((x) => _norm(x.supplier_name) === _norm(supplierName)) : [];
+  const rest = inv.filter((x) => !mine.includes(x));
+  const opt = (x) => `<option value="${esc(x.id)}" ${x.id === selectedId ? "selected" : ""}>`
+    + `${esc(x.name)}${x.unit_label ? ` (${esc(x.unit_label)})` : ""}</option>`;
+  return `<option value="">— pick an item —</option>`
+    + (mine.length ? `<optgroup label="From this supplier">${mine.map(opt).join("")}</optgroup>` : "")
+    + (rest.length ? `<optgroup label="${mine.length ? "Everything else" : "Your inventory"}">${rest.map(opt).join("")}</optgroup>` : "")
+    + `<option value="__other" ${selectedId === "__other" ? "selected" : ""}>Something not in my inventory…</option>`;
+}
+
+function _norm(x) { return String(x || "").trim().toLowerCase(); }
+
 function poLineRow(l, i) {
+  const typed = l.inventory_id === "__other";
   return `
     <tr data-poi="${i}">
-      <td><input class="po-name" value="${esc(l.name || "")}" placeholder="What are you buying?" /></td>
+      <td>
+        <select class="po-item">${poItemOptions(l.inventory_id || "", (_poSupplierName || ""))}</select>
+        ${typed ? `<input class="po-name" value="${esc(l.name || "")}" placeholder="What are you buying?" style="margin-top:5px;" />` : ""}
+      </td>
       <td><input class="po-qty" type="number" min="1" value="${esc(String(l.order_qty || 1))}" /></td>
       <td><input class="po-unit" value="${esc(l.unit_label || "unit")}" /></td>
       <td><input class="po-cost" type="number" min="0" step="0.01" value="${l.unit_cost != null ? esc(String(l.unit_cost)) : ""}" placeholder="—" /></td>
@@ -8206,34 +8320,64 @@ function poLineRow(l, i) {
     </tr>`;
 }
 
+let _poSupplierName = "";
+
+function paintPoTotal() {
+  const box = $("poTotal");
+  if (!box) return;
+  const total = _poLines.reduce((a, l) =>
+    a + (l.unit_cost != null ? Number(l.unit_cost) * Number(l.order_qty || 1) : 0), 0);
+  box.innerHTML = _poLines.some((l) => l.unit_cost != null)
+    ? `<b>₹${fmt(total)}</b>`
+    : `<span class="muted">No rates entered — the PO will show quantities only.</span>`;
+}
+
 function renderPoLines() {
   const body = $("poBody");
   if (!body) return;
   body.innerHTML = _poLines.map(poLineRow).join("");
-  const total = _poLines.reduce((a, l) =>
-    a + (l.unit_cost != null ? Number(l.unit_cost) * Number(l.order_qty || 1) : 0), 0);
-  const anyCost = _poLines.some(l => l.unit_cost != null);
-  $("poTotal").innerHTML = anyCost
-    ? `<b>₹${fmt(total)}</b>`
-    : `<span class="muted">No rates entered — the PO will show quantities only.</span>`;
+  paintPoTotal();
 
   body.querySelectorAll("[data-poi]").forEach(tr => {
     const i = Number(tr.dataset.poi);
+    // Typing updates the numbers in place. Re-rendering the whole table on
+    // every keystroke threw the caret out of the field being typed in — the
+    // quantity ended up in whichever box had focus next.
     const sync = () => {
-      _poLines[i].name = tr.querySelector(".po-name").value;
+      const nm = tr.querySelector(".po-name");
+      if (nm) _poLines[i].name = nm.value;
       _poLines[i].order_qty = Number(tr.querySelector(".po-qty").value || 0);
       _poLines[i].unit_label = tr.querySelector(".po-unit").value;
       const c = tr.querySelector(".po-cost").value;
       _poLines[i].unit_cost = c === "" ? null : Number(c);
+      const l = _poLines[i];
+      tr.querySelector(".po-amt").textContent =
+        l.unit_cost != null ? "₹" + fmt(l.unit_cost * (l.order_qty || 1)) : "—";
+      paintPoTotal();
+    };
+    // Picking an item fills its unit and last known rate, so the usual case is
+    // choose-and-type-a-quantity.
+    tr.querySelector(".po-item").onchange = (e) => {
+      const id = e.target.value;
+      const it = ((_supplyData || {}).inventory || []).find((x) => x.id === id);
+      const typedQty = Number(_poLines[i].order_qty) > 1;   // the seller set it themselves
+      _poLines[i] = { ...(_poLines[i] || {}), inventory_id: id,
+        name: it ? it.name : "",
+        unit_label: it ? (it.unit_label || "unit") : "unit",
+        unit_cost: it && it.unit_cost != null ? it.unit_cost : null,
+        // start at what this item is usually ordered in — its DOQ
+        order_qty: typedQty ? Number(_poLines[i].order_qty)
+          : (it && it.doq ? Math.max(1, Math.round(it.doq)) : 1) };
       renderPoLines();
     };
-    tr.querySelectorAll("input").forEach(inp => inp.onchange = sync);
+    tr.querySelectorAll("input").forEach((inp) => { inp.oninput = sync; inp.onchange = sync; });
     tr.querySelector("[data-podel]").onclick = () => { _poLines.splice(i, 1); renderPoLines(); };
   });
 }
 
 function openManualPo(suppliers) {
-  _poLines = [{ name: "", order_qty: 1, unit_label: "unit", unit_cost: null }];
+  _poLines = [{ inventory_id: "", name: "", order_qty: 1, unit_label: "unit", unit_cost: null }];
+  _poSupplierName = "";
   const opts = (suppliers || []).map(x =>
     `<option value="${esc(x.name)}">${esc(x.name)}</option>`).join("");
 
@@ -8256,7 +8400,7 @@ function openManualPo(suppliers) {
         <tbody id="poBody"></tbody>
       </table></div>
       <div class="po-foot">
-        <button class="btn ghost sm" id="poAdd">${sic("plus")}Add a line</button>
+        <button class="btn ghost sm" id="poAdd">${sic("plus")}Add another item</button>
         <div id="poTotal"></div>
       </div>
       <label class="fld"><span>Note to the supplier</span>
@@ -8264,7 +8408,8 @@ function openManualPo(suppliers) {
     </div>
     <div class="modal-actions">
       <button class="btn ghost" data-mclose7>Cancel</button>
-      <button class="btn primary" id="poSave">Create</button>
+      <button class="btn ghost" id="poSaveDraft">Save as draft</button>
+      <button class="btn primary" id="poSave">${sic("mail")}Create &amp; send</button>
     </div>`, { wide: true });
 
   renderPoLines();
@@ -8276,23 +8421,35 @@ function openManualPo(suppliers) {
   sup.onchange = () => {
     const hit = (suppliers || []).find(x => x.name === sup.value);
     if (hit) { $("poSupPhone").value = hit.phone || ""; $("poSupEmail").value = hit.email || ""; }
+    // the item dropdown puts this supplier's own items at the top
+    _poSupplierName = sup.value.trim();
+    renderPoLines();
   };
   document.querySelector("[data-mclose7]").onclick = closeModal;
-  $("poSave").onclick = async () => {
+  const create = async (send) => {
     const lines = _poLines.filter(l => (l.name || "").trim() && Number(l.order_qty) > 0);
-    if (!lines.length) return toast("Every line needs a name and a quantity.");
+    if (!lines.length) return toast("Pick an item and a quantity.");
     if (!sup.value.trim()) return toast("Who are you ordering from?");
+    if (send && !$("poSupEmail").value.trim())
+      return toast("Add the supplier's email to send it — or save it as a draft.", 6000);
     try {
-      const po = await api("/api/purchase-orders/manual", { method: "POST", json: {
-        supplier: { name: sup.value.trim(), phone: $("poSupPhone").value.trim(),
-                    email: $("poSupEmail").value.trim() },
-        lines, expected_on: $("poWhen").value, terms: $("poTerms").value.trim(),
-        note: $("poNote").value.trim() } });
+      const r = await withBusy(send ? "Sending the purchase order…" : "Saving the purchase order…",
+        send ? "The PO goes to the supplier as a PDF attachment." : "It will wait in your Approval panel.",
+        () => api("/api/purchase-orders/manual", { method: "POST", json: {
+          supplier: { name: sup.value.trim(), phone: $("poSupPhone").value.trim(),
+                      email: $("poSupEmail").value.trim() },
+          lines, expected_on: $("poWhen").value, terms: $("poTerms").value.trim(),
+          note: $("poNote").value.trim(), send } }));
       closeModal();
-      toast(`${po.po_number} created.`);
-      openPoActions(po);
-    } catch (e) { toast(e.message); }
+      if (r.supply) _supAfter(r.supply);
+      const s = r.send || {};
+      if (!send) toast(`${r.po_number} saved as a draft — approve it when you are ready.`, 6000);
+      else if (s.sent) toast(`${r.po_number} emailed to ${s.to}, PDF attached.`, 7000);
+      else { toast(`${r.po_number} created, but not emailed: ${s.reason || "email is not set up."}`, 9000); openPoActions(r); }
+    } catch (e) { toast(e.message, 7000); }
   };
+  $("poSave").onclick = () => create(true);
+  $("poSaveDraft").onclick = () => create(false);
 }
 
 /* After creating one, the seller has three things they might want: send it,

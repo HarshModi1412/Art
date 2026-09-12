@@ -81,20 +81,28 @@ ACTIVE_STATES = ("draft", "ready", "approved", "scheduled", "published")
 
 
 # --------------------------------------------------------------- time
-def _tz():
+def _tz(email: str = ""):
+    from backend.core import localtime
+    return localtime.tz(email)
+
+
+def _tz_label(email: str = "") -> str:
     try:
-        from zoneinfo import ZoneInfo
-        return ZoneInfo(os.environ.get("AUTOPLAN_TZ", "Asia/Kolkata"))
+        from backend.core import localtime
+        info = localtime.get(email)
+        z = localtime.tz(email)
+        return (datetime.now(z).tzname() or info["tz"].split("/")[-1]) if z else ""
     except Exception:  # noqa: BLE001
-        return None
+        return ""
 
 
-def now_local() -> datetime:
-    """Naive local wall-clock time. Sellers are in India and every scheduled_at
-    in the app is a naive local time, so decisions are made in the same frame
-    whatever timezone the server runs in (Render runs in UTC)."""
-    tz = _tz()
-    return datetime.now(tz).replace(tzinfo=None) if tz else datetime.now()
+def now_local(email: str = "") -> datetime:
+    """Naive wall-clock time WHERE THE SELLER IS. Every scheduled_at in the app
+    is a naive local time, so the planner has to decide in the same frame — and
+    the server is not in that frame (Render runs in UTC). The account's country
+    says which zone that is; see backend/core/localtime.py."""
+    from backend.core import localtime
+    return localtime.now(email)
 
 
 def next_monday(d: date) -> date:
@@ -148,7 +156,7 @@ def save_config(email: str, patch: dict) -> dict:
     social.save_settings(email, clean)
     st = _state(email)
     if clean.get("auto_plan") and not st.get("armed_at"):
-        st["armed_at"] = now_local().isoformat(timespec="seconds")
+        st["armed_at"] = now_local(email).isoformat(timespec="seconds")
         _save_state(email, st)
     return status(email)
 
@@ -168,7 +176,7 @@ def arm(email: str) -> dict:
     automatic run is the first trigger after this moment — never one before."""
     st = _state(email)
     if not st.get("armed_at"):
-        st["armed_at"] = now_local().isoformat(timespec="seconds")
+        st["armed_at"] = now_local(email).isoformat(timespec="seconds")
         _save_state(email, st)
     return st
 
@@ -178,7 +186,7 @@ def due(email: str, now: datetime | None = None) -> date | None:
     cfg = get_config(email)
     if not cfg["enabled"]:
         return None
-    now = now or now_local()
+    now = now or now_local(email)
     st = arm(email)
     try:
         armed = datetime.fromisoformat(st["armed_at"])
@@ -198,7 +206,7 @@ def due(email: str, now: datetime | None = None) -> date | None:
 def status(email: str) -> dict:
     cfg = get_config(email)
     st = _state(email)
-    now = now_local()
+    now = now_local(email)
     nxt = next_trigger(now, cfg["day"], cfg["hour"])
     armed = st.get("armed_at")
     # If the most recent trigger was missed (and is after arming), it will run
@@ -210,6 +218,8 @@ def status(email: str) -> dict:
         "armed_at": armed,
         "next_run": nxt.isoformat(timespec="minutes"),
         "next_run_label": nxt.strftime("%a %d %b, %I:%M %p").replace(" 0", " "),
+        # every time on this screen is the seller's own wall clock
+        "tz_label": _tz_label(email),
         "next_week": next_monday(nxt.date()).isoformat(),
         "pending_week": pending.isoformat() if pending else "",
         "running": _running(email),
@@ -598,7 +608,7 @@ def plan_week(email: str, week_start: date | None = None, trigger: str = "manual
               now: datetime | None = None, catalogue: list[dict] | None = None) -> dict:
     """Plan one week (Monday `week_start`). Returns the brief shown to the
     seller: what was found, what already existed, what was added and why."""
-    now = now or now_local()
+    now = now or now_local(email)
     week_start = week_start or next_monday(now.date())
     week_end = week_start + timedelta(days=6)
     s = social.get_settings(email)
@@ -850,7 +860,7 @@ def run_due() -> dict:
         else:
             skipped += 1
     return {"ran": ran, "skipped": skipped, "failed": failed,
-            "at": now_local().isoformat(timespec="seconds")}
+            "at": now_local(email).isoformat(timespec="seconds")}
 
 
 # --------------------------------------------------------------- in-process scheduler

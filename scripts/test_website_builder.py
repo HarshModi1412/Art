@@ -1119,7 +1119,8 @@ must(r.status_code == 400, "an empty PO is refused")
 
 r = c.post("/api/purchase-orders/status", headers=H,
            json={"po_number": _po["po_number"], "status": "sent"})
-must(r.status_code == 200 and r.json()["status"] == "sent", "and it can be marked sent")
+must(r.status_code == 200 and r.json()["status"] == "mailed",
+     "and it can be marked as gone to the supplier (the old 'sent' still works)")
 r = c.post("/api/purchase-orders/status", headers=H,
            json={"po_number": _po["po_number"], "status": "teleported"})
 must(r.status_code == 400, "an invented status is refused")

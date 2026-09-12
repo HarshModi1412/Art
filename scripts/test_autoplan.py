@@ -80,7 +80,7 @@ check("a Sunday's next week is the very next day",
       autoplan.next_monday(date(2026, 9, 13)) == MON)
 
 orig_now = autoplan.now_local
-autoplan.now_local = lambda: FRI
+autoplan.now_local = lambda email="": FRI
 try:
     check("a fresh account is armed, not fired, on first look", autoplan.due(e1) is None)
     st = autoplan._state(e1)
@@ -100,7 +100,7 @@ try:
     check("Wednesday 7:05 after arming → the following Monday is due",
           autoplan.due(e1, datetime(2026, 9, 16, 7, 5)) == date(2026, 9, 21))
     autoplan.save_config(e1, {"day": 5, "hour": 9})
-    autoplan.now_local = lambda: sat
+    autoplan.now_local = lambda email="": sat
     r = autoplan.run_if_due(e1)
     check("run_if_due plans it", r and r.get("added") == 4, r and r.get("note"))
     check("and a second call does nothing — once per week", autoplan.run_if_due(e1) is None)

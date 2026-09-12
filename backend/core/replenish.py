@@ -89,8 +89,17 @@ def covered_item_ids(email: str) -> set[str]:
 
 
 def draft_pos(email: str) -> list[dict]:
+    """Drafts the replenishment check may ADD LINES TO — its own only. A PO the
+    seller wrote by hand is theirs; quietly appending to it would change an
+    order they already decided on."""
     return [p for p in supply.get_purchase_orders(email)
             if p.get("status") == "draft" and p.get("source") == "auto"]
+
+
+def waiting_pos(email: str) -> list[dict]:
+    """Every purchase order waiting for approval, however it was raised — one
+    card each in the Approval panel. A hand-written draft waits there too."""
+    return [p for p in supply.get_purchase_orders(email) if p.get("status") == "draft"]
 
 
 def _supplier_of(row: dict) -> dict:
@@ -214,7 +223,7 @@ def recent_log(email: str, limit: int = 10) -> list[dict]:
 def insight_cards(email: str) -> list[dict]:
     """One Approval-panel card per draft purchase order."""
     out = []
-    for po in draft_pos(email):
+    for po in waiting_pos(email):
         sup = po.get("supplier") or {}
         lines = po.get("lines") or []
         names = ", ".join(f"{ln.get('name')} × {ln.get('order_qty')} {ln.get('unit_label') or ''}".strip()
@@ -315,7 +324,7 @@ def send_po(email: str, po_number: str, subject: str = "", body: str = "",
             reason = res.get("reason") or "The mail server did not accept it."
 
     hist = list(po.get("history") or [])
-    status = "sent" if sent else "open"
+    status = "mailed" if sent else "open"
     hist.append({"at": _now(), "status": status, "by": "seller",
                  "note": (f"Emailed to {to}" if sent else f"Approved — not emailed: {reason}")[:200]})
     supply.update_po(email, po_number, {"status": status, "history": hist})

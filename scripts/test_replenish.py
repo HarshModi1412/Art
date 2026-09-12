@@ -247,7 +247,7 @@ att = (sent.get("attachments") or [None])[0]
 check("with the PO attached as a PDF",
       att and att[0].endswith(".pdf") and att[1][:4] == b"%PDF" and att[2] == "application/pdf", att and att[0])
 check("replies come back to the seller", sent.get("reply_to") == email)
-check("the PO is now 'sent'", supply.get_po(email, po["po_number"])["status"] == "sent")
+check("the PO is now tracked as mailed", supply.get_po(email, po["po_number"])["status"] == "mailed")
 check("and leaves the Approval panel",
       not any(i["id"] == f"po_{po['po_number']}" for i in r.json()["insights"]))
 

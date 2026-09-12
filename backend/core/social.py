@@ -1251,7 +1251,8 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
     # that reads.
     n_slots = len(shape)
     times = []
-    now = datetime.now()
+    from backend.core import localtime
+    now = localtime.now(email)          # the seller's wall clock, not the server's
     for i in range(n_slots):
         offset = (best_weekdays[i % len(best_weekdays)] - start.weekday()) % 7
         when = datetime.combine(start + timedelta(days=offset),
@@ -1430,7 +1431,9 @@ def pending_insight_cards(email: str) -> list[dict]:
     still fully approvable by opening them from the calendar, which is what
     "explain me complete logic" below documents."""
     from datetime import datetime, timedelta
-    horizon = datetime.now() + timedelta(days=PENDING_WINDOW_DAYS)
+    from backend.core import localtime
+    _now = localtime.now(email)
+    horizon = _now + timedelta(days=PENDING_WINDOW_DAYS)
     cards = []
     # Asked once for the whole list rather than per card: it is a server
     # capability, not a per-post one.
@@ -1463,7 +1466,7 @@ def pending_insight_cards(email: str) -> list[dict]:
             "scheduled_at": when_raw,
             "hook": cap.get("hook") or "",
             "when_label": when.strftime("%a %d %b, %I:%M %p").replace(" 0", " "),
-            "overdue": when < datetime.now(),
+            "overdue": when < _now,
             # WHAT KIND OF POST THIS IS, said plainly on the card.
             #
             # A photo post and a reel need completely different things from the

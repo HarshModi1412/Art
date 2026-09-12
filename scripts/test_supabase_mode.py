@@ -120,13 +120,13 @@ finally:
     os.environ.pop("SMTP_HOST", None)
 check("Approve sends it", r.status_code == 200 and sent.get("to") == "po@kanpur.example", r.text[:300])
 got = supply.get_po(email, n)
-check("…and it is marked sent, history and all", got["status"] == "sent" and len(got.get("history") or []) >= 2, got)
+check("…and it is marked mailed, history and all", got["status"] == "mailed" and len(got.get("history") or []) >= 2, got)
 zp = next(p for p in pos if p["supplier"]["name"] == "Zip Co")
 r = c.post(f"/api/smart/insight/po_{zp['po_number']}/decision", headers=H, json={"decision": "disapprove"})
 check("Cancel works", r.status_code == 200 and supply.get_po(email, zp["po_number"])["status"] == "cancelled",
       r.text[:300])
 before = supply._get_item(email, lp["lines"][0]["inventory_id"])["current_stock"]
-r = c.post("/api/purchase-orders/status", headers=H, json={"po_number": n, "status": "received"})
+r = c.post("/api/supply/po/move", headers=H, json={"po_number": n, "status": "received"})
 after = supply._get_item(email, lp["lines"][0]["inventory_id"])["current_stock"]
 check("receiving it works and puts the ordered stock back",
       r.status_code == 200 and after == before + 120, (r.status_code, before, after))

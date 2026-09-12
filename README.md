@@ -593,6 +593,49 @@ with `corner=` — which relaxes what counts as a mark in that corner only:
 fainter, smaller, and judged as less colourful than its surroundings rather
 than grey. A corner with nothing in it is left exactly as it was and says so.
 
+## The purchase order, end to end
+
+**Raising one.** Two ways in, one shape out. The replenishment check raises
+drafts by itself; *Create purchase order* is the seller writing one — supplier,
+then each line picked from a dropdown of **their own inventory** (name, unit and
+last rate fill themselves, the quantity starts at that item's DOQ), terms, and
+either *Create & send* or *Save as draft*. A line keeps its `inventory_id`, so
+receiving the order later can post the stock against it; a free-typed line is
+still allowed for a first order from a new supplier and simply cannot restock.
+
+**Approving one.** Approve SENDS: the email the content writer drafted, the PO
+as a PDF attachment, to the address in the Supplier module. No draft to read
+first — *Details* is where the mail is, editable, for the times that matters.
+Every waiting PO is its own card in the Approval panel, hand-written drafts
+included.
+
+**Tracking one.** `draft → mailed → replied → confirmed → received`, plus
+`open` (approved, but this server has no mail account) and `cancelled`.
+`PO_NEXT` in supply.py says which move is legal from where; the Suppliers page
+gathers POs under those headings and shows only the moves that apply. Receiving
+posts the ordered quantities back into stock. The old `sent`/`shipped` names
+still read correctly (`PO_STATUS_ALIASES`).
+
+Marking *Replied* is a button today. Detecting it automatically needs access to
+the mailbox the supplier replies into — the seller's own inbox, since the mail
+carries their address in Reply-To — so it waits for a decision about IMAP
+credentials rather than a half-working guess.
+
+**The signature.** Optional, uploaded on the Suppliers page, drawn above
+"authorised signatory" on every PO PDF. Without one the PO still carries the
+shop's name.
+
+## Local time, by country
+
+`backend/core/localtime.py`. Every `scheduled_at` in this app is naive
+wall-clock time, and the server is not where the seller is (Render runs UTC).
+The account picks a country; that maps to one IANA zone, and the weekly planner
+(`autoplan.now_local`) and the slots `social.build_week` writes both run on it.
+One zone per country on purpose — picking a state is an extra question for a
+difference that matters in five countries, and the zone chosen for those is
+named in the list. Changing country does not move posts already scheduled:
+7:00 pm stays 7:00 pm.
+
 ## Purchase orders on Supabase
 
 `purchase_orders` in supabase/schema.sql has eleven columns; a PO carries more

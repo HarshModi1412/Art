@@ -107,8 +107,23 @@ def _group_by_supplier(lines: list[dict]) -> list[tuple[str, list[dict]]]:
     return [(k, groups[k]) for k in order]
 
 
+def _signature_flowable(path: str, width_mm: float = 38):
+    """The seller's signature image, scaled to a sensible width. None if it
+    cannot be read — a PO must never fail to render over its signature."""
+    try:
+        from reportlab.lib.utils import ImageReader
+        from reportlab.platypus import Image as RLImage
+        iw, ih = ImageReader(path).getSize()
+        if not iw or not ih:
+            return None
+        w = width_mm * mm
+        return RLImage(path, width=w, height=w * (ih / iw))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def build_po_pdf(po: dict, buyer_email: str = "", brand: str = "Content Seller",
-                 for_supplier: bool = False) -> io.BytesIO:
+                 for_supplier: bool = False, signature_path: str = "") -> io.BytesIO:
     """`for_supplier` is the copy that is emailed to the vendor: no internal
     notes about how the quantity was worked out, and no "data-generated
     suggestion" footer — to the supplier this is simply our order."""
@@ -279,6 +294,30 @@ def build_po_pdf(po: dict, buyer_email: str = "", brand: str = "Content Seller",
                  "days of supply fall below 1.2 &times; the supplier's lead time. Please confirm "
                  "price and availability with the vendor before dispatch.")
     el.append(Paragraph(terms, mut))
+
+    # ---- signature -------------------------------------------------------
+    # Suppliers in India expect an authorised signature on a purchase order;
+    # without one this reads like a printout rather than an instruction to
+    # supply. The image is optional — the name and "authorised signatory" line
+    # stand on their own when there is none.
+    el.append(Spacer(1, 22))
+    sig_bits = []
+    img = _signature_flowable(signature_path) if signature_path else None
+    if img is not None:
+        sig_bits.append(img)
+    else:
+        sig_bits.append(Spacer(1, 16))
+    sig_bits.append(Paragraph(f"<b>For {brand}</b>", body))
+    sig_bits.append(Paragraph("Authorised signatory", mut))
+    sig = Table([[ "", sig_bits]], colWidths=[None, 62 * mm])
+    sig.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("LINEABOVE", (1, 0), (1, 0), 0.6, MUT),
+        ("TOPPADDING", (1, 0), (1, 0), 4),
+    ]))
+    el.append(sig)
 
     def _footer(canvas, d):
         canvas.saveState()
