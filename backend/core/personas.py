@@ -85,6 +85,7 @@ ORDER = ["operations", "marketing", "supply", "brand", "social"]
 # for it.
 BY_ID = {
     "winback": "marketing",
+    "winback_auto": "marketing",
     "festival": "marketing",
     "reorder": "operations",
     "overstock": "operations",
@@ -354,7 +355,7 @@ def _purchase_order(card: dict) -> dict:
 
 
 WRITERS = {
-    "winback": _winback, "festival": _festival, "reorder": _reorder,
+    "winback": _winback, "winback_auto": _winback, "festival": _festival, "reorder": _reorder,
     "overstock": _overstock, "supplier_risk": _supplier_risk,
     "reputation": _reputation, "complaints": _complaints,
 }

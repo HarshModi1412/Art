@@ -859,8 +859,13 @@ def run_due() -> dict:
             ran += 1
         else:
             skipped += 1
+    # `email` does not exist here — it was a loop variable named `account`, so
+    # this line raised NameError on EVERY tick. The planning above had already
+    # happened, so the symptom was only a warning in the log and a 500 from the
+    # admin endpoint; but it meant the scheduler had never once reported a
+    # successful run, and nobody could tell whether it was working.
     return {"ran": ran, "skipped": skipped, "failed": failed,
-            "at": now_local(email).isoformat(timespec="seconds")}
+            "at": datetime.now().isoformat(timespec="seconds")}
 
 
 # --------------------------------------------------------------- in-process scheduler
@@ -890,4 +895,14 @@ def _loop() -> None:
             run_due()
         except Exception as e:  # noqa: BLE001
             log.warning("autoplan tick failed: %s", e)
+        # The weekly win-back rides the SAME ticker. A second thread on a
+        # half-CPU instance to check a clock once every fifteen minutes would
+        # be two things to start, two to get wrong, and two to forget about.
+        # Its own failure is caught separately so a bad win-back run can never
+        # stop the social planning, or the other way round.
+        try:
+            from backend.core import winback_auto
+            winback_auto.run_due()
+        except Exception as e:  # noqa: BLE001
+            log.warning("win-back tick failed: %s", e)
         time.sleep(TICK_SECONDS)

@@ -2733,6 +2733,10 @@ async function openModule(id) {
   if (id === "marketing") return openMarketing();
   if (id === "gst") return openGst();
   if (id === "ads") return openAdsModule();
+  // Reachable at #/module/instagram, and from the Social Media Manager. It has
+  // no tile of its own on purpose: connecting Instagram is a step inside
+  // planning posts, not a fifteenth app to choose between.
+  if (id === "instagram") return openInstagramModule();
 }
 
 // ---------- MODULE: Product Management ----------
@@ -5321,17 +5325,124 @@ function renderActions(insights) {
 async function openMarketing() {
   await openCached("marketing", "Marketing",
     async () => {
-      const [wb, proof, sends] = await Promise.all([
+      const [wb, proof, sends, auto] = await Promise.all([
         api("/api/rfm/winback", { method: "POST" }).catch((e) => ({ customers: [], _error: e.message })),
         api("/api/rfm/winback/proof").catch(() => null),
         api("/api/rfm/winback/sends").catch(() => null),
+        api("/api/winback/auto").catch(() => null),
       ]);
-      return { wb, proof, sends };
+      return { wb, proof, sends, auto };
     },
-    (d) => renderMarketing(d.wb, d.proof, d.sends));
+    (d) => renderMarketing(d.wb, d.proof, d.sends, d.auto));
 }
 
-function renderMarketing(wb, proof, sends) {
+/* ------------------------------------------- the weekly win-back strip -----
+   Win-back used to be a thing the seller had to remember to do. Nobody
+   remembers on a Tuesday, and a customer who went quiet 70 days ago is
+   reachable while the same customer at 140 days is a stranger — so the value
+   of the feature was mostly theoretical.
+
+   It now runs itself weekly and leaves ONE card in the Approval panel. This
+   strip is where that schedule is visible and changeable, and where the
+   cooldown is stated: without saying it out loud, a seller cannot tell the
+   difference between "we are being careful with your customers" and "it is
+   broken and only found four people". */
+function winbackStrip(a) {
+  if (!a) return "";
+  const hr = (h) => { const n = Number(h) || 0; return `${((n + 11) % 12) + 1}${n < 12 ? " AM" : " PM"}`; };
+  const p = a.pending;
+  const last = a.last || null;
+  const head = p
+    ? `<b>${fmt(p.reachable || p.n)} message${(p.reachable || p.n) === 1 ? "" : "s"} are written and waiting for you</b>
+       <span class="muted tiny">Prepared ${esc(String(p.at || "").slice(0, 10))}. Approve them in the panel on the right and they go out from your own email address.${
+         p.skipped_cooldown ? ` ${fmt(p.skipped_cooldown)} more were left out — they were contacted within the last ${a.cooldown_days} days.` : ""}</span>`
+    : a.enabled
+      ? `<b>Checks every ${esc(a.day_name)} at ${esc(hr(a.hour))}${a.tz_label ? ` ${esc(a.tz_label)}` : ""}</b>
+         <span class="muted tiny">It reads your sales for customers who have gone quiet, writes each message against what that person actually bought, and puts one card in your Approval panel. Nothing is ever sent until you approve it. Anyone contacted in the last ${a.cooldown_days} days is left alone.
+           ${last && !last.ok && last.reason ? ` Last check: ${esc(last.reason)}.` : ""}
+           ${a.next_run_label ? ` Next check ${esc(a.next_run_label)}.` : ""}</span>`
+      : `<b>Automatic win-back is off</b>
+         <span class="muted tiny">Turn it on and it finds your quiet customers every week for you.</span>`;
+  return `
+    <div class="ap-strip ${p ? "on" : (a.enabled ? "on" : "off")}">
+      <div class="ap-strip-t">${sic(p ? "bell" : "clock")}<div>${head}</div></div>
+      <div class="ap-strip-a">
+        ${p ? `<button class="btn ghost sm" id="wbaSkip" title="Throw this batch away — these customers stay eligible next week">Skip this week</button>`
+            : `<button class="btn primary sm" id="wbaRun">${sic("refresh")}Check now</button>`}
+        <button class="btn ghost sm" id="wbaChange">${sic("settings")}${a.enabled ? "Change day" : "Turn on"}</button>
+      </div>
+    </div>`;
+}
+
+function wireWinbackStrip() {
+  const run = $("wbaRun");
+  if (run) run.onclick = async () => {
+    run.disabled = true; run.textContent = "Checking…";
+    try {
+      const r = await api("/api/winback/auto/run", { method: "POST" });
+      const res = r.run || {};
+      toast(res.ok ? `${res.reachable || res.n} customers ready — approve them in the panel`
+                   : `Nothing to send: ${res.reason || "no one has gone quiet"}`, 6000);
+      warmModClearAll();
+      openMarketing();
+      refreshApprovals(true);
+    } catch (e) { toast(e.message, 6000); run.disabled = false; }
+  };
+  const skip = $("wbaSkip");
+  if (skip) skip.onclick = async () => {
+    if (!confirm("Throw away this week's win-back batch? Nothing is sent, and these customers will be eligible again next week.")) return;
+    try {
+      await api("/api/winback/auto/skip", { method: "POST" });
+      toast("Skipped. Nobody was contacted.");
+      warmModClearAll();
+      openMarketing();
+      refreshApprovals(true);
+    } catch (e) { toast(e.message, 6000); }
+  };
+  const ch = $("wbaChange");
+  if (ch) ch.onclick = openWinbackAutoSetup;
+}
+
+async function openWinbackAutoSetup() {
+  let a;
+  try { a = await api("/api/winback/auto"); } catch (e) { return toast(e.message); }
+  const days = (a.day_names || []).map((d, i) =>
+    `<option value="${i}" ${i === a.day ? "selected" : ""}>${esc(d)}</option>`).join("");
+  const hours = Array.from({ length: 24 }, (_, h) =>
+    `<option value="${h}" ${h === a.hour ? "selected" : ""}>${((h + 11) % 12) + 1}${h < 12 ? " AM" : " PM"}</option>`).join("");
+  openModal("Automatic win-back", `
+    <label class="site-toggle" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <input type="checkbox" id="wbaOn" ${a.enabled ? "checked" : ""} />
+      <span class="tsw"></span><b>Look for quiet customers every week</b>
+    </label>
+    <div class="grid-2">
+      <label>Day <select id="wbaDay">${days}</select></label>
+      <label>Time <select id="wbaHour">${hours}</select></label>
+    </div>
+    <p class="muted tiny" style="margin-top:10px;">Times are ${esc(a.tz_label || "your local time")}.
+      Anyone already contacted in the last ${a.cooldown_days} days is skipped, so the same
+      customer never gets two of these close together. Nothing is sent without your approval.</p>
+    <div class="row" style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+      <button class="btn ghost" data-mclose2>Cancel</button>
+      <button class="btn primary" id="wbaSave">Save</button>
+    </div>`);
+  document.querySelector("[data-mclose2]").onclick = closeModal;
+  $("wbaSave").onclick = async () => {
+    try {
+      await api("/api/winback/auto", { method: "POST", json: {
+        enabled: $("wbaOn").checked,
+        day: Number($("wbaDay").value),
+        hour: Number($("wbaHour").value),
+      }});
+      closeModal();
+      toast("Saved");
+      warmModClearAll();
+      openMarketing();
+    } catch (e) { toast(e.message, 6000); }
+  };
+}
+
+function renderMarketing(wb, proof, sends, auto) {
   const rows = (wb && wb.customers) || [];
   const sendRows = (sends && sends.sends) || [];
 
@@ -5378,10 +5489,12 @@ function renderMarketing(wb, proof, sends) {
   moduleShell("Marketing", `
     <p class="muted" style="margin-top:0;">Win-back campaigns for customers who used to
       buy from you and have gone quiet — written and ready, one tap to send.</p>
+    ${winbackStrip(auto)}
     ${proofLine}
     ${body}
     ${pastCampaigns}`);
 
+  wireWinbackStrip();
   const m = $("mkProofMore");
   if (m) m.onclick = () => toast(proof.method, 7000);
   const rv = $("mkReview");
@@ -5579,7 +5692,7 @@ async function openInstagramModule() {
     const connectPanel = oauth ? `
       <div class="row" style="display:flex;gap:10px;flex-wrap:wrap;">
         <button class="btn primary sm" id="igOauth">🔗 Connect Instagram</button>
-        <span class="muted tiny" style="align-self:center;">Opens Meta's login in a popup. No tokens to paste.</span>
+        <span class="muted tiny" style="align-self:center;">Opens Instagram's own login. Nothing to paste, and no Facebook Page needed.</span>
       </div>
       <details class="ig-advanced" style="margin-top:12px;">
         <summary class="muted tiny" style="cursor:pointer;">Advanced: paste an access token manually instead</summary>
@@ -5613,7 +5726,7 @@ async function openInstagramModule() {
           <div style="flex:1;min-width:220px;">
             <h3 style="margin:0;">${s.connected ? "✅ Connected" : "🔌 Not connected yet"}</h3>
             ${s.connected ? `<div class="muted tiny" style="margin-top:4px;">Account: <b>@${esc(s.account_username || "—")}</b> · IG user id: <code>${esc(s.ig_user_id)}</code> · since ${esc(String(s.connected_at || "").slice(0,10))}</div>`
-                          : `<div class="muted tiny" style="margin-top:4px;">${oauth ? "Click below to sign in with Meta — we'll never see your password." : "Follow the steps below."}</div>`}
+                          : `<div class="muted tiny" style="margin-top:4px;">${oauth ? "Sign in at instagram.com with the password you already use — it never passes through us." : "Follow the steps below."}</div>`}
           </div>
           ${s.connected ? `<button class="btn ghost sm" id="igDisconnect">Disconnect</button>` : ""}
         </div>
@@ -5623,13 +5736,33 @@ async function openInstagramModule() {
       <div class="card">
         <h4>${oauth ? "What happens when you click Connect Instagram" : "How to set OAuth up (admin)"}</h4>
         ${oauth ? `
+        <div class="ig-pre">
+          <b>Two things to check first</b>
+          <ol style="line-height:1.7;padding-left:18px;margin:6px 0 0;">
+            <li><b>Your account must be Business or Creator.</b> Instagram app →
+              Settings → Account type and tools → Switch to professional account.
+              It is free and takes a minute. A personal account cannot connect —
+              this is the reason almost every failed connection fails.</li>
+            <li><b>If we are still in testing, accept the invite first.</b> You were
+              added as a tester, and the invite has to be accepted before Instagram
+              will allow the login: open
+              <a href="https://www.instagram.com/accounts/manage_access_tools/" target="_blank" rel="noopener">instagram.com → Apps and websites → Tester invites</a>
+              and press Accept. On a phone: Instagram app → Settings → Website
+              permissions → Apps and websites → Tester invites. Nothing happens on
+              facebook.com — this invite lives on Instagram.</li>
+          </ol>
+        </div>
+        <b class="ig-then">Then press Connect Instagram, and:</b>
         <ol class="muted tiny" style="line-height:1.7;padding-left:18px;">
-          <li>An Instagram login popup opens (instagram.com, not us — no Facebook Page needed).</li>
-          <li>You approve the permissions with your Instagram Business/Creator account.</li>
-          <li>Instagram redirects back and we save your access token to your account — you never see it.</li>
-          <li>Done. New Content Creator suggestions can post to your Instagram.</li>
+          <li>An Instagram login window opens — instagram.com, not us, and no Facebook Page anywhere.</li>
+          <li>You sign in with the Instagram password you already use.</li>
+          <li>Instagram asks whether to allow this app to see your profile, publish posts and read your insights. Press Allow.</li>
+          <li>You land back here, connected. We store the access token encrypted — you never see it and neither does anyone else.</li>
         </ol>
-        <p class="muted tiny" style="margin-top:8px;">💡 Your Instagram account must be switched to <b>Business</b> or <b>Creator</b> (Instagram app → Settings → Account type and tools) — a personal account can't connect. During Meta's app review your account also needs to be added as an "Instagram Tester" in the Meta app — otherwise Instagram will refuse the login. After the app is approved, this works for any account, and no Facebook Page is ever required.</p>` : `
+        <p class="muted tiny" style="margin-top:8px;">Use a desktop browser if you can,
+          and turn off any VPN or ad blocker for this one step — both are common causes of
+          a login window that opens and then does nothing. Once Meta approves the app,
+          the tester step disappears and this works for any Business or Creator account.</p>` : `
         <ol class="muted tiny" style="line-height:1.7;padding-left:18px;">
           <li>Create a Meta app at <a href="https://developers.facebook.com/apps" target="_blank">developers.facebook.com/apps</a>.</li>
           <li>Add the <b>"Instagram"</b> product (not "Facebook Login") and set up Business Login for Instagram, with the OAuth Redirect URI <code>https://YOUR-APP/api/instagram/oauth/callback</code>.</li>
@@ -7580,10 +7713,15 @@ async function renderSocial() {
         <button class="btn ghost sm" id="smBuild4">${sic("spark")}Plan 4 weeks</button>
         <button class="btn ghost sm" id="smShoot">${sic("camera")}Shoot list</button>
         <button class="btn ghost sm" id="smSettings">${sic("settings")}Setup</button>
+        ${d.instagram && d.instagram.connected
+          ? `<button class="btn ghost sm" id="smInsta" title="Instagram connection">${sic("instagram")}@${esc(d.instagram.account_username || "connected")}</button>`
+          : ""}<!-- not connected? the strip below asks, and asking twice on one
+               screen makes both requests easier to ignore -->
         <button class="btn ghost sm danger" id="smClearPlan" title="Delete every planned post and campaign">${sic("close")}Clear plan</button>
       </div>
     </div>
 
+    ${igStrip(d.instagram)}
     ${autoplanStrip(d.autoplan)}
 
     <div id="smCampaigns"></div>
@@ -7678,6 +7816,12 @@ async function renderSocial() {
   if ($("apChange")) $("apChange").onclick = openSocialSetup;
   $("smShoot").onclick = openShootList;
   $("smSettings").onclick = openSocialSetup;
+  const igBtn = $("smInsta");
+  if (igBtn) igBtn.onclick = () => openModule("instagram");
+  const igHere = $("igConnectHere");
+  if (igHere) igHere.onclick = () => openModule("instagram");
+  const igRe = $("igReconnect");
+  if (igRe) igRe.onclick = () => openModule("instagram");
   $("smClearPlan").onclick = async () => {
     // Same destructive-action pattern as productDelete(): a native confirm()
     // up front, since wiping every planned post has no undo-toast-sized
@@ -7738,6 +7882,43 @@ async function renderSocial() {
 let _socialCal = null;
 
 /* The automatic weekly plan, said in one line at the top of the planner. */
+/* ------------------------------------------------- the Instagram strip -----
+   THE BUG THIS FIXES: the Instagram connection screen existed, worked, and
+   was completely unreachable. It had no tile on the home grid, no entry in
+   openModule's dispatch, and nothing anywhere linked to it — a seller could
+   not have connected their account if they had wanted to.
+
+   It belongs here rather than on the home grid. Connecting Instagram is a step
+   inside planning posts, not a sixteenth app to choose between, and this is
+   the screen where the absence of a connection actually costs something. */
+function igStrip(ig) {
+  if (!ig) return "";
+  if (ig.connected) {
+    // Quiet when it is working. The only thing worth saying is when it is
+    // about to stop working: a token dies at 60 days and a seller who finds
+    // out by a post silently failing never trusts the feature again.
+    if (!ig.needs_attention) return "";
+    return `
+      <div class="ap-strip off">
+        <div class="ap-strip-t">${sic("alert")}
+          <div><b>Your Instagram connection expires in ${Number(ig.expires_in_days) || 0} day${Number(ig.expires_in_days) === 1 ? "" : "s"}</b>
+            <span class="muted tiny">Reconnect @${esc(ig.account_username || "")} and scheduled posts keep going out. It takes one tap.</span></div>
+        </div>
+        <div class="ap-strip-a"><button class="btn primary sm" id="igReconnect">${sic("refresh")}Reconnect</button></div>
+      </div>`;
+  }
+  return `
+    <div class="ap-strip off">
+      <div class="ap-strip-t">${sic("instagram")}
+        <div><b>Instagram is not connected</b>
+          <span class="muted tiny">Everything below still works — the week is planned, written and scheduled. Connecting only changes the last step: approved posts go out by themselves instead of you posting them by hand.</span></div>
+      </div>
+      <div class="ap-strip-a">
+        <button class="btn primary sm" id="igConnectHere">${sic("instagram")}Connect Instagram</button>
+      </div>
+    </div>`;
+}
+
 function autoplanStrip(ap) {
   if (!ap) return "";
   const hr = (h) => { const n = Number(h) || 0; return `${((n + 11) % 12) + 1}${n < 12 ? " AM" : " PM"}`; };

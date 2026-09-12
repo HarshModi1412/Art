@@ -2311,6 +2311,16 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .setup-rest summary { cursor: pointer; font-size: 12.5px; color: var(--primary); }
 .setup-rest ul { margin: 8px 0 0; padding-left: 20px; font-size: 12.5px; line-height: 1.7; color: var(--text-2); }
 
+/* ---------- Instagram connect: the two prerequisites ----------
+   Tinted and boxed because these two checks are the difference between a
+   connection that works and one that fails with an error Instagram writes,
+   not us. They are not "notes" — they are step zero. */
+.ig-pre { background: var(--amber-soft, var(--surface-2)); border-radius: 10px;
+  padding: 12px 14px; margin: 4px 0 14px; font-size: 12.5px; line-height: 1.6; }
+.ig-pre b { font-size: 13px; }
+.ig-pre a { color: var(--primary); }
+.ig-then { display: block; margin-bottom: 6px; font-size: 13px; }
+
 /* ---------- chart placeholder ----------
    Holds the chart's height while the library downloads, so the page does not
    jump under the reader's thumb when it lands. Bars, not a grey block: it

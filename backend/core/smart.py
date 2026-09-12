@@ -264,18 +264,51 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
 
     if txns is not None and len(txns):
         # 1) win-back campaign
-        # same shared pool the Today strip and the campaign generator read
-        at_risk = analytics.at_risk_cached(email, txns)
-        if at_risk:
+        #
+        # TWO DIFFERENT CARDS, and the difference matters. The weekly job
+        # (backend/core/winback_auto.py) prepares an actual batch — these
+        # specific people, these specific messages, nobody contacted in the
+        # last 45 days — and approving it SENDS. When no batch is waiting the
+        # old card stands: a standing offer to generate one by hand, which ends
+        # in a spreadsheet. Showing the sending card when nothing is prepared
+        # would mean "Approve → send" sent something the seller never saw.
+        from backend.core import winback_auto
+        waiting = None
+        try:
+            waiting = winback_auto.pending(email)
+        except Exception:  # noqa: BLE001
+            waiting = None
+        if waiting:
+            n = len(waiting.get("rows") or [])
+            reach = int(waiting.get("reachable") or 0)
+            cooled = int(waiting.get("skipped_cooldown") or 0)
+            detail = (f"{n} regulars have gone quiet. The messages are written — each one "
+                      f"names what that customer actually bought — and {reach} of them have "
+                      f"an email or phone on file. Approve and they go out from your own "
+                      f"address.")
+            if cooled:
+                detail += (f" {cooled} more were left out because they were already "
+                           f"contacted in the last {winback_auto.COOLDOWN_DAYS} days.")
             out.append({
-                "id": "winback", "module": "sales", "page": "winback", "icon": "💌",
-                "title": f"Win back {len(at_risk)} at-risk customers",
-                "detail": (f"{len(at_risk)} regulars haven't visited in a while. Approve to generate a "
-                           "ready-to-send message + personalised coupon for each, exported to Excel."),
-                "action_label": "Approve → download campaign", "count": len(at_risk),
-                "value": round(sum(float(c.get("monetary") or 0) for c in at_risk), 2) or None,
-                "has_download": True,
+                "id": "winback_auto", "module": "marketing", "page": "winback", "icon": "💌",
+                "title": f"Send this week's win-back to {reach or n} customers",
+                "detail": detail,
+                "action_label": "Approve → send now", "count": reach or n,
+                "value": round(float(waiting.get("value") or 0), 2) or None,
             })
+        else:
+            # same shared pool the Today strip and the campaign generator read
+            at_risk = analytics.at_risk_cached(email, txns)
+            if at_risk:
+                out.append({
+                    "id": "winback", "module": "sales", "page": "winback", "icon": "💌",
+                    "title": f"Win back {len(at_risk)} at-risk customers",
+                    "detail": (f"{len(at_risk)} regulars haven't visited in a while. Approve to generate a "
+                               "ready-to-send message + personalised coupon for each, exported to Excel."),
+                    "action_label": "Approve → download campaign", "count": len(at_risk),
+                    "value": round(sum(float(c.get("monetary") or 0) for c in at_risk), 2) or None,
+                    "has_download": True,
+                })
     if review is not None and len(review):
         pt = get_product_type(email)
         # 2) reputation / positioning

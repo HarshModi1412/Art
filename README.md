@@ -532,6 +532,25 @@ on Instagram Login at first, which used to be the one real reason to force
 sellers through a Facebook Page. It is available now, so the Page is needed for
 nothing this app does.
 
+**Where the seller actually finds it.** This was the gap: the connection screen
+existed, worked, and was unreachable. No tile on the home grid, no entry in
+`openModule`'s dispatch, nothing anywhere linking to it — a seller could not
+have connected their account if they had wanted to. It now lives in the Social
+Media Manager, which is the screen where the absence of a connection costs
+something, as a strip that says what connecting changes ("the week is planned,
+written and scheduled either way; this only changes whether approved posts go
+out by themselves"). It is also reachable at `#/module/instagram`. Deliberately
+no home tile: connecting Instagram is a step inside planning posts, not a
+sixteenth app to choose between. When connected the strip disappears and only
+returns to warn that the token expires within a week.
+
+**The two things that make a connection fail**, both now stated on the screen
+before the button rather than in an error afterwards: the account must be
+**Business or Creator** (a personal account cannot connect, and this is most
+failures), and during testing the seller must **accept the tester invite** at
+instagram.com → Apps and websites → Tester invites. That invite lives on
+Instagram, not facebook.com, which is where everyone looks first.
+
 **What is still required, and cannot be coded around:** Meta App Review for
 Advanced Access, because other people's Instagram accounts connect here.
 Standard Access covers only accounts with a role on the app — fine for a
@@ -978,6 +997,63 @@ a password (`register()` upgrades a guest row instead of refusing it).
 description, canonical and Open Graph tags per store and per product, so a link
 pasted into WhatsApp arrives as a card rather than grey text. Each product has
 its own address at `/s/<handle>/p/<id>`, and each store a `sitemap.xml`.
+
+## Win-back, weekly, without being asked
+
+`backend/core/winback_auto.py`. The win-back card used to sit in the Approval
+panel whenever the data happened to contain at-risk customers, saying "Approve
+→ download campaign". Two things were wrong with that.
+
+It was **passive** — identical week after week until the seller happened to
+look. The whole value of a win-back is that it is timely: a customer who last
+bought 70 days ago is reachable, and the same customer at 140 days is a
+stranger. Nobody remembers to check on a Tuesday.
+
+And it **ended in a spreadsheet**. A seller who downloads an Excel of messages
+then has to send them one at a time from an app this one cannot see, so nothing
+is measurable, the send usually never happens, and the feature quietly proves
+itself useless.
+
+Now it rides the same weekly clock as the social auto-plan (one ticker, not
+two — `autoplan._loop` runs both, with separate error handling so neither can
+stop the other). Monday 10am by default, in the seller's own timezone, chosen
+to be a different day from the Saturday social plan: two decisions landing in
+the panel at the same moment means one of them gets rubber-stamped. A missed
+run catches up when the seller next opens the app.
+
+Each run reads their own sales history for who has gone quiet, writes each
+message against what that person actually bought, and leaves **one** card in the
+Approval panel. Approving SENDS — from the seller's own mailbox (`seller_mail`)
+— and records who was contacted so `winback_proof` can measure what came back.
+
+**The cooldown is the most important part of the file.** An at-risk customer
+stays at-risk, so a weekly job with no memory mails the same person every Monday
+forever. That is not a campaign; it is how a small shop's domain reaches a spam
+folder permanently, and it would look like it was working right up until it had
+destroyed their deliverability. `COOLDOWN_DAYS = 45`, read from the campaigns
+this app actually recorded, pending ones included — the seller was handed
+tap-to-send links and we do not know whether they used them, so mailing again on
+the assumption they did not is the wrong way to be wrong. The seller is told how
+many were held back, because otherwise "only 4 customers" is indistinguishable
+from a bug.
+
+A run that finds nobody, or fewer than `MIN_BATCH`, produces no card at all. A
+card that says "0 customers" every Monday teaches the seller to ignore the
+panel. A batch is capped at `MAX_BATCH` and sorted by value first, so the cap
+drops the smallest customers rather than whichever ones the dataframe sorted to
+the top. Skipping a week throws the batch away **without** marking anyone as
+contacted, so they stay eligible next week.
+
+It never sends by itself. Everything else in this app asks before acting on a
+seller's behalf, and a message going to their customers in their name is the
+last place to make an exception.
+
+`scripts/test_winback_auto.py` — 71 assertions, most of them about the cooldown.
+
+**Also fixed here:** `autoplan.run_due()` ended with `now_local(email)`, where
+the loop variable was called `account`. Every scheduler tick raised NameError
+*after* doing the work, so the planning happened but the ticker had never once
+reported a successful run and `/api/social/autoplan/run` returned 500.
 
 ## Win-back proof loop
 

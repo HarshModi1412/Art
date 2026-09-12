@@ -37,7 +37,7 @@ from backend.core import commerce, secrets_store, db, supply, products
 from backend.core import sitebuilder, storefront
 from backend.core import messaging, password_reset, today as today_mod
 from backend.core import winback_proof
-from backend.core import loginguard, google_auth
+from backend.core import loginguard, google_auth, winback_auto
 from backend.core import media
 from backend.core import cache
 from backend.core import cancellations
@@ -2507,6 +2507,12 @@ def smart_state(response: Response,
         autoplan.kick(email)
     except Exception:  # noqa: BLE001
         pass
+    # Same for the weekly win-back scan: a missed Monday catches up here rather
+    # than waiting a whole week for the next one.
+    try:
+        winback_auto.kick(email)
+    except Exception:  # noqa: BLE001
+        pass
     tag = f'W/"{hashlib.md5((cache.stamp(email) + _home_fingerprint(email)).encode()).hexdigest()}"'
     # Private: this is one seller's data and must never be held by a shared
     # proxy. no-cache means "revalidate every time", not "do not store" — the
@@ -3093,6 +3099,21 @@ def smart_decision(insight_id: str, body: SmartDecisionBody,
             # order triggers — they come back as purchase-order cards to check
             # and send, instead of a download nobody sends.
             replenish.check(email, trigger="insight")
+        if insight_id == "winback_auto":
+            # This card is the only one that puts a message in front of a
+            # customer, so it reports what actually happened rather than a
+            # cheerful "approved". A partial send (some had no email, WhatsApp
+            # not connected) is normal and is stated, not hidden.
+            try:
+                res = winback_auto.approve(email)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            smart.set_decision(email, insight_id, "approved")
+            return {"ok": True, "download": False, "download_url": None,
+                    "sent": res.get("summary", ""), "result": res,
+                    "insights": smart.build_insights(email),
+                    "history": smart.build_history(email),
+                    "tasks": smart.get_tasks(email)}
         smart.set_decision(email, insight_id, "approved")
         if str(insight_id).startswith("content_"):
             smart.clear_content_suggestion(email)   # rotate a fresh suggestion in
@@ -3118,6 +3139,47 @@ def smart_decision(insight_id: str, body: SmartDecisionBody,
         return {"ok": True,
                 "insights": smart.build_insights(email),
                 "history": smart.build_history(email)}
+
+
+class WinbackAutoBody(BaseModel):
+    enabled: bool | None = None
+    day: int | None = None
+    hour: int | None = None
+
+
+@app.get("/api/winback/auto")
+def winback_auto_status(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return {**winback_auto.status(email), "day_names": winback_auto.DAY_NAMES}
+
+
+@app.post("/api/winback/auto")
+def winback_auto_save(body: WinbackAutoBody,
+                      authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    patch = {k: v for k, v in body.dict().items() if v is not None}
+    return {**winback_auto.save_config(email, patch),
+            "day_names": winback_auto.DAY_NAMES}
+
+
+@app.post("/api/winback/auto/run")
+def winback_auto_run_now(authorization: str | None = Header(default=None)):
+    """Run this week's scan now instead of waiting for the trigger. Prepares
+    the batch; it still waits for approval before anything is sent."""
+    email = require_user(authorization)
+    res = winback_auto.run_if_due(email, trigger="manual")
+    return {"run": res, "status": winback_auto.status(email),
+            "insights": smart.build_insights(email)}
+
+
+@app.post("/api/winback/auto/skip")
+def winback_auto_skip(authorization: str | None = Header(default=None)):
+    """Throw this week's batch away without sending it. The customers in it are
+    NOT marked as contacted, so they are eligible again next week."""
+    email = require_user(authorization)
+    winback_auto.clear_pending(email)
+    return {"ok": True, "status": winback_auto.status(email),
+            "insights": smart.build_insights(email)}
 
 
 @app.get("/api/smart/insight/{insight_id}/download")
@@ -4809,7 +4871,27 @@ def social_home(authorization: str | None = Header(default=None)):
         "catalogue_size": len(_social_catalogue(email)),
         "autoplan": _safe_autoplan_status(email),
         "day_names": autoplan.DAY_NAMES,
+        # Whether posts can go out by themselves. Wrapped because a broken
+        # credential store must not take the whole Social screen down with it —
+        # planning works perfectly well with Instagram disconnected.
+        "instagram": _safe_instagram_status(email),
     }
+
+
+def _safe_instagram_status(email: str) -> dict:
+    try:
+        st = instagram.status(email)
+        # `refresh_if_due` is cheap when it is not due and this is the screen a
+        # seller looks at most, so it is the natural place to keep a 60-day
+        # token alive without a second scheduler.
+        if st.get("connected"):
+            try:
+                instagram.refresh_if_due(email)
+            except Exception:  # noqa: BLE001
+                pass
+        return {**st, "oauth_available": instagram.oauth_configured()}
+    except Exception:  # noqa: BLE001
+        return {"connected": False, "oauth_available": instagram.oauth_configured()}
 
 
 @app.post("/api/social/settings")
