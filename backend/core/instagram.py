@@ -43,17 +43,32 @@ import requests
 
 from backend.core import user_store
 
-# Instagram's own OAuth + Graph endpoints (not graph.facebook.com / facebook.com)
-OAUTH_DIALOG = "https://api.instagram.com/oauth/authorize"
+# Instagram's own OAuth + Graph endpoints (not graph.facebook.com / facebook.com).
+#
+# THE AUTHORIZE HOST IS www.instagram.com, NOT api.instagram.com. The
+# api.instagram.com dialog belonged to the Basic Display API, which Meta shut
+# down in September 2025; pointing a seller at it now sends them to a dead
+# screen. The token endpoint stayed where it was.
+OAUTH_DIALOG = "https://www.instagram.com/oauth/authorize"
 OAUTH_TOKEN = "https://api.instagram.com/oauth/access_token"
 GRAPH = "https://graph.instagram.com"
 
-# The two scopes needed to read the account + publish content. Instagram
-# Login introduced these `instagram_business_*` scope names, replacing the
-# old `instagram_content_publish` used by the Facebook Login flow.
-OAUTH_SCOPES = "instagram_business_basic,instagram_business_content_publish"
+# Read the account, publish to it, and read its numbers. `manage_insights` was
+# not available on Instagram Login at first, which used to be the one real
+# reason to force sellers through a Facebook Page; it is available now, so the
+# Page is not needed for anything this app does.
+OAUTH_SCOPES = ("instagram_business_basic,"
+                "instagram_business_content_publish,"
+                "instagram_business_manage_insights")
 
-_KEY = "instagram_creds"
+_KEY = "instagram_creds"          # metadata only — never the token
+_CONNECTOR = "instagram"          # encrypted credential store
+
+# A long-lived token lasts 60 days and can be refreshed any time after it is
+# 24 hours old. Refreshing at 50 days leaves ten days of slack for a seller
+# whose shop is shut, or a server that was asleep.
+TOKEN_TTL_DAYS = 60
+REFRESH_AFTER_DAYS = 50
 
 
 # ---------------------------------------------------------
@@ -138,24 +153,119 @@ def exchange_code(code: str, redirect_url: str) -> dict:
 # ---------------------------------------------------------
 # Credentials
 # ---------------------------------------------------------
+# An Instagram access token IS the account: anyone holding it can post as the
+# seller. It is kept encrypted, with the same Fernet key as every other
+# third-party credential, and never written into the account's state document
+# where a stray debug dump or a Supabase row export would carry it out. Only
+# the harmless facts — which handle, when it was connected — live in plain
+# state, because the UI reads them on every page.
 def get_credentials(email: str) -> dict:
-    return user_store.get_key(email, _KEY, {}) or {}
+    from backend.core import secrets_store
+    creds = dict(secrets_store.get_credentials(email, _CONNECTOR) or {})
+    meta = user_store.get_key(email, _KEY, {}) or {}
+    # Tokens saved by the version before this one are still in plain state.
+    # Read them, so nobody is disconnected by the upgrade, and move them.
+    if not creds.get("access_token") and meta.get("access_token"):
+        creds = {"access_token": meta["access_token"],
+                 "ig_user_id": str(meta.get("ig_user_id") or "")}
+        try:
+            save_credentials(email, creds["access_token"], creds["ig_user_id"],
+                             meta.get("account_username"), meta.get("connected_at"))
+        except Exception:  # noqa: BLE001 — reading must not fail on a write problem
+            pass
+    out = {**meta, **{k: v for k, v in creds.items() if v}}
+    out.pop("_legacy", None)
+    return out
 
 
 def save_credentials(email: str, access_token: str, ig_user_id: str,
-                     account_username: str | None = None) -> dict:
-    creds = {
-        "access_token": access_token.strip(),
-        "ig_user_id": str(ig_user_id).strip(),
+                     account_username: str | None = None,
+                     connected_at: str | None = None) -> dict:
+    from backend.core import secrets_store
+    token = (access_token or "").strip()
+    ig_id = str(ig_user_id or "").strip()
+    secrets_store.save_connection(email, _CONNECTOR,
+                                  {"access_token": token, "ig_user_id": ig_id},
+                                  {"ig_user_id": ig_id})
+    meta = {
+        "ig_user_id": ig_id,
         "account_username": account_username,
-        "connected_at": _now_iso(),
+        "connected_at": connected_at or _now_iso(),
+        "token_at": _now_iso(),          # when THIS token was issued
+        "expires_at": _plus_days(TOKEN_TTL_DAYS),
     }
-    user_store.set_key(email, _KEY, creds)
-    return creds
+    user_store.set_key(email, _KEY, meta)
+    return {**meta, "access_token": token}
 
 
 def clear_credentials(email: str) -> None:
+    from backend.core import secrets_store
+    try:
+        secrets_store.delete_connection(email, _CONNECTOR)
+    except Exception:  # noqa: BLE001
+        pass
     user_store.set_key(email, _KEY, {})
+
+
+# ---------------------------------------------------------
+# Keeping the connection alive
+# ---------------------------------------------------------
+# THE BUG THIS PREVENTS: a long-lived token dies after 60 days. A seller who
+# connects Instagram, posts for a month and then has a quiet month comes back
+# to an account that is silently disconnected — with no error, because nothing
+# tried to post. They conclude the feature does not work.
+def token_age_days(email: str) -> float | None:
+    meta = user_store.get_key(email, _KEY, {}) or {}
+    stamp = meta.get("token_at") or meta.get("connected_at")
+    if not stamp:
+        return None
+    try:
+        import pandas as pd
+        return float((pd.Timestamp.now() - pd.Timestamp(stamp)).total_seconds() / 86400.0)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def needs_refresh(email: str) -> bool:
+    if not is_connected(email):
+        return False
+    age = token_age_days(email)
+    return age is not None and age >= REFRESH_AFTER_DAYS
+
+
+def refresh_token(email: str) -> dict:
+    """Swap a long-lived token for a fresh 60 days. Safe to call any time the
+    current token is over 24 hours old; a failure leaves the old one in place,
+    because a token with a week left is worth more than no token."""
+    creds = get_credentials(email)
+    token = creds.get("access_token")
+    if not token:
+        return {"ok": False, "error": "Instagram is not connected."}
+    try:
+        r = requests.get(f"{GRAPH}/refresh_access_token",
+                         params={"grant_type": "ig_refresh_token", "access_token": token},
+                         timeout=15)
+        d = _first(r.json())
+        if d.get("error") or not d.get("access_token"):
+            err = (d.get("error") or {}).get("message") if isinstance(d.get("error"), dict) else d.get("error")
+            return {"ok": False, "error": err or "Instagram would not refresh the connection."}
+        save_credentials(email, d["access_token"], creds.get("ig_user_id", ""),
+                         creds.get("account_username"), creds.get("connected_at"))
+        return {"ok": True, "expires_in": d.get("expires_in")}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+
+
+def refresh_if_due(email: str) -> dict | None:
+    """Called wherever the app already touches Instagram. Cheap when not due."""
+    if not needs_refresh(email):
+        return None
+    return refresh_token(email)
+
+
+def _plus_days(n: int) -> str:
+    import pandas as pd
+    return (pd.Timestamp.now() + pd.Timedelta(days=n)).isoformat(timespec="seconds")
 
 
 def is_connected(email: str) -> bool:
@@ -164,12 +274,21 @@ def is_connected(email: str) -> bool:
 
 
 def status(email: str) -> dict:
+    """What the UI may show. Never the token."""
     c = get_credentials(email)
+    age = token_age_days(email)
+    # Rounded, not truncated: a token issued a second ago has 59.99999 days
+    # left, and telling a seller "59 days" about a connection they made while
+    # looking at the screen reads as a bug.
+    days_left = None if age is None else max(0, int(round(TOKEN_TTL_DAYS - age)))
     return {
         "connected": is_connected(email),
         "ig_user_id": c.get("ig_user_id"),
         "account_username": c.get("account_username"),
         "connected_at": c.get("connected_at"),
+        "expires_in_days": days_left,
+        # Said plainly rather than left for the seller to work out from a date.
+        "needs_attention": bool(days_left is not None and days_left <= 7),
     }
 
 

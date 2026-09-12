@@ -499,6 +499,48 @@ whether they knew what to offer in the first thirty seconds.
 
 The same shape covers purchase orders, where the counterparty is a supplier.
 
+## Connecting Instagram
+
+`backend/core/instagram.py`. Meta's **Instagram API with Instagram Login** — not
+Facebook Login for Business. The difference is the whole point: this flow needs
+no Facebook Page. The seller taps Connect, logs in at instagram.com with the
+password they already know, taps Allow, and comes back connected. At no point
+does the word "developer", "Facebook Page" or "App ID" appear. Buffer, Later and
+Publer all onboard the same way in about four screens; that is the benchmark,
+and Meta owns those screens, so nobody beats it.
+
+Three things were wrong and are fixed:
+
+* **The authorize URL pointed at a dead host.** `api.instagram.com/oauth/
+  authorize` belonged to the Basic Display API, which Meta shut down in
+  September 2025. It is `www.instagram.com/oauth/authorize` now. Every seller
+  who clicked Connect would have landed on a broken page, and nothing in this
+  repo would have noticed.
+* **The access token sat in plain account state.** That token *is* the account.
+  It is in the encrypted credential store now, with a read path that finds and
+  migrates any token saved by the old version, so nobody is disconnected by the
+  upgrade.
+* **Nothing refreshed it.** Long-lived tokens die at 60 days. A seller who
+  connects, posts for a month and then has a quiet month came back to an account
+  that was silently disconnected — with no error, because nothing had tried to
+  post. `refresh_if_due()` swaps it at 50 days, leaving ten days of slack, and
+  a failed refresh keeps the old token rather than throwing away one that still
+  has a week left.
+
+`instagram_business_manage_insights` is also requested now. It was not available
+on Instagram Login at first, which used to be the one real reason to force
+sellers through a Facebook Page. It is available now, so the Page is needed for
+nothing this app does.
+
+**What is still required, and cannot be coded around:** Meta App Review for
+Advanced Access, because other people's Instagram accounts connect here.
+Standard Access covers only accounts with a role on the app — fine for a
+handful of design partners, not a business model. Budget Business Verification
+(GST or Udyam certificate, 5–15 business days) plus review cycles that Meta now
+warns take about 20 days each. The working OAuth flow above is a prerequisite
+for passing: the top rejection cause is a screencast that does not show real
+data rendered in the product's own UI.
+
 ## Social Media Manager
 
 `social.py`. Built on Liadeli, Sotgiu & Verlegh (*Journal of Marketing*, 2023),
@@ -945,7 +987,52 @@ answers how many came back and what they spent in the following 30 days. The
 headline lands on the home screen. The method is stated on screen rather than
 implied — it is not a controlled test, it is what their own sales data says.
 
-## Performance
+## Speed, on the phone that actually matters
+
+Measured in a 390px Chromium at 4× CPU throttle on a 1.5 Mbps connection — a
+mid-range Android on Indian 4G, which is the device that decides the 75th
+percentile, not the laptop this was built on.
+
+| | before | after |
+|---|---|---|
+| login screen visible | behind ~1 MB of blocking JS | **1.5 s** |
+| home painted after login | — | **1.0 s** |
+| opening a module | skeleton + full fetch, every time | **0.2–0.4 s** |
+| reload, back to the same screen | went to Home | **0.07 s** |
+
+**Plotly was the whole problem.** `smart.html` loaded the charting library —
+about 3.5 MB — from a CDN in `<head>`, with no `defer`. Every page view waited
+for it before painting anything, including the login screen, which has no chart
+on it, and the eleven screens out of fifteen that never draw one. It is now
+fetched by `ensurePlotly()` the first time a chart is actually drawn, warmed
+during idle time once the app is up, and shared by every chart on a screen
+through one promise. A chart whose screen closed mid-download is not drawn into
+a node that has gone.
+
+**Every module now paints from cache.** `openCached()` existed but only three
+screens used it; the other twelve showed a skeleton and re-fetched on every
+single open, which is what "the app resets every time I open it" actually was.
+All thirteen data screens now paint their last known view immediately, then
+revalidate and repaint only if something moved — scroll position included.
+
+**And the app knows where it is.** Opening a module writes `#/module/<id>`, so
+a reload, a pull-to-refresh or an iOS tab discard comes back to the screen the
+seller was on, and Back goes Home rather than out of the app.
+
+**The bug the throttled walkthrough found, which no unit test would have:** a
+module fetch takes a moment and a seller does not wait. Open Suppliers, tap
+Home before it lands, and the reply painted Suppliers back over the home page —
+the app undoing the tap. Every await in `openCached`, `goHome` and
+`renderSocial` now checks it is still the current screen before painting. The
+data is still cached; it is just not drawn.
+
+Remaining, in order of what is left to gain: brotli instead of gzip on
+`smart.js` (141 KB → about 100 KB — needs `brotli` in requirements and
+precompressed files, deliberately not shipped untested); the same lazy-load for
+Plotly in the Classic app at `/app`; and splitting `smart.js` itself, which is
+the only thing that reduces parse and compile time rather than transfer time.
+
+## Server-side performance
 
 The home screen used to take about half a second of server work before it drew
 anything, and it got worse as an account's history grew. Four changes, in order
@@ -989,13 +1076,99 @@ reads together rather than in sequence.
 
 ## Security & trust
 
-- Passwords are stored as salted PBKDF2-SHA256 hashes ("pbkdf2$salt$hash") — never
-  plain text. Legacy plaintext rows in user.csv still log in and are upgraded to a
-  hash automatically on the next successful login.
-- Signup asks for the password twice (double protection) on both the landing page
-  and the in-app modal.
-- Uploaded data lives in the user's private server-side session only — the UI says
-  so at every upload point.
+**Passwords.** Salted PBKDF2-HMAC-SHA256 at **600,000 iterations**, the current
+OWASP minimum. It was 100,000 — the 2017 figure, six times too cheap against a
+2026 GPU. The cost is written into the stored string (`pbkdf2$600000$salt$hash`)
+rather than being a constant in the code, which is the thing that makes it
+raisable at all: with a constant, raising it verifies the new cost against a
+digest computed at the old one and silently rejects every correct password.
+Rows in either older format — `pbkdf2$salt$hash`, and bare plaintext from the
+first version — still verify, and are rewritten at the current cost on the next
+successful login.
+
+**Login is throttled** (`backend/core/loginguard.py`). It accepted unlimited
+attempts, which is how small SaaS accounts are actually taken: not by cracking a
+hash, but by replaying a leaked email/password list. Failures are counted **per
+account** as well as per address — per-address alone is what everyone writes
+first and is sidestepped for free by spreading guesses over a botnet. The delay
+grows 1s, 2s, 4s, 8s, then the attempt is refused for fifteen minutes. Never a
+permanent lock: that is a free denial-of-service against anyone whose email
+address is known. A throttled attempt returns the same "Invalid credentials" as
+a wrong password, so none of it can be used to work out which addresses exist.
+
+**Sessions** are 256-bit random tokens (`secrets.token_urlsafe(32)`), stored as
+a SHA-256 hash so a database read does not hand over live sessions, expiring in
+30 days. `auth.start_session()` is the single place they are minted, so Google
+sign-in produces exactly the same session as a password — not a parallel one
+with its own expiry and revocation bugs.
+
+**Third-party credentials** — seller SMTP passwords, Instagram access tokens,
+commerce API keys — are Fernet-encrypted (AES-128-CBC + HMAC) with
+`CS_SECRET_KEY` and never returned by any endpoint. The Instagram token moved
+here from plain account state in the same change: that token *is* the account,
+and anyone holding it can post as the seller.
+
+**Known gap, stated rather than hidden.** The session token is held in the
+browser's `localStorage`, which OWASP is now explicit about: any XSS in the
+origin reads it. The fix is an `HttpOnly; Secure; SameSite=Lax` cookie with the
+`__Host-` prefix, and it touches every `fetch` in the app plus CSRF handling on
+every write — worth doing before this holds anyone's payment data, not worth
+doing half-way. Login throttling is also in-process memory, so with more than
+one instance the effective limit multiplies by the instance count; the honest
+fix is the same counters in Supabase or Redis, deliberately not built while one
+instance is what runs.
+
+**Also:** signup asks for the password twice on both the landing page and the
+in-app modal, and uploaded data lives in the account's own server-side storage.
+
+## Sign in with Google
+
+`backend/core/google_auth.py`. A seller who has just found this app is asked,
+before they see anything, to invent a password and remember it. Most Indian D2C
+sellers are on Gmail already, so "Continue with Google" removes the highest-
+friction moment in the product. The password login stays — an account reachable
+only through a third party is an account the seller loses when that third party
+decides they are a bot.
+
+**Verification is local and depends on no library.** Google publishes its
+signing keys; the ID token's signature is checked against them with
+`cryptography`, which is already a dependency. Checked, in order: the header
+names RS256 and a key id we can find (never `none`, never an algorithm the
+token itself gets to choose); the signature; `iss`; **`aud` is our client id**;
+`exp`/`iat` within 60 seconds of skew; `email_verified`; and the `nonce` we
+issued. The audience check is the one that matters — a token minted for any
+other Google app is a perfectly valid Google-signed JWT, and without it anyone
+running any Google OAuth app can sign in as anyone.
+
+**Account linking, and the attack it avoids.** An existing account is joined to
+a Google identity only when both sides are proven. Joining on a matching email
+alone is pre-account hijacking: an attacker registers `victim@gmail.com` with a
+password they choose, waits, and inherits the account the moment the real owner
+signs in with Google — while keeping the password. That is CVE-2026-53516
+(Better Auth, CVSS 8.3, May 2026), and it is the default behaviour of a
+surprising amount of shipped code. Here the seller is asked for the existing
+account's password once, and the two are joined only then.
+
+Set `GOOGLE_CLIENT_ID` to switch it on; the button is hidden without it, so a
+deployment that has not configured one shows no dead control. Google's OAuth
+verification is **not required** for the `email`/`profile`/`openid` scopes this
+uses — no 100-user cap, no unverified-app warning. Brand verification (a logo
+on the consent screen) is separate, automated, and needs a custom domain, since
+`*.onrender.com` cannot be verified in Search Console.
+
+## The Home screen explains itself
+
+A seller who signs up used to see fifteen app tiles, a task box and no sentence
+anywhere saying what this thing is. The setup card tells them the *next step*,
+which is useless if you do not yet know what you are setting up — and people
+who do not understand a tool in the first thirty seconds do not come back to it
+on day two.
+
+`guideCard()` is one short panel at the top: what it does, what it needs from
+them, what it does on its own. Three steps, the first two ticking themselves
+off once sales data is in. It dismisses to a "How this works" button in the
+header and stays dismissed. No carousel, no tour, nothing to click through
+before the app can be used.
 
 ## Growth features
 

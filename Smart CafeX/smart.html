@@ -16,8 +16,23 @@
     document.documentElement.setAttribute("data-theme", saved || (prefersDark ? "dark" : "light"));
   })();
 </script>
-<link rel="stylesheet" href="/smart-static/smart.css?v=52" />
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<link rel="stylesheet" href="/smart-static/smart.css?v=53" />
+<!-- Plotly is NOT loaded here.
+     It is ~3.5 MB of JavaScript, and it used to sit in this <head> with no
+     `defer`, which means every single page view — including the login screen,
+     which has no chart on it — stopped and waited for it before painting
+     anything. On an Indian 4G connection that was several seconds of blank
+     white before the app existed.
+
+     Four screens out of fifteen draw a chart. `ensurePlotly()` in smart.js
+     fetches the library the first time one of them actually needs it, and the
+     fetch is warmed in the background once the app is up, so by the time
+     anyone opens Sales Analytics it is usually already there.
+
+     preconnect only: the DNS lookup and TLS handshake to the CDN happen early
+     and cost nothing, so the eventual fetch is just the bytes. -->
+<link rel="preconnect" href="https://cdn.plot.ly" crossorigin>
+<link rel="dns-prefetch" href="https://cdn.plot.ly">
 </head>
 <body>
 
@@ -26,6 +41,13 @@
   <div class="login-card">
     <div class="login-brand"><span class="logo-chip">1T</span> One Tap Manager · Smart</div>
     <p class="muted">Your product-selling command centre. Log in to load your workspace — data, tasks and approvals are saved to your account and shared with Classic mode.</p>
+    <!-- Google first, because for most sellers it is one tap and no password
+         to invent. Hidden until /api/auth/providers says the server has a
+         client id, so a deployment without one shows no dead button. -->
+    <div id="gsiBox" hidden>
+      <div id="gsiBtn" class="gsi-btn"></div>
+      <div class="or-rule"><span>or use a password</span></div>
+    </div>
     <label>Email <input type="email" id="email" autocomplete="username" placeholder="you@yourbrand.com" /></label>
     <label>Password <input type="password" id="password" autocomplete="current-password" placeholder="Your password" /></label>
     <button class="btn primary block" id="loginBtn">Log in</button>
@@ -195,6 +217,6 @@
     <div class="err" id="addErr" hidden></div>
   </div>
 </div>
-<script src="/smart-static/smart.js?v=52"></script>
+<script src="/smart-static/smart.js?v=53"></script>
 </body>
 </html>

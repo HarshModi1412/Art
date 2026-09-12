@@ -406,6 +406,105 @@ async function doLogin() {
     showShell();
   } catch (e) { err.textContent = e.message; err.hidden = false; }
 }
+/* ------------------------------------------------- continue with Google ----
+   Most Indian D2C sellers are on Gmail already. Asking them to invent and
+   remember a password before they have seen anything is the highest-friction
+   moment in the whole product, and it is the one that happens first.
+
+   Google Identity Services is loaded only if the server actually has a client
+   id — a dead button is worse than no button — and only on the login screen,
+   so the script is never fetched for a seller who is already signed in.
+
+   `use_fedcm_for_button` is on: Safari, Firefox and Brave already block the
+   third-party cookies the old flow depends on, and roughly a fifth of traffic
+   would otherwise get a button that silently does nothing. */
+let _gsiNonce = "";
+
+async function setupGoogleSignIn() {
+  let cfg;
+  try { cfg = await api("/api/auth/providers"); } catch (e) { return; }
+  const g = cfg && cfg.google;
+  if (!g || !g.enabled || !g.client_id) return;
+
+  await new Promise((resolve, reject) => {
+    if (window.google && google.accounts) return resolve();
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true; s.defer = true;
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  }).catch(() => null);
+  if (!(window.google && google.accounts && google.accounts.id)) return;
+
+  // Replay protection: the server is told what nonce to expect, and a token
+  // captured from one browser cannot be posted from another.
+  _gsiNonce = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()));
+  google.accounts.id.initialize({
+    client_id: g.client_id,
+    callback: onGoogleCredential,
+    nonce: _gsiNonce,
+    use_fedcm_for_button: true,
+    auto_select: false,
+    itp_support: true,
+  });
+  const box = $("gsiBox"), btn = $("gsiBtn");
+  if (!box || !btn) return;
+  google.accounts.id.renderButton(btn, {
+    type: "standard", theme: document.documentElement.dataset.theme === "dark" ? "filled_black" : "outline",
+    size: "large", text: "continue_with", shape: "rectangular", width: 320,
+  });
+  box.hidden = false;
+}
+
+async function onGoogleCredential(resp) {
+  const err = $("loginErr"), note = $("loginNote");
+  err.hidden = true; if (note) note.hidden = true;
+  await googleFinish({ credential: resp.credential, nonce: _gsiNonce });
+}
+
+/* Split out because the link case comes back through here a second time, with
+   the password the seller typed. */
+async function googleFinish(payload) {
+  const err = $("loginErr");
+  try {
+    const d = await api("/api/auth/google", { method: "POST", json: payload });
+    state.token = d.token; state.email = d.email;
+    localStorage.setItem("cx_token", d.token); localStorage.setItem("cx_email", d.email);
+    showShell();
+  } catch (e) {
+    // 409: an account with this address already exists and was made with a
+    // password. We ask for it once rather than silently joining the two, which
+    // is how one person's account ends up attached to another's Google login.
+    if (/already uses this email/i.test(e.message || "")) {
+      const pw = await askPassword();
+      if (pw) return googleFinish({ ...payload, password: pw });
+      return;
+    }
+    err.textContent = e.message; err.hidden = false;
+  }
+}
+
+function askPassword() {
+  return new Promise((resolve) => {
+    openModal("Connect Google to your existing account", `
+      <p class="muted">You already have an account with this email. Type its
+        password once and the two are joined — after that, one tap signs you in.</p>
+      <label>Your current password
+        <input type="password" id="gLinkPw" autocomplete="current-password" /></label>
+      <div class="row" style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+        <button class="btn ghost" id="gLinkNo">Cancel</button>
+        <button class="btn primary" id="gLinkGo">Connect</button>
+      </div>`);
+    const done = (v) => { closeModal(); resolve(v); };
+    $("gLinkNo").onclick = () => done(null);
+    $("gLinkGo").onclick = () => done(($("gLinkPw").value || "").trim() || null);
+    $("gLinkPw").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") done(($("gLinkPw").value || "").trim() || null);
+    });
+    $("gLinkPw").focus();
+  });
+}
+
 // A seller locked out of their account is locked out of their whole catalogue,
 // so this has to either work or say honestly that it cannot. It used to do
 // neither: there was no link here at all, and the endpoint behind it promised
@@ -432,6 +531,10 @@ $("logoutBtn").onclick = async () => {
   // them with it, or the next person at this browser sees them.
   warmClear(); warmModClearAll();
   $("appShell").hidden = true; $("loginView").hidden = false;
+  // Google remembers the last account and would sign them straight back in on
+  // the next tap, which is not what "log out" means to anyone.
+  try { if (window.google && google.accounts) google.accounts.id.disableAutoSelect(); } catch (e) {}
+  setupGoogleSignIn();
 };
 
 function showShell() {
@@ -451,10 +554,18 @@ function deepLinkModule() {
   const m = /^#\/module\/([a-z]+)$/.exec(location.hash);
   return m ? m[1] : null;
 }
-window.addEventListener("hashchange", () => {
+/* Back and forward. `openModule`/`goHome` call routeTo, which writes the hash,
+   which would fire this again and re-fetch — so a navigation that merely
+   reflects where we already are is ignored. */
+function _syncRoute() {
+  if (!state.token || $("appShell").hidden) return;
   const deep = deepLinkModule();
-  if (deep && state.token && !$("appShell").hidden) openModule(deep);
-});
+  if (deep === _currentModule) return;
+  if (deep) openModule(deep);
+  else if (_currentModule) goHome();
+}
+window.addEventListener("popstate", _syncRoute);
+window.addEventListener("hashchange", _syncRoute);
 
 // ---------- view helpers ----------
 function setView(html) { $("view").innerHTML = html; }
@@ -502,9 +613,62 @@ function SERIES() {
 }
 function series(i) { return SERIES()[i % 8]; }
 
+/* ------------------------------------------------ the chart library, late ---
+   Plotly is about 3.5 MB. It used to load in the <head> of every page, with no
+   `defer`, so nothing painted until it arrived — on the login screen, on Home,
+   on Suppliers, on all eleven screens that have no chart at all.
+
+   Now it is fetched the first time a chart is actually drawn, and warmed in
+   the background a moment after the app is usable, so the seller who does open
+   Sales Analytics almost never waits for it either. One promise, so ten charts
+   on one screen share a single download. */
+let _plotlyPromise = null;
+
+function ensurePlotly() {
+  if (window.Plotly) return Promise.resolve(true);
+  if (_plotlyPromise) return _plotlyPromise;
+  _plotlyPromise = new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.plot.ly/plotly-2.35.2.min.js";
+    s.async = true;
+    s.onload = () => resolve(true);
+    s.onerror = () => { _plotlyPromise = null; resolve(false); };  // retry next time
+    document.head.appendChild(s);
+  });
+  return _plotlyPromise;
+}
+
+/* Once the app is up and idle, pull it down so the first chart is instant.
+   requestIdleCallback keeps it off the critical path entirely; the timeout
+   fallback covers Safari, which still has not shipped it. */
+function warmPlotly() {
+  const go = () => ensurePlotly();
+  if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 4000 });
+  else setTimeout(go, 2500);
+}
+
 function plot(el, traces, layout = {}, title = "") {
-  if (!window.Plotly) { el.innerHTML = "Charts failed to load."; return; }
+  if (!el) return;
   if (el.id) _charts[el.id] = { traces, layout, title };
+  if (window.Plotly) return _drawPlot(el, traces, layout, title);
+  // The card keeps its height so the page does not jump when the chart lands.
+  el.innerHTML = `<div class="plot-wait">${skeletonBar()}</div>`;
+  const id = el.id;
+  ensurePlotly().then((ok) => {
+    // The seller may have navigated away while it downloaded. Re-find by id
+    // rather than drawing into a node that is no longer on the page.
+    const live = id ? $(id) : el;
+    if (!live) return;
+    if (!ok) { live.innerHTML = `<div class="ap-empty">Charts could not load. Check your connection and press Refresh.</div>`; return; }
+    _drawPlot(live, traces, layout, title);
+  });
+}
+
+function skeletonBar() {
+  return `<div class="sk-plot"><i></i><i></i><i></i><i></i><i></i><i></i></div>`;
+}
+
+function _drawPlot(el, traces, layout, title) {
   const base = _baseLayout();
   Plotly.newPlot(el, traces, { ...base, ...layout, xaxis: { ...base.xaxis, ...(layout.xaxis || {}) }, yaxis: { ...base.yaxis, ...(layout.yaxis || {}) } },
     { displayModeBar: false, responsive: true, staticPlot: true });
@@ -523,8 +687,9 @@ function _addExpand(el, title) {
 }
 
 let _modalChart = null, _modalMode = "zoom";
-function openChartModal(id, title) {
-  const c = _charts[id]; if (!c || !window.Plotly) return;
+async function openChartModal(id, title) {
+  const c = _charts[id]; if (!c) return;
+  if (!window.Plotly && !(await ensurePlotly())) return;
   _modalChart = id;
   $("chartModal").style.display = "flex";
   $("chartModalTitle").textContent = title || c.title || "Chart";
@@ -713,23 +878,63 @@ function warmModClearAll() {
 /* One shape for every module: paint what we had, fetch, repaint only if it
    actually changed. `render` must be safe to call twice with equal data —
    every caller below re-renders from scratch, so it is. */
-async function openCached(mod, title, fetcher, render) {
+async function openCached(mod, title, fetcher, render, emptyHtml) {
+  // THE BUG THIS GUARDS AGAINST: the fetch below takes a second or two, and a
+  // seller does not wait. Open Suppliers, tap Home before it lands, and the
+  // reply arrives to a screen that has moved on — and paints Suppliers over
+  // the home page. Every await here is followed by a check that this is still
+  // the screen the seller is looking at.
+  const openedAs = _currentModule;
+  const stillHere = () => _currentModule === openedAs;
+
   const warm = warmModRead(mod);
   let painted = false;
   if (warm) {
-    try { render(warm); painted = true; } catch (e) { painted = false; }
+    // await: some renders are async (Social fetches its calendar). Without it
+    // the fresh fetch below would race the warm paint and they would land in
+    // whichever order the network decided.
+    try { await render(warm); painted = true; } catch (e) { painted = false; }
+    if (!stillHere()) return;
   }
   if (!painted) moduleShell(title, skeleton("cards"));
+  else restoreScroll(mod);
   try {
     const fresh = await fetcher();
-    if (!painted || JSON.stringify(warm) !== JSON.stringify(fresh)) render(fresh);
+    if (!stillHere()) { warmModWrite(mod, fresh); return; }   // cache it, don't draw it
+    if (!painted || JSON.stringify(warm) !== JSON.stringify(fresh)) {
+      // A repaint under someone's finger loses their place. The scroll position
+      // is put back after the new screen exists, so a background refresh is
+      // something the seller notices only if the numbers changed.
+      const y = window.scrollY;
+      await render(fresh);
+      if (!stillHere()) return;
+      if (painted && y) window.scrollTo(0, y);
+    }
     warmModWrite(mod, fresh);
   } catch (e) {
+    if (!stillHere()) return;
     // Keep a usable screen rather than swapping it for an error card.
     if (painted) toast("Showing your last saved view — could not reach the "
                        + "server just now.", 5000);
+    else if (emptyHtml) moduleShell(title, emptyHtml(e.message));
     else moduleShell(title, failed(e.message, () => openModule(_currentModule)));
   }
+}
+
+/* Where the seller was on each screen.
+   ------------------------------------------------------------------
+   Kept in memory only, on purpose: a scroll position from yesterday is
+   meaningless, and restoring one is more disorienting than starting at the
+   top. Within a session, though, going Products → a product → back and
+   landing at the top of a 60-item list is the single most irritating thing
+   this app did. */
+const _scrollAt = {};
+function rememberScroll(mod) { if (mod) _scrollAt[mod] = window.scrollY || 0; }
+function restoreScroll(mod) {
+  const y = _scrollAt[mod];
+  if (!y) return;
+  // After paint, or the document is not yet tall enough to scroll to it.
+  requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, y)));
 }
 
 function paintHome(s, pt) {
@@ -742,7 +947,9 @@ function paintHome(s, pt) {
 
 async function goHome() {
   _afterUpload = null;
+  rememberScroll(_currentModule);
   _currentModule = null;
+  routeTo(null);
   setCrumb(""); showRail(true);
 
   // Paint the last known home screen first. The seller is looking at their
@@ -758,8 +965,12 @@ async function goHome() {
     ]);
     // Only repaint when something actually moved. Re-rendering identical HTML
     // is what made the return feel like a reload even once it was fast.
+    // Same race as openCached: the seller may have opened a module while this
+    // was in flight, and painting Home over it now would be the app undoing
+    // their tap. The data is still worth keeping for next time.
+    const left = _currentModule !== null;
     const changed = !warm || JSON.stringify(warm.state) !== JSON.stringify(s);
-    if (changed || !warm) paintHome(s, pt);
+    if (!left && (changed || !warm)) paintHome(s, pt);
     warmWrite(s, pt);
   } catch (e) {
     // A warm screen already on-screen is far better than throwing it away for
@@ -956,6 +1167,77 @@ function openDigest() {
    the next step, keeps the rest of the screen available but quiet, and removes
    itself the moment the last step is done. Nothing here blocks anything — a
    seller who wants to go straight to the website builder still can. */
+/* ------------------------------------------------------- the guide card ----
+   THE PROBLEM: a seller who signs up sees fifteen app tiles and a task box,
+   and no sentence anywhere saying what this thing is or what it will do for
+   them. The setup card below tells them the NEXT step, which is useless if you
+   do not yet know what you are setting up. People who do not understand a tool
+   in the first thirty seconds do not come back to it on day two.
+
+   So: one short panel, at the top, in plain words — what it does, what it
+   needs from them, and what it does on its own. It disappears once setup is
+   finished, and "How this works" in the header brings it back for anyone who
+   wants it later. No carousel, no tour, nothing that has to be clicked
+   through before the app can be used. */
+const GUIDE_KEY = "cx_guide_hidden";
+
+function guideHidden() {
+  try { return localStorage.getItem(GUIDE_KEY) === "1"; } catch (e) { return false; }
+}
+function setGuideHidden(v) {
+  try { v ? localStorage.setItem(GUIDE_KEY, "1") : localStorage.removeItem(GUIDE_KEY); }
+  catch (e) { /* private mode — it just shows again next time */ }
+}
+
+function guideCard(s) {
+  const setup = s.setup || {};
+  // Finished sellers have earned their screen back. They can still reopen it.
+  if (setup.complete && guideHidden()) return "";
+  if (guideHidden()) return "";
+  const salesReady = !!(state.data && state.data.sales && state.data.sales.ready);
+  const step = (n, done, title, body) => `
+    <li class="${done ? "done" : ""}">
+      <span class="gd-n">${done ? sic("check") : n}</span>
+      <div><b>${esc(title)}</b><span>${esc(body)}</span></div>
+    </li>`;
+  return `
+    <section class="guide-card" id="guideCard">
+      <div class="guide-head">
+        <div>
+          <div class="today-eyebrow">How this works</div>
+          <h3>One place to run the shop, not fifteen apps to learn</h3>
+          <p>You give it your sales. It works out what is selling, what is about
+             to run out, and what to post — then asks you to approve. Nothing is
+             sent, ordered or published without you saying yes.</p>
+        </div>
+        <button class="btn ghost tiny" id="guideHide" title="Hide this">${sic("close")}</button>
+      </div>
+      <ol class="guide-steps">
+        ${step(1, salesReady, "Give it your sales once",
+               "Any export from your marketplace, your billing app or a spreadsheet. It reads the columns for you.")}
+        ${step(2, salesReady, "It watches while you work",
+               "Stock cover, reorder points, what to post next week, who has stopped buying — all recalculated as orders come in.")}
+        ${step(3, false, "You approve, it acts",
+               "Purchase orders to your suppliers, posts to your calendar, win-back messages. Every one waits for your yes.")}
+      </ol>
+      <div class="guide-foot">
+        <span class="muted tiny">Start anywhere. The apps below are grouped by
+          what they are for — <b>Sell</b>, <b>Make</b>, <b>Run</b>.</span>
+      </div>
+    </section>`;
+}
+
+function wireGuide() {
+  const hide = $("guideHide");
+  if (hide) hide.onclick = () => {
+    setGuideHidden(true);
+    const el = $("guideCard");
+    if (el) { el.style.height = `${el.offsetHeight}px`; el.classList.add("gone"); }
+  };
+  const show = $("guideShow");
+  if (show) show.onclick = () => { setGuideHidden(false); goHome(); };
+}
+
 function setupCard(setup) {
   if (!setup || setup.complete || !setup.next) return "";
   const n = setup.next;
@@ -1027,10 +1309,14 @@ function renderHome(s) {
       <h2>Welcome back</h2>
       <div class="page-actions">
         <span class="muted">${esc(state.email)}</span>
+        ${guideHidden() ? `<button class="btn ghost sm" id="guideShow" title="What this app does and how to use it">
+          ${sic("compass")}How this works</button>` : ""}
         <button class="btn ghost sm" id="refreshPage" title="Pull the latest numbers without reloading the page">
           ${sic("refresh")}Refresh</button>
       </div>
     </div>
+
+    ${guideCard(s)}
 
     <!-- The task list leads the home screen. Approving a reel puts a dated
          task here (make the clip in Google Flow, upload it, schedule it), and a
@@ -1096,6 +1382,7 @@ function renderHome(s) {
   // the difference between one round-trip and three on a slow connection
   const rp = $("refreshPage");
   if (rp) rp.onclick = refreshCurrent;
+  wireGuide();
   wireSetupCard();
   // Inside a folded section now: fetched when it is opened, not on every home
   // paint. One fewer round trip on the load that matters most.
@@ -1106,6 +1393,7 @@ function renderHome(s) {
   renderToday();
   renderUpcomingSocial();
   warmOnIntent();
+  warmPlotly();     // idle-time, so the first chart does not wait for 3.5 MB
   warmModules();
   document.querySelectorAll("[data-up]").forEach((el) => el.onclick = () => startUpload(el.dataset.up));
   document.querySelectorAll("[data-add]").forEach((el) => el.onclick = () => openAddRecords(el.dataset.add));
@@ -2408,8 +2696,28 @@ async function refreshCurrent() {
   }
 }
 
+/* ------------------------------------------------------------- the route ---
+   THE PROBLEM: the app never told the browser where it was. Open Suppliers,
+   pull to refresh on a phone (or let iOS discard the tab, or hit back), and
+   you were on Home again — every time, from the top. The seller reads that as
+   "it lost my place", and they are right.
+
+   Now every module writes itself into the URL. Reload lands where you were,
+   Back goes to Home instead of leaving the app, and the address bar says what
+   screen you are on. `replaceState` is used when the hash already matches so
+   re-opening the same module does not stack history entries a seller would
+   have to press Back through twice. */
+function routeTo(id) {
+  const want = id ? `#/module/${id}` : "#/";
+  if (location.hash === want) return;
+  if (id) history.pushState({ mod: id }, "", want);
+  else history.replaceState({ mod: null }, "", want);
+}
+
 async function openModule(id) {
+  rememberScroll(_currentModule);
   _currentModule = id;
+  routeTo(id);
   if (id === "sales") return openSales();
   if (id === "inventory") return openInventory();
   if (id === "studio") return openStudio();
@@ -3181,10 +3489,9 @@ let _studio = null;
 let _studioProduct = null;
 
 async function openStudio() {
-  moduleShell("Product Studio", skeleton("cards"));
-  try { _studio = await api("/api/studio/state"); }
-  catch (e) { return moduleShell("Product Studio", failed(e.message, () => openModule(_currentModule))); }
-  renderStudio();
+  await openCached("studio", "Product Studio",
+    () => api("/api/studio/state"),
+    (d) => { _studio = d; renderStudio(); });
 }
 
 function renderStudio() {
@@ -3587,15 +3894,11 @@ const _eff = (v, auto) => (auto ? fmt(v) + "<span class=\"auto-tag\">auto</span>
 
 async function openSupply() {
   if (_currentModule === "supply") _supplyView = "suppliers";
-  moduleShell(_supplyView === "inventory"
+  // Two views share one endpoint but paint differently, so they cache apart —
+  // otherwise opening Inventory would flash the Suppliers screen first.
+  await openCached(`supply_${_supplyView}`, _supplyView === "inventory"
     ? "Inventory Management" : "Suppliers & Purchase Orders",
-    `<div class="ap-empty">Loading…</div>`);
-  try {
-    const d = await api("/api/supply/state");
-    renderSupply(d);
-  } catch (e) { moduleShell(_supplyView === "inventory"
-      ? "Inventory Management" : "Suppliers & Purchase Orders",
-      `<div class="card">${esc(e.message)}</div>`); }
+    () => api("/api/supply/state"), renderSupply);
 }
 
 function _supBadge(it) {
@@ -4581,16 +4884,23 @@ function showSupplierOrders(orders) {
 
 // ---------- MODULE: Sales Analytics ----------
 async function openSales() {
-  moduleShell("Sales Analytics", skeleton("tiles"));
-  try {
-    await api("/api/smart/state");
-    // Cancellations come from your own website's orders, and they are already
-    // out of the revenue figure beside them — fetched together so the page
-    // paints once.
-    const [d, cx] = await Promise.all([
-      api("/api/analytics?lang=en"),
-      api("/api/cancellations").catch(() => null),
-    ]);
+  await openCached("sales", "Sales Analytics",
+    async () => {
+      await api("/api/smart/state");
+      // Cancellations come from your own website's orders, and they are already
+      // out of the revenue figure beside them — fetched together so the page
+      // paints once.
+      const [d, cx] = await Promise.all([
+        api("/api/analytics?lang=en"),
+        api("/api/cancellations").catch(() => null),
+      ]);
+      return { d, cx };
+    }, renderSales);
+}
+
+function renderSales(payload) {
+  const { d, cx } = payload;
+  {
     const k = d.kpis;
     const rowCount = (state.data && state.data.sales && state.data.sales.rows) || 0;
     const thin = rowCount > 0 && rowCount < THIN_DATA_ROWS;
@@ -4644,8 +4954,6 @@ async function openSales() {
     if (d.by_category) plot($("cCat"), [{ x: d.by_category.x, y: d.by_category.y, type: "bar", marker: { color: primary } }], { yaxis: { tickprefix: "₹" } }, "Revenue by category");
     plot($("cWk"), [{ x: d.weekday_pattern.x, y: d.weekday_pattern.y, type: "bar", marker: { color: series(1) } }], { yaxis: { tickprefix: "₹" } }, "Revenue by weekday");
     if (d.top_products) plot($("cTop"), [{ x: d.top_products.x, y: d.top_products.y, type: "bar", orientation: "h", marker: { color: series(2) } }], { xaxis: { tickprefix: "₹" }, yaxis: { autorange: "reversed" }, margin: { l: 150, r: 20, t: 8, b: 40 } }, "Top products");
-  } catch (e) {
-    moduleShell("Sales Analytics", failed(e.message, () => openModule(_currentModule)));
   }
 }
 
@@ -4754,10 +5062,15 @@ function bindCancelPanel(cx) {
 
 // ---------- MODULE: Sub-Category Analysis ----------
 async function openSubcategory() {
-  moduleShell("Sub-Category Analysis", `<div class="ap-empty">Loading…</div>`);
-  try {
-    await api("/api/smart/state");
-    const d = await api("/api/subcategory?lang=en");
+  await openCached("subcategory", "Sub-Category Analysis",
+    async () => {
+      await api("/api/smart/state");
+      return api("/api/subcategory?lang=en");
+    }, renderSubcategory);
+}
+
+function renderSubcategory(d) {
+  {
     const rowCount = (state.data && state.data.sales && state.data.sales.rows) || 0;
     // Same rule as Sales Analytics: the cards are sums of the seller's own rows
     // and are always shown; only the trend charts wait for enough history.
@@ -4792,7 +5105,7 @@ async function openSubcategory() {
     $("subSel").onchange = () => $("subSel").value ? renderSubDetail($("subSel").value) : openSubcategory();
     plot($("cSubTrend"), d.series.map((s) => ({ x: s.x, y: s.y, name: s.name, type: "scatter", mode: "lines+markers" })), { yaxis: { tickprefix: "₹" } }, "Monthly trend");
     plot($("cSubTot"), [{ x: d.totals.x, y: d.totals.y, type: "bar", marker: { color: cssVar("--primary", "#6d28d9") } }], { yaxis: { tickprefix: "₹" } }, "Total revenue");
-  } catch (e) { moduleShell("Sub-Category Analysis", failed(e.message, () => openModule(_currentModule))); }
+  }
 }
 
 async function renderSubDetail(value) {
@@ -4828,9 +5141,12 @@ async function renderSubDetail(value) {
 
 // ---------- MODULE: Review Analytics (self positioning, no peer comparison) ----------
 async function openReview() {
-  moduleShell("Review Analytics", `<div class="ap-empty">Analysing your reviews…</div>`);
-  try {
-    const d = await api("/api/smart/positioning?lang=en");
+  await openCached("review", "Review Analytics",
+    () => api("/api/smart/positioning?lang=en"), renderReview);
+}
+
+function renderReview(d) {
+  {
     if (!d.available) { moduleShell("Review Analytics", `<div class="card">${esc(d.reason || "Not enough review data.")}</div>`); return; }
     const pos = d.position || {};
     const html = `
@@ -4848,14 +5164,17 @@ async function openReview() {
     const primary = cssVar("--primary", "#6d28d9");
     plot($("cShare"), [{ x: d.share_chart.themes, y: d.share_chart.yours, type: "bar", marker: { color: primary } }], { margin: { l: 46, r: 16, t: 8, b: 120 }, xaxis: { tickangle: -35 } }, "What customers talk about");
     plot($("cSent"), [{ x: d.sentiment_chart.themes, y: d.sentiment_chart.yours, type: "bar", marker: { color: series(1) } }], { margin: { l: 46, r: 16, t: 8, b: 120 }, xaxis: { tickangle: -35 } }, "Sentiment by theme");
-  } catch (e) { moduleShell("Review Analytics", failed(e.message, () => openModule(_currentModule))); }
+  }
 }
 
 // ---------- MODULE: Complaint Analysis ----------
 async function openComplaints() {
-  moduleShell("Complaint Analysis", `<div class="ap-empty">Finding complaint patterns…</div>`);
-  try {
-    const d = await api("/api/smart/complaints");
+  await openCached("complaints", "Complaint Analysis",
+    () => api("/api/smart/complaints"), renderComplaints);
+}
+
+function renderComplaints(d) {
+  {
     const det = d.detected || {};
     let html = `<p class="muted">${fmt(det.n_reviews)} reviews · ${fmt(det.n_complaints)} complaints (${det.complaint_rate ?? 0}% rate)</p>`;
     const focus = (d.focus && d.focus.focus_now) || [];
@@ -4876,20 +5195,24 @@ async function openComplaints() {
     }
     moduleShell("Complaint Analysis", html);
     if (d.monthly) plot($("cCompM"), [{ x: d.monthly.months, y: d.monthly.counts, type: "bar", marker: { color: "#f97316" } }], {}, "Complaints per month");
-  } catch (e) { moduleShell("Complaint Analysis", failed(e.message, () => openModule(_currentModule))); }
+  }
 }
 
 // ---------- MODULE: Position Strategy + AI ----------
 async function openStrategy() {
-  moduleShell("Position Strategy + AI", `<div class="ap-empty">Detecting your position from your saved reviews…</div>`);
-  try {
-    let d;
-    try { d = await api("/api/smart/strategy/detect?lang=en", { method: "POST" }); }
-    catch (e) { d = await api("/api/position-strategy"); if (!d.detected) throw e; }
-    renderStrategy(d);
-  } catch (e) {
-    moduleShell("Position Strategy + AI", `<div class="card">${esc(e.message)}<br><br>Upload your reviews in <b>Review Analytics</b> first — the strategy is detected from them.</div>`);
-  }
+  await openCached("strategy", "Position Strategy + AI",
+    async () => {
+      try { return await api("/api/smart/strategy/detect?lang=en", { method: "POST" }); }
+      catch (e) {
+        const d = await api("/api/position-strategy");
+        if (!d.detected) throw e;
+        return d;
+      }
+    },
+    renderStrategy,
+    // Detection runs an analysis pass, so the empty state has to explain where
+    // the input comes from rather than just showing a failure.
+    (msg) => `<div class="card">${esc(msg)}<br><br>Upload your reviews in <b>Review Analytics</b> first — the strategy is detected from them.</div>`);
 }
 
 function posCard(p, eyebrow) {
@@ -4996,17 +5319,16 @@ function renderActions(insights) {
 // home: open it any time and it fetches the current at-risk list itself,
 // same endpoint the panel card uses, no waiting for an insight to appear.
 async function openMarketing() {
-  moduleShell("Marketing", skeleton("cards"));
-  try {
-    const [wb, proof, sends] = await Promise.all([
-      api("/api/rfm/winback", { method: "POST" }).catch((e) => ({ customers: [], _error: e.message })),
-      api("/api/rfm/winback/proof").catch(() => null),
-      api("/api/rfm/winback/sends").catch(() => null),
-    ]);
-    renderMarketing(wb, proof, sends);
-  } catch (e) {
-    moduleShell("Marketing", failed(e.message, () => openModule(_currentModule)));
-  }
+  await openCached("marketing", "Marketing",
+    async () => {
+      const [wb, proof, sends] = await Promise.all([
+        api("/api/rfm/winback", { method: "POST" }).catch((e) => ({ customers: [], _error: e.message })),
+        api("/api/rfm/winback/proof").catch(() => null),
+        api("/api/rfm/winback/sends").catch(() => null),
+      ]);
+      return { wb, proof, sends };
+    },
+    (d) => renderMarketing(d.wb, d.proof, d.sends));
 }
 
 function renderMarketing(wb, proof, sends) {
@@ -5631,9 +5953,12 @@ async function commerceDisconnect(id) {
 
 // ---------- MODULE: Ad Analytics ----------
 async function openAdsModule() {
-  moduleShell("Ad Analytics", `<div class="ap-empty">Loading…</div>`);
-  try {
-    const d = await api("/api/ads/connectors");
+  await openCached("ads", "Ad Analytics",
+    () => api("/api/ads/connectors"), renderAdsModule);
+}
+
+function renderAdsModule(d) {
+  {
     let html = `<div class="card"><p class="muted tiny">Connect each ad account once — free platforms will start pulling live data in the next update; paid ones show a demo dashboard for now.</p></div>
       <div class="ads-grid">${d.connectors.map((c) => `
         <div class="ads-card ${c.connected ? "connected" : ""}">
@@ -5655,7 +5980,7 @@ async function openAdsModule() {
     document.querySelectorAll("[data-ads-conn]").forEach((b) => b.onclick = () => connectAds(b.dataset.adsConn));
     document.querySelectorAll("[data-ads-dc]").forEach((b) => b.onclick = async () => { await api("/api/ads/disconnect", { method: "POST", json: { connector: b.dataset.adsDc, credentials: {} } }); openAdsModule(); });
     document.querySelectorAll("[data-ads-view]").forEach((b) => b.onclick = () => viewAdsMetrics(b.dataset.adsView));
-  } catch (e) { moduleShell("Ad Analytics", failed(e.message, () => openModule(_currentModule))); }
+  }
 }
 
 async function connectAds(id) {
@@ -7092,7 +7417,11 @@ async function loadCustomers() {
   // Icons come from localStorage on any warm start, so this almost never
   // blocks. On a cold one it is still the only thing the shell needs first.
   await loadIcons();
-  if (!state.token) { $("loginView").hidden = false; return; }
+  if (!state.token) {
+    $("loginView").hidden = false;
+    setupGoogleSignIn();     // not awaited: the password form is usable meanwhile
+    return;
+  }
 
   // Only a 401 means the session is actually gone. A 500, a timeout or a cold
   // start is the server having a bad moment — throwing the seller back to the
@@ -7158,7 +7487,7 @@ let _socialData = null;
 async function openSocial() {
   await openCached("social", "Social Media Manager",
     () => api("/api/social"),
-    (d) => { _socialData = d; renderSocial(); });
+    (d) => { _socialData = d; return renderSocial(); });
 }
 
 function socialStateChip(st) {
@@ -7190,7 +7519,14 @@ async function renderSocial() {
   let cal;
   try {
     cal = await api(`/api/social/month?year=${_socialMonth.year}&month=${_socialMonth.month}`);
-  } catch (e) { return moduleShell("Social Media Manager", failed(e.message, () => openModule(_currentModule))); }
+  } catch (e) {
+    if (_currentModule !== "social") return;
+    return moduleShell("Social Media Manager", failed(e.message, () => openModule(_currentModule)));
+  }
+  // The calendar is a second round trip after the module's own, so this is the
+  // screen most likely to still be loading when the seller taps away. Painting
+  // it now would put Social back over whatever they went to instead.
+  if (_currentModule !== "social") return;
   _socialCal = cal;
 
   const aiLine = ai.ready
@@ -8171,14 +8507,12 @@ async function openSocialSetup() {
 let _gstData = null;
 
 async function openGst() {
-  moduleShell("Billing & GST", skeleton("form"));
-  try {
-    const [inv, st] = await Promise.all([api("/api/invoices"), api("/api/gst/settings")]);
-    _gstData = { invoices: inv.invoices || [], st, fy: inv.fy };
-    renderGst();
-  } catch (e) {
-    moduleShell("Billing & GST", failed(e.message, () => openModule(_currentModule)));
-  }
+  await openCached("gst", "Billing & GST",
+    async () => {
+      const [inv, st] = await Promise.all([api("/api/invoices"), api("/api/gst/settings")]);
+      return { invoices: inv.invoices || [], st, fy: inv.fy };
+    },
+    (d) => { _gstData = d; renderGst(); });
 }
 
 function renderGst() {

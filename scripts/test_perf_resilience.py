@@ -304,8 +304,53 @@ check("any successful write drops every cached screen",
       "if (!retryable) { warmClear(); warmModClearAll(); }" in JS)
 check("signing out clears the module caches too",
       JS.count("warmModClearAll()") >= 4, JS.count("warmModClearAll()"))
+# The body of openCached, from its opening brace to the blank line that ends
+# it. A fixed character count used to stand in for this and broke the moment a
+# comment was added, which is a test failing for a reason that has nothing to
+# do with the behaviour it is meant to protect.
+_OPEN_CACHED = JS.split("async function openCached")[1].split("\n}\n")[0]
+
 check("a failed refresh keeps the usable screen instead of an error card",
-      JS.split("async function openCached")[1][:900].count("Showing your last saved view") == 1)
+      _OPEN_CACHED.count("Showing your last saved view") == 1)
+
+# ---- a reply that arrives after the seller has moved on ----
+# THE BUG: every module fetch takes a moment, and a seller does not wait. Open
+# Suppliers, tap Home before it lands, and the reply paints Suppliers back over
+# the home page — the app undoing the tap. Caught by the throttled mobile
+# walkthrough, not by anything here, so it is written down now.
+check("a module that is no longer open does not paint over what is",
+      "_currentModule === openedAs" in _OPEN_CACHED)
+check("and the guard is checked after the fetch, not only before",
+      _OPEN_CACHED.split("await fetcher()")[1][:200].count("stillHere()") >= 1)
+check("the data is still cached even when it is not drawn",
+      "warmModWrite(mod, fresh); return;" in _OPEN_CACHED.replace("\n", " ").replace("  ", " "))
+check("an async render is awaited, or the two paints race",
+      "await render(" in _OPEN_CACHED)
+check("Home has the same guard", "_currentModule !== null" in JS.split("async function goHome")[1][:1400])
+check("the slowest screen guards its second fetch too",
+      '_currentModule !== "social"' in JS.split("async function renderSocial")[1][:1400])
+
+# ---- the chart library is no longer on the critical path ----
+HTML = io.open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "Smart CafeX", "smart.html"), encoding="utf-8").read()
+check("Plotly is NOT a blocking script in the page head", "cdn.plot.ly/plotly" not in HTML.split("</head>")[0].replace("Plotly is NOT loaded here", ""))
+check("but the connection to its CDN is warmed early", "preconnect" in HTML and "cdn.plot.ly" in HTML)
+check("it is fetched on demand instead", "function ensurePlotly" in JS)
+check("one download is shared by every chart on a screen", "_plotlyPromise" in JS)
+check("a failed fetch can be retried rather than sticking",
+      "_plotlyPromise = null" in JS.split("function ensurePlotly")[1][:700])
+check("and it is warmed when the app is idle, not when a chart is needed",
+      "requestIdleCallback" in JS.split("function warmPlotly")[1][:300])
+check("a chart that outlives its screen is not drawn into a dead node",
+      "const live = id ? $(id) : el;" in JS)
+
+# ---- the app remembers which screen you were on ----
+check("opening a module writes it into the URL", "history.pushState" in JS)
+check("so a reload comes back to it", "deepLinkModule()" in JS.split("function showShell")[1][:400])
+check("back and forward both work", 'addEventListener("popstate"' in JS)
+check("and a route change that only reflects where we are is ignored",
+      "deep === _currentModule" in JS)
+check("scroll position survives leaving and returning", "function restoreScroll" in JS)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

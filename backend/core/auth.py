@@ -27,11 +27,23 @@ from backend.core import db
 
 
 # ---------- password hashing ----------
-# New passwords are stored as "pbkdf2$<salt>$<hash>" — never plaintext.
-# Old plaintext rows still verify (and are silently upgraded to a hash on
-# the next successful login), so no existing account breaks.
+# Stored as "pbkdf2$<iterations>$<salt>$<hash>" — never plaintext.
+#
+# WHY THE ITERATION COUNT IS IN THE STRING. It used to be a constant, which
+# meant raising it would have locked every existing account out: verification
+# would have run the new count against a digest computed with the old one and
+# silently returned False for a correct password. Writing the cost into the
+# hash is what makes the number raisable — verify with whatever cost that row
+# was written at, then re-hash at the current cost on a successful login.
+#
+# 600,000 is the OWASP Password Storage minimum for PBKDF2-HMAC-SHA256. The old
+# value here was 100,000, which is the 2017 figure and six times too cheap
+# against 2026 GPUs. Two older formats still verify so nobody is locked out:
+# "pbkdf2$<salt>$<hash>" (implicitly 100,000) and bare plaintext from the very
+# first version. Both are rewritten at the current cost on the next login.
 _HASH_PREFIX = "pbkdf2$"
-_PBKDF2_ITERATIONS = 100_000
+_PBKDF2_ITERATIONS = 600_000
+_PBKDF2_LEGACY_ITERATIONS = 100_000
 
 SESSION_TTL_DAYS = 30
 
@@ -40,19 +52,45 @@ def hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt),
                                  _PBKDF2_ITERATIONS).hex()
-    return f"{_HASH_PREFIX}{salt}${digest}"
+    return f"{_HASH_PREFIX}{_PBKDF2_ITERATIONS}${salt}${digest}"
+
+
+def _pbkdf2_parts(stored: str) -> tuple[int, str, str] | None:
+    """(iterations, salt, digest) for either stored layout, or None."""
+    body = stored[len(_HASH_PREFIX):]
+    bits = body.split("$")
+    try:
+        if len(bits) == 3:                       # pbkdf2$<iters>$<salt>$<hash>
+            return int(bits[0]), bits[1], bits[2]
+        if len(bits) == 2:                       # pbkdf2$<salt>$<hash>, pre-2026
+            return _PBKDF2_LEGACY_ITERATIONS, bits[0], bits[1]
+    except (ValueError, TypeError):
+        return None
+    return None
 
 
 def verify_password(password: str, stored: str) -> bool:
+    stored = stored or ""
     if stored.startswith(_HASH_PREFIX):
+        parts = _pbkdf2_parts(stored)
+        if not parts:
+            return False
+        iterations, salt, digest = parts
         try:
-            _, salt, digest = stored.split("$", 2)
-            calc = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt),
-                                       _PBKDF2_ITERATIONS).hex()
-            return _hmac.compare_digest(calc, digest)
+            calc = hashlib.pbkdf2_hmac("sha256", password.encode(),
+                                       bytes.fromhex(salt), iterations).hex()
         except (ValueError, TypeError):
             return False
+        return _hmac.compare_digest(calc, digest)
     return _hmac.compare_digest(stored, password)  # legacy plaintext row
+
+
+def needs_rehash(stored: str) -> bool:
+    """True when this row was written at a weaker cost than we use today."""
+    if not (stored or "").startswith(_HASH_PREFIX):
+        return True                              # plaintext, or nothing
+    parts = _pbkdf2_parts(stored)
+    return (not parts) or parts[0] < _PBKDF2_ITERATIONS
 
 
 def _token_hash(token: str) -> str:
@@ -202,8 +240,12 @@ def load_users() -> dict:
     return dict(zip(df["email"], df["password"]))
 
 
-def _upgrade_plaintext(email_clean: str, pw: str) -> None:
-    """Transparently replace a legacy plaintext password row with a hash."""
+def _upgrade_hash(email_clean: str, pw: str) -> None:
+    """Rewrite a weak or plaintext password row at today's cost.
+
+    Runs on a SUCCESSFUL login, which is the only moment the plaintext password
+    is legitimately in memory. The account is never locked out by this: if the
+    write fails, the old row still verifies."""
     new_hash = hash_password(pw)
     if db.SUPABASE_ENABLED:
         db.upsert("users", {"email": email_clean, "password_hash": new_hash}, on_conflict="email")
@@ -214,24 +256,39 @@ def _upgrade_plaintext(email_clean: str, pw: str) -> None:
     df.to_csv(users_file, index=False)
 
 
+def start_session(email: str) -> str:
+    """Issue a session token for an account whose owner has already been
+    established. Split out of login() so that a second way of proving who
+    someone is — Google, today — creates exactly the same session, rather than
+    a parallel one with its own storage, expiry and revocation bugs.
+
+    THE CALLER IS RESPONSIBLE FOR PROVING IDENTITY. Everything that calls this
+    has already checked a password or a signed identity token."""
+    email_clean = (email or "").strip().lower()
+    token = secrets.token_urlsafe(32)     # 256 bits
+    if db.SUPABASE_ENABLED:
+        th = _token_hash(token)
+        expires = (datetime.utcnow() + timedelta(days=SESSION_TTL_DAYS)).isoformat()
+        db.upsert("sessions", {"token_hash": th, "email": email_clean,
+                               "expires_at": expires}, on_conflict="token_hash")
+        db.cache_session(th, email_clean)
+    else:
+        _sessions[token] = email_clean
+    return token
+
+
 def login(email: str, password: str) -> str | None:
     """Return a session token on success, None on bad credentials."""
     users = load_users()
     email_clean = (email or "").strip().lower()
     pw = (password or "").strip()
     if email_clean in users and verify_password(pw, users[email_clean]):
-        if not users[email_clean].startswith(_HASH_PREFIX):
-            _upgrade_plaintext(email_clean, pw)
-        token = secrets.token_urlsafe(32)
-        if db.SUPABASE_ENABLED:
-            th = _token_hash(token)
-            expires = (datetime.utcnow() + timedelta(days=SESSION_TTL_DAYS)).isoformat()
-            db.upsert("sessions", {"token_hash": th, "email": email_clean,
-                                   "expires_at": expires}, on_conflict="token_hash")
-            db.cache_session(th, email_clean)
-        else:
-            _sessions[token] = email_clean
-        return token
+        if needs_rehash(users[email_clean]):
+            try:
+                _upgrade_hash(email_clean, pw)
+            except Exception:  # noqa: BLE001 — never fail a good login over this
+                pass
+        return start_session(email_clean)
     return None
 
 

@@ -17,6 +17,7 @@ import json
 import math
 import os
 import secrets
+import time
 
 import pandas as pd
 import logging
@@ -36,6 +37,7 @@ from backend.core import commerce, secrets_store, db, supply, products
 from backend.core import sitebuilder, storefront
 from backend.core import messaging, password_reset, today as today_mod
 from backend.core import winback_proof
+from backend.core import loginguard, google_auth
 from backend.core import media
 from backend.core import cache
 from backend.core import cancellations
@@ -544,12 +546,26 @@ class ChatBody(BaseModel):
 # Auth
 # ---------------------------------------------------------
 @app.post("/api/login")
-def login(body: LoginBody):
+def login(body: LoginBody, request: Request):
+    """Sync on purpose: verifying a password is ~0.4s of CPU (PBKDF2 at the
+    OWASP cost) and Starlette runs a `def` handler in a threadpool. As
+    `async def` that work would sit on the event loop and stall every other
+    request on the instance for the duration of each login."""
     if not auth.load_users():
         raise HTTPException(401, "No user accounts found. Create user.csv (columns: email,password) in the data/ folder or project root.")
+    ip = loginguard.client_ip(request)
+    allowed, wait = loginguard.check(body.email, ip)
+    if not allowed:
+        # The same words as a wrong password. Telling an attacker they have
+        # tripped a limit tells them the address is worth attacking.
+        raise HTTPException(401, "Invalid credentials")
+    if wait:
+        time.sleep(min(wait, 8.0))
     token = auth.login(body.email, body.password)
     if not token:
+        loginguard.failed(body.email, ip)
         raise HTTPException(401, "Invalid credentials")
+    loginguard.succeeded(body.email, ip)
     email = body.email.strip().lower()
     return {"token": token, "email": email, "usage": _usage(email), "plan": billing.get_plan(email)}
 
@@ -564,6 +580,72 @@ def register(body: RegisterBody):
     token = auth.login(body.email, body.password)
     email = body.email.strip().lower()
     return {"token": token, "email": email, "usage": _usage(email), "plan": billing.get_plan(email)}
+
+
+class GoogleBody(BaseModel):
+    credential: str
+    nonce: str = ""
+    password: str = ""      # only when linking to an existing password account
+
+
+@app.get("/api/auth/providers")
+def auth_providers():
+    """What the sign-in screen may offer. The client id is public by design —
+    it is in the page source of every site that uses Google sign-in."""
+    return {"google": {"enabled": google_auth.configured(),
+                       "client_id": google_auth.client_id()}}
+
+
+@app.post("/api/auth/google")
+def auth_google(body: GoogleBody, request: Request):
+    """Sign in, or sign up, with a verified Google identity.
+
+    The three outcomes, and why the third exists:
+      * this Google account is already linked here     -> straight in;
+      * no account with this address                   -> create one and link;
+      * an account exists that was made with a PASSWORD and has never been
+        linked -> ask for that password once. Linking on a matching address
+        alone is how accounts get stolen: anyone can type any address into a
+        signup form, so a local row is not proof of owning the mailbox.
+    """
+    ip = loginguard.client_ip(request)
+    allowed, wait = loginguard.check(body.credential[:40] or "google", ip)
+    if not allowed:
+        raise HTTPException(429, "Too many attempts. Try again in a few minutes.")
+    try:
+        claims = google_auth.verify(body.credential, body.nonce)
+    except ValueError as e:
+        loginguard.failed(body.credential[:40] or "google", ip)
+        raise HTTPException(401, str(e))
+
+    email = claims["email"]
+    users = auth.load_users()
+    existing = users.get(email)
+    linked = (google_auth.identity(email) or {}).get("sub")
+
+    if existing is not None and not linked:
+        # The account is real and was made with a password. One of two things
+        # is true and we cannot tell which: this is the same person, or someone
+        # registered their address first. The password settles it.
+        if not body.password:
+            raise HTTPException(409, "An account already uses this email. "
+                                     "Enter its password once to connect Google to it.")
+        if not auth.verify_password(body.password.strip(), existing):
+            loginguard.failed(email, ip)
+            raise HTTPException(401, "That password does not match the existing account.")
+
+    if existing is None:
+        # No password is ever set for a Google-only account. A random one is
+        # stored so the row has the same shape as every other, and it is not
+        # written down anywhere — the seller uses "Forgot password" if they
+        # later want to sign in without Google.
+        auth.register(email, secrets.token_urlsafe(24), "free")
+
+    google_auth.remember(email, claims)
+    loginguard.succeeded(email, ip)
+    token = auth.start_session(email)
+    return {"token": token, "email": email, "usage": _usage(email),
+            "plan": billing.get_plan(email), "new_account": existing is None}
 
 
 @app.post("/api/forgot")
