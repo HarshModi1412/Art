@@ -393,3 +393,124 @@ def status(email: str) -> dict:
             "recent": (st.get("log") or [])[-5:][::-1],
             "due_now": len(due_posts(email)),
             "overdue": len(stale_posts(email))}
+
+
+# ---------------------------------------------------------------------------
+# "Why is this post not going out?"
+# ---------------------------------------------------------------------------
+# WHY THIS EXISTS. A scheduled post that does not appear gives you nothing to
+# work with. The post looks fine on the calendar, Instagram is connected, and
+# the only way to find out which of eight conditions failed was to read the
+# publisher's source. That turned every "it is not posting" into a day of
+# guessing — for the seller, and for whoever they ask.
+#
+# So the publisher can now explain itself: for every post that has not finished,
+# the one sentence that says where it stands and what would move it.
+def queue_report(email: str, now: datetime | None = None) -> dict:
+    """Every unfinished post, with the reason it is or is not going out."""
+    from backend.core import instagram
+
+    now = now or localtime.now(email)
+    floor = now - timedelta(hours=GRACE_HOURS)
+    connected = False
+    try:
+        connected = instagram.is_connected(email)
+    except Exception:  # noqa: BLE001
+        connected = False
+
+    rows, due_n = [], 0
+    for p in social.all_posts(email):
+        state = p.get("state") or ""
+        if state in ("cancelled",):
+            continue
+        raw = str(p.get("scheduled_at") or "")
+        when = None
+        if raw:
+            try:
+                when = datetime.fromisoformat(raw[:19])
+            except ValueError:
+                when = None
+
+        ready = social.post_ready(p)
+        verdict, will_post = "", False
+
+        if state == "published":
+            verdict = "Published." + (f" {p.get('permalink')}" if p.get("permalink") else "")
+        elif state == "failed":
+            verdict = "Failed: " + (p.get("publish_error") or "no reason recorded")
+        elif state in ("draft", "ready"):
+            verdict = "Not approved yet — it is waiting for you in the Approval panel."
+        elif state == "approved" and not ready:
+            verdict = ("Approved, but it has no "
+                       + ("clip" if p.get("format") == "reel" else "picture")
+                       + " yet. It goes out once the media is on it.")
+        elif state == "approved":
+            # The trap: media arrived but nothing moved it on. Worth saying,
+            # because the calendar shows a time and the post never goes.
+            verdict = ("Approved and has its media, but was never scheduled. "
+                       "Open it and press Save & schedule.")
+        elif state != "scheduled":
+            verdict = f"In state '{state}', which the publisher does not send."
+        elif not raw or when is None:
+            verdict = "Scheduled, but its date and time could not be read."
+        elif not ready:
+            verdict = ("Scheduled, but it has no "
+                       + ("clip" if p.get("format") == "reel" else "picture") + " yet.")
+        elif when > now:
+            mins = int((when - now).total_seconds() // 60)
+            verdict = (f"Goes out {raw[:16].replace('T', ' at ')} — "
+                       + (f"in {mins} minutes." if mins < 120
+                          else f"in about {mins // 60} hours."))
+        elif when < floor:
+            verdict = (f"Its time ({raw[:16].replace('T', ' at ')}) passed more than "
+                       f"{GRACE_HOURS} hours ago, so it will not be sent late. "
+                       "Reschedule it to send it.")
+        elif not connected:
+            verdict = "Due now, but Instagram is not connected."
+        else:
+            verdict = "Due now — it goes out at the next check."
+            will_post = True
+            due_n += 1
+
+        rows.append({"id": p.get("id"), "state": state, "format": p.get("format") or "photo",
+                     "scheduled_at": raw, "has_media": ready,
+                     "verdict": verdict, "will_post": will_post})
+
+    rows.sort(key=lambda r: r["scheduled_at"] or "")
+    return {
+        "instagram_connected": connected,
+        "now": now.isoformat(timespec="minutes"),
+        "tz": localtime.label(email),
+        "public_base_url": base_url(),
+        "due_now": due_n,
+        "posts": rows[-40:],
+    }
+
+
+def kick(email: str) -> bool:
+    """Publish anything due for this seller, in the background, right now.
+
+    THE GAP THIS CLOSES. The weekly plan and the weekly win-back both catch up
+    the moment a seller opens the app. Publishing did not — it waited for the
+    fifteen-minute ticker, and that ticker dies with the process. So a seller
+    sitting in front of the app, watching a post's time come and go, saw
+    nothing happen, and the app had given them no reason to think opening it
+    would help. It does now."""
+    try:
+        if not due_posts(email):
+            return False
+        from backend.core import instagram
+        if not instagram.is_connected(email):
+            return False
+    except Exception:  # noqa: BLE001
+        return False
+    threading.Thread(target=_safe_run, args=(email,), daemon=True,
+                     name=f"publish-{email[:12]}").start()
+    return True
+
+
+def _safe_run(email: str) -> None:
+    try:
+        run_for(email)
+    except Exception as e:  # noqa: BLE001
+        log.warning("publish kick failed for %s: %s", email, e)

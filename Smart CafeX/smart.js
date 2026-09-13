@@ -7702,6 +7702,50 @@ async function openSocial() {
     (d) => { _socialData = d; return renderSocial(); });
 }
 
+/* ---------------------------------------------- why a post has not gone ----
+   A scheduled post that does not appear gives the seller nothing to work with.
+   The calendar shows a time, Instagram says connected, and the reason is one of
+   eight conditions none of which are visible. This puts the answer on the
+   screen, per post, in a sentence. */
+async function openPostQueue() {
+  let q;
+  try { q = await api("/api/social/queue"); } catch (e) { return toast(e.message, 6000); }
+  const rows = (q.posts || []).filter((p) => p.state !== "published");
+  const body = rows.length ? `
+    <div class="table-scroll"><table>
+      <thead><tr><th>When</th><th>Type</th><th>Where it stands</th></tr></thead>
+      <tbody>${rows.map((p) => `
+        <tr class="${p.will_post ? "pq-go" : ""}">
+          <td class="muted tiny">${esc((p.scheduled_at || "—").slice(0, 16).replace("T", " "))}</td>
+          <td class="muted tiny">${esc(p.format)}</td>
+          <td>${esc(p.verdict)}</td>
+        </tr>`).join("")}</tbody>
+    </table></div>`
+    : `<div class="ap-empty">Nothing waiting — every post has either gone out or been cancelled.</div>`;
+  openModal("What is going out, and what is not", `
+    <p class="muted tiny">It is <b>${esc((q.now || "").replace("T", " at "))}</b> ${esc(q.tz || "")}.
+      Instagram is ${q.instagram_connected ? "connected" : "<b>not connected</b>"}.
+      ${q.due_now ? `<b>${q.due_now} post${q.due_now === 1 ? " is" : "s are"} due now.</b>` : ""}</p>
+    ${body}
+    <div class="row" style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+      <button class="btn ghost" data-mclose3>Close</button>
+      ${q.due_now ? `<button class="btn primary" id="pqRun">Send the ${q.due_now} due now</button>` : ""}
+    </div>`, { wide: true });
+  document.querySelector("[data-mclose3]").onclick = closeModal;
+  const run = $("pqRun");
+  if (run) run.onclick = async () => {
+    run.disabled = true; run.textContent = "Sending…";
+    try {
+      const r = await api("/api/social/publish-due", { method: "POST" });
+      toast(r.published ? `${r.published} posted.`
+            : `Nothing went out. ${(r.details && r.details.failed[0] && r.details.failed[0].error) || ""}`, 7000);
+      closeModal();
+      warmModClearAll();
+      openModule("social");
+    } catch (e) { toast(e.message, 6000); run.disabled = false; }
+  };
+}
+
 function socialStateChip(st) {
   const map = { draft: ["Draft", "st-draft"], ready: ["Ready", "st-ready"],
                 approved: ["Approved · needs media", "st-appr"],
@@ -7792,6 +7836,7 @@ async function renderSocial() {
         <button class="btn ghost sm" id="smBuild4">${sic("spark")}Plan 4 weeks</button>
         <button class="btn ghost sm" id="smShoot">${sic("camera")}Shoot list</button>
         <button class="btn ghost sm" id="smSettings">${sic("settings")}Setup</button>
+        <button class="btn ghost sm" id="smQueue" title="Why a post has or has not gone out">${sic("clock")}What is going out</button>
         ${d.instagram && d.instagram.connected
           ? `<button class="btn ghost sm" id="smInsta" title="Instagram connection">${sic("instagram")}@${esc(d.instagram.account_username || "connected")}</button>`
           : ""}<!-- not connected? the strip below asks, and asking twice on one
@@ -7895,6 +7940,8 @@ async function renderSocial() {
   if ($("apChange")) $("apChange").onclick = openSocialSetup;
   $("smShoot").onclick = openShootList;
   $("smSettings").onclick = openSocialSetup;
+  const sq = $("smQueue");
+  if (sq) sq.onclick = openPostQueue;
   const igBtn = $("smInsta");
   if (igBtn) igBtn.onclick = () => openModule("instagram");
   const igHere = $("igConnectHere");

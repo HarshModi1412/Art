@@ -781,5 +781,112 @@ check("the blueprint ships a cron so this works on a fresh deploy",
 check("running often enough that a post is late, never missed",
       "*/15 * * * *" in _yaml)
 
+section("The publisher explains itself")
+
+# WHY: a scheduled post that does not appear gives the seller nothing to work
+# with. The calendar shows a time, Instagram says connected, and the reason is
+# one of eight conditions, none of them visible. Every "it is not posting"
+# turned into a day of guessing. Each branch below is one of those days.
+instagram.is_connected = lambda email: True
+NOW2 = datetime(2026, 9, 13, 12, 0)
+
+
+def verdict_for(p):
+    seed([p])
+    rep = publisher.queue_report(EMAIL, NOW2)
+    return rep["posts"][0]["verdict"], rep
+
+
+def at2(hours):
+    return (NOW2 + timedelta(hours=hours)).isoformat(timespec="minutes")
+
+
+v, rep = verdict_for({**post("a"), "state": "draft", "scheduled_at": at2(2)})
+check("a draft says it is waiting for approval", "Not approved" in v, v)
+
+v, _ = verdict_for({**post("b"), "state": "approved", "image_url": "", "video_url": "",
+                    "scheduled_at": at2(2)})
+check("approved with no picture says so", "no picture" in v, v)
+
+v, _ = verdict_for({**post("c"), "state": "approved", "format": "reel",
+                    "video_url": "", "scheduled_at": at2(2)})
+check("an approved reel with no clip says clip, not picture", "no clip" in v, v)
+
+# The trap worth naming: media arrived, but nothing moved it on to scheduled.
+# The calendar shows a time and the post never goes.
+v, _ = verdict_for({**post("d"), "state": "approved", "scheduled_at": at2(2)})
+check("approved WITH media says it was never scheduled",
+      "never scheduled" in v and "Save & schedule" in v, v)
+
+v, _ = verdict_for({**post("e"), "state": "scheduled", "scheduled_at": at2(3)})
+check("a future post says when it goes", "Goes out" in v and "hours" in v, v)
+
+v, _ = verdict_for({**post("f"), "state": "scheduled", "scheduled_at": at2(0.5)})
+check("one due soon counts in minutes, not hours", "minutes" in v, v)
+
+v, rep = verdict_for({**post("g"), "state": "scheduled", "scheduled_at": at2(-1)})
+check("one due now says so", "Due now" in v, v)
+check("and is counted", rep["due_now"] == 1, str(rep["due_now"]))
+check("and is flagged for the UI to highlight", rep["posts"][0]["will_post"])
+
+v, rep = verdict_for({**post("h"), "state": "scheduled",
+                      "scheduled_at": at2(-(publisher.GRACE_HOURS + 2))})
+check("one whose time long passed explains the grace window",
+      "passed more than" in v and "Reschedule" in v, v)
+check("and is not counted as due", rep["due_now"] == 0)
+
+v, _ = verdict_for({**post("i"), "state": "scheduled", "scheduled_at": at2(-1),
+                    "image_url": "", "video_url": ""})
+check("scheduled with no media says that, not 'due now'", "no picture" in v, v)
+
+v, _ = verdict_for({**post("j"), "state": "failed", "scheduled_at": at2(-1),
+                    "publish_error": "The aspect ratio is not supported"})
+check("a failed post repeats Instagram's reason", "aspect ratio" in v, v)
+
+v, _ = verdict_for({**post("k"), "state": "published", "scheduled_at": at2(-2),
+                    "permalink": "https://instagram.com/p/xyz"})
+check("a published post shows its link", "instagram.com/p/xyz" in v, v)
+
+instagram.is_connected = lambda email: False
+v, rep = verdict_for({**post("l"), "state": "scheduled", "scheduled_at": at2(-1)})
+check("with Instagram disconnected, a due post says exactly that",
+      "not connected" in v, v)
+check("and is not counted as going out", rep["due_now"] == 0)
+check("and the report says the connection is down", not rep["instagram_connected"])
+instagram.is_connected = lambda email: True
+
+seed([{**post("m"), "state": "cancelled", "scheduled_at": at2(1)}])
+check("a cancelled post is not listed at all — it is not waiting on anything",
+      publisher.queue_report(EMAIL, NOW2)["posts"] == [])
+
+rep = publisher.queue_report(EMAIL, NOW2)
+for k in ("instagram_connected", "now", "tz", "public_base_url", "due_now", "posts"):
+    check(f"the report carries {k}", k in rep, str(list(rep)))
+check("including the seller's clock, so a timezone mistake is visible",
+      bool(rep["tz"]), rep["tz"])
+
+section("Opening the app publishes what is due")
+
+# THE GAP: the weekly plan and the weekly win-back both caught up when a seller
+# opened the app. Publishing did not — it waited for the fifteen-minute ticker,
+# which dies with the process. A seller watching a post's time come and go saw
+# nothing, with no reason to think opening the app would help.
+_mainsrc = open(os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "backend", "main.py"), encoding="utf-8").read()
+check("publishing catches up on app open, like the other two jobs",
+      "publisher.kick(email)" in _mainsrc)
+check("and it never blocks the home screen", "daemon=True" in _i.getsource(publisher.kick))
+check("it does nothing when there is nothing due",
+      (seed([post("n", state="draft")]), publisher.kick(EMAIL))[1] is False)
+instagram.is_connected = lambda email: False
+check("and nothing when Instagram is not connected",
+      (seed([post("o", when=-1)]), publisher.kick(EMAIL))[1] is False)
+instagram.is_connected = lambda email: True
+
+check("there is an operator view too, for one account or all of them",
+      '"/api/admin/queue"' in _mainsrc)
+check("and the error log is readable from a browser when things are broken",
+      "_require_admin(x_admin_token or token)" in _mainsrc)
+
 print(f"\n{PASSED} passed, {FAILED} failed")
 sys.exit(1 if FAILED else 0)

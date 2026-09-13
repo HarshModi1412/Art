@@ -699,15 +699,20 @@ def _require_admin(x_admin_token: str | None) -> None:
 
 @app.get("/api/admin/errors")
 def admin_errors(limit: int = 50, detail: bool = False,
-                 x_admin_token: str | None = Header(default=None)):
+                 x_admin_token: str | None = Header(default=None),
+                 token: str | None = None):
     """Every failure the app has hit, newest first, grouped by cause.
 
     This is the answer to "how would I know?". `detail=true` returns the raw
     entries with tracebacks; the default returns groups, which is what you
     actually want to look at — fifty occurrences of one bug is one line, not
     fifty.
+
+    `?token=` works as well as the header: this is the endpoint you reach for
+    when something is broken, and at that moment the fastest thing anyone has
+    is a browser tab. It is a read, and the token is the same either way.
     """
-    _require_admin(x_admin_token)
+    _require_admin(x_admin_token or token)
     if detail:
         return {"errors": errors.recent(limit)}
     return errors.summary(limit)
@@ -1494,6 +1499,39 @@ def admin_schedule(x_admin_token: str | None = Header(default=None),
                    "restarts, so on its own it only works while someone is "
                    "using the site."),
     }
+
+
+@app.get("/api/social/queue")
+def social_queue(authorization: str | None = Header(default=None)):
+    """Why each post is or is not going out. See publisher.queue_report."""
+    email = require_user(authorization)
+    return publisher.queue_report(email)
+
+
+@app.get("/api/admin/queue")
+def admin_queue(email: str = "", x_admin_token: str | None = Header(default=None),
+                token: str | None = None):
+    """The same answer, for one account, without needing their password.
+
+    Built because "it is not posting" took a day to turn into "that post is
+    still in `approved` and was never scheduled", and that day should have been
+    one request."""
+    _require_admin(x_admin_token or token)
+    if email:
+        return {email: publisher.queue_report(email)}
+    out = {}
+    for account in (auth.load_users() or {}):
+        try:
+            if not instagram.is_connected(account):
+                continue
+            rep = publisher.queue_report(account)
+        except Exception as e:  # noqa: BLE001
+            out[account] = {"error": str(e)[:160]}
+            continue
+        # Only accounts with something unfinished are worth printing.
+        if rep.get("posts"):
+            out[account] = rep
+    return out or {"note": "No connected account has any unfinished posts."}
 
 
 @app.get("/api/social/publisher")
@@ -2746,6 +2784,15 @@ def smart_state(response: Response,
     # than waiting a whole week for the next one.
     try:
         winback_auto.kick(email)
+    except Exception:  # noqa: BLE001
+        pass
+    # AND publishing. This was the gap: the two jobs above caught up the moment
+    # a seller opened the app, and publishing did not — it waited for the
+    # fifteen-minute ticker, which dies with the process. So a seller sitting in
+    # front of the app watching a post's time come and go saw nothing happen,
+    # and had no reason to think opening it would help.
+    try:
+        publisher.kick(email)
     except Exception:  # noqa: BLE001
         pass
     tag = f'W/"{hashlib.md5((cache.stamp(email) + _home_fingerprint(email)).encode()).hexdigest()}"'
