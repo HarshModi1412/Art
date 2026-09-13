@@ -46,6 +46,9 @@ services:
       # with the repo and applies even to a service configured by hand.
       - key: PYTHON_VERSION
         value: 3.12.11
+      # The cron below needs this to authenticate. Same value in both places.
+      - key: ADMIN_TOKEN
+        generateValue: true
     disk:
       name: cafex-data
       # THIS PATH AND CAFEX_DATA_DIR ABOVE MUST BE THE SAME STRING.
@@ -58,3 +61,35 @@ services:
                                   # (or this disk is genuinely attached and writable) — without
                                   # either, every deploy wipes them.
       sizeGB: 1
+
+  # ---------------------------------------------------------------------------
+  # The scheduled jobs — weekly planning, weekly win-back, and publishing posts
+  # ---------------------------------------------------------------------------
+  # WHY THIS IS NOT OPTIONAL. The app has an in-process ticker, and it only runs
+  # while the web process does. That process restarts on every deploy, and on
+  # the free tier it sleeps after fifteen minutes without traffic. So a 7pm post
+  # goes out only if somebody happened to have the site open at 7pm — which is
+  # exactly the "it works while I am watching it" symptom.
+  #
+  # This cron calls one endpoint that runs all three jobs, and the request also
+  # keeps a sleepy instance awake. Every fifteen minutes is chosen to match the
+  # in-process tick: a post is at most fifteen minutes late, never missed.
+  - type: cron
+    name: cafe-x-scheduler
+    runtime: python
+    schedule: "*/15 * * * *"
+    plan: starter
+    buildCommand: pip install requests
+    startCommand: >-
+      python -c "import os,requests;
+      r=requests.post(os.environ['APP_URL'].rstrip('/')+'/api/admin/tick',
+      headers={'X-Admin-Token':os.environ['ADMIN_TOKEN']}, timeout=600);
+      print(r.status_code, r.text[:800]); r.raise_for_status()"
+    envVars:
+      - key: APP_URL
+        value: https://smart-helper-c3oy.onrender.com
+      - key: ADMIN_TOKEN
+        fromService:
+          type: web
+          name: cafe-x
+          envVarKey: ADMIN_TOKEN

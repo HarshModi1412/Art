@@ -181,8 +181,41 @@ def arm(email: str) -> dict:
     return st
 
 
+# How many times a single week may be planned before we stop trying, and how
+# long to wait between attempts.
+#
+# WHY BOTH NUMBERS EXIST. Deciding from what is on the calendar means that a
+# week emptied by the seller becomes "needs planning" again — which is the
+# point. But it also means a seller who empties it ON PURPOSE would be refilled
+# every fifteen minutes forever, which is the app arguing with them. The
+# cooldown gives them hours to do whatever they were doing, and the cap makes
+# the app give up after a few tries and leave them alone.
+MAX_PLANS_PER_WEEK = 3
+REPLAN_COOLDOWN_HOURS = 6
+
+
+def _week_shortfall(email: str, week_start: date) -> int:
+    """How many posts this week is short of the seller's cadence, right now."""
+    cadence = (social.get_settings(email).get("cadence") or "standard")
+    target = social.CADENCE.get(cadence, social.CADENCE["standard"])["posts"]
+    return max(0, target - len(existing_for_week(email, week_start)))
+
+
 def due(email: str, now: datetime | None = None) -> date | None:
-    """The week (its Monday) that should be planned now, or None."""
+    """The week (its Monday) that should be planned now, or None.
+
+    THE BUG THIS REPLACES. This used to ask "have we already run for this
+    week?" and skip if so — a flag set once and never revisited. So a seller
+    who planned a week and then deleted the posts (Clear plan, or cancelling
+    them one by one) had an empty calendar and an app convinced its work was
+    done. The week stayed empty until the next Saturday, and nothing anywhere
+    said why.
+
+    It now asks the only question that matters at the moment of execution:
+    **does this week actually have the posts it is supposed to have?** If the
+    calendar is short of the seller's cadence, there is work to do, whether or
+    not we did some earlier. `plan_week` already adds only the shortfall, so a
+    week missing two posts gets two, not a duplicate set."""
     cfg = get_config(email)
     if not cfg["enabled"]:
         return None
@@ -196,11 +229,33 @@ def due(email: str, now: datetime | None = None) -> date | None:
     if last < armed:
         return None
     target = next_monday(last.date())
-    if st.get("last_target") == target.isoformat():
-        return None
     if now.date() > target + timedelta(days=6):
         return None                       # that week is over; wait for the next trigger
+
+    try:
+        if _week_shortfall(email, target) <= 0:
+            return None                   # the week is covered — nothing to do
+    except Exception:  # noqa: BLE001 — a counting problem must not stop planning
+        if st.get("last_target") == target.isoformat():
+            return None                   # fall back to the old flag
+
+    attempts = (st.get("attempts") or {}).get(target.isoformat()) or {}
+    if int(attempts.get("n") or 0) >= MAX_PLANS_PER_WEEK:
+        return None                       # they keep emptying it; stop arguing
+    try:
+        since = now - datetime.fromisoformat(attempts["at"])
+        if since < timedelta(hours=REPLAN_COOLDOWN_HOURS):
+            return None                   # give them room to finish what they were doing
+    except (KeyError, ValueError, TypeError):
+        pass
     return target
+
+
+def _safe_shortfall(email: str, week_start: date) -> int:
+    try:
+        return _week_shortfall(email, week_start)
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 def status(email: str) -> dict:
@@ -225,6 +280,10 @@ def status(email: str) -> dict:
         "running": _running(email),
         "last_run_at": st.get("last_run_at") or "",
         "last_target": st.get("last_target") or "",
+        # What the NEXT week actually looks like right now, so the screen can
+        # say "3 of 4 planned" instead of implying the job is done because it
+        # ran once. This is the same number due() decides on.
+        "next_week_short": _safe_shortfall(email, next_monday(now.date())),
         "last": briefs[-1] if briefs else None,
     }
 
@@ -752,6 +811,17 @@ def _finish(email: str, brief: dict, week_start: date) -> dict:
     st["last_target"] = week_start.isoformat()
     st["last_run_at"] = brief["ran_at"]
     st.setdefault("armed_at", brief["ran_at"])
+    # Every attempt at a week is counted, not just the first. This is what
+    # stops a seller who empties the calendar on purpose from being refilled
+    # every fifteen minutes: three tries, hours apart, then the app leaves it
+    # alone until next week's trigger.
+    key = week_start.isoformat()
+    attempts = dict(st.get("attempts") or {})
+    prev = attempts.get(key) or {}
+    attempts[key] = {"n": int(prev.get("n") or 0) + 1,
+                     "at": now_local(email).isoformat(timespec="seconds")}
+    # Keep only the recent weeks, or this dict grows for the life of the account.
+    st["attempts"] = dict(sorted(attempts.items())[-8:])
     briefs = [b for b in (st.get("briefs") or []) if b.get("week_start") != brief["week_start"]]
     briefs.append(brief)
     st["briefs"] = briefs
@@ -872,6 +942,17 @@ def run_due() -> dict:
 _SCHED_STARTED = False
 _SCHED_GUARD = threading.Lock()
 TICK_SECONDS = 15 * 60
+
+
+def scheduler_running() -> bool:
+    """Whether the in-process ticker is alive in THIS process.
+
+    Worth exposing: an app that is only ever awake while someone is looking at
+    it has a scheduler that is technically running and practically useless, and
+    the two states are indistinguishable without asking."""
+    return bool(_SCHED_STARTED) and any(
+        t.name == "autoplan-scheduler" and t.is_alive()
+        for t in threading.enumerate())
 
 
 def ensure_scheduler() -> bool:

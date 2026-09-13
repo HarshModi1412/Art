@@ -2311,6 +2311,17 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .setup-rest summary { cursor: pointer; font-size: 12.5px; color: var(--primary); }
 .setup-rest ul { margin: 8px 0 0; padding-left: 20px; font-size: 12.5px; line-height: 1.7; color: var(--text-2); }
 
+/* ---------- the deliberate test post ----------
+   Folded away, and quieter than everything around it. This is the one control
+   on the screen that does something irreversible on the seller's public
+   profile, so it must not look like the next step — it has to be sought out. */
+.ig-testpost { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.ig-testpost > summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+.ig-testpost > summary:hover { color: var(--text-2); }
+.ig-testpost label { display: block; margin-top: 10px; font-size: 12.5px; }
+.ig-testpost input { width: 100%; max-width: 420px; }
+.ig-testpost .btn { margin-top: 12px; }
+
 /* ---------- Instagram connect: the two prerequisites ----------
    Tinted and boxed because these two checks are the difference between a
    connection that works and one that fails with an error Instagram writes,

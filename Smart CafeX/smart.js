@@ -5739,7 +5739,19 @@ async function openInstagramModule() {
             <button class="btn primary sm" id="igPreflight">${sic("check")}Check posting works</button>
             <span class="muted tiny">Tests the whole chain without putting anything on your profile.</span>
           </div>
-          <div id="igPfMsg" style="margin-top:10px;"></div>` : connectPanel}
+          <div id="igPfMsg" style="margin-top:10px;"></div>
+          <details class="ig-testpost">
+            <summary>Or put a real test post up now</summary>
+            <p class="muted tiny">This posts for real, immediately, on @${esc(s.account_username || "")}.
+              Use it once to see a post actually appear with your caption. Delete it
+              from Instagram afterwards — we cannot remove it for you.</p>
+            <label>Caption
+              <input id="igTpCap" placeholder="Testing our new posting setup." /></label>
+            <label>Picture <span class="muted tiny">optional — leave blank for a plain test card</span>
+              <input id="igTpUrl" placeholder="/generated_images/… or a public https link" /></label>
+            <button class="btn ghost sm" id="igTpGo">${sic("instagram")}Post it now</button>
+            <div id="igTpMsg" style="margin-top:8px;"></div>
+          </details>` : connectPanel}
       </div>
       ${!s.connected ? `
       <div class="card">
@@ -5829,6 +5841,34 @@ async function openInstagramModule() {
           box.innerHTML = `<span class="err">${esc(e.message)}</span>`;
         }
         pf.disabled = false; pf.innerHTML = `${sic("check")}Check again`;
+      };
+
+      /* The preflight proves the chain without posting, which is the right
+         default. This answers the other question — does a real post actually
+         appear, with my caption — and the only honest answer to that is a real
+         post. Deliberate, explicit, and folded away so nobody hits it by
+         accident. */
+      const tp = $("igTpGo");
+      if (tp) tp.onclick = async () => {
+        const box = $("igTpMsg");
+        if (!confirm("Post this to Instagram now? It goes out for real and you will have to delete it from Instagram yourself.")) return;
+        tp.disabled = true; tp.textContent = "Posting…";
+        box.innerHTML = `<span class="muted tiny">Sending…</span>`;
+        try {
+          const r = await api("/api/instagram/test-post", { method: "POST", json: {
+            caption: ($("igTpCap").value || "").trim(),
+            image_url: ($("igTpUrl").value || "").trim(),
+          }});
+          box.innerHTML = `<div class="focus-box" style="background:var(--green-soft,var(--surface-2));border-radius:8px;padding:10px 12px;">
+            <b style="color:var(--green);">✓ It posted.</b>
+            ${r.permalink ? ` <a href="${esc(r.permalink)}" target="_blank" rel="noopener">Open it on Instagram</a>` : ""}
+            <div class="muted tiny" style="margin-top:3px;">Remember to delete it if you do not want it on the account.</div></div>`;
+        } catch (e) {
+          box.innerHTML = `<div class="focus-box" style="background:var(--amber-soft,var(--surface-2));border-radius:8px;padding:10px 12px;">
+            <b style="color:var(--amber);">It did not go out.</b>
+            <div class="muted tiny" style="margin-top:3px;">${esc(e.message)}</div></div>`;
+        }
+        tp.disabled = false; tp.innerHTML = `${sic("instagram")}Post it now`;
       };
       $("igDisconnect").onclick = async () => {
         if (!confirm("Disconnect Instagram? Scheduled posts will fail until you reconnect.")) return;

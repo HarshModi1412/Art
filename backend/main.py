@@ -1313,6 +1313,45 @@ def preflight_image():
                     headers={"Cache-Control": "public, max-age=86400"})
 
 
+class IGTestPostBody(BaseModel):
+    caption: str = ""
+    image_url: str = ""      # one of the seller's own, or blank for the test card
+    kind: str = "image"      # "image" or "reel"
+
+
+@app.post("/api/instagram/test-post")
+def instagram_test_post(body: IGTestPostBody, request: Request,
+                        authorization: str | None = Header(default=None)):
+    """Put something on the account right now, to see it work.
+
+    The preflight proves the chain WITHOUT posting, which is the right default.
+    But there is a different question — "does a real post actually appear, with
+    my caption, the right way up?" — and the only honest answer to that is a
+    real post. So this one is deliberate, explicit, and deletable: it goes out
+    immediately, the seller is told it is permanent from Instagram's side, and
+    they remove it from the app in two taps if they do not want it.
+
+    With no picture given it uses the same generated test card the preflight
+    uses, so a brand-new account with no photos can still try it."""
+    email = require_user(authorization)
+    base = _public_base_url(request)
+    publisher.remember_base_url(base)
+    url = (body.image_url or "").strip()
+    if url.startswith("/"):
+        url = base.rstrip("/") + url
+    if not url:
+        url = base + "/preflight-image.jpg"
+    caption = (body.caption or "").strip() or "Testing our new posting setup."
+    kind = "reel" if str(body.kind).lower() in ("reel", "video") else "image"
+    try:
+        res = instagram.publish(email, kind, url, caption)
+    except instagram.InstagramError as e:
+        raise HTTPException(400, str(e))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Instagram refused the post.")
+    return res
+
+
 @app.post("/api/instagram/preflight")
 def instagram_preflight(request: Request,
                         authorization: str | None = Header(default=None)):
@@ -1357,6 +1396,104 @@ def social_post_now(body: PostNowBody, request: Request,
         raise HTTPException(400, "That one has already gone out.")
     res = publisher.publish_post(email, post, _public_base_url(request))
     return {**res, "post": social.get_post(email, body.post_id)}
+
+
+@app.post("/api/admin/tick")
+@app.get("/api/admin/tick")
+def admin_tick(request: Request, x_admin_token: str | None = Header(default=None),
+               token: str | None = None):
+    """ONE URL that does every scheduled job. Point a cron at this.
+
+    WHY THIS MATTERS MORE THAN IT LOOKS. The in-process ticker lives inside the
+    web process, so it only runs while the process does. On Render's free tier
+    the service sleeps after fifteen minutes with no traffic; on any tier it
+    restarts on deploy, and a single-instance app is asleep most of the night —
+    which is exactly when a 7pm-IST post is due on a server in UTC. "It works
+    while I have the site open" is the symptom of relying on that thread.
+
+    An external cron calling this every fifteen minutes fixes both halves: the
+    jobs run, and the request itself keeps a sleepy instance awake.
+
+    GET is allowed as well as POST because most free cron services only send
+    GET, and `?token=` because several cannot set a custom header. The token is
+    the same ADMIN_TOKEN either way, and without it this refuses everyone —
+    it never defaults open."""
+    supplied = x_admin_token or token
+    _require_admin(supplied)
+    # Learn our own address from this very request, so a deployment whose only
+    # traffic is this cron still knows what to hand Meta.
+    publisher.remember_base_url(_public_base_url(request))
+
+    out = {"at": pd.Timestamp.now().isoformat(timespec="seconds"),
+           "base_url": publisher.base_url()}
+    # Each job is caught separately: a failure in one must never stop the other
+    # two. A week that cannot be planned is not a reason for today's post to
+    # stay unpublished.
+    for name, fn in (("publish", lambda: publisher.run_due()),
+                     ("autoplan", autoplan.run_due),
+                     ("winback", winback_auto.run_due)):
+        try:
+            out[name] = fn()
+        except Exception as e:  # noqa: BLE001
+            out[name] = {"error": str(e)[:200]}
+    _record_tick(out)
+    return out
+
+
+_TICK_KEY = "last_tick"
+
+
+def _record_tick(result: dict) -> None:
+    """Remember that the jobs ran, so /api/admin/health can say whether the
+    schedule is actually alive rather than assuming it is."""
+    try:
+        from backend.core import db as _db
+        _db.upsert("app_config", {"key": _TICK_KEY, "value": json.dumps(result)[:4000]},
+                   on_conflict="key")
+    except Exception:  # noqa: BLE001
+        pass
+    global _LAST_TICK
+    _LAST_TICK = result
+
+
+_LAST_TICK: dict = {}
+
+
+@app.get("/api/admin/schedule")
+def admin_schedule(x_admin_token: str | None = Header(default=None),
+                   token: str | None = None):
+    """Is the background schedule alive, and when did it last do anything.
+
+    Built because "it is not posting" and "the schedule never ran" look
+    identical from the outside, and guessing between them wasted days."""
+    _require_admin(x_admin_token or token)
+    last = _LAST_TICK or {}
+    if not last:
+        try:
+            from backend.core import db as _db
+            row = _db.fetch_one("app_config", {"key": _TICK_KEY})
+            if row and row.get("value"):
+                last = json.loads(row["value"])
+        except Exception:  # noqa: BLE001
+            last = {}
+    age = None
+    try:
+        age = round((pd.Timestamp.now() - pd.Timestamp(last["at"])).total_seconds() / 60, 1)
+    except Exception:  # noqa: BLE001
+        age = None
+    return {
+        "in_process_ticker": autoplan.scheduler_running(),
+        "tick_seconds": autoplan.TICK_SECONDS,
+        "last_tick": last,
+        "minutes_since_last_tick": age,
+        # The judgement, said plainly, rather than four numbers to interpret.
+        "healthy": bool(age is not None and age < (autoplan.TICK_SECONDS / 60) * 3),
+        "public_base_url": publisher.base_url(),
+        "advice": ("Point a cron at POST /api/admin/tick every 15 minutes. The "
+                   "in-process ticker stops whenever this service sleeps or "
+                   "restarts, so on its own it only works while someone is "
+                   "using the site."),
+    }
 
 
 @app.get("/api/social/publisher")
@@ -4624,6 +4761,21 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Paths that belong to the app itself, whatever host they arrive on. Everything
 # else on a seller's own domain is their shop.
+@app.middleware("http")
+async def _learn_base_url(request: Request, call_next):
+    """Remember what this app's public address is, from real traffic.
+
+    Meta fetches media from us, so publishing needs an absolute https address.
+    A web request knows it; the background ticker does not, and used to read an
+    environment variable that no deployment ever set — which is why nothing
+    published. Learning it here means there is nothing to configure."""
+    try:
+        publisher.remember_base_url(_public_base_url(request))
+    except Exception:  # noqa: BLE001 — never break a request over bookkeeping
+        pass
+    return await call_next(request)
+
+
 _APP_PATHS = ("/api/", "/smart", "/smart-static/", "/static/", "/generated_images/",
               "/s/", "/docs", "/openapi.json", "/redoc", "/health", "/favicon.ico",
               # Meta fetches this to prove it can reach us. If a seller's custom

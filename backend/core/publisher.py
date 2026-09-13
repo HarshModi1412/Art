@@ -48,6 +48,7 @@ THE RULES THAT KEEP THIS SAFE
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from datetime import datetime, timedelta
 
@@ -67,6 +68,66 @@ GRACE_HOURS = 6
 MAX_PER_TICK = 3
 
 _claim_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# Where this app lives, as the public internet sees it
+# ---------------------------------------------------------------------------
+# THE BUG THIS FIXES, and it is the reason posts were not going out at all.
+# Meta fetches the picture and the clip from us, so it needs an absolute
+# https:// address — a stored path like /generated_images/x.jpg means nothing
+# to it. Inside a web request that address is obvious (it is on the request).
+# The background ticker has no request, so it read PUBLIC_BASE_URL from the
+# environment — a variable that was documented nowhere, set nowhere, and
+# present in no deployment. Every background publish therefore failed with
+# "the media is not on a public https address", which reads like a
+# configuration mistake by the seller and was in fact ours.
+#
+# So the app now LEARNS its own address from the first real request that
+# arrives and remembers it on disk, which means it is correct with nothing to
+# configure. The env var still wins when it is set, for a deployment behind a
+# proxy that rewrites Host.
+_BASE_FILE = "public_base_url.txt"
+_base_cache = ""
+
+
+def _base_path() -> str:
+    from backend.core import auth
+    return os.path.join(auth.BASE_DIR, _BASE_FILE)
+
+
+def remember_base_url(url: str) -> None:
+    """Called on real requests. Cheap, and idempotent once it settles."""
+    global _base_cache
+    url = str(url or "").strip().rstrip("/")
+    if not url.startswith("http") or url == _base_cache:
+        return
+    # localhost is useless to Meta and must never overwrite a real address.
+    if "127.0.0.1" in url or "localhost" in url:
+        if _base_cache:
+            return
+    _base_cache = url
+    try:
+        os.makedirs(os.path.dirname(_base_path()), exist_ok=True)
+        with open(_base_path(), "w", encoding="utf-8") as fh:
+            fh.write(url)
+    except Exception:  # noqa: BLE001 — the in-memory copy still works
+        pass
+
+
+def base_url() -> str:
+    """The address to hand Meta. Env wins, then what we learned, then disk."""
+    global _base_cache
+    env = (os.environ.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+    if env:
+        return env
+    if _base_cache:
+        return _base_cache
+    try:
+        with open(_base_path(), encoding="utf-8") as fh:
+            _base_cache = fh.read().strip().rstrip("/")
+    except Exception:  # noqa: BLE001
+        _base_cache = ""
+    return _base_cache
 
 
 def _state(email: str) -> dict:
@@ -199,7 +260,7 @@ def _absolute(url: str, base_url: str) -> str:
     return u
 
 
-def publish_post(email: str, post: dict, base_url: str = "") -> dict:
+def publish_post(email: str, post: dict, base: str = "") -> dict:
     """Publish one post and record what happened on it."""
     from backend.core import instagram
 
@@ -228,7 +289,7 @@ def publish_post(email: str, post: dict, base_url: str = "") -> dict:
         if blocking and not (vreport or {}).get("converted"):
             return _fail_now(email, pid, "This clip cannot go out as a reel. "
                              + " ".join(blocking))
-    url = _absolute(raw, base_url)
+    url = _absolute(raw, base or base_url())
 
     def _fail(reason: str) -> dict:
         """Record it, do not just return it.
@@ -250,7 +311,7 @@ def publish_post(email: str, post: dict, base_url: str = "") -> dict:
                      "cannot fetch it. Set the app's public URL and try again.")
 
     caption = _caption(post)
-    cover = _absolute(post.get("image_url") or "", base_url) if is_reel else ""
+    cover = _absolute(post.get("image_url") or "", base or base_url()) if is_reel else ""
     try:
         res = instagram.publish(email, "reel" if is_reel else "image", url, caption,
                                 cover_url=cover if cover != url else "")
@@ -271,15 +332,17 @@ def _caption(post: dict) -> str:
     return cap
 
 
-def run_for(email: str, base_url: str = "", now: datetime | None = None) -> dict:
-    """Publish everything due for one account."""
+def run_for(email: str, base: str = "", now: datetime | None = None) -> dict:
+    """Publish everything due for one account. `base` defaults to the address
+    the app learned about itself, so a caller with no request still works."""
+    base = base or base_url()
     fired, failed = [], []
     for post in due_posts(email, now)[:MAX_PER_TICK]:
         pid = post.get("id") or ""
         if not _claim(email, pid):
             continue
         try:
-            res = publish_post(email, post, base_url)
+            res = publish_post(email, post, base)
         finally:
             _release(email, pid)
         (fired if res.get("ok") else failed).append(
@@ -305,15 +368,16 @@ def run_for(email: str, base_url: str = "", now: datetime | None = None) -> dict
             "details": {"published": fired, "failed": failed}}
 
 
-def run_due(base_url: str = "") -> dict:
+def run_due(base: str = "") -> dict:
     """Every account. Called by the ticker."""
     from backend.core import auth, instagram
+    base = base or base_url()
     total = {"accounts": 0, "published": 0, "failed": 0, "missed": 0}
     for account in (auth.load_users() or {}):
         try:
             if not instagram.is_connected(account):
                 continue                 # nothing to publish to
-            res = run_for(account, base_url)
+            res = run_for(account, base)
         except Exception as e:  # noqa: BLE001
             log.warning("publishing failed for %s: %s", account, e)
             continue

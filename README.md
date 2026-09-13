@@ -1091,6 +1091,83 @@ description, canonical and Open Graph tags per store and per product, so a link
 pasted into WhatsApp arrives as a card rather than grey text. Each product has
 its own address at `/s/<handle>/p/<id>`, and each store a `sitemap.xml`.
 
+## The schedule, and why "it works while I have the site open" is the bug
+
+Three jobs run on a clock: the weekly plan, the weekly win-back, and publishing
+posts whose time has come. They shared one in-process ticker — a thread inside
+the web process, every fifteen minutes.
+
+**A thread inside the web process only runs while that process does.** It
+restarts on every deploy, and on a free instance it stops entirely fifteen
+minutes after the last visitor. So a 7pm post went out only if somebody
+happened to have the app open at 7pm. The schedule was not broken; it was
+conditional on someone watching it, which is worse, because it works whenever
+you check.
+
+`POST /api/admin/tick` is one URL that runs all three. Point a cron at it every
+fifteen minutes and both halves are solved: the jobs run, and the request keeps
+a sleeping instance awake. `render.yaml` now ships that cron, so a fresh
+blueprint deploy has it from the start.
+
+Small things that matter for cron services specifically: **GET works as well as
+POST**, because most free schedulers only send GET, and **`?token=`** works as
+well as the `X-Admin-Token` header, because several cannot set a custom header.
+Same `ADMIN_TOKEN` either way, and without it the endpoint refuses everyone — it
+never defaults open. Each job is caught separately, so a week that cannot be
+planned never stops today's post from publishing.
+
+`GET /api/admin/schedule` answers "is the schedule actually alive", because
+"it is not posting" and "nothing ever ran" look identical from outside and
+guessing between them wastes days. It reports whether the in-process ticker is
+running in this process, when the last tick was, how many minutes ago, and a
+plain `healthy` verdict.
+
+### The app now knows its own address
+
+**This is why nothing was publishing in the background.** Meta fetches the
+picture and the clip from us, so a post needs an absolute `https://` address —
+a stored path like `/generated_images/x.jpg` means nothing to it. Inside a web
+request that address is obvious. The ticker has no request, so it read
+`PUBLIC_BASE_URL` from the environment: a variable documented nowhere and set
+in no deployment. Every background publish failed with *"the media is not on a
+public https address"*, which reads like the seller misconfigured something and
+was in fact ours.
+
+`publisher.remember_base_url()` now learns it from the first real request and
+keeps it on disk, so it is right with nothing to configure. `PUBLIC_BASE_URL`
+still wins when set, for a deployment behind a proxy that rewrites Host, and
+localhost is never allowed to overwrite a real address.
+
+### Planning a week decides from the calendar, not from a flag
+
+`autoplan.due()` used to ask *"have we already run for this week?"* — a flag set
+once and never revisited. So a seller who planned a week and then deleted the
+posts had an empty calendar and an app convinced its work was done. The week
+stayed empty until the next Saturday and nothing said why.
+
+It now asks the only question that matters at the moment of execution: **does
+this week actually have the posts it is supposed to have?** If the calendar is
+short of the seller's cadence there is work to do, whether or not we did some
+earlier — and `plan_week` already adds only the shortfall, so a week missing two
+posts gets two, not a duplicate set.
+
+The cap and the cooldown are the other half of that. Deciding from reality means
+a week emptied deliberately would be refilled every fifteen minutes forever,
+which is the app arguing with its user. `REPLAN_COOLDOWN_HOURS = 6` gives them
+room to finish whatever they were doing; `MAX_PLANS_PER_WEEK = 3` makes the app
+accept that they meant it and leave them alone until next week.
+
+### Posting something real, on purpose
+
+Two different questions, two different tools. **Check posting works** proves the
+whole chain without putting anything on the profile. **Or put a real test post
+up now** (folded away under it, and on the Instagram screen only) answers the
+other one — does a post actually appear, with my caption, the right way up —
+and the only honest answer to that is a real post. It says plainly that it is
+permanent from Instagram's side and the seller deletes it themselves. There is
+also **Post now** on any scheduled post, which sends that specific post
+immediately instead of waiting for its time.
+
 ## Win-back, weekly, without being asked
 
 `backend/core/winback_auto.py`. The win-back card used to sit in the Approval

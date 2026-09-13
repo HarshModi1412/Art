@@ -599,5 +599,187 @@ try:
 finally:
     localtime.now = _real_now
 
+section("The app learns its own public address")
+
+# THE BUG THIS FIXES, and it is why nothing was publishing in the background.
+# Meta fetches the media from us, so a post needs an absolute https address. A
+# web request knows it. The ticker does not, and read PUBLIC_BASE_URL — a
+# variable documented nowhere and set in no deployment. So every background
+# publish failed with "the media is not on a public https address", which reads
+# like the seller misconfigured something and was in fact our bug.
+publisher._base_cache = ""
+os.environ.pop("PUBLIC_BASE_URL", None)
+try:
+    os.remove(publisher._base_path())
+except OSError:
+    pass
+
+check("with nothing learned yet, there is no address", publisher.base_url() == "",
+      publisher.base_url())
+
+publisher.remember_base_url("https://shop.onrender.com/")
+check("a real request teaches it", publisher.base_url() == "https://shop.onrender.com",
+      publisher.base_url())
+check("and the trailing slash is dropped, so urls do not double up",
+      not publisher.base_url().endswith("/"))
+
+publisher._base_cache = ""
+check("it survives a restart, because it is on disk",
+      publisher.base_url() == "https://shop.onrender.com", publisher.base_url())
+
+publisher.remember_base_url("http://127.0.0.1:8000")
+check("localhost never overwrites a real address — that would publish links "
+      "Instagram cannot reach",
+      publisher.base_url() == "https://shop.onrender.com", publisher.base_url())
+
+os.environ["PUBLIC_BASE_URL"] = "https://www.myshop.com"
+check("an explicit setting still wins, for a proxy that rewrites Host",
+      publisher.base_url() == "https://www.myshop.com")
+os.environ.pop("PUBLIC_BASE_URL", None)
+
+CALLS.clear()
+seed([post("learned")])
+publisher.run_for(EMAIL, "", NOW)          # no base passed, as the ticker does
+check("so the ticker publishes with a full url and no configuration",
+      CALLS and CALLS[0]["url"].startswith("https://shop.onrender.com/"),
+      str(CALLS[:1]))
+
+section("Planning again after the seller empties the week")
+
+# THE GLITCH: this used to ask "have we already run for this week?" — a flag set
+# once and never revisited. Plan a week, delete the posts, and the app was
+# convinced its work was done while the calendar sat empty until next Saturday.
+from datetime import date as _date  # noqa: E402
+from backend.core import autoplan  # noqa: E402
+
+PEMAIL = "plan@test.local"
+MONDAY = _date(2026, 9, 21)
+SAT_9AM = datetime(2026, 9, 19, 9, 30)      # after Saturday's 9am trigger
+
+social.save_settings(PEMAIL, {"auto_plan": True, "auto_plan_day": 5,
+                              "auto_plan_hour": 9, "cadence": "standard"})
+user_store.set_key(PEMAIL, autoplan.STATE_KEY,
+                   {"armed_at": datetime(2026, 9, 1, 9, 0).isoformat(timespec="seconds")})
+
+
+def week_posts(n):
+    user_store.set_key(PEMAIL, social.POSTS_KEY, [
+        {"id": f"w{i}", "state": "scheduled", "format": "photo",
+         "scheduled_at": f"2026-09-2{2 + (i % 5)}T18:00",
+         "image_url": "/generated_images/a.jpg", "video_url": "",
+         "caption": "x", "hashtags": []} for i in range(n)])
+
+
+target = social.CADENCE["standard"]["posts"]
+week_posts(0)
+check("an empty week is due", autoplan.due(PEMAIL, SAT_9AM) == MONDAY,
+      str(autoplan.due(PEMAIL, SAT_9AM)))
+
+week_posts(target)
+check("a full week is not", autoplan.due(PEMAIL, SAT_9AM) is None)
+
+week_posts(max(0, target - 1))
+check("a week one post short IS due — the old flag would have said no",
+      autoplan.due(PEMAIL, SAT_9AM) == MONDAY)
+
+# The actual reported bug: plan it, then delete everything.
+week_posts(target)
+st = autoplan._state(PEMAIL)
+st["last_target"] = MONDAY.isoformat()       # as if we had planned it
+autoplan._save_state(PEMAIL, st)
+check("planned and full: nothing to do", autoplan.due(PEMAIL, SAT_9AM) is None)
+week_posts(0)
+check("the seller deletes them all -> it is due again",
+      autoplan.due(PEMAIL, SAT_9AM) == MONDAY,
+      "this is the reported glitch: an empty calendar and an app that thought it was done")
+
+# Cancelled posts are a decision, not a gap — but they still leave the week
+# short, and the planner has always counted only live ones.
+user_store.set_key(PEMAIL, social.POSTS_KEY, [
+    {"id": "c1", "state": "cancelled", "format": "photo",
+     "scheduled_at": "2026-09-22T18:00", "image_url": "", "video_url": "",
+     "caption": "x", "hashtags": []}])
+check("a cancelled post does not count towards the week",
+      autoplan.due(PEMAIL, SAT_9AM) == MONDAY)
+
+section("But it does not argue with a seller who wants it empty")
+
+week_posts(0)
+st = autoplan._state(PEMAIL)
+st["attempts"] = {MONDAY.isoformat(): {"n": 1, "at": SAT_9AM.isoformat()}}
+autoplan._save_state(PEMAIL, st)
+check("it does not re-plan again straight away",
+      autoplan.due(PEMAIL, SAT_9AM + timedelta(minutes=15)) is None,
+      "refilling every quarter hour is the app fighting the seller")
+check("but it does after the cooldown",
+      autoplan.due(PEMAIL, SAT_9AM + timedelta(hours=autoplan.REPLAN_COOLDOWN_HOURS + 1))
+      == MONDAY)
+
+st = autoplan._state(PEMAIL)
+st["attempts"] = {MONDAY.isoformat(): {"n": autoplan.MAX_PLANS_PER_WEEK,
+                                       "at": datetime(2026, 9, 19, 0, 0).isoformat()}}
+autoplan._save_state(PEMAIL, st)
+check("after a few tries it gives up and leaves them alone",
+      autoplan.due(PEMAIL, SAT_9AM + timedelta(hours=48)) is None,
+      f"{autoplan.MAX_PLANS_PER_WEEK} attempts is enough to know they meant it")
+
+section("The other guards still hold")
+
+week_posts(0)
+user_store.set_key(PEMAIL, autoplan.STATE_KEY,
+                   {"armed_at": datetime(2026, 9, 1, 9, 0).isoformat(timespec="seconds")})
+# At 8am on Saturday the most recent trigger is still LAST Saturday's, so the
+# week it points at is the one already running — not next week. Asserting
+# "nothing is due" here would have been asserting that a half-empty current
+# week gets abandoned, which is the opposite of what was just fixed.
+check("an hour before the trigger, it is not yet planning NEXT week",
+      autoplan.due(PEMAIL, datetime(2026, 9, 19, 8, 0)) != MONDAY,
+      str(autoplan.due(PEMAIL, datetime(2026, 9, 19, 8, 0))))
+check("it is still catching up the week that is running",
+      autoplan.due(PEMAIL, datetime(2026, 9, 19, 8, 0)) == _date(2026, 9, 14))
+check("nothing is due once that week has finished",
+      autoplan.due(PEMAIL, datetime(2026, 9, 29, 10, 0)) != MONDAY)
+social.save_settings(PEMAIL, {"auto_plan": False})
+check("and nothing at all when it is switched off",
+      autoplan.due(PEMAIL, SAT_9AM) is None)
+social.save_settings(PEMAIL, {"auto_plan": True})
+
+check("status reports the real shortfall, not just that it ran",
+      "next_week_short" in autoplan.status(PEMAIL))
+
+section("The schedule can run with nobody on the site")
+
+import inspect as _i  # noqa: E402
+_main_src = ""
+try:
+    _main_src = open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "backend", "main.py"), encoding="utf-8").read()
+except Exception:  # noqa: BLE001
+    pass
+check("there is one endpoint that runs every job", '"/api/admin/tick"' in _main_src)
+check("reachable by GET too — most free cron services only send GET",
+      '@app.get("/api/admin/tick")' in _main_src)
+check("and by ?token= — several cannot set a custom header",
+      "x_admin_token or token" in _main_src)
+check("it refuses without the admin token, never defaulting open",
+      "_require_admin(supplied)" in _main_src)
+check("one failing job does not stop the other two",
+      'out[name] = {"error"' in _main_src)
+check("and there is a way to ask whether the schedule is actually alive",
+      '"/api/admin/schedule"' in _main_src)
+check("which reports the in-process ticker honestly",
+      "scheduler_running" in _i.getsource(autoplan))
+
+_yaml = ""
+try:
+    _yaml = open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "render.yaml"), encoding="utf-8").read()
+except Exception:  # noqa: BLE001
+    pass
+check("the blueprint ships a cron so this works on a fresh deploy",
+      "type: cron" in _yaml and "/api/admin/tick" in _yaml)
+check("running often enough that a post is late, never missed",
+      "*/15 * * * *" in _yaml)
+
 print(f"\n{PASSED} passed, {FAILED} failed")
 sys.exit(1 if FAILED else 0)
