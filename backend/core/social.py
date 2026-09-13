@@ -177,7 +177,13 @@ WEDDING_MONTHS = {2: "high", 3: "high", 4: "medium", 5: "medium", 6: "medium",
 # --------------------------------------------------------------- settings
 
 def blank_settings() -> dict:
-    return {"category": "clothing", "language": "hinglish", "cadence": "standard",
+    # Category starts EMPTY, not "clothing". A hardcoded default is a guess
+    # about the seller's whole business, and it was wrong for everyone who does
+    # not sell clothes — their captions opened by calling their candles an
+    # item of clothing. get_settings() fills it from what they told us they
+    # sell; if they have told us nothing, it stays empty and the copy simply
+    # does not claim a category.
+    return {"category": "", "language": "hinglish", "cadence": "standard",
             "pillars": [p["id"] for p in PILLARS], "whatsapp": "",
             "brand_hashtag": "", "handle": "", "city": "",
             "order_cta": "DM us to order",
@@ -190,7 +196,30 @@ def blank_settings() -> dict:
 def get_settings(email: str) -> dict:
     s = blank_settings()
     s.update(user_store.get_key((email or "").lower(), SETTINGS_KEY, {}) or {})
+    # What the seller said they sell, in their own words, is the best answer to
+    # "what category is this shop" — better than a preset and far better than a
+    # default. Only used when they have not set a category here explicitly.
+    if not str(s.get("category") or "").strip():
+        s["category"] = product_label(email)
     return s
+
+
+def product_label(email: str) -> str:
+    """The seller's own words for what they sell, or the preset's label.
+
+    Read straight from the store rather than through smart.py, which imports
+    this module — going the other way would be a cycle."""
+    from backend.core import product_config
+    key = (email or "").lower()
+    try:
+        label = user_store.get_key(key, "product_type_label", "")
+        ptype = user_store.get_key(key, "product_type", None)
+    except Exception:  # noqa: BLE001
+        return ""
+    meta = product_config.meta(ptype, label)
+    # "Other products" is the generic preset's label and says nothing useful in
+    # a caption, so it is treated as "they have not told us".
+    return "" if meta["id"] == "generic" and not meta.get("custom") else meta["label"]
 
 
 def save_settings(email: str, patch: dict) -> dict:
@@ -509,24 +538,75 @@ CTA: <one line>
 TAGS: <5 hashtags separated by spaces>"""
 
 
+def _tags_from(text: str) -> list[str]:
+    """Hashtags out of a line a model wrote, however it chose to write them.
+
+    THE BUG THIS FIXES: this used to be `re.findall(r"#[\w]+")`, which only
+    matched tags that already had a #. Smaller models — Cloudflare's, the one
+    that had actually been writing these captions — routinely answer
+    `TAGS: kurta handmade ganeshchaturthi` with no hashes at all, so every
+    caption it wrote went out with NO hashtags and nobody noticed, because an
+    empty list is not an error.
+
+    So: take the hashed ones when they are there, and otherwise treat the line
+    as plain words. `#` is added on the way out either way."""
+    line = str(text or "").strip()
+    if not line:
+        return []
+    hashed = re.findall(r"#([\w]+)", line)
+    if hashed:
+        return hashed
+    # No hashes: split on commas and spaces, drop anything that is obviously a
+    # sentence rather than a tag.
+    words = [w.strip(" .,;:#\"'") for w in re.split(r"[,\s]+", line)]
+    return [w for w in words if w and len(w) > 2 and not w.endswith(".")][:8]
+
+
+def clean_tags(raw: list, limit: int = 5) -> list[str]:
+    """Five usable hashtags: no #, no spaces, no duplicates, nothing empty.
+
+    Five because Instagram capped them there in January 2026 — more are
+    ignored, and a wall of them reads as spam to a human either way."""
+    out, seen = [], set()
+    for t in raw or []:
+        tag = re.sub(r"[^0-9A-Za-z_]", "", str(t or "").strip().lstrip("#"))
+        if not tag or len(tag) < 3:
+            continue
+        key = tag.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(tag)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _parse_caption(text: str) -> dict:
     out = {"hook": "", "body": "", "question": "", "cta": "", "tags": []}
     cur = None
     for raw in (text or "").splitlines():
         line = raw.strip()
-        m = re.match(r"^(HOOK|BODY|QUESTION|CTA|TAGS)\s*:\s*(.*)$", line, re.I)
+        # HASHTAGS: is what half the models write when asked for TAGS.
+        m = re.match(r"^(HOOK|BODY|QUESTION|CTA|TAGS|HASHTAGS)\s*:\s*(.*)$", line, re.I)
         if m:
             cur = m.group(1).lower()
+            if cur == "hashtags":
+                cur = "tags"
             val = m.group(2).strip()
             if cur == "tags":
-                out["tags"] = re.findall(r"#[\w]+", val)
+                out["tags"] = _tags_from(val)
             else:
                 out[cur] = val
         elif cur == "body" and line:
             out["body"] = f"{out['body']}\n{line}".strip()
         elif cur == "tags" and line:
-            out["tags"] += re.findall(r"#[\w]+", line)
-    out["tags"] = out["tags"][:5]
+            out["tags"] += _tags_from(line)
+    # A model that ignored the format entirely may still have scattered
+    # hashtags through its answer. Better than nothing.
+    if not out["tags"]:
+        out["tags"] = re.findall(r"#([\w]+)", text or "")
+    out["tags"] = clean_tags(out["tags"])
     return out
 
 
@@ -587,8 +667,11 @@ def _fallback_caption(product: dict, pillar: dict, settings: dict,
     already rotated its lines by beat; the weekly path never got the same
     treatment. Now the ARCHETYPE picks the line, so each beat of the week
     reads differently even with no model in the loop."""
-    name = product.get("name") or "this piece"
-    cat = settings.get("category") or "piece"
+    # "piece" is jewellery language. For a candle maker it is simply wrong, and
+    # this is the path that runs when there is no AI at all — the one a free
+    # account sees most.
+    cat = settings.get("category") or "product"
+    name = product.get("name") or f"this {cat}"
     price = product.get("price")
     cta = settings.get("order_cta") or "DM us to order"
 
@@ -732,6 +815,101 @@ def _occasion_context(occasion: dict | None = None, playbook: dict | None = None
     return occ
 
 
+# --------------------------------------------------------------- hashtags
+#
+# WHY HASHTAGS GET THEIR OWN CALL. Asking one small model for a hook, a body, a
+# question, a CTA and five hashtags in one strictly-formatted answer is asking
+# it to get five things right at once, and the hashtags are the field it drops
+# — which is exactly what happened: captions went out with none at all. Asking
+# the same model ONE question it can answer in a line is a different task, and
+# small free models are good at it.
+#
+# Five, because Instagram capped them at five in January 2026. They are worth
+# roughly +2% reach now — real but small, which is why this never blocks a post
+# and never costs a second round trip when the caption already produced them.
+HASHTAG_SYSTEM = """You pick Instagram hashtags for a small Indian D2C seller.
+
+Return EXACTLY 5 hashtags on one line, separated by spaces, and nothing else.
+
+Rules:
+- Mix them: one or two broad (the category), two mid-size (the style, the
+  occasion, the material), one narrow or local (the city, the craft, the niche).
+  Five broad tags compete with millions of posts and reach nobody.
+- Real tags people search, not invented phrases. No #viral, #trending,
+  #followforfollow, #explorepage — those reach bots, not buyers.
+- No spaces inside a tag. No punctuation. No emoji.
+- Indian and local tags in Roman script.
+
+Answer with the five hashtags only."""
+
+
+def _derived_tags(product: dict, settings: dict, occasion: dict | None = None) -> list[str]:
+    """Hashtags from what we already know, for when the AI gives us nothing.
+
+    Not clever, but never empty and never wrong: these come from the seller's
+    own category, city and product, so the worst case is a tag that is merely
+    unambitious."""
+    # ORDER IS THE WHOLE DESIGN HERE, because only the first five survive.
+    # The mix that actually reaches buyers is one broad, one narrow, one
+    # timely, one local, one material — not five broad ones competing with a
+    # million posts. So: category, product, occasion, city, fabric. A
+    # "#clothinglover" filler used to sit second and push the city out of the
+    # list entirely, which threw away the only tag with local intent behind it.
+    bits = []
+    cat = str((settings or {}).get("category") or "").strip()
+    if cat:
+        bits.append(cat.replace(" ", ""))                      # broad
+    name = str((product or {}).get("name") or "").strip()
+    if name:
+        bits.append(re.sub(r"[^0-9A-Za-z]", "", name)[:24])    # narrow
+    if occasion and occasion.get("name"):
+        bits.append(re.sub(r"[^0-9A-Za-z]", "", str(occasion["name"]))[:24])   # timely
+    city = str((settings or {}).get("city") or "").strip()
+    if city:
+        bits.append(re.sub(r"[^0-9A-Za-z]", "", city))         # local
+    if (product or {}).get("fabric"):
+        bits.append(re.sub(r"[^0-9A-Za-z]", "", str(product["fabric"]))[:20])  # material
+    # Evergreen, and honest for this market — only reached when the above is thin.
+    bits += ["handmade", "shopsmall", "madeinindia", "smallbusiness"]
+    return clean_tags(bits)
+
+
+def write_hashtags(email: str, product: dict, caption: dict | None = None,
+                   occasion: dict | None = None) -> list[str]:
+    """Five hashtags for this post. Never returns fewer than it can."""
+    s = get_settings(email)
+    facts = []
+    if (product or {}).get("name"):
+        facts.append(f"Product: {product['name']}")
+    for k in ("category", "fabric", "description"):
+        v = (product or {}).get(k)
+        if v:
+            facts.append(f"{k.title()}: {str(v)[:120]}")
+    if s.get("category"):
+        facts.append(f"Shop sells: {s['category']}")
+    if s.get("city"):
+        facts.append(f"City: {s['city']}")
+    if occasion and occasion.get("name"):
+        facts.append(f"Occasion: {occasion['name']}")
+    if caption and caption.get("hook"):
+        facts.append(f"The caption's hook: {caption['hook']}")
+
+    tags = []
+    try:
+        res = aiprovider.generate(HASHTAG_SYSTEM, "\n".join(facts) or "An Indian D2C product.",
+                                  sensitivity="public", max_tokens=80, temperature=0.7,
+                                  fallback="")
+        tags = clean_tags(_tags_from(res.get("text") or ""))
+    except Exception:  # noqa: BLE001 — hashtags are never worth failing a post for
+        tags = []
+
+    if len(tags) < 5:
+        # Top up rather than replace: three good AI tags plus two derived ones
+        # beats five derived ones.
+        tags = clean_tags(tags + _derived_tags(product, s, occasion))
+    return tags
+
+
 def write_caption(email: str, product: dict, pillar_id: str,
                   angle: str = "", occasion: dict | None = None,
                   playbook: dict | None = None, beat: dict | None = None,
@@ -742,11 +920,16 @@ def write_caption(email: str, product: dict, pillar_id: str,
              ("name", "price", "description", "fabric", "sizes", "care", "stock", "category")
              if product.get(k)}
     occ = _occasion_context(occasion, playbook, beat)
+    sells = product_label(email) or s.get("category") or ""
     user = (f"Pillar: {pillar['name']} ({pillar['type']}).\n"
             f"{story}"
             f"{occ}"
             f"Angle: {angle or pillar['prompts'][0]}\n"
-            f"Seller city: {s.get('city') or 'India'}\n"
+            # In the seller's own words. Without this the model is told only a
+            # product name and invents a category — which is how a candle maker
+            # got a caption about an outfit.
+            + (f"This shop sells: {sells}. Write as a {sells} seller would.\n" if sells else "")
+            + f"Seller city: {s.get('city') or 'India'}\n"
             f"How to order: {s.get('order_cta')}\n"
             f"Product facts (use only these):\n"
             + "\n".join(f"- {k}: {v}" for k, v in facts.items()))
@@ -761,6 +944,14 @@ def write_caption(email: str, product: dict, pillar_id: str,
     if not parsed["hook"]:
         return {**fb, "provider": "template", "free": True,
                 "error": "model did not return the expected shape"}
+    # The hashtags are the field models drop. If they did, ask for just those —
+    # one short question a small model can answer — rather than shipping a post
+    # with none.
+    if len(parsed.get("tags") or []) < 5:
+        try:
+            parsed["tags"] = write_hashtags(email, product, parsed, occasion)
+        except Exception:  # noqa: BLE001
+            parsed["tags"] = _derived_tags(product, s, occasion)
     return {**parsed, "provider": res["provider"], "free": res["free"], "error": ""}
 
 
@@ -1056,7 +1247,13 @@ def write_reel_script(email: str, product: dict, pillar_id: str,
 
 
 def assemble(caption: dict) -> str:
-    """The caption as it will actually be pasted into Instagram."""
+    """The caption as it will actually be posted.
+
+    The # is added HERE, not stored. Tags reach this app from four places — the
+    caption model, the dedicated hashtag call, the playbook, and the seller
+    typing them — and each has its own idea about whether a tag carries a #.
+    Normalising at the one point where they become text is the only way that
+    does not eventually publish `#kurta ##silk handmade`."""
     parts = [caption.get("hook", "")]
     if caption.get("body"):
         parts += ["", caption["body"]]
@@ -1064,8 +1261,9 @@ def assemble(caption: dict) -> str:
         parts += ["", caption["question"]]
     if caption.get("cta"):
         parts += ["", caption["cta"]]
-    if caption.get("tags"):
-        parts += ["", " ".join(caption["tags"][:5])]
+    tags = clean_tags(caption.get("tags") or [])
+    if tags:
+        parts += ["", " ".join("#" + t for t in tags)]
     return "\n".join(parts).strip()
 
 

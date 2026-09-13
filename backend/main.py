@@ -1880,19 +1880,28 @@ def product_types():
 
 class ProductTypeBody(BaseModel):
     product_type: str
+    label: str | None = None      # the seller's own words, e.g. "Soy wax candles"
 
 
 @app.get("/api/product-type")
 def get_product_type(authorization: str | None = Header(default=None)):
     email = require_user(authorization)
+    m = smart.product_meta(email)
     return {"product_type": smart.get_product_type(email),
+            "label": smart.get_product_label(email),
+            # What the copy will actually call it — shown back to the seller so
+            # they can see the effect of what they typed before anything posts.
+            "display": m["label"], "noun": m["noun"], "nouns": m["nouns"],
             "types": product_config.public_types()}
 
 
 @app.post("/api/product-type")
 def set_product_type(body: ProductTypeBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
-    return {"ok": True, "product_type": smart.set_product_type(email, body.product_type)}
+    pt = smart.set_product_type(email, body.product_type, body.label)
+    m = smart.product_meta(email)
+    return {"ok": True, "product_type": pt, "label": smart.get_product_label(email),
+            "display": m["label"], "noun": m["noun"], "nouns": m["nouns"]}
 
 
 def _resolve_product_type(authorization: str | None, product_type: str | None) -> str:

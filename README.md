@@ -685,6 +685,45 @@ Consequences you will see in the code:
 Festival dates in `FESTIVALS_2026` are lunisolar and **must be refreshed each
 year, never extrapolated** — marketing blogs routinely get them a week wrong.
 
+## Sellers say what they sell, in their own words
+
+`backend/core/product_config.py`, `smart.py`, `social.py`.
+
+The product-type picker used to be a closed list — clothing, jewellery, food,
+handicraft, beauty, home. A seller of blue pottery picked "handicraft" and every
+caption the AI wrote afterwards called their work "this handicraft piece", which
+is not a thing anyone says. Worse, a brand-new account defaulted to `clothing`
+in `social.blank_settings()`, so a candle maker's first caption sold a saree.
+
+Now the picker ends with a free-text box — *"None of these? Type what you
+sell"* — capped at 40 characters. Whatever the seller types is what the app
+calls their products, everywhere:
+
+* the **Products** form's Category field takes their words as its placeholder
+  and its hint now says the category "groups it on your site, and tells the
+  caption writer what this is";
+* the **Home** screen chip shows it back to them;
+* `GET`/`POST /api/product-type` return `label`, `display`, `noun` and `nouns`
+  alongside the type, so the front end never has to guess;
+* the caption prompt carries `This shop sells: {sells}. Write as a {sells}
+  seller would.`, and the offline fallback caption stopped calling everything
+  "this piece".
+
+Two rules that cost more thought than they look:
+
+**Never invent a plural.** The first pass derived "blue potterys". `meta()` now
+only ever *removes* an ending it can see — `-ies → -y`, `-ses/-xes/-zes/-ches/
+-shes → -s`, a trailing `-s` that is not `-ss` — and otherwise uses the seller's
+string unchanged for both singular and plural. A word it has not seen before is
+left alone rather than mangled.
+
+**Switching type clears a stale label.** `set_product_type(email, type, label)`
+drops the old custom words when the type changes and no new words arrive with
+it. Without that, a seller who typed "Soy wax candles" and then tapped
+"Jewellery" kept selling candles in every caption. The sequence the tests pin
+is: `'' → 'Soy wax candles' → (switch to jewellery) 'Jewellery' → (jewellery +
+own words) 'Kundan jewellery'`.
+
 ## Automatic weekly planning
 
 `backend/core/autoplan.py`. The Social Media Manager plans next week on its own,

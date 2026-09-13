@@ -283,7 +283,14 @@ def run_due_posts(base_public_url: str = "", email: str = "") -> list[dict]:
 
 
 def _compose_caption(post: dict) -> str:
-    caption = str(post.get("caption") or "").strip()
+    # A caption can be the structured dict the Social planner stores, not just
+    # a string. str() on a dict publishes Python's repr to the seller's
+    # customers — which happened once, on a real account.
+    raw = post.get("caption")
+    if isinstance(raw, dict):
+        from backend.core import social as _social
+        return _social.assemble(raw).strip()
+    caption = str(raw or "").strip()
     tags = post.get("hashtags") or []
     if tags:
         caption = caption + "\n\n" + " ".join("#" + str(t).strip().lstrip("#") for t in tags)

@@ -325,10 +325,36 @@ def publish_post(email: str, post: dict, base: str = "") -> dict:
 
 
 def _caption(post: dict) -> str:
-    cap = str(post.get("caption") or "").strip()
-    tags = post.get("hashtags") or []
+    """The caption as a human reads it.
+
+    THE BUG THIS FIXES, and it went out on a real account. A post's caption is
+    stored as a DICT — {hook, body, question, cta, tags} — because the editor
+    shows those parts separately and `social.assemble()` joins them. This
+    function called str() on it, which on a dict gives Python's repr. So the
+    post that actually appeared on Instagram read:
+
+        {'cta': 'DM us to order', 'body': 'Price 25999, 10 pieces left',
+         'free': True, 'hook': '...', 'provider': 'cloudflare', ...}
+
+    — internal field names, a provider name, and a boolean, published to the
+    seller's customers. Nothing caught it because every test passed a caption
+    that was already a string.
+
+    So: dicts go through the same assembler the rest of the app uses, and a
+    string is still accepted, because a hand-edited caption is one."""
+    raw = post.get("caption")
+    if isinstance(raw, dict):
+        cap = social.assemble(raw).strip()
+        # assemble() already appends caption["tags"]; only add the post's own
+        # hashtags when the caption did not carry any, or they double up.
+        tags = post.get("hashtags") or (raw.get("tags") if not raw.get("tags") else [])
+    else:
+        cap = str(raw or "").strip()
+        tags = post.get("hashtags") or []
     if tags:
-        cap = (cap + "\n\n" + " ".join("#" + str(t).strip().lstrip("#") for t in tags)).strip()
+        joined = " ".join("#" + str(t).strip().lstrip("#") for t in tags if str(t).strip())
+        if joined and joined not in cap:
+            cap = (cap + "\n\n" + joined).strip()
     return cap
 
 

@@ -41,13 +41,41 @@ SUPPLY_SALES_KEY = "smart_supply_sales_txns"   # separate "previous sales" set, 
 # ---------------------------------------------------------
 # Product type (what the seller sells) — drives keyword tracking everywhere
 # ---------------------------------------------------------
+PRODUCT_LABEL_KEY = "product_type_label"
+
+
 def get_product_type(email: str) -> str:
     return product_config.normalize(user_store.get_key(email, "product_type", None))
 
 
-def set_product_type(email: str, product_type: str) -> str:
+def get_product_label(email: str) -> str:
+    """What this seller calls what they sell, in their own words. "" if they
+    have not said — never a guess."""
+    return product_config.clean_label(user_store.get_key(email, PRODUCT_LABEL_KEY, ""))
+
+
+def product_meta(email: str) -> dict:
+    """The type, with the seller's own label and nouns. This is what every
+    caption, hashtag and image prompt should ask for — not the raw id, which
+    says "product" for everyone outside the four presets."""
+    return product_config.meta(get_product_type(email), get_product_label(email))
+
+
+def set_product_type(email: str, product_type: str, label: str | None = None) -> str:
+    """Save what this seller sells.
+
+    `label` is their own words and may refine a preset — "Kundan jewellery"
+    with type jewellery is better than either alone. But CHANGING THE TYPE
+    without giving new words clears the old ones: a seller who typed "Soy wax
+    candles" and then picked Jewellery does not still sell candles, and leaving
+    the stale label would have every caption say so."""
     pt = product_config.normalize(product_type)
+    was = product_config.normalize(user_store.get_key(email, "product_type", None))
     user_store.set_key(email, "product_type", pt)
+    if label is not None:
+        user_store.set_key(email, PRODUCT_LABEL_KEY, product_config.clean_label(label))
+    elif pt != was:
+        user_store.set_key(email, PRODUCT_LABEL_KEY, "")
     return pt
 
 

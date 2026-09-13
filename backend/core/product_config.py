@@ -37,13 +37,66 @@ PRODUCT_TYPES = [
 _BY_ID = {p["id"]: p for p in PRODUCT_TYPES}
 DEFAULT_TYPE = "generic"
 
+# ---------------------------------------------------------------------------
+# Saying what you actually sell
+# ---------------------------------------------------------------------------
+# WHY THIS EXISTS. There were four choices — jewellery, clothes, perfumes, and
+# "Other products" — and everything else in India's D2C long tail landed in the
+# fourth. Scented candles, blue pottery, pickles, phone cases, leather bags,
+# incense, brass idols: all of them "generic", and every caption written for
+# them said "product" because that is the only noun the generic type carries.
+# A candle maker reading "Check out this product" knows immediately that the
+# app does not know what shop it is in, and nothing after that lands.
+#
+# So the seller types it. The four presets stay, because each carries a real
+# positioning and complaint lexicon that free text cannot replace — but the
+# LABEL is now theirs, and the label is what reaches every caption, hashtag and
+# image prompt. A candle maker selling "Soy wax candles" keeps the generic
+# lexicon and gets copy that says candles.
+MAX_LABEL = 40
+
+
+def clean_label(text: str | None) -> str:
+    """A seller's own words for what they sell, trimmed to something usable."""
+    label = " ".join(str(text or "").split())[:MAX_LABEL].strip(" .,-")
+    # A label that is only punctuation or digits tells the copy nothing.
+    return label if any(c.isalpha() for c in label) else ""
+
 
 def normalize(product_type: str | None) -> str:
+    """The known id behind a type, for the lexicons. Custom types are generic."""
     return product_type if product_type in _BY_ID else DEFAULT_TYPE
 
 
-def meta(product_type: str | None) -> dict:
-    return _BY_ID[normalize(product_type)]
+def meta(product_type: str | None, label: str = "") -> dict:
+    """The type's id, label and nouns — with the seller's own words when they
+    gave us some.
+
+    The nouns matter more than they look: they are what captions and the image
+    prompts say. "this piece" for jewellery, "this candle" for a candle maker,
+    and "this product" only when nobody has told us anything."""
+    base = dict(_BY_ID[normalize(product_type)])
+    custom = clean_label(label)
+    if not custom:
+        return base
+    base["label"] = custom
+    # NO INVENTED PLURALS. Deriving a singular from a plural is safe — candles
+    # -> candle, brass idols -> brass idol. Going the other way is not: "blue
+    # pottery" becomes "blue potterys", "jewellery" becomes "jewellerys", and a
+    # caption containing a non-word is worse than one that is slightly stiff.
+    # So a label that is not already plural is used unchanged for both, and the
+    # copy reads "our blue pottery" rather than inventing anything.
+    low = custom.lower()
+    if low.endswith("ies") and len(low) > 4:
+        base["noun"], base["nouns"] = custom[:-3] + "y", custom
+    elif low.endswith(("ses", "xes", "zes", "ches", "shes")):
+        base["noun"], base["nouns"] = custom[:-2], custom
+    elif low.endswith("s") and not low.endswith("ss"):
+        base["noun"], base["nouns"] = custom[:-1], custom
+    else:
+        base["noun"] = base["nouns"] = custom
+    base["custom"] = True
+    return base
 
 
 def public_types() -> list[dict]:

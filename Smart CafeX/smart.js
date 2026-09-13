@@ -9,6 +9,7 @@ const state = {
   email: localStorage.getItem("cx_email") || null,
   data: { sales: {}, review: {} },
   productType: null,
+  productLabel: "",          // the seller's own words for what they sell
   productTypes: [],
   lastState: null,
 };
@@ -940,7 +941,11 @@ function restoreScroll(mod) {
 function paintHome(s, pt) {
   state.lastState = s;
   state.data = s.data;
-  if (pt) { state.productType = pt.product_type; state.productTypes = pt.types; }
+  if (pt) {
+    state.productType = pt.product_type;
+    state.productLabel = pt.label || "";
+    state.productTypes = pt.types;
+  }
   renderHome(s);
   renderApprovals(s.insights);
 }
@@ -982,6 +987,11 @@ async function goHome() {
 }
 
 function productLabel(id) {
+  // Their own words win over the preset's name wherever this is shown, because
+  // this is the app telling them what it thinks they sell.
+  if (state.productLabel && (id === undefined || id === state.productType)) {
+    return state.productLabel;
+  }
   const t = (state.productTypes || []).find((x) => x.id === id);
   return t ? `${t.icon} ${t.label}` : "Not set";
 }
@@ -1353,7 +1363,7 @@ function renderHome(s) {
     ${setupCard(s.setup)}
 
     <div class="section-title">Your data
-      <button class="btn ghost tiny pt-chip" id="ptChip" title="What you sell — drives keyword tracking">${sic("tag")}${productLabel(state.productType)}</button>
+      <button class="btn ghost tiny pt-chip" id="ptChip" title="What you sell, in your own words — your captions, hashtags and photo prompts all use this">${sic("tag")}${esc(productLabel(state.productType))}</button>
     </div>
     <div class="data-grid">
       ${dataCard("sales", "Sales", sic("receipt"), "upload your orders / sales export")}
@@ -1410,26 +1420,60 @@ function openProductTypePicker(afterSet) {
   const types = state.productTypes && state.productTypes.length ? state.productTypes :
     [{ id: "jewellery", label: "Jewellery", icon: "spark" }, { id: "clothes", label: "Clothes", icon: "scissors" },
      { id: "perfumes", label: "Perfumes", icon: "droplet" }, { id: "generic", label: "Other products", icon: "bag" }];
+  /* THE FOUR PRESETS WERE NOT ENOUGH. Everything outside jewellery, clothes
+     and perfumes landed in "Other products", and every caption written for
+     those sellers said "product", because that is the only noun the generic
+     type carries. A candle maker reading "Check out this product" knows
+     immediately that the app does not know what shop it is in.
+
+     So the seller types it. The presets stay — each carries a real positioning
+     and complaint lexicon — but the words are theirs, and the words are what
+     reach every caption, hashtag and image prompt. */
   $("ptGrid").innerHTML = types.map((t) => `
     <button class="pt-card ${t.id === state.productType ? "selected" : ""}" data-pt="${t.id}">
       <div class="pt-ico">${t.icon}</div><div>${esc(t.label)}</div>
-    </button>`).join("");
+    </button>`).join("") + `
+    <div class="pt-own">
+      <label>Or tell us in your own words
+        <input id="ptOwn" maxlength="40" placeholder="e.g. Soy wax candles, Blue pottery, Kundan jewellery"
+               value="${esc(state.productLabel || "")}" /></label>
+      <p class="muted tiny">This is what your captions will call what you sell — so
+        "${esc(state.productLabel || "Soy wax candles")}" beats "products". Leave it
+        blank to use the choice above.</p>
+      <button class="btn primary sm" id="ptOwnGo">Use my words</button>
+    </div>`;
   $("ptModal").hidden = false;
-  $("ptGrid").querySelectorAll("[data-pt]").forEach((b) => b.onclick = () => {
-    const pt = b.dataset.pt;
-    // Apply optimistically and run afterSet() synchronously so the file dialog
-    // opens inside this click gesture — browsers block a file input .click()
-    // that happens after an awaited call, which is why the first review upload
-    // never showed the mapping popup.
+
+  const apply = (pt, label) => {
+    // Applied optimistically, and afterSet() runs synchronously, so a file
+    // dialog opens inside this click gesture — browsers block a file input
+    // .click() that happens after an awaited call, which is why the first
+    // review upload never showed the mapping popup.
     state.productType = pt;
+    if (label !== undefined) state.productLabel = label;
     $("ptModal").hidden = true;
-    toast(`Tracking set to ${productLabel(pt)}`);
-    const chip = $("ptChip"); if (chip) chip.innerHTML = `🏷️ ${productLabel(pt)}`;
-    api("/api/product-type", { method: "POST", json: { product_type: pt } })
-      .then((r) => { state.productType = r.product_type; })
+    const shown = label || productLabel(pt);
+    toast(`Set to ${shown}`);
+    const chip = $("ptChip"); if (chip) chip.innerHTML = `🏷️ ${esc(shown)}`;
+    const body = { product_type: pt };
+    if (label !== undefined) body.label = label;
+    api("/api/product-type", { method: "POST", json: body })
+      .then((r) => { state.productType = r.product_type; state.productLabel = r.label || ""; })
       .catch((e) => toast(e.message));
     if (afterSet) afterSet();
-  });
+  };
+
+  $("ptGrid").querySelectorAll("[data-pt]").forEach((b) => b.onclick = () => apply(b.dataset.pt));
+  const own = $("ptOwn"), ownGo = $("ptOwnGo");
+  const useOwn = () => {
+    const text = (own.value || "").trim();
+    if (!text) { own.focus(); return; }
+    // Their words refine whichever preset is selected, so a jeweller typing
+    // "Kundan jewellery" keeps the jewellery lexicon AND gets their own noun.
+    apply(state.productType || "generic", text);
+  };
+  if (ownGo) ownGo.onclick = useOwn;
+  if (own) own.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); useOwn(); } });
 }
 $("ptClose").onclick = () => { $("ptModal").hidden = true; };
 
@@ -3119,8 +3163,8 @@ function openProductForm(id, prefillName) {
             <input id="pfName" value="${it ? esc(it.name) : esc(prefillName || "")}" placeholder="e.g. Midnight Oud 50ml" /></label>
           <label>Selling price ₹ <span class="req">required</span>
             <input id="pfPrice" type="number" min="0" step="any" value="${num("price")}" placeholder="1499" /></label>
-          <label>Category <span class="muted tiny">groups it on your site</span>
-            <input id="pfCat" value="${esc(v("category"))}" placeholder="Fragrance" list="pfCatList" />
+          <label>Category <span class="muted tiny">groups it on your site, and tells the caption writer what this is</span>
+            <input id="pfCat" value="${esc(v("category"))}" placeholder="${esc(state.productLabel || "e.g. Soy wax candles")}" list="pfCatList" />
             <datalist id="pfCatList">${[...new Set((_productsData.products || [])
               .map((x) => x.category).filter(Boolean))].map((c2) => `<option value="${esc(c2)}">`).join("")}</datalist></label>
           <label>MRP ₹ <span class="muted tiny">optional — shows a struck-through price and a discount badge</span>

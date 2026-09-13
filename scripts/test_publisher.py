@@ -888,5 +888,208 @@ check("there is an operator view too, for one account or all of them",
 check("and the error log is readable from a browser when things are broken",
       "_require_admin(x_admin_token or token)" in _mainsrc)
 
+section("The caption a customer actually reads")
+
+# THIS ONE WENT OUT ON A REAL ACCOUNT. A post's caption is stored as a DICT —
+# {hook, body, question, cta, tags} — because the editor shows those parts
+# separately. The publisher called str() on it, which on a dict gives Python's
+# repr, so the post that appeared on Instagram read:
+#
+#   {'cta': 'DM us to order', 'body': 'Price 25999, 10 pieces left',
+#    'free': True, 'hook': '...', 'provider': 'cloudflare', 'tags': []}
+#
+# Internal field names, a provider name and a boolean, published to the
+# seller's customers. Every test passed because every test used a string.
+CALLS.clear()
+seed([{**post("dictcap"), "hashtags": [], "caption": {
+    "hook": "Gucci Signature Bag for Ganesh Chaturthi",
+    "body": "Price 25999, 10 pieces left",
+    "question": "Kya aapke Ganesh Chaturthi look mein yeh bag fit ho sakta hai?",
+    "cta": "DM us to order",
+    "tags": ["luxurybags", "ganeshchaturthi"],
+    "free": True, "provider": "cloudflare", "error": "",
+}}])
+publisher.run_for(EMAIL, BASE, NOW)
+cap = CALLS[0]["caption"]
+check("no Python repr reaches Instagram", "{'" not in cap and "': " not in cap, cap[:90])
+for leak in ("provider", "cloudflare", "'free'", "True", "error", "hook", "cta"):
+    check(f"  the word '{leak}' is not in the caption", leak not in cap, cap[:120])
+check("the hook is there", "Gucci Signature Bag" in cap, cap[:80])
+check("the body is there", "10 pieces left" in cap)
+check("the question is there", "fit ho sakta hai" in cap)
+check("the call to action is there", "DM us to order" in cap)
+check("and it reads as separated lines, not one run-on",
+      cap.count("\n") >= 3, repr(cap[:120]))
+check("the hashtags are hashed", "#luxurybags" in cap and "#ganeshchaturthi" in cap, cap[-60:])
+
+CALLS.clear()
+seed([{**post("strcap"), "caption": "A plain typed caption", "hashtags": ["kurta"]}])
+publisher.run_for(EMAIL, BASE, NOW)
+check("a hand-typed string caption still works",
+      CALLS[0]["caption"].startswith("A plain typed caption"), CALLS[0]["caption"])
+check("and its hashtags are appended once", CALLS[0]["caption"].count("#kurta") == 1)
+
+CALLS.clear()
+seed([{**post("dupe"), "hashtags": ["silk"], "caption": {
+    "hook": "Hook", "body": "", "question": "", "cta": "", "tags": ["silk"]}}])
+publisher.run_for(EMAIL, BASE, NOW)
+check("a tag in both places is not published twice",
+      CALLS[0]["caption"].count("#silk") == 1, CALLS[0]["caption"])
+
+section("Hashtags: five, real, and never empty")
+
+from backend.core import social as _s  # noqa: E402
+
+check("a tag list is normalised to five clean tags",
+      _s.clean_tags(["#one", "two", "#one", "  three ", "f o u r", "five!", "six", "seven"])
+      == ["one", "two", "three", "four", "five"],
+      str(_s.clean_tags(["#one", "two", "#one", "  three ", "f o u r", "five!", "six", "seven"])))
+check("duplicates differing only in case are one tag",
+      _s.clean_tags(["Kurta", "kurta", "KURTA"]) == ["Kurta"])
+check("junk is dropped, not published", _s.clean_tags(["#", "!!", "a", ""]) == [])
+
+# The actual failure: Cloudflare's model answers without any # at all, and the
+# old parser only matched #tags. So every caption it wrote had none.
+check("tags written WITHOUT a hash are still read",
+      _s._tags_from("kurta handmade ganeshchaturthi") ==
+      ["kurta", "handmade", "ganeshchaturthi"],
+      str(_s._tags_from("kurta handmade ganeshchaturthi")))
+check("tags written WITH a hash are read", _s._tags_from("#kurta #silk") == ["kurta", "silk"])
+check("comma-separated tags are read", _s._tags_from("kurta, silk, banarasi")[:3] ==
+      ["kurta", "silk", "banarasi"])
+check("an empty line gives nothing", _s._tags_from("") == [])
+
+parsed = _s._parse_caption(
+    "HOOK: A hook\nBODY: Some body\nQUESTION: A question?\nCTA: DM us\n"
+    "TAGS: kurta handmade ganeshchaturthi cottonkurta delhi")
+check("a full caption parses", parsed["hook"] == "A hook")
+check("and its unhashed tags survive", len(parsed["tags"]) == 5, str(parsed["tags"]))
+
+parsed = _s._parse_caption("HOOK: X\nHASHTAGS: #kurta #silk #jaipur")
+check("HASHTAGS: is accepted as well as TAGS:",
+      parsed["tags"] == ["kurta", "silk", "jaipur"], str(parsed["tags"]))
+# Two-character tags are dropped on purpose — #a1 is not a tag anyone searches,
+# and a caption padded with them looks automated.
+check("and tags under three characters are dropped, not published",
+      _s.clean_tags(["a1", "b2", "kurta"]) == ["kurta"],
+      str(_s.clean_tags(["a1", "b2", "kurta"])))
+
+parsed = _s._parse_caption("HOOK: X\nBODY: Y\nSome stray line #loose #tags here")
+check("tags scattered outside the format are still found",
+      "loose" in parsed["tags"], str(parsed["tags"]))
+
+derived = _s._derived_tags({"name": "Cotton Kurta", "fabric": "cotton"},
+                           {"category": "clothing", "city": "Jaipur"},
+                           {"name": "Ganesh Chaturthi"})
+check("with no AI at all there are still five tags", len(derived) == 5, str(derived))
+check("built from what we actually know — the city",
+      any("jaipur" in t.lower() for t in derived),
+      f"{derived} — the local tag is the one with buying intent behind it")
+check("the product itself is in there",
+      any("kurta" in t.lower() for t in derived), str(derived))
+check("and the occasion", any("ganesh" in t.lower() for t in derived), str(derived))
+check("and none of them carry a hash in storage",
+      not any(t.startswith("#") for t in derived), str(derived))
+
+check("assemble adds the hash exactly once, however they were stored",
+      _s.assemble({"hook": "H", "tags": ["#kurta", "silk"]}).endswith("#kurta #silk"),
+      _s.assemble({"hook": "H", "tags": ["#kurta", "silk"]}))
+check("and never publishes a double hash",
+      "##" not in _s.assemble({"hook": "H", "tags": ["##weird", "#banarasi"]}),
+      _s.assemble({"hook": "H", "tags": ["##weird", "#banarasi"]}))
+check("a caption with no tags has no dangling blank line",
+      _s.assemble({"hook": "Just a hook"}) == "Just a hook")
+
+section("Sellers say what they sell, in their own words")
+
+# WHY: there were four choices — jewellery, clothes, perfumes, "Other products"
+# — and India's whole D2C long tail landed in the fourth. Candles, pottery,
+# pickles, phone cases, brass idols: all "generic", and every caption for them
+# said "product", because that is the only noun the generic type carries. A
+# candle maker reading "Check out this product" knows the app does not know
+# what shop it is in, and nothing after that lands.
+from backend.core import product_config as _pc, smart as _sm  # noqa: E402
+
+CAND = "candles@test.local"
+
+check("a preset is untouched by any of this",
+      _pc.meta("jewellery")["noun"] == "piece", str(_pc.meta("jewellery")))
+
+m = _pc.meta("generic", "Soy wax candles")
+check("their own words become the label", m["label"] == "Soy wax candles", str(m))
+check("and the singular noun the copy needs", m["noun"] == "Soy wax candle", m["noun"])
+check("and it is marked as theirs, not a preset", m.get("custom") is True)
+
+# NO INVENTED PLURALS: "blue pottery" must never become "blue potterys".
+for label, sing, plur in [("Brass idols", "Brass idol", "Brass idols"),
+                          ("Spice boxes", "Spice box", "Spice boxes"),
+                          ("Diaries", "Diary", "Diaries"),
+                          ("Blue pottery", "Blue pottery", "Blue pottery"),
+                          ("Handmade soap", "Handmade soap", "Handmade soap")]:
+    mm = _pc.meta("generic", label)
+    check(f"  {label!r} -> {sing!r} / {plur!r}",
+          mm["noun"] == sing and mm["nouns"] == plur,
+          f'{mm["noun"]!r} / {mm["nouns"]!r}')
+
+check("nonsense is refused rather than published", _pc.clean_label("   ") == "")
+check("digits alone tell the copy nothing", _pc.clean_label("12345") == "")
+check("a very long label is trimmed, not rejected",
+      0 < len(_pc.clean_label("x" * 200)) <= _pc.MAX_LABEL)
+check("surrounding punctuation is cleaned off",
+      _pc.clean_label("  ..Soy wax candles.. ") == "Soy wax candles",
+      repr(_pc.clean_label("  ..Soy wax candles.. ")))
+
+section("And those words reach the copy")
+
+check("before they say anything, the app claims no category",
+      _s.get_settings(CAND)["category"] == "",
+      "a hardcoded 'clothing' default told every candle maker they sell clothes")
+
+_sm.set_product_type(CAND, "generic", "Soy wax candles")
+check("once they say it, that is the category",
+      _s.get_settings(CAND)["category"] == "Soy wax candles",
+      _s.get_settings(CAND)["category"])
+
+tags = _s._derived_tags({"name": "Lavender Jar"}, _s.get_settings(CAND), {"name": "Diwali"})
+check("the hashtags are about candles, not 'products'",
+      any("candle" in t.lower() for t in tags), str(tags))
+check("and none of them say 'product'",
+      not any(t.lower() == "products" for t in tags), str(tags))
+
+fb = _s._fallback_caption({"name": "Lavender Jar"}, _s.PILLARS[0], _s.get_settings(CAND))
+blob = " ".join(str(v) for v in fb.values() if isinstance(v, str))
+check("even the no-AI template stops calling everything a 'piece'",
+      "this piece" not in blob, blob[:120])
+
+# Their words may REFINE a preset — "Kundan jewellery" keeps the jewellery
+# lexicon and gets their own noun.
+_sm.set_product_type(CAND, "jewellery", "Kundan jewellery")
+check("a preset plus their own words keeps both",
+      _sm.get_product_type(CAND) == "jewellery"
+      and _s.get_settings(CAND)["category"] == "Kundan jewellery",
+      f'{_sm.get_product_type(CAND)} / {_s.get_settings(CAND)["category"]}')
+
+# But changing type without new words must not leave the old ones behind.
+_sm.set_product_type(CAND, "generic", "Soy wax candles")
+_sm.set_product_type(CAND, "perfumes", None)
+check("switching type clears words that no longer apply",
+      "candle" not in _s.get_settings(CAND)["category"].lower(),
+      f'still says {_s.get_settings(CAND)["category"]!r} — a perfume seller does not sell candles')
+
+_sm.set_product_type(CAND, "generic", "")
+check("clearing their words falls back to saying nothing, not to a guess",
+      _s.get_settings(CAND)["category"] == "",
+      _s.get_settings(CAND)["category"])
+check("and 'Other products' is never used as a category in copy",
+      "other products" not in _s.get_settings(CAND)["category"].lower())
+
+_JS = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "Smart CafeX", "smart.js"), encoding="utf-8").read()
+check("the picker offers a free-text box", 'id="ptOwn"' in _JS)
+check("their words show wherever the app names what they sell",
+      "state.productLabel" in _JS)
+check("and the per-product Category field says it steers the caption writer",
+      "tells the caption writer what this is" in _JS)
+
 print(f"\n{PASSED} passed, {FAILED} failed")
 sys.exit(1 if FAILED else 0)

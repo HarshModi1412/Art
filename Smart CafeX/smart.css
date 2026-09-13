@@ -2311,6 +2311,17 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .setup-rest summary { cursor: pointer; font-size: 12.5px; color: var(--primary); }
 .setup-rest ul { margin: 8px 0 0; padding-left: 20px; font-size: 12.5px; line-height: 1.7; color: var(--text-2); }
 
+/* ---------- "or tell us in your own words" ----------
+   Sits under the four preset cards, spanning the grid, because it is the
+   option most sellers actually need and a fifth card would have hidden it
+   among four it is not like. */
+.pt-own { grid-column: 1 / -1; margin-top: 6px; padding-top: 14px;
+  border-top: 1px solid var(--border); }
+.pt-own label { display: block; font-size: 13px; font-weight: 600; }
+.pt-own input { width: 100%; margin-top: 6px; }
+.pt-own p { margin: 8px 0 0; }
+.pt-own .btn { margin-top: 10px; }
+
 /* ---------- the publish queue explainer ----------
    The row that is about to go out is the one the seller is looking for, so it
    is the only one with any colour on it. */
