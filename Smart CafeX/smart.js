@@ -571,6 +571,99 @@ window.addEventListener("hashchange", _syncRoute);
 // ---------- view helpers ----------
 function setView(html) { $("view").innerHTML = html; }
 function setCrumb(t) { $("crumb").textContent = t || ""; }
+
+/* ---------- tables that survive a phone ----------
+
+   The Inventory table has eleven columns. On a 390px phone that is 774px of
+   table inside a 390px box, so the seller sees "Item, Supplier, Left" and has
+   to drag sideways for the rest — and dragging sideways takes the item name
+   off screen, so by the time they can read the reorder point they no longer
+   know which item it belongs to. The numbers are there and unusable.
+
+   Below tablet width the same markup is laid out as one card per row, each
+   line reading "Lead time    15". Nothing is hidden, nothing is cut off, and
+   the item name stays at the top of its own card.
+
+   The label has to come from somewhere: CSS cannot read the <th> above a
+   cell. So each cell is stamped with the text of its column heading, once,
+   here — rather than by hand at fifteen different render sites, where the
+   next person to add a table would forget. A MutationObserver catches every
+   table the app draws, including the ones that arrive later from a fetch. */
+function labelTableCells(table) {
+  /* A column heading has two jobs and they pull in opposite directions. In the
+     desktop table it has to fit a narrow column, so it gets abbreviated: DOS,
+     MOQ, DOQ. On a phone the same heading becomes a full-width label with a
+     value beside it, and there "DOS" is a word from our side of the screen
+     that a seller has no reason to know — the tooltip that explains it needs a
+     mouse, and a phone has no mouse. `data-card-label` lets a column keep its
+     short name in the table and say what it means in the card. */
+  const cols = [...table.querySelectorAll("thead th")].map((th) => {
+    const t = (th.dataset.cardLabel || th.textContent || "").trim();
+    return {
+      label: t.length > 26 ? t.slice(0, 25) + "…" : t,
+      hide: th.hasAttribute("data-card-hide"),
+      first: th.hasAttribute("data-card-first"),
+    };
+  });
+  const heads = cols.map((c) => c.label);
+  if (!heads.length) return;
+  table.querySelectorAll("tbody > tr").forEach((tr) => {
+    [...tr.children].forEach((td, i) => {
+      if (td.tagName !== "TD") return;
+      // A spanning cell is an empty state or a sub-header, not a field.
+      if (td.colSpan > 1) { td.setAttribute("data-full", "1"); return; }
+      const col = cols[i] || { label: "", hide: false, first: false };
+      /* Secondary on a phone, ordinary in the table. Eleven fields stacked
+         vertically is a screen and a half per item; the five that answer
+         "have I got enough, and who do I ring" stay, and the arithmetic
+         behind them is one tap away for whoever wants it. */
+      if (col.hide) td.setAttribute("data-secondary", "1");
+      else td.removeAttribute("data-secondary");
+      if (col.first) td.setAttribute("data-first", "1");
+      else td.removeAttribute("data-first");
+      const label = heads[i] || "";
+      const text = (td.textContent || "").trim();
+      // A cell holding only a button (the row's action) reads better as a
+      // full-width row of its own than as "  [Order]" against a blank label.
+      const onlyControl = !text && td.querySelector("button, a, input, select");
+      if (!label || onlyControl) { td.setAttribute("data-full", "1"); td.removeAttribute("data-label"); return; }
+      td.removeAttribute("data-full");
+      td.setAttribute("data-label", label);
+      if (i === 0) td.setAttribute("data-primary", "1");
+      if (!text && !td.querySelector("*")) td.setAttribute("data-blank", "1");
+      else td.removeAttribute("data-blank");
+      /* The value goes in a box of its own. Without it a cell like
+         "Harsh <div>harsh@…</div>" becomes two separate flex items sitting
+         beside the label, which squeezed the label until it wrapped inside
+         the word: "Supplie / r". One wrapper, and the label keeps its width
+         while the value stacks and wraps on its own side. Inline by default,
+         so nothing about the desktop table changes. */
+      if (!td.firstElementChild || !td.firstElementChild.classList.contains("td-v")
+          || td.childNodes.length > 1) {
+        const box = document.createElement("span");
+        box.className = "td-v";
+        while (td.firstChild) box.appendChild(td.firstChild);
+        td.appendChild(box);
+      }
+    });
+  });
+}
+function labelTablesIn(root) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll(".table-scroll table").forEach(labelTableCells);
+  if (root.matches && root.matches(".table-scroll table")) labelTableCells(root);
+}
+function watchTables() {
+  labelTablesIn(document.body);
+  const obs = new MutationObserver((batch) => {
+    for (const m of batch) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === 1) labelTablesIn(node);
+      }
+    }
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+}
 function showRail(on) { document.querySelector(".shell-body").classList.toggle("no-rail", !on); }
 
 // ---------- charts: image-like inline, interactive when maximized ----------
@@ -1023,7 +1116,7 @@ function openModal(title, bodyHtml, opts = {}) {
   wrap.className = "modal-back";
   wrap.innerHTML = `<div class="modal${opts.wide ? " wide" : ""}">
       <div class="modal-head"><b>${esc(title)}</b>
-        <button class="btn ghost tiny" data-mclose>${sic("close")}</button></div>
+        <button class="btn ghost tiny" data-mclose title="Close" aria-label="Close this popup">${sic("close")}</button></div>
       <div class="modal-body">${bodyHtml}</div>
     </div>`;
   document.body.appendChild(wrap);
@@ -1055,6 +1148,9 @@ async function startDemo() {
    it gets done. The same rows the morning digest sends, so the two can never
    disagree. */
 let _digest = null;
+/* What the shop needs, as of the last read. Kept because ticking a task off
+   now has to re-count the whole card, not just the task half of it. */
+let _todayItems = [];
 
 async function renderToday() {
   const rows = $("todayRows"), title = $("todayTitle");
@@ -1068,20 +1164,25 @@ async function renderToday() {
   }
   _digest = d.digest || null;
   const items = d.items || [];
+  _todayItems = items;
+  const tasks = (state.lastState && state.lastState.tasks) || [];
+  const openTasks = tasks.filter((t) => !t.done).length;
   renderProof();          // independent request — do not make it wait for this one
+
+  title.textContent = todayHeadline(items, tasks);
+  paintTasks(tasks);      // the list under the rows, now that we know what is above it
 
   if (!items.length) {
     const e = d.empty || {};
-    title.textContent = e.title || "Nothing needs you this morning";
-    rows.innerHTML = `<div class="today-empty">
+    /* When the seller has their own tasks listed below, the "upload a sales
+       file and this fills up" nudge is wrong twice over: the card is not
+       empty, and it talks past the work they can see sitting right there. */
+    rows.innerHTML = openTasks ? "" : `<div class="today-empty">
       <span>${esc(e.detail || "")}</span>
       ${e.cta ? `<button class="btn ghost sm" id="todayCta">${esc(e.cta)}</button>` : ""}</div>`;
     const cta = $("todayCta");
     if (cta) cta.onclick = startDemo;
   } else {
-    title.textContent = items.length === 1
-      ? "One thing worth your time"
-      : `${items.length} things worth your time`;
     rows.innerHTML = items.map((it) => `
       <button class="today-row sev-${esc(it.severity)}" data-today="${esc(it.route)}">
         <span class="today-dot"></span>
@@ -1210,6 +1311,35 @@ function guideCard(s) {
       <span class="gd-n">${done ? sic("check") : n}</span>
       <div><b>${esc(title)}</b><span>${esc(body)}</span></div>
     </li>`;
+  const steps = `
+      <ol class="guide-steps">
+        ${step(1, salesReady, "Give it your sales once",
+               "Any export from your marketplace, your billing app or a spreadsheet. It reads the columns for you.")}
+        ${step(2, salesReady, "It watches while you work",
+               "Stock cover, reorder points, what to post next week, who has stopped buying — all recalculated as orders come in.")}
+        ${step(3, false, "You approve, it acts",
+               "Purchase orders to your suppliers, posts to your calendar, win-back messages. Every one waits for your yes.")}
+      </ol>`;
+
+  /* Once the sales file is in, the seller has done the two things this card
+     explains, and it has stopped being an explanation — it is 590px of text
+     standing between them and their shop, every single morning, on a screen
+     844px tall. It folds itself away and stays one tap from being read again.
+     Before that it stays open, because someone who has uploaded nothing yet
+     genuinely does not know what this app is for. */
+  if (salesReady) {
+    return `
+    <details class="fold guide-fold" id="guideCard">
+      <summary>How this works
+        <span class="muted tiny">— give it your sales, it watches, you approve</span></summary>
+      ${steps}
+      <div class="guide-foot">
+        <span class="muted tiny">The apps below are grouped by what they are for —
+          <b>Sell</b>, <b>Make</b>, <b>Run</b>.</span>
+      </div>
+    </details>`;
+  }
+
   return `
     <section class="guide-card" id="guideCard">
       <div class="guide-head">
@@ -1220,16 +1350,9 @@ function guideCard(s) {
              to run out, and what to post — then asks you to approve. Nothing is
              sent, ordered or published without you saying yes.</p>
         </div>
-        <button class="btn ghost tiny" id="guideHide" title="Hide this">${sic("close")}</button>
+        <button class="btn ghost tiny" id="guideHide" title="Hide this" aria-label="Hide this explanation">${sic("close")}</button>
       </div>
-      <ol class="guide-steps">
-        ${step(1, salesReady, "Give it your sales once",
-               "Any export from your marketplace, your billing app or a spreadsheet. It reads the columns for you.")}
-        ${step(2, salesReady, "It watches while you work",
-               "Stock cover, reorder points, what to post next week, who has stopped buying — all recalculated as orders come in.")}
-        ${step(3, false, "You approve, it acts",
-               "Purchase orders to your suppliers, posts to your calendar, win-back messages. Every one waits for your yes.")}
-      </ol>
+      ${steps}
       <div class="guide-foot">
         <span class="muted tiny">Start anywhere. The apps below are grouped by
           what they are for — <b>Sell</b>, <b>Make</b>, <b>Run</b>.</span>
@@ -1315,10 +1438,16 @@ function renderHome(s) {
   const tasks = (s.tasks || []);
 
   setView(`
+    <!-- The greeting used to take three rows on a phone: "Welcome back", then
+         a Refresh button alone, then the account address alone. Three rows of
+         chrome before the first useful pixel. The address belongs under the
+         greeting as a subtitle, not on a line of its own below the buttons. -->
     <div class="page-head">
-      <h2>Welcome back</h2>
+      <div class="ph-title">
+        <h2>Welcome back</h2>
+        <span class="ph-sub">${esc(state.email)}</span>
+      </div>
       <div class="page-actions">
-        <span class="muted">${esc(state.email)}</span>
         ${guideHidden() ? `<button class="btn ghost sm" id="guideShow" title="What this app does and how to use it">
           ${sic("compass")}How this works</button>` : ""}
         <button class="btn ghost sm" id="refreshPage" title="Pull the latest numbers without reloading the page">
@@ -1328,34 +1457,51 @@ function renderHome(s) {
 
     ${guideCard(s)}
 
-    <!-- The task list leads the home screen. Approving a reel puts a dated
-         task here (make the clip in Google Flow, upload it, schedule it), and a
-         task with a posting time on it is the most urgent thing on the page. -->
-    <section class="task-card" id="taskBox">
-      <div class="task-card-h">
-        <div>
-          <div class="today-eyebrow">Your tasks</div>
-          <h3 id="taskHead">${taskHeadline(tasks)}</h3>
-        </div>
-        <div class="task-add">
-          <input id="taskInput" placeholder="Add a task…" />
-          <button class="btn primary sm" id="taskAddBtn">Add</button>
-        </div>
-      </div>
-      <div id="taskList">${taskRowsHtml(tasks)}</div>
-    </section>
-
+    <!-- ONE card, not two.
+         This used to be two stacked sections: "Your tasks — Nothing waiting on
+         you", and under it "Today — Nothing to act on yet". On a phone that is
+         two screenfuls of the app telling the seller that nothing is happening
+         before they reach anything they can act on, and neither card could
+         answer the only question they open the app with: what do I do now?
+         The answer is one list. What the shop needs (read from the data) and
+         what the seller wrote down for themselves are the same kind of thing —
+         both are "do this today" — so they live in the same card, under one
+         headline that counts both. -->
     <section class="today" id="todayBox">
       <div class="today-h">
         <div>
           <div class="today-eyebrow">Today</div>
           <h3 id="todayTitle">Looking at your shop…</h3>
         </div>
-        <button class="btn ghost tiny" id="digestBtn" title="Get this by email each morning">
-          ${sic("bell")}Digest</button>
       </div>
       <div id="todayRows" class="today-rows"><div class="ap-empty">Checking orders, stock and customers…</div></div>
       <div id="proofLine" class="today-proof" hidden></div>
+      <!-- One list, not a list and then a widget.
+           The seller's own tasks used to sit below a rule, under a standing
+           "Add your own task…" input, which made the card read as two things
+           stacked — "Today", and then a little to-do app. They are the same
+           kind of thing: work to do this morning. So the rows now run
+           straight on from the ones above with no divider and the same
+           shape, and adding one is a quiet line at the end of the list
+           rather than a permanent form sitting there asking to be filled. -->
+      <div class="today-tasks" id="taskBox">
+        <div id="taskList">${taskRowsHtml(tasks)}</div>
+        <div class="task-add" id="taskAdd" hidden>
+          <input id="taskInput" placeholder="What else needs doing today?" aria-label="Add your own task" />
+          <button class="btn primary sm" id="taskAddBtn">Add</button>
+        </div>
+        <button type="button" class="task-open" id="taskOpen">
+          ${sic("plus")}<span>Add something of your own</span></button>
+      </div>
+      <!-- Moved out of the card's header. "Digest" was also a word from our
+           side of the screen; what the button does is email them this list,
+           so that is what it says. Up in the header it squeezed the headline
+           into three lines on a phone and read like the card's main action,
+           which it is not: it is a setting, and settings belong at the end. -->
+      <div class="today-foot">
+        <button class="btn ghost tiny" id="digestBtn" title="Get this list by email every morning">
+          ${sic("bell")}Email me this every morning</button>
+      </div>
     </section>
 
     <section class="up-strip" id="upStrip" hidden></section>
@@ -1411,8 +1557,39 @@ function renderHome(s) {
   document.querySelectorAll("[data-remap]").forEach((el) => el.onclick = () => remap(el.dataset.remap));
   $("ptChip").onclick = () => openProductTypePicker();
   $("taskAddBtn").onclick = addTask;
-  $("taskInput").addEventListener("keydown", (e) => e.key === "Enter" && addTask());
+  $("taskInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") addTask();
+    // Escape puts the line back the way it was, rather than leaving an open
+    // form behind for a seller who changed their mind.
+    if (e.key === "Escape") closeTaskAdd();
+  });
+  /* An empty box that has been tapped away from is the form still sitting
+     there. Typed-in text is never thrown away this way — only a blank one
+     folds itself back up. */
+  $("taskInput").addEventListener("blur", () => {
+    if (!$("taskInput").value.trim()) closeTaskAdd();
+  });
+  $("taskOpen").onclick = openTaskAdd;
   wireTasks();
+}
+
+/* The add-a-task line, open and shut. A standing input box at the bottom of
+   the Today card read as a second widget — a little to-do app bolted under
+   the list. As one quiet line it reads as what it is: the end of the list,
+   with room to add to it. */
+function openTaskAdd() {
+  const add = $("taskAdd"), open = $("taskOpen");
+  if (!add || !open) return;
+  add.hidden = false; open.hidden = true;
+  const inp = $("taskInput");
+  if (inp) inp.focus();
+}
+function closeTaskAdd() {
+  const add = $("taskAdd"), open = $("taskOpen");
+  if (!add || !open) return;
+  const inp = $("taskInput");
+  if (inp) inp.value = "";
+  add.hidden = true; open.hidden = false;
 }
 
 // ---------- product type ----------
@@ -1483,6 +1660,9 @@ async function addTask() {
   inp.value = "";
   const r = await api("/api/smart/tasks", { method: "POST", json: { action: "add", text } });
   refreshTaskList(r.tasks);
+  // Morning tasks arrive in threes, not ones. The line stays open and focused
+  // so the second and third do not each cost another tap to get back here.
+  if (inp.isConnected) inp.focus();
 }
 /* Post tasks first (the ones with a posting time on them, soonest first), then
    the seller's own, then a few recently finished ones so a tick is visible. */
@@ -1493,16 +1673,27 @@ function orderTasks(tasks) {
   const done = (tasks || []).filter((t) => t.done).slice(-4).reverse();
   return [...post, ...own, ...done];
 }
-function taskHeadline(tasks) {
+/* One headline over both lists.
+   The seller does not sort their morning into "things the software noticed"
+   and "things I wrote down" — it is all just today. So the count is the sum,
+   and reels get called out by name because a reel is the one task that takes
+   real time and is easy to leave until it is too late. */
+function todayHeadline(items, tasks) {
   const open = (tasks || []).filter((t) => !t.done);
   const reels = open.filter((t) => t.kind === "video").length;
-  if (!open.length) return "Nothing waiting on you";
-  if (reels) return `${open.length} to do · ${reels} reel${reels === 1 ? "" : "s"} to make`;
-  return `${open.length} to do`;
+  const n = (items || []).length + open.length;
+  if (!n) return "Nothing needs you this morning";
+  const head = n === 1 ? "1 thing to do today" : `${n} things to do today`;
+  return reels ? `${head} · ${reels} reel${reels === 1 ? "" : "s"} to film` : head;
 }
+/* An empty task list says nothing at all. The card already has one message
+   when there is nothing to do, and a paragraph explaining that tasks would
+   appear here if there were any is the second empty state that made the home
+   screen feel like it was apologising twice. The "Add your own task…" box
+   sitting right underneath is the explanation. */
 function taskRowsHtml(tasks) {
   const rows = orderTasks(tasks);
-  if (!rows.length) return `<div class="ap-empty">No tasks yet. Approving a reel adds one here, with every step to finish it.</div>`;
+  if (!rows.length) return "";
   return rows.map((t) => {
     if (t.post_id && !t.done) {
       const steps = t.steps || [];
@@ -1524,7 +1715,7 @@ function taskRowsHtml(tasks) {
       <div class="task-item ${t.done ? "done" : ""}" data-task="${esc(t.id)}">
         <input type="checkbox" ${t.done ? "checked" : ""} ${t.post_id ? "disabled" : ""} />
         <span class="t">${esc(t.text)}</span>
-        <button class="task-del" title="Delete">${sic("close")}</button>
+        <button class="task-del" title="Delete this task" aria-label="Delete this task">${sic("close")}</button>
       </div>`;
   }).join("");
 }
@@ -1548,12 +1739,75 @@ function wireTasks() {
     };
   });
 }
-function refreshTaskList(tasks) {
-  if (state.lastState) state.lastState.tasks = tasks;
+function paintTasks(tasks) {
   const list = $("taskList"); if (!list) return;
   list.innerHTML = taskRowsHtml(tasks || []);
-  const head = $("taskHead"); if (head) head.textContent = taskHeadline(tasks || []);
   wireTasks();
+}
+function refreshTaskList(tasks) {
+  if (state.lastState) state.lastState.tasks = tasks;
+  paintTasks(tasks);
+  /* Ticking something off changes the count in the card's headline, and a
+     headline that still says "3 things to do today" over two rows is the kind
+     of small wrongness that makes people stop trusting the number. */
+  const head = $("todayTitle");
+  if (head) head.textContent = todayHeadline(_todayItems, tasks || []);
+}
+
+/* ---------- the panel, on a phone ----------
+   Beside the workspace this is a column that costs no vertical space, so it
+   shows everything. Stacked under a phone screen the same panel measured
+   2,261px — nine cards below four groups of tiles, which is past where
+   anybody scrolls. So on a phone it arrives shut, showing the one number that
+   matters: how many decisions are waiting. Tapping it opens the list.
+
+   Shut once, per session: a seller who opens it has said they want it open,
+   and having it snap shut again on the next repaint would be the app arguing
+   with them. */
+let _apShut = null;
+function paintApprovalCount(n) {
+  const panel = $("approvalPanel"), chip = $("apCount");
+  if (!panel || !chip) return;
+  chip.textContent = n ? `${n} waiting` : "all clear";
+  chip.hidden = false;
+  if (_apShut === null) _apShut = true;      // first paint of the session
+  panel.classList.toggle("shut", _apShut);
+  const head = $("apHead");
+  if (head && !head.dataset.wired) {
+    head.dataset.wired = "1";
+    /* Beside the workspace this header is a heading, not a control — there is
+       nothing to fold. Announcing it as a button on a desktop would promise a
+       press that does nothing, so the role follows the layout and is kept in
+       step when the window is resized across the breakpoint. */
+    const narrow = window.matchMedia("(max-width: 900px)");
+    const syncRole = () => {
+      if (narrow.matches) {
+        head.setAttribute("role", "button");
+        head.setAttribute("tabindex", "0");
+        head.setAttribute("aria-expanded", String(!_apShut));
+      } else {
+        head.removeAttribute("role");
+        head.removeAttribute("tabindex");
+        head.removeAttribute("aria-expanded");
+      }
+    };
+    if (narrow.addEventListener) narrow.addEventListener("change", syncRole);
+    syncRole();
+    const flip = (e) => {
+      if (!narrow.matches) return;
+      // The History and Refresh buttons live in this header too.
+      if (e.target.closest(".ap-head-actions")) return;
+      _apShut = !_apShut;
+      panel.classList.toggle("shut", _apShut);
+      head.setAttribute("aria-expanded", String(!_apShut));
+    };
+    head.onclick = flip;
+    head.onkeydown = (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      if (e.target.closest(".ap-head-actions")) return;   // let the real buttons work
+      e.preventDefault(); flip(e);
+    };
+  }
 }
 
 // ---------- approvals ----------
@@ -1561,6 +1815,7 @@ function renderApprovals(insights) {
   const list = $("approvalList");
   const hist = (state.lastState && state.lastState.history) || { approved: [], dismissed: [] };
   const decidedCount = (hist.approved || []).length + (hist.dismissed || []).length;
+  paintApprovalCount((insights || []).filter((i) => !i.summary).length);
   if (!insights || !insights.length) {
     list.innerHTML = `<div class="ap-empty">${decidedCount ? "All caught up — nothing pending. Check <b>History</b> for what you've handled." : "No pending insights. Upload data or check back after new activity."}</div>`;
     return;
@@ -2490,7 +2745,7 @@ function _addInputCell(col) {
   return `<td><input data-col="${esc(col.name)}" type="${type}" step="any"${req} placeholder="${esc(col.name)}"></td>`;
 }
 function _addRowHtml() {
-  return `<tr>${_addCtx.columns.map(_addInputCell).join("")}<td><button class="btn ghost tiny" data-delrow title="Remove row">${sic("close")}</button></td></tr>`;
+  return `<tr>${_addCtx.columns.map(_addInputCell).join("")}<td><button class="btn ghost tiny" data-delrow title="Remove row" aria-label="Remove this row">${sic("close")}</button></td></tr>`;
 }
 function renderAddGrid() {
   const head = `<thead><tr>${_addCtx.columns.map((c) => `<th>${esc(c.name)}${_addCtx.required.includes(c.name) ? " *" : ""}</th>`).join("")}<th></th></tr></thead>`;
@@ -2794,7 +3049,7 @@ async function openProducts() {
 function _prodCard(p) {
   const aliasChips = (p.aliases || []).length
     ? p.aliases.map((a) => `<span class="link-chip">${esc(a.alias)}${a.platform ? ` <i class="al-plat">${esc(a.platform)}</i>` : ""}
-        <button class="lc-x" data-delalias="${a.id}" title="Unlink">${sic("close")}</button></span>`).join("")
+        <button class="lc-x" data-delalias="${a.id}" title="Unlink" aria-label="Unlink this name">${sic("close")}</button></span>`).join("")
     : `<span class="muted tiny">No platform names linked yet</span>`;
   const meta = [
     p.category ? esc(p.category) : null,
@@ -2817,8 +3072,8 @@ function _prodCard(p) {
           </div>
         </div>
         <div class="sup-actions">
-          <button class="btn ghost tiny" data-editprod="${p.id}" title="Edit">✎</button>
-          <button class="btn ghost tiny" data-delprod="${p.id}" title="Delete">${sic("close")}</button>
+          <button class="btn ghost tiny" data-editprod="${p.id}" title="Edit">✎<span class="btn-lbl">Edit</span></button>
+          <button class="btn ghost tiny danger" data-delprod="${p.id}" title="Delete">${sic("close")}<span class="btn-lbl">Delete this product</span></button>
         </div>
       </div>
       <label class="site-toggle" title="Show this product on your own website">
@@ -3371,7 +3626,7 @@ function renderVariants() {
       <input class="vx-name" data-axname="${i}" value="${esc(ax.name)}" placeholder="Size" />
       <input class="vx-vals" data-axvals="${i}" value="${esc((ax.values || []).join(", "))}"
              placeholder="S, M, L, XL" />
-      <button type="button" class="btn ghost tiny" data-axrm="${i}" title="Remove this option">
+      <button type="button" class="btn ghost tiny" data-axrm="${i}" title="Remove this option" aria-label="Remove this option">
         ${sic("close")}</button>
     </div>`;
 
@@ -3475,7 +3730,7 @@ function renderGallery() {
   if (!g) return;
   g.innerHTML = _pfGallery.map((u, i) => `
       <div class="gal-item" style="background-image:url('${esc(u)}')">
-        <button class="gal-x" data-galrm="${i}" title="Remove">${sic("close")}</button>
+        <button class="gal-x" data-galrm="${i}" title="Remove" aria-label="Remove this photo">${sic("close")}</button>
       </div>`).join("") +
     `<button class="gal-add" id="galAdd">＋<span>Add photos</span></button>`;
   g.querySelectorAll("[data-galrm]").forEach((b) => b.onclick = () => {
@@ -3651,7 +3906,7 @@ function renderDesignLanguage() {
   if (box) {
     box.innerHTML = refs.length ? refs.map((u) => `
       <div class="dl-ref" style="background-image:url('${esc(u)}')">
-        <button class="dl-x" data-dlx="${esc(u)}" title="Remove">✕</button>
+        <button class="dl-x" data-dlx="${esc(u)}" title="Remove" aria-label="Remove this download">✕</button>
       </div>`).join("")
       : `<div class="dl-blank">Nothing here yet. Add four pictures whose look you want to copy.</div>`;
     box.querySelectorAll("[data-dlx]").forEach((n) => n.onclick = async () => {
@@ -3798,11 +4053,11 @@ function renderStudioProduct() {
   const paintMedia = () => {
     $("stShots").innerHTML = shots.map((u, i) => `
       <div class="gal-item" style="background-image:url('${esc(u)}')">
-        <button class="gal-x" data-shotrm="${i}" title="Remove">${sic("close")}</button>
+        <button class="gal-x" data-shotrm="${i}" title="Remove" aria-label="Remove this shot">${sic("close")}</button>
       </div>`).join("") + `<button class="gal-add" id="stShotAdd">＋<span>Add photos</span></button>`;
     $("stClips").innerHTML = clips.map((u, i) => `
       <div class="gal-item is-vid"><video src="${esc(u)}" muted loop autoplay playsinline></video>
-        <button class="gal-x" data-cliprm="${i}" title="Remove">${sic("close")}</button>
+        <button class="gal-x" data-cliprm="${i}" title="Remove" aria-label="Remove this clip">${sic("close")}</button>
       </div>`).join("") + `<button class="gal-add" id="stClipAdd">＋<span>Add a clip</span></button>`;
     $("stShotAdd").onclick = () => pickImage((u) => { shots.push(u); paintMedia(); }, true, "image/*");
     $("stClipAdd").onclick = () => pickImage((u) => { clips.push(u); paintMedia(); }, false,
@@ -4029,11 +4284,19 @@ function renderSupply(d) {
                  placeholder="${fmt(it.doq)}" title="Type your own DOQ, or leave blank for the worked-out one" />
           <span class="muted tiny" title="${esc((it.eoq_missing || []).length ? "EOQ needs: " + it.eoq_missing.join(", ") : "")}">${DOQ_BASIS[it.doq_basis] || ""}${it.eoq && it.doq_basis !== "eoq" ? ` · EOQ ${fmt(it.eoq)}` : ""}</span></td>
         <td>${_supBadge(it)}</td>
+        <!-- WHY EVERY ONE OF THESE NOW CARRIES A WORD.
+             These were four icon-only buttons explained by title tooltips.
+             A tooltip needs a hover and a phone has no hover, so on a phone
+             the card ended in four identical full-width empty boxes with a
+             tiny mark in the middle of each — one of which deletes the item.
+             The label is hidden again above tablet width, so the desktop row
+             keeps its compact icons. -->
         <td class="sup-actions">
-          ${it.suggestions_available ? `<button class="btn ghost tiny" data-apply="${it.id}" title="Apply the values suggested from your sales">✨</button>` : ""}
-          <button class="btn ghost tiny" data-edit="${it.id}" title="Edit">✎</button>
-          <button class="btn ghost tiny" data-waste="${it.id}" title="Record waste">🗑️</button>
-          <button class="btn ghost tiny" data-del="${it.id}" title="Remove item">${sic("close")}</button>
+          ${it.suggestions_available ? `<button class="btn ghost tiny" data-apply="${it.id}" title="Apply the values suggested from your sales">✨<span class="btn-lbl">Use the suggested numbers</span></button>` : ""}
+          <button class="btn ghost tiny" data-edit="${it.id}" title="Edit">✎<span class="btn-lbl">Edit</span></button>
+          <button class="btn ghost tiny" data-waste="${it.id}" title="Record waste">🗑️<span class="btn-lbl">Record waste</span></button>
+          <button class="btn ghost tiny sup-more" data-more="${it.id}">${sic("chevron-down")}<span class="btn-lbl">Show all the numbers</span></button>
+          <button class="btn ghost tiny danger" data-del="${it.id}" title="Remove item">${sic("close")}<span class="btn-lbl">Remove from stock list</span></button>
         </td>
       </tr>`).join("")
     : `<tr><td colspan="11" class="ap-empty">No inventory yet. Add an item in Inventory Management.</td></tr>`;
@@ -4058,9 +4321,9 @@ function renderSupply(d) {
       ${nexts.filter((x) => x !== "cancelled" && !(send && x === "mailed")).map((x) =>
         `<button class="btn ghost tiny" data-pomove="${esc(p.po_number)}" data-postatus="${x}"
                  title="${esc(PO_STEP_WHY[x] || "")}">${PO_STEP[x] || x}</button>`).join("")}
-      <button class="btn ghost tiny" data-popdf="${esc(p.po_number)}" title="Download the PDF">📄</button>
-      <button class="btn ghost tiny" data-poxls="${esc(p.po_number)}" title="Download as Excel">⬇</button>
-      ${nexts.includes("cancelled") ? `<button class="btn ghost tiny danger" data-pomove="${esc(p.po_number)}" data-postatus="cancelled" title="Cancel this order">${sic("close")}</button>` : ""}`;
+      <button class="btn ghost tiny" data-popdf="${esc(p.po_number)}" title="Download the PDF">📄<span class="btn-lbl">PDF</span></button>
+      <button class="btn ghost tiny" data-poxls="${esc(p.po_number)}" title="Download as Excel">⬇<span class="btn-lbl">Excel</span></button>
+      ${nexts.includes("cancelled") ? `<button class="btn ghost tiny danger" data-pomove="${esc(p.po_number)}" data-postatus="cancelled" title="Cancel this order">${sic("close")}<span class="btn-lbl">Cancel this order</span></button>` : ""}`;
   };
   const poRow = (p) => `
       <tr>
@@ -4106,7 +4369,15 @@ function renderSupply(d) {
       <button class="btn ghost sm" id="supLinks">${sic("layers")}What each product uses</button>
       <button class="btn ghost sm" id="supWaste">${sic("close")}Record waste</button>
     </div>
-    <p class="muted tiny">${esc(salesNote)}</p>
+    <!-- Four sentences of arithmetic, above the list, every single visit.
+         It is true and it is worth having, but it answers a question a seller
+         asks once — "where does 'days left' come from?" — and then never
+         again, while costing a third of a phone screen before the first item
+         appears. Folded, with the question as the summary. -->
+    <details class="fold quiet">
+      <summary>How "days left" is worked out</summary>
+      <p class="muted tiny" style="margin:8px 0 0;">${esc(salesNote)}</p>
+    </details>
 
     <div id="supForm" hidden></div>
     <div id="supPanel" hidden></div>
@@ -4143,11 +4414,20 @@ function renderSupply(d) {
     <div class="table-scroll">
       <table class="sup-table">
         <thead><tr>
-          <th>Item</th><th>Supplier</th><th class="num">Left</th><th class="num">Used/day</th>
-          <th class="num" title="Days of supply: what you have ÷ what you use a day">DOS</th>
-          <th class="num" title="Days the supplier takes to deliver">Lead time</th>
-          <th class="num" title="Order when DOS falls below this: ${rule.dos_multiple} × lead time">Order below</th>
-          <th class="num">MOQ</th><th class="num" title="Default order quantity — type your own to override">DOQ</th><th>Status</th><th></th>
+          <th>Item</th>
+          <th data-card-label="Buy it from">Supplier</th>
+          <th class="num" data-card-label="In stock">Left</th>
+          <th class="num" data-card-hide data-card-label="Used each day">Used/day</th>
+          <th class="num" data-card-label="Days left"
+              title="Days of supply: what you have ÷ what you use a day">DOS</th>
+          <th class="num" data-card-hide data-card-label="Delivery takes"
+              title="Days the supplier takes to deliver">Lead time</th>
+          <th class="num" data-card-hide data-card-label="Reorder at"
+              title="Order when DOS falls below this: ${rule.dos_multiple} × lead time">Order below</th>
+          <th class="num" data-card-hide data-card-label="Smallest order">MOQ</th>
+          <th class="num" data-card-hide data-card-label="Order this many"
+              title="Default order quantity — type your own to override">DOQ</th>
+          <th data-card-first>Status</th><th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -4196,6 +4476,18 @@ function renderSupply(d) {
   document.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => supplyDelete(b.dataset.del));
   document.querySelectorAll("[data-waste]").forEach((b) => b.onclick = () => openWastePanel(b.dataset.waste));
   document.querySelectorAll("[data-apply]").forEach((b) => b.onclick = () => supplyApplySuggested(b.dataset.apply));
+  /* The card shows the five fields that answer "have I got enough, and who do
+     I ring". The other six are the arithmetic behind them — real, and worth
+     showing to whoever asks, but not worth a screen and a half per item to
+     someone checking stock on a phone between customers. */
+  document.querySelectorAll("[data-more]").forEach((b) => b.onclick = () => {
+    const tr = b.closest("tr");
+    if (!tr) return;
+    const open = tr.classList.toggle("show-all");
+    const lbl = b.querySelector(".btn-lbl");
+    if (lbl) lbl.textContent = open ? "Hide the workings" : "Show all the numbers";
+    b.classList.toggle("is-open", open);
+  });
   document.querySelectorAll("[data-openpo]").forEach((b) => b.onclick = () => supplyOpenPo([b.dataset.openpo]));
   document.querySelectorAll("[data-draftpo]").forEach((b) => b.onclick = supplyCheckNow);
   document.querySelectorAll("[data-podetail]").forEach((b) => b.onclick = () => openPoDetail(b.dataset.podetail));
@@ -4558,7 +4850,7 @@ function _renderLinks() {
     const chips = links.map((m) => {
       const it = byName[m.inventory_id];
       return `<span class="link-chip">${esc(it ? it.name : "?")} × ${fmt(m.qty_per_unit)} ${esc(it ? it.unit_label : "")}
-        <button class="lc-x" data-unmap="${m.id}" title="Remove">${sic("close")}</button></span>`;
+        <button class="lc-x" data-unmap="${m.id}" title="Remove" aria-label="Remove this link">${sic("close")}</button></span>`;
     }).join("") || `<span class="muted tiny">No items linked yet</span>`;
     return `
       <div class="link-row">
@@ -5571,7 +5863,7 @@ function renderWinbackTable() {
   const head = `<tr>${WB_COLS.map((c) => `<th>${c.label}</th>`).join("")}<th></th></tr>`;
   const body = _wbRows.map((r, i) => `<tr data-r="${i}">${WB_COLS.map((c) =>
     `<td><input data-k="${c.k}" value="${esc(r[c.k] == null ? "" : r[c.k])}" /></td>`).join("")}
-    <td><button class="btn ghost tiny" data-del="${i}">${sic("close")}</button></td></tr>`).join("");
+    <td><button class="btn ghost tiny" data-del="${i}" title="Remove this row" aria-label="Remove this row">${sic("close")}</button></td></tr>`).join("");
   $("wbTable").innerHTML = `<table class="wb-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
   $("wbTable").querySelectorAll("input").forEach((inp) => inp.onchange = (e) => {
     const tr = e.target.closest("tr"); _wbRows[+tr.dataset.r][e.target.dataset.k] = e.target.value;
@@ -6932,10 +7224,10 @@ function renderRepeaters() {
   if (hl) {
     hl.innerHTML = _site.highlights.map((h, i) => `
       <div class="rep-row">
-        <button class="icon-pick" data-iconpick="${i}" title="Change icon">${sic(h.icon || "check")}</button>
+        <button class="icon-pick" data-iconpick="${i}" title="Change icon" aria-label="Change this icon">${sic(h.icon || "check")}</button>
         <input value="${esc(h.title)}" data-hl="${i}" data-k="title" placeholder="Fast dispatch" />
         <input value="${esc(h.text)}" data-hl="${i}" data-k="text" placeholder="Orders leave within 24 hours." />
-        <button class="btn ghost tiny" data-hlrm="${i}">${sic("close")}</button>
+        <button class="btn ghost tiny danger" data-hlrm="${i}" title="Remove this promise" aria-label="Remove this promise">${sic("close")}<span class="btn-lbl">Remove</span></button>
       </div>`).join("") +
       `<button class="btn ghost sm" id="hlAdd">＋ Add a promise</button>`;
     hl.querySelectorAll("[data-hl]").forEach((n) => n.oninput = () => { _site.highlights[+n.dataset.hl][n.dataset.k] = n.value; siteMark(); });
@@ -6952,7 +7244,7 @@ function renderRepeaters() {
       <div class="rep-row">
         <input class="rep-ico" value="${esc(x.value)}" data-st="${i}" data-k="value" placeholder="2,400+" />
         <input value="${esc(x.label)}" data-st="${i}" data-k="label" placeholder="bottles shipped" />
-        <button class="btn ghost tiny" data-strm="${i}">${sic("close")}</button>
+        <button class="btn ghost tiny danger" data-strm="${i}" title="Remove this figure" aria-label="Remove this figure">${sic("close")}<span class="btn-lbl">Remove</span></button>
       </div>`).join("") + `<button class="btn ghost sm" id="stAdd">＋ Add a figure</button>`;
     st.querySelectorAll("[data-st]").forEach((n) => n.oninput = () => {
       _site.stats[+n.dataset.st][n.dataset.k] = n.value; siteMark();
@@ -6971,7 +7263,7 @@ function renderRepeaters() {
     gl.innerHTML = (_site.gallery || []).map((g, i) => `
       <div class="gal-item ${isVid(g.url) ? "is-vid" : ""}" style="${isVid(g.url) ? "" : `background-image:url('${esc(g.url)}')`}">
         ${isVid(g.url) ? `<video src="${esc(g.url)}" muted loop autoplay playsinline></video>` : ""}
-        <button class="gal-x" data-glrm="${i}" title="Remove">${sic("close")}</button>
+        <button class="gal-x" data-glrm="${i}" title="Remove" aria-label="Remove this image">${sic("close")}</button>
         <input class="gal-cap" value="${esc(g.caption || "")}" data-glcap="${i}" placeholder="Caption" />
       </div>`).join("") +
       `<button class="gal-add" id="glAdd">＋<span>Add photos</span></button>
@@ -6997,7 +7289,7 @@ function renderRepeaters() {
         <select data-ts="${i}" data-k="rating" class="rep-ico">${[5, 4, 3, 2, 1].map((r) => `<option value="${r}" ${t.rating === r ? "selected" : ""}>${"★".repeat(r)}</option>`).join("")}</select>
         <input value="${esc(t.name)}" data-ts="${i}" data-k="name" placeholder="Customer name" />
         <input value="${esc(t.text)}" data-ts="${i}" data-k="text" placeholder="What they said" />
-        <button class="btn ghost tiny" data-tsrm="${i}">${sic("close")}</button>
+        <button class="btn ghost tiny danger" data-tsrm="${i}" title="Remove this review" aria-label="Remove this review">${sic("close")}<span class="btn-lbl">Remove</span></button>
       </div>`).join("") : `<p class="muted tiny">No reviews added yet.</p>`) +
       `<button class="btn ghost sm" id="tsAdd">＋ Add a review</button>`;
     ts.querySelectorAll("[data-ts]").forEach((n) => n.oninput = n.onchange = () => {
@@ -7670,6 +7962,9 @@ async function loadCustomers() {
 
 // ---------- boot ----------
 (async function init() {
+  // Every table the app ever draws gets its cells labelled, so each one can
+  // fall back to card layout on a phone. Started before anything renders.
+  watchTables();
   // Icons come from localStorage on any warm start, so this almost never
   // blocks. On a cold one it is still the only thing the shell needs first.
   await loadIcons();
@@ -7847,10 +8142,18 @@ async function renderSocial() {
   // --- the month grid
   const pad = cal.starts_on;                       // Monday = 0
   const cells = [];
+  /* The strip under the grid is built from the days the grid actually marked,
+     not from cal.festivals — a festival whose own date falls in the NEXT
+     month still gets a "starts" mark in this one, and reading its date
+     straight off the record put "11 Navratri" under a September calendar when
+     the 11th is in October and what September has is the 20th. */
+  const legend = [];
   for (let i = 0; i < pad; i++) cells.push(`<div class="cal-cell is-pad"></div>`);
   (cal.days || []).forEach((day) => {
     const fest = (cal.festivals || []).find((f) => f.date === day.date);
     const startsFest = (cal.festivals || []).find((f) => f.start_on === day.date);
+    if (fest) legend.push({ d: Number(day.date.slice(-2)), name: fest.name, starts: false });
+    else if (startsFest) legend.push({ d: Number(day.date.slice(-2)), name: startsFest.name, starts: true });
     const isToday = day.date === cal.today;
     cells.push(`
       <div class="cal-cell${isToday ? " is-today" : ""}${fest ? " is-fest" : ""}" data-day="${esc(day.date)}">
@@ -7906,15 +8209,32 @@ async function renderSocial() {
 
     <div class="cal-wrap">
       <div class="cal-head">
-        <button class="btn ghost sm" id="calPrev">‹</button>
+        <!-- A bare chevron is readable as "back a month" by convention, so it
+             keeps its shape — but a screen reader and a long-press both need
+             a name, and neither gets one from a glyph. -->
+        <button class="btn ghost sm" id="calPrev" title="The month before" aria-label="Go to the month before">‹</button>
         <b>${esc(cal.label)}</b>
-        <button class="btn ghost sm" id="calNext">›</button>
+        <button class="btn ghost sm" id="calNext" title="The month after" aria-label="Go to the month after">›</button>
         <span class="muted tiny">${cal.counts.planned} planned</span>
         <button class="btn ghost sm" id="calToday" style="margin-left:auto;">Today</button>
       </div>
       <div class="cal-dow">${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
         .map((x) => `<span>${x}</span>`).join("")}</div>
       <div class="cal-grid">${cells.join("")}</div>
+      <!-- WHAT A 45px COLUMN CANNOT HOLD.
+           A phone gives each day about 45 pixels. "Ganesh Chaturthi" does not
+           fit, and forcing it to wrap turned the cell into "Ganes / h /
+           Chatur / thi" — which is worse than not showing it, because it
+           reads as a broken layout rather than as a festival. So below phone
+           width the day keeps its amber tint (the signal: something is on)
+           and the names move here, under the grid, where there is a whole
+           line to say them in. Above that width the cells have room and this
+           strip is hidden as a duplicate. -->
+      ${legend.length ? `<div class="cal-legend">
+        <span class="cal-legend-h">This month</span>
+        ${legend.map((f) => `<span class="cal-leg">
+          <b>${esc(String(f.d))}</b> ${esc(f.name)}${f.starts ? " starts" : ""}</span>`).join("")}
+      </div>` : ""}
     </div>
 
     <details class="sm-fold">
@@ -8732,7 +9052,7 @@ function renderBeatRows() {
       <input class="sm-beat-sec" data-k="sec" value="${esc(b.sec || "")}" placeholder="0-3s" />
       <input class="sm-beat-shot" data-k="shot" value="${esc(b.shot || "")}" placeholder="Camera / shot" />
       <input class="sm-beat-osd" data-k="on_screen_text" value="${esc(b.on_screen_text || "")}" placeholder="On-screen text" />
-      <button class="btn ghost tiny" data-del="${i}" title="Remove beat">${sic("close")}</button>
+      <button class="btn ghost tiny" data-del="${i}" title="Remove beat" aria-label="Remove this beat from the shot list">${sic("close")}</button>
     </div>`).join("") || `<p class="muted" style="margin:6px 0;">No beats yet — add one below.</p>`;
   el.querySelectorAll("input").forEach((inp) => inp.onchange = (e) => {
     const row = e.target.closest("[data-r]");
@@ -9190,7 +9510,7 @@ function poLineRow(l, i) {
       <td><input class="po-unit" value="${esc(l.unit_label || "unit")}" /></td>
       <td><input class="po-cost" type="number" min="0" step="0.01" value="${l.unit_cost != null ? esc(String(l.unit_cost)) : ""}" placeholder="—" /></td>
       <td class="num po-amt">${l.unit_cost != null ? "₹" + fmt(l.unit_cost * (l.order_qty || 1)) : "—"}</td>
-      <td><button class="btn ghost tiny danger" data-podel="${i}">✕</button></td>
+      <td><button class="btn ghost tiny danger" data-podel="${i}" title="Remove this line" aria-label="Remove this line from the order">✕</button></td>
     </tr>`;
 }
 

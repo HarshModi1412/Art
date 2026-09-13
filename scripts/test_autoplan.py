@@ -428,8 +428,18 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JS = open(os.path.join(ROOT, "Smart CafeX", "smart.js"), encoding="utf-8").read()
 CSS = open(os.path.join(ROOT, "Smart CafeX", "smart.css"), encoding="utf-8").read()
 check("post cards offer Approve / Details / Cancel", "data-cancel=" in JS and '"cancel"' in JS)
-check("the task list is at the top of Home",
-      JS.index('id="taskBox"') < JS.index('id="todayBox"'))
+# The task list used to be its own section ABOVE the Today card, and this
+# asserted that order in the source. It is not above it any more: it is INSIDE
+# it. A seller does not sort their morning into "things the software noticed"
+# and "things I wrote down" — it is all just today — so the two lists became
+# one, under one headline that counts both. The intent of this check (the
+# seller's own work is not buried) is stronger now than the old ordering was,
+# so it checks the new structure instead of the old one.
+check("the task list is inside the Today card, not a section of its own",
+      JS.index('id="todayBox"') < JS.index('id="taskBox"')
+      and JS.index('id="taskBox"') < JS.index('class="today-foot"'))
+check("and the Today card comes before the module tiles",
+      JS.index('id="todayBox"') < JS.index('class="apps-grid"'))
 check("video tasks open the step-by-step popup", "openVideoTask" in JS)
 check("with Google Flow in it", "labs.google/fx/tools/flow" in JS or "showVideoTools" in JS)
 check("and a Save & schedule step", "/api/social/schedule-ready" in JS)
@@ -437,7 +447,12 @@ check("the setup lets the seller pick the day", "apDay" in JS and "/api/social/a
 check("and plan next week on demand", "/api/social/autoplan/run-now" in JS)
 check("the old ReferenceError in approvePostReady is gone",
       "findPost ? findPost(postId)" not in JS)
-check("styles exist for the new pieces", ".vt-steps2" in CSS and ".task-card" in CSS)
+check("styles exist for the new pieces", ".vt-steps2" in CSS and ".task-item" in CSS)
+# The task list moved inside the Today card; the standalone .task-card wrapper
+# it used to live in is gone on purpose.
+check("tasks live in the Today card, not a second card above it",
+      ".today-tasks" in CSS and ".task-card {" not in CSS
+      and 'class="task-card"' not in JS)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

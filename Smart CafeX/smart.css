@@ -209,6 +209,11 @@ input, select {
   background: var(--surface); border: 1px solid var(--border-strong); color: var(--text);
   border-radius: 8px; padding: 9px 11px; font: inherit; font-size: 13.5px; width: 100%;
 }
+/* No control may be wider than the box it sits in. Date, time and colour
+   inputs carry a built-in minimum width that differs per browser — Safari's
+   `datetime-local` is far wider than Chrome's, which is why a form that looked
+   fine on a laptop pushed its whole row off the side of an iPad. */
+input, select, textarea { min-width: 0; max-width: 100%; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px var(--primary-soft); }
 /* Every focusable thing gets a visible ring. Removing this is the single most
    common accessibility failure in a dark theme, and it is also what makes an
@@ -367,7 +372,8 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px s
   width: min(1100px, 96vw);
   max-width: 96vw;
   max-height: 92vh;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;   /* same rule as .modal — see the note there */
 }
 @media (max-width: 720px) {
   .modal.wide { width: 100vw; max-width: 100vw; max-height: 100vh; border-radius: 0; padding: 14px; }
@@ -461,6 +467,123 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px s
 
 /* ---------- tables ---------- */
 .table-scroll { overflow: auto; max-height: 460px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+
+/* ---------- a table, on a phone or a tablet ----------
+   Eleven columns do not fit in 390px and never will. Below this width each
+   row becomes its own card: the first column is the card's title, every other
+   column is a "label      value" line, and the seller reads down instead of
+   dragging sideways and losing track of which row they are in.
+   The labels come from labelTableCells() in smart.js, which stamps every cell
+   with the text of its column heading — or with `data-card-label`, where the
+   heading is an abbreviation that only makes sense in a narrow column.
+
+   WHY 900px AND NOT 760px. The cutoff used to sit just under an iPad held
+   upright (768px), so a tablet got the full eleven-column table squeezed into
+   768px and scrolled sideways inside its own box — the worst of both layouts.
+   Eleven columns want a thousand pixels. Between 760 and 900 the card is the
+   better read, so the card is what a tablet now gets.
+   The `.btn-lbl` rule further down shares this breakpoint on purpose: a row's
+   icon buttons must grow their words at exactly the moment the row stops
+   being a table row and starts being a card. */
+@media (max-width: 900px) {
+  .table-scroll { overflow-x: hidden; max-height: none; border: none;
+    border-radius: 0; background: transparent; }
+  .table-scroll table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  /* The heading row goes away entirely rather than being hidden off-screen.
+     Changing tr/td to `display: block` already drops the table role in every
+     browser, so an invisible header row buys no screen-reader benefit — and
+     every cell now carries its heading as visible text beside the value, which
+     reads the same aloud. Hiding it off-screen instead left a phantom 359px
+     box hanging past the right edge of the page. */
+  .table-scroll thead { display: none; }
+  .table-scroll tbody, .table-scroll tr, .table-scroll td { display: block; width: auto; }
+  /* A flex column, not a plain block, so a card can put its fields in the
+     order a person reads them rather than the order a spreadsheet stores
+     them. The item's name leads, then whether it is fine or short — which
+     was previously the LAST line of an eleven-line card, below six numbers,
+     which is the one thing nobody should have to scroll for. */
+  .table-scroll tbody tr {
+    display: flex; flex-direction: column;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); padding: 4px 13px 8px; margin-bottom: 10px;
+    box-shadow: var(--shadow);
+  }
+  .table-scroll td[data-primary] { order: -2; }
+  .table-scroll td[data-first] { order: -1; }
+  /* Folded until asked for. `.sup-more` is the row's own toggle. */
+  .table-scroll td[data-secondary] { display: none; }
+  .table-scroll tr.show-all td[data-secondary] { display: flex; }
+  .table-scroll tbody tr:last-child { margin-bottom: 2px; }
+  .table-scroll td {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; padding: 7px 0; text-align: right; white-space: normal;
+    border-bottom: 1px solid var(--border); font-size: 13.5px;
+    overflow-wrap: anywhere;
+  }
+  .table-scroll td:last-child { border-bottom: none; }
+  /* flex: 0 0 auto — the label never shrinks, so it can never be broken in the
+     middle of its own word. A label long enough to crowd the value truncates
+     instead. */
+  .table-scroll td::before {
+    content: attr(data-label); flex: 0 0 auto; text-align: left;
+    color: var(--muted); font-size: 12px; font-weight: 600;
+    text-transform: none; letter-spacing: 0; white-space: nowrap;
+    max-width: 48%; overflow: hidden; text-overflow: ellipsis;
+  }
+  .table-scroll td > .td-v { flex: 1 1 auto; min-width: 0; text-align: right; }
+  /* A second line inside a cell (the supplier's email under their name) reads
+     as a caption under the value, not as a competing column beside it. */
+  .table-scroll td > .td-v > div, .table-scroll td > .td-v > .muted { display: block; }
+  /* The item name is the card's heading, not a field with a label. */
+  .table-scroll td[data-primary] {
+    display: block; text-align: left; font-size: 15px; font-weight: 650;
+    color: var(--text); padding: 8px 0 7px;
+  }
+  .table-scroll td[data-primary]::before { content: none; }
+  .table-scroll td[data-primary] > .td-v { text-align: left; }
+  /* Empty state rows and action cells span the card. */
+  .table-scroll td[data-full] { display: block; text-align: left; }
+  .table-scroll td[data-full]::before { content: none; }
+  /* Row actions become rows that say what they do. Left aligned with the icon
+     first reads as a menu of things you can do; centred with no word read as
+     four identical grey boxes, one of which deletes. A plain <button> centres
+     its text, so this has to become a flex box before alignment means
+     anything — `justify-content` alone did nothing here. */
+  .table-scroll td[data-full] .btn {
+    width: 100%; margin-top: 4px; display: flex; align-items: center;
+    justify-content: flex-start; gap: 9px; text-align: left;
+  }
+  .table-scroll td[data-full] .btn.danger { color: var(--red); }
+
+  /* Five full-width boxes per item is its own kind of noise. The three that
+     manage the item sit on one row, the quiet toggle stops pretending to be a
+     button, and only a real prompt ("your sales suggest better numbers") keeps
+     the full width it deserves. */
+  .table-scroll td.sup-actions {
+    display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px;
+  }
+  .table-scroll td.sup-actions .btn { flex: 1 1 44%; width: auto; margin-top: 0;
+    justify-content: center; text-align: center; }
+  /* A real prompt, and the destructive one, each get their own line — the
+     first because it is worth reading, the second so a thumb aiming at
+     "Edit" can never land on "Remove". */
+  .table-scroll td.sup-actions .btn[data-apply],
+  .table-scroll td.sup-actions .btn[data-del] { flex: 1 1 100%;
+    justify-content: flex-start; text-align: left; }
+  .table-scroll td.sup-actions .btn[data-del] { margin-top: 2px; }
+  .table-scroll td.sup-actions .sup-more {
+    flex: 1 1 100%; background: none; border-color: transparent;
+    color: var(--muted); justify-content: flex-start; padding-left: 2px;
+  }
+  .table-scroll td.sup-actions .sup-more:hover { color: var(--text); }
+  /* A blank value would otherwise leave a label pointing at nothing. */
+  .table-scroll td[data-blank] { display: none; }
+  /* Numbers stop being right-aligned columns and become the value half. */
+  .table-scroll td.num { font-variant-numeric: tabular-nums; }
+  .table-scroll .sup-table td { white-space: normal; }
+  .table-scroll tr.sup-below { border-color: var(--red); }
+  .table-scroll tr.sup-below td { background: transparent; }
+}
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { padding: 9px 12px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
 th { position: sticky; top: 0; background: var(--surface-3); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
@@ -469,11 +592,59 @@ td { color: var(--text-2); }
 /* ---------- mapping modal ---------- */
 .modal-back { position: fixed; inset: 0; background: rgba(9,12,20,.55); backdrop-filter: blur(2px); display: grid; place-items: center; z-index: 50; padding: 20px; }
 .modal-back[hidden] { display: none; }
-.modal { background: var(--surface); border-radius: var(--radius-lg); width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; padding: 20px 22px; box-shadow: var(--shadow-pop); color: var(--text); }
+/* WHY overflow-x IS WRITTEN OUT HERE.
+   This used to say `overflow-y: auto` and nothing about the other axis. CSS
+   does not leave the other axis alone: the moment one axis stops being
+   `visible`, the other computes to `auto` as well. So every popup in the app
+   was a horizontally draggable surface, and one stray pixel — a date field
+   that refuses to shrink, an unbreakable word, a focus ring — was enough to
+   let a finger slide the whole popup sideways and leave it there, with the
+   left edge of every line cut off. That is what the seller was looking at.
+   Saying `hidden` out loud costs nothing and makes it impossible: whatever
+   ends up inside a popup, the popup itself never moves sideways again.
+   Anything that genuinely needs width (a table, a prompt) gets its own
+   scroller below, so nothing is clipped out of reach. */
+.modal { background: var(--surface); border-radius: var(--radius-lg); width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; overflow-x: hidden; padding: 20px 22px; box-shadow: var(--shadow-pop); color: var(--text); }
+/* Controls shrink instead of shoving. `datetime-local` and `date` inputs carry
+   a large intrinsic minimum width in Safari — far wider than Chrome, which is
+   why this never showed up on a laptop — and without min-width:0 they push
+   their whole row past the edge. */
+.modal input, .modal select, .modal textarea { min-width: 0; max-width: 100%; }
+/* A long unbroken run of characters — a pasted URL, a hex-heavy image prompt,
+   a product code — wraps rather than setting the width of the popup. */
+.modal p, .modal li, .modal .sm-hint, .modal .muted, .modal h3, .modal h4,
+.modal b, .modal summary { overflow-wrap: anywhere; }
+/* The safety valve. Everything above stops content being too wide in the first
+   place, but "hidden" on its own would mean that anything that still managed
+   it — a control some future browser sizes differently — became unreachable
+   rather than merely ugly. So the body scrolls instead. The seller's actual
+   complaint is answered either way: the popup's frame, its title and its close
+   button are nailed down and never move. */
+/* `auto` here made the popup's own body a sideways scroller: anything inside
+   that was a few pixels too wide — a three-column yield table, a long prompt —
+   turned the whole popup into something that slid left and right under a
+   thumb. A popup should only ever scroll one way. `clip` stops the drag
+   without creating a scroll container, so a `.table-scroll` inside can still
+   scroll on purpose where a wide table genuinely belongs. Anything that
+   actually needs the width now asks for it explicitly. */
+.modal-body { overflow-x: clip; }
+.modal-head, .modal-actions { position: relative; z-index: 1; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .map-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 11px; margin: 14px 0; }
 .map-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+/* WHY flex-wrap MATTERS MORE THAN IT LOOKS.
+   `justify-content: flex-end` with `nowrap` overflows to the LEFT, and the
+   left of a popup is the one direction nothing can scroll to. Four buttons in
+   a 306px popup put "Close" 29px off the edge, clipped and untappable —
+   measured, not guessed. Wrapping costs a second row and nothing else. */
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px;
+  margin-top: 14px; flex-wrap: wrap; }
+/* On a phone the buttons stop competing for one row and stack full width, in
+   the order they matter, with the primary action under the thumb. */
+@media (max-width: 560px) {
+  .modal-actions { gap: 8px; }
+  .modal-actions > .btn { flex: 1 1 100%; justify-content: center; }
+}
 
 /* ---------- toast ---------- */
 .toast { position: fixed; bottom: 20px; right: 20px; background: var(--text); color: var(--surface); padding: 12px 18px;
@@ -481,6 +652,12 @@ td { color: var(--text-2); }
 .toast[hidden] { display: none; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .page-head h2 { font-size: 20px; }
+/* Greeting and account address as one block, so they cost one row together
+   rather than a row each. */
+.ph-title { min-width: 0; }
+.ph-title h2 { margin: 0; line-height: 1.2; }
+.ph-sub { display: block; margin-top: 2px; font-size: 12.5px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
 
 /* progress bar (strategy) */
 .progress-bar { height: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 99px; overflow: hidden; margin-bottom: 12px; }
@@ -612,7 +789,8 @@ td { color: var(--text-2); }
 .sup-form-grid textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 .sup-form-grid input[type="range"] { padding: 0; accent-color: var(--primary); }
 .sup-form-grid input[type="color"] { padding: 2px; height: 38px; width: 62px; cursor: pointer; }
-.sup-form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.sup-form-grid > * { min-width: 0; }
+.sup-form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-2); min-width: 0; }
 .sup-form-grid input { padding: 8px 10px; font-size: 13px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); }
 .sup-form-grid input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 
@@ -1182,7 +1360,12 @@ svg { width: 1em; height: 1em; flex: none; vertical-align: -0.125em; }
 .vx-grid input[type="number"] { font-variant-numeric: tabular-nums; }
 
 @media (max-width: 720px) {
-  .today-h { flex-direction: column; }
+  /* The email button used to drop onto its own line under the headline, where
+     a small ghost button reads like the card's main action. It belongs in the
+     corner, level with the "TODAY" label, out of the headline's way. */
+  .today-h { flex-direction: row; align-items: flex-start; gap: 10px; }
+  .today-h > div { min-width: 0; flex: 1 1 auto; }
+  .today-h > .btn { flex: none; margin-top: -2px; }
   .vx-axis { grid-template-columns: 1fr; }
   .pairs { grid-template-columns: 1fr 1fr; }
 }
@@ -1543,8 +1726,22 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .sm-shoot h4 { margin: 14px 0 5px; font-size: 12px; text-transform: uppercase;
   letter-spacing: .04em; color: var(--muted); }
 .sm-shoot ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.7; }
-.sm-yield { width: 100%; font-size: 12px; border-collapse: collapse; }
-.sm-yield td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+.sm-yield { width: 100%; font-size: 12px; border-collapse: collapse;
+  table-layout: fixed; }
+.sm-yield td { padding: 5px 8px; border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere; }
+/* Three columns of prose measured 410px inside a 306px popup, which is what
+   made the Shoot list slide sideways. On a phone the row becomes what it
+   actually is — an asset, and two lines saying where it comes from and how to
+   shoot it — read downwards. */
+@media (max-width: 760px) {
+  .sm-yield, .sm-yield tbody, .sm-yield tr, .sm-yield td { display: block; width: auto; }
+  .sm-yield tr { border-bottom: 1px solid var(--border); padding: 8px 0; }
+  .sm-yield tr:last-child { border-bottom: none; }
+  .sm-yield td { padding: 1px 0; border-bottom: none; }
+  .sm-yield td:first-child { font-size: 13px; margin-bottom: 2px; }
+  .sm-yield td + td { color: var(--muted); font-size: 12px; line-height: 1.5; }
+}
 #smHookCount { font-weight: 400; color: var(--muted); font-style: normal; }
 #smHookCount.over { color: var(--red); font-weight: 600; }
 
@@ -1683,24 +1880,37 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .cal-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
   border-bottom: 1px solid var(--border); }
 .cal-head b { font-size: 14px; min-width: 130px; text-align: center; }
-.cal-dow { display: grid; grid-template-columns: repeat(7, 1fr);
+/* WHY minmax(0, 1fr) AND NOT 1fr.
+   `1fr` is shorthand for `minmax(auto, 1fr)`, and `auto` as a minimum means
+   min-content: a column refuses to shrink below its widest unbreakable word.
+   Seven columns each holding "Chaturthi" or a "REEL" chip came to 405px inside
+   a 360px card, so the month hung 45px off the right edge and the whole
+   Social screen dragged sideways. `minmax(0, 1fr)` lets a column go as narrow
+   as its share of the row and the text inside deal with it.
+   Measured at 390px: 405px before, 360px after. */
+.cal-dow { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
   border-bottom: 1px solid var(--border); background: var(--surface-3); }
 .cal-dow span { padding: 6px 8px; font-size: 10.5px; font-weight: 600;
-  letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
-.cal-cell { min-height: 96px; border-right: 1px solid var(--border);
+  letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.cal-cell { min-height: 96px; min-width: 0; border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border); padding: 5px 6px; display: flex;
-  flex-direction: column; gap: 3px; }
+  flex-direction: column; gap: 3px; overflow: hidden; }
 .cal-cell:nth-child(7n) { border-right: none; }
 .cal-cell.is-pad { background: var(--surface-3); }
 .cal-cell.is-today { background: var(--primary-soft); }
 .cal-cell.is-today .cal-num { color: var(--primary); font-weight: 700; }
 .cal-cell.is-fest { background: var(--amber-soft); }
-.cal-num { font-size: 11.5px; color: var(--muted); }
+/* A festival name is one long word in a 45px column. Breaking it mid-word is
+   the only alternative to pushing the column wider, and a wrapped
+   "Ganesh Chaturthi" still reads; a month that scrolls sideways does not. */
+.cal-num { font-size: 11.5px; color: var(--muted); min-width: 0; }
 .cal-fest { font-size: 10px; font-weight: 700; color: var(--amber);
-  line-height: 1.25; margin-bottom: 1px; }
-.cal-start { font-size: 9.5px; color: var(--muted); line-height: 1.25; font-style: italic; }
-.cal-post { display: flex; align-items: center; gap: 4px; width: 100%;
+  line-height: 1.25; margin-bottom: 1px; min-width: 0; overflow-wrap: anywhere; }
+.cal-start { font-size: 9.5px; color: var(--muted); line-height: 1.25;
+  font-style: italic; min-width: 0; overflow-wrap: anywhere; }
+.cal-post { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0;
   border: none; border-left: 3px solid var(--muted); background: var(--surface-2);
   border-radius: 3px; padding: 3px 5px; cursor: pointer; text-align: left;
   font-size: 10.5px; line-height: 1.3; }
@@ -1711,17 +1921,39 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .cal-post.st-scheduled { border-left-color: var(--blue); }
 .cal-post.st-published { border-left-color: var(--green); }
 .cal-post.st-failed    { opacity: .45; text-decoration: line-through; }
+/* `flex: none` on a 4-letter chip is what made the cell refuse to shrink.
+   It may shrink now, and it truncates rather than widening its column. */
 .cal-fmt { font-size: 8.5px; font-weight: 700; text-transform: uppercase;
-  color: var(--muted); flex: none; }
+  color: var(--muted); flex: 0 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: clip; white-space: nowrap; }
 .cal-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-has-img { width: 5px; height: 5px; border-radius: 50%;
   background: var(--green); flex: none; margin-left: auto; }
 /* A clip reads differently from a still at a glance — square, not round — so
    a seller can see which reels are already filmed without opening each one. */
 .cal-has-vid { border-radius: 1px; background: var(--primary); }
+/* The named-days strip under the month grid. Only earns its space on a phone,
+   where the cells are too narrow to hold a festival name — see the note in
+   renderSocial(). */
+.cal-legend { display: none; }
 @media (max-width: 760px) {
   .cal-cell { min-height: 62px; }
   .cal-name { display: none; }
+  /* Mid-word breaking is what produced "Ganes / h / Chatur / thi". The name
+     is not shown in the cell at all now; the amber tint carries the signal
+     and the strip below carries the word. */
+  .cal-fest, .cal-start { display: none; }
+  .cal-legend {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px;
+    padding: 10px 12px; border-top: 1px solid var(--border);
+    background: var(--surface-2); font-size: 12px; color: var(--text-2);
+  }
+  .cal-legend-h {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--muted); width: 100%;
+  }
+  .cal-leg { display: inline-flex; gap: 5px; align-items: baseline; }
+  .cal-leg b { color: var(--amber); font-weight: 700; }
 }
 
 /* the decisions strip above the calendar */
@@ -1887,8 +2119,8 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .sm-prompt-head { display: flex; align-items: flex-start; gap: 10px;
   padding: 11px 13px; background: var(--surface-2); }
 .sm-prompt-head > div { flex: 1; min-width: 0; font-size: 13px; }
-.sm-prompt-body { margin: 0; padding: 12px 13px; font-size: 11.5px;
-  line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+.sm-prompt-body { margin: 0; padding: 12px 13px; font-size: 11.5px; min-width: 0;
+  line-height: 1.55; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
   max-height: 260px; overflow-y: auto; font-family: ui-monospace,
   "SF Mono", Menlo, monospace; color: var(--text); background: var(--surface); }
 
@@ -2053,7 +2285,37 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
   .shell-body { grid-template-columns: 1fr; }
   .approvals { position: static; height: auto; max-height: none;
     border-left: none; border-top: 1px solid var(--border); }
+
+  /* WHY IT ARRIVES SHUT.
+     "Stacks underneath" was true and still cost 2,261px — measured, nine
+     cards, 35% of the whole home screen — sitting below four groups of tiles
+     where nobody scrolls. A column beside the workspace can afford to show
+     everything at once because it costs no vertical space; the same column
+     stacked underneath cannot. So on a phone it arrives as one line saying
+     how many decisions are waiting, and opens when the seller wants them.
+     Nothing is hidden: the count is the point, and it is the honest summary
+     of what the panel contains. */
+  .approvals { padding-top: 4px; }
+  .ap-head {
+    padding: 14px 2px; margin: 0; cursor: pointer; gap: 10px;
+    min-height: 44px;
+  }
+  .ap-head::after {
+    content: "›"; margin-left: auto; font-size: 19px; color: var(--muted);
+    transition: transform .18s ease; flex: none;
+  }
+  .approvals:not(.shut) .ap-head::after { transform: rotate(90deg); }
+  .approvals.shut .ap-sub, .approvals.shut #approvalList { display: none; }
+  .approvals.shut .ap-head-actions { display: none; }
+  .ap-count {
+    background: var(--primary-soft); color: var(--primary);
+    border-radius: 99px; padding: 2px 9px; font-size: 12px; font-weight: 700;
+    flex: none;
+  }
 }
+/* Beside the workspace there is nothing to fold away — the column is always
+   open and its header is not a button. */
+@media (min-width: 901px) { .ap-count { display: none; } }
 
 /* NOTE: there used to be `html, body { overflow-x: hidden }` here.
    It clipped every page at one viewport height.
@@ -2072,10 +2334,13 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
      the account email sat alone in the middle of the screen with a button
      beside it and nothing to the left. Left-aligned under the heading reads as
      one block instead of two orphans. */
-  .page-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
-  /* The signed-in address is context, not an action — it goes on its own line
-     under the buttons rather than competing with them for the same row. */
+  /* Buttons sit beside the greeting now, not on a row of their own: the
+     account address moved up under the heading, which freed the space. */
+  .page-actions { width: auto; justify-content: flex-end; flex-wrap: wrap; margin-left: auto; }
+  /* Any address still rendered inside an actions row (other modules) stays on
+     its own line rather than competing with the buttons. */
   .page-actions > .muted { order: 99; width: 100%; font-size: 12px; }
+  .ph-sub { max-width: 52vw; }
   /* Buttons here must never wrap their own label: a squeezed flex item turned
      "⟳ Refresh" into an icon stacked above the word, which looks broken. */
   .page-actions .btn { white-space: nowrap; flex: none; }
@@ -2153,7 +2418,13 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
    ========================================================== */
 @media (max-width: 860px) {
   .btn, button, select, .chip, [role="button"] { min-height: 40px; }
-  .btn.tiny, .btn.xs { min-height: 36px; padding-left: 12px; padding-right: 12px; }
+  /* These were carved out at 36px to stay visually "tiny". Measured across
+     fourteen modules, `.btn.tiny` is the single most common control a seller
+     touches — Edit, Details, Approve & send, Download — and 36px is under the
+     threshold where a thumb starts missing. The exemption is withdrawn: on a
+     touch screen nothing a finger has to hit is smaller than 40px. They still
+     read as small buttons; they are just hittable ones. */
+  .btn.tiny, .btn.xs { min-height: 40px; padding-left: 12px; padding-right: 12px; }
 
   /* Icon-only buttons need width as well as height, or they stay a sliver. */
   .btn.tiny:not(:has(span)), .gal-x, .dl-x, .cal-post,
@@ -2169,11 +2440,29 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 
   /* Calendar month arrows. */
   #calPrev, #calNext, #calToday { min-width: 44px; min-height: 40px; }
+  /* The month name reserved 130px so the row would not jiggle between
+     "May" and "September". On a phone that reservation plus two 44px arrows
+     plus "Today" is wider than the screen, so the row wraps instead — a
+     second line is better than a header hanging off the edge. */
+  .cal-head { flex-wrap: wrap; }
+  .cal-head b { min-width: 0; flex: 1 1 auto; }
+  #calToday { margin-left: 0 !important; }
 
-  /* Nothing readable drops below 11px on a phone. */
+  /* Nothing readable drops below 11px on a phone.
+     This used to be a list of classes someone had noticed, which meant every
+     new 10px label shipped unnoticed until someone squinted at it. Measuring
+     all fourteen modules at 390px turned up eight more: the Today eyebrow, the
+     occasion chip, the order labels, the MOQ badge, the purchase-order status
+     pill, the campaign weighting, and the Website Builder's pair labels.
+     They are enumerated here with the rest, and scripts/test_mobile_css.py now
+     fails the build if a font-size under 11px appears in a phone rule without
+     being listed. */
   .tiny, .muted.tiny, .cmp-when, .sm-chip, .cal-fmt, .up-fmt,
   .st-meta, .chan-pill, .sm-metric-w, .sm-pil-w, .cr-play,
-  .req, .sk-bar + span { font-size: 11.5px !important; }
+  .req, .sk-bar + span,
+  .today-eyebrow, .sm-occ, .ord-lbl, .sup-badge, .po-st,
+  .cmp-weight, .pair-lbl, .pair-rec,
+  .cal-dow span, .gal-add span { font-size: 11.5px !important; }
   .cal-num, .cal-fest, .cal-start { font-size: 11px !important; }
 
   /* iOS zooms the whole page when a focused input is under 16px. That zoom
@@ -2261,7 +2550,7 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .pp-head { padding: 8px 11px; border-bottom: 1px solid var(--border); font-size: 12.5px; font-weight: 600;
   display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .pp-text { margin: 0; padding: 10px 11px; font-size: 11.5px; line-height: 1.6; white-space: pre-wrap;
-  word-break: break-word; max-height: 210px; overflow-y: auto; color: var(--text-2);
+  word-break: break-word; overflow-wrap: anywhere; min-width: 0; max-height: 210px; overflow-y: auto; color: var(--text-2);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .pp-src { border-top: 1px solid var(--border); padding: 8px 11px; display: flex; flex-direction: column; gap: 5px; }
 .pp-row { display: grid; grid-template-columns: 16px auto 1fr; gap: 8px; align-items: baseline; font-size: 12px; }
@@ -2411,8 +2700,12 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
   /* Dismiss is not an action anyone came here to take. At phone size the
      bordered button was as visually loud as the headline; it needs to be
      reachable (44px of touch target) without looking important. */
-  #guideHide { border: 0; background: none; padding: 6px; margin: -6px -6px 0 0; opacity: .55; }
-  #guideHide::after { content: ""; position: absolute; inset: -10px; }
+  /* The touch target grows inwards and upwards only. It used to grow to the
+     right as well (a -6px margin plus a -10px inset), which put an invisible
+     16px of box past the edge of the card — enough to make the home screen
+     itself scrollable sideways for no reason the seller could see. */
+  #guideHide { border: 0; background: none; padding: 6px; margin: -6px 0 0 0; opacity: .55; }
+  #guideHide::after { content: ""; position: absolute; inset: -10px 0 -10px -14px; }
   .guide-head > button { position: relative; }
 }
 
@@ -2425,7 +2718,19 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .fold > summary::before { content: "›"; display: inline-block; transition: transform .15s ease;
   font-size: 17px; color: var(--muted); width: 12px; }
 .fold[open] > summary::before { transform: rotate(90deg); }
+/* The folded version of the how-this-works card, shown once the seller has
+   their sales in and no longer needs the long explanation every morning. */
+.guide-fold > summary { flex-wrap: wrap; }
+.guide-fold .guide-steps { margin: 2px 0 12px; }
+.guide-fold .guide-foot { padding-bottom: 12px; }
 .fold > summary + * { margin-bottom: 14px; }
+/* A footnote, not a section. Used where the folded thing is an explanation
+   the seller reads once rather than a part of the screen they work in — it
+   should not draw a box around itself and sit there looking unfinished. */
+.fold.quiet { border: none; background: none; padding: 0; margin-bottom: 10px; }
+.fold.quiet > summary { padding: 6px 0; font-weight: 500; color: var(--muted);
+  font-size: 12.5px; }
+.fold.quiet > summary:hover { color: var(--text); }
 .fold-count { background: var(--primary-soft); color: var(--primary); border-radius: 99px;
   padding: 1px 8px; font-size: 11px; font-weight: 700; }
 @media (max-width: 640px) {
@@ -2462,16 +2767,44 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
    ===================================================================== */
 
 /* ---------- the task list, now the first thing on Home ---------- */
-.task-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); padding: 16px 20px 10px; margin-bottom: 18px;
-  box-shadow: var(--shadow);
+/* The seller's own tasks, now living inside the Today card rather than in a
+   second card above it. The hairline is the only thing separating "what your
+   shop needs" from "what you wrote down", because on a phone a second card
+   header costs about 90px and earns nothing. */
+/* The email-me-this setting, at the end of the card where a setting belongs. */
+.today-foot { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.today-foot .btn { color: var(--muted); }
+/* NO DIVIDER HERE, ON PURPOSE.
+   There used to be a `border-top` between the rows the app worked out and the
+   rows the seller wrote down, which is a distinction only the software cares
+   about. To the person reading it at 8am they are one list: things to do
+   today. The rows below now continue the ones above — same rhythm, same gap,
+   same hover — so the eye never registers a second section. */
+.today-tasks { margin-top: 0; display: flex; flex-direction: column; gap: 2px; }
+.today-tasks .task-add { margin: 4px 0 2px; }
+.today-tasks .task-add input { font-size: 13.5px; }
+/* The seller's own rows, wearing the same clothes as the worked-out ones. */
+.today-tasks .task-item {
+  border-bottom: none; border-radius: 9px; padding: 10px 8px;
+  gap: 11px; transition: background .12s;
 }
-.task-card-h { display: flex; align-items: flex-end; justify-content: space-between;
-  gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
-.task-card-h h3 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
-.task-card .task-add { margin: 0; flex: 1 1 260px; max-width: 420px; }
-.task-post { align-items: flex-start; padding: 11px 4px; }
+.today-tasks .task-item:hover { background: var(--surface-2); }
+.today-tasks .task-item .t { font-size: 13.8px; font-weight: 600; }
+.today-tasks .task-item.done .t { font-weight: 500; }
+/* "Add something of your own" — the last line of the list, not a form.
+   It only becomes an input once someone means it. */
+.task-open {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  border: none; background: none; cursor: pointer; text-align: left;
+  padding: 10px 8px; border-radius: 9px; font: inherit; font-size: 13.3px;
+  color: var(--muted); transition: background .12s, color .12s;
+}
+.task-open:hover { background: var(--surface-2); color: var(--text); }
+.task-open svg { width: 15px; height: 15px; flex: none; }
+.task-open[hidden] { display: none; }
+/* The hairline this used to cancel is gone entirely now — there is no
+   divider left to suppress, because the two lists became one. */
+.task-post { align-items: flex-start; padding: 11px 8px; border-radius: 9px; }
 .task-post .t { display: grid; gap: 3px; min-width: 0; }
 .task-post .t b { font-size: 13.8px; font-weight: 600; line-height: 1.35; }
 .task-sub { font-size: 12px; color: var(--muted); line-height: 1.45; }
@@ -2484,6 +2817,20 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .task-ico.reel { background: var(--amber-soft); color: var(--amber); }
 .task-ico.photo { background: var(--blue-soft); color: var(--blue); }
 .task-post .btn { flex: none; align-self: center; }
+/* On a phone the task title was being squeezed into a three-line column beside
+   the button. The text gets the full width and the button sits under it. */
+@media (max-width: 620px) {
+  /* Icon and title keep their row; only the button drops to the next one.
+     `flex: 1 1 auto` did not achieve that: `auto` makes the title's base size
+     its max-content width, and a flex item whose base size does not fit the
+     remaining space moves to a new line before shrinking is ever considered —
+     so the reel icon sat alone on a line above its own title. A zero basis
+     means the title takes what is left beside the icon and wraps inside
+     itself, which is what the comment always claimed. */
+  .task-post { flex-wrap: wrap; }
+  .task-post .t { flex: 1 1 0; min-width: 0; }
+  .task-post .btn { flex: 1 0 100%; width: 100%; margin-top: 8px; align-self: stretch; }
+}
 
 /* ---------- Approval panel: the week header and why-this-product ---------- */
 .ins-kind.plan { background: var(--primary-soft); color: var(--primary); }
@@ -2562,7 +2909,11 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .ap-setup-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
 
 /* ---------- editor: what Studio will draw ---------- */
-.sm-studio { display: grid; grid-template-columns: 96px 1fr; gap: 10px; align-items: start; margin-top: 8px; }
+/* min-width:0 on the text track: a grid column is min-content wide by default,
+   so without it the longest unbreakable token in the prompt sets the width of
+   the whole popup. */
+.sm-studio { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: start; margin-top: 8px; }
+.sm-studio > * { min-width: 0; }
 .sm-studio img { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
 .sm-studio .pp-text { max-height: 160px; overflow: auto; }
 .sm-studio:not(:has(img)) { grid-template-columns: 1fr; }
@@ -2644,6 +2995,23 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 /* a PO row carries more actions than an inventory row — let them wrap */
 .sup-table td.sup-actions { white-space: normal; }
 .sup-table td.sup-actions .btn { margin: 1px 0; }
+
+/* ---------- what an icon button says when there is no mouse ----------
+   A `title` tooltip is a hover, and a phone has no hover. Every icon-only
+   control in a row therefore carries a real word in a `.btn-lbl`, hidden
+   while there is room for a tooltip and shown the moment the row becomes a
+   card. The toggle that folds the arithmetic away is desktop-pointless — the
+   table shows every column there — so it only exists on a phone. */
+.btn-lbl { display: none; }
+.sup-more { display: none; }
+/* Shares the 900px table-becomes-a-card breakpoint above — see the long note
+   there. These two must switch together or a card ends in mute icons. */
+@media (max-width: 900px) {
+  .btn-lbl { display: inline; }
+  .sup-more { display: inline-flex; }
+  .sup-more svg { transition: transform .18s ease; }
+  .sup-more.is-open svg { transform: rotate(180deg); }
+}
 
 /* pointing your own domain at the shop */
 .dom-help { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px;

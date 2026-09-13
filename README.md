@@ -1272,6 +1272,141 @@ answers how many came back and what they spent in the following 30 days. The
 headline lands on the home screen. The method is stated on screen rather than
 implied — it is not a controlled test, it is what their own sales data says.
 
+## The UI pass, measured on a 390px render
+
+A seller reported three things: the Social Media popup slid sideways under a
+thumb, the inventory table was unusable on anything but a desktop, and the Home
+screen had two competing to-do lists. Each turned out to be an instance of
+something general, and the general thing is what was fixed. Every number below
+was measured in a headless Chromium at 390×844, not estimated.
+`scripts/test_ui_polish.py` (55 assertions) guards the lot.
+
+### A grid column that will not shrink
+
+`repeat(7, 1fr)` is shorthand for `repeat(7, minmax(auto, 1fr))`, and `auto` as
+a minimum means *min-content*: a column refuses to go narrower than its longest
+unbreakable word. The month calendar's cells held "Chaturthi" and a "REEL"
+chip, so the grid measured **405px inside a 360px card** and the whole Social
+screen dragged sideways. `minmax(0, 1fr)` on `.cal-grid` and `.cal-dow`, plus
+`min-width: 0` on the cell and `flex: 0 1 auto` on the chip that was holding
+the column open: 405px → 360px.
+
+The same sweep found two more in popups. `.modal-actions` was
+`justify-content: flex-end` with `nowrap`, which overflows to the **left** —
+the one direction nothing can scroll to — putting "Close" 29px past the edge of
+a 306px popup, clipped and untappable. And the Shoot list's three-column yield
+table measured 410px in the same 306px box.
+
+The systemic fix is `.modal-body { overflow-x: clip }`. It used to be
+`overflow-x: auto`, which turned any slightly-too-wide child into a popup that
+slid under a thumb. `clip` stops the drag without creating a scroll container,
+so a `.table-scroll` inside can still scroll deliberately where a wide table
+genuinely belongs. No popup can do it again.
+
+### A control whose only explanation is a tooltip
+
+A `title` attribute is a hover, and a phone has no hover. Sweeping all fourteen
+modules turned up **nine buttons that were a bare icon and a tooltip** — and on
+a phone the inventory card ended in four identical full-width grey boxes, one
+of which deleted the item.
+
+Every icon-only control now carries a name. Where there is room for a word it
+gets a visible one in a `.btn-lbl`, hidden again above tablet width so the
+desktop row keeps its compact icons; where a word would swallow the control —
+the little `×` on a gallery thumbnail — it gets an `aria-label`, read aloud and
+surfaced on long-press but invisible to the layout. Fourteen controls were
+given accessible names. The test parses `smart.js` for `<button>` elements
+whose content reduces to nothing after emoji and `${sic(...)}` are removed, so
+the next one fails the build rather than shipping.
+
+Touch targets went with it: `.btn.tiny` was exempted at 36px to stay visually
+small, and it is the single most common control a seller touches — Edit,
+Details, Approve & send, Download. The exemption is withdrawn; nothing a finger
+has to hit is under 40px. Eight more classes were found rendering below 11px
+and raised.
+
+### Eleven columns, on a device that has no room for eleven columns
+
+The table-to-card conversion already existed. Three things were wrong with it.
+
+The breakpoint sat at 760px, just under an iPad held upright (768px), so a
+tablet got the full eleven-column table squeezed into 768px and scrolling
+sideways inside its own box — the worst of both layouts. Eleven columns want a
+thousand pixels; the cutoff moved to **900px**.
+
+Column headings have two jobs that pull apart. In a narrow table column they
+get abbreviated — DOS, MOQ, DOQ — and on a phone the same heading becomes a
+full-width label where "DOS" is a word from our side of the screen, explained
+by a tooltip that needs a mouse. `data-card-label` lets a column keep its short
+name in the table and say what it means in the card: *Days left*, *Smallest
+order*, *Order this many*, *Used each day*, *Delivery takes*, *Reorder at*.
+
+And eleven fields stacked vertically is a screen and a half per item. Five
+answer "have I got enough, and who do I ring"; the other six are the arithmetic
+behind them, marked `data-card-hide` and folded behind a per-row toggle. Status
+moved from the eleventh line to the first (`data-card-first`), because whether
+an item is fine or short is the one thing nobody should have to scroll for.
+The inventory screen went **8,686px → 6,306px** on a phone, and the module is
+now readable at 390px, 768px and 1440px.
+
+### One list, not a list and a widget
+
+The seller's own tasks sat below a hairline rule, under a standing
+"Add your own task…" input, which made the Today card read as two things
+stacked: a digest, and then a little to-do app. They are the same kind of
+thing — work to do this morning — and the distinction between "what the
+software worked out" and "what you wrote down" is one only the software cares
+about. The divider is gone, the rows share the same rhythm and hover, the
+headline counts both, and adding one is a quiet last line of the list that
+becomes an input when someone means it (Escape or leaving it blank folds it
+back; adding one keeps it open and focused, because morning tasks arrive in
+threes).
+
+### What a phone screen can actually hold
+
+The Approval panel is a 340px column beside the workspace, where it costs no
+vertical space and rightly shows everything. Stacked under a phone screen the
+same panel measured **2,261px — nine cards, 35% of the entire Home screen** —
+below four groups of tiles, past where anybody scrolls. On a phone it now
+arrives shut, showing the one number that matters ("8 waiting"), and opens on a
+tap. Nothing is hidden: the count *is* the honest summary. Home went
+**6,573px → 4,389px**, from 7.8 phone screens to 5.2.
+
+The header is only announced as a button at the width where it is one, via
+`matchMedia`, and the History and Refresh buttons that live in the same row
+still work rather than toggling the panel.
+
+### A festival name in a 45px column
+
+A phone gives each calendar day about 45 pixels. "Ganesh Chaturthi" does not
+fit, and forcing it to wrap produced `Ganes / h / Chatur / thi`, which reads as
+a broken layout rather than as a festival. Below phone width the day keeps its
+amber tint — the signal that something is on — and the names move to a strip
+under the grid, where there is a whole line to say them in.
+
+That strip is built from the days the grid actually marked, not from
+`cal.festivals` directly: a festival whose own date falls in the *next* month
+still gets a "starts" mark in this one, and reading the date straight off the
+record printed "11 Navratri" under a September calendar when what September has
+is the 20th.
+
+### Two tests that were passing for the wrong reason
+
+`test_mobile_css.py` forbade the string `overflow-x: hidden` anywhere in the
+stylesheet. That is not the rule. The bug it was written for was
+`html, body { overflow-x: hidden }`, which promotes the document to a scroll
+container one viewport tall and clips every page at the fold; on a *bounded*
+box — a popup, a scrolling table — the same declaration is correct, and
+`.modal` depends on it. The check passed for months only because the file's one
+occurrence sat inside a comment the stripper removes, and it failed the moment
+a real declaration appeared, having proved nothing in between. It now checks
+what it always meant: not on `html`, `body`, `#view` or `.main`.
+
+`test_autoplan.py` asserted that `id="taskBox"` appeared *before* `id="todayBox"`
+in the source, encoding the old two-card layout. Tasks are inside the Today
+card now, so the check asserts the new structure — task list within the card,
+card above the module tiles — which is a stronger statement of the same intent.
+
 ## Speed, on the phone that actually matters
 
 Measured in a 390px Chromium at 4× CPU throttle on a 1.5 Mbps connection — a

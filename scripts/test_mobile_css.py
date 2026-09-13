@@ -44,12 +44,31 @@ def must(cond, msg, why=""):
 print("\n== mobile layout regressions ==")
 
 # ---------------------------------------------------------------- the clipper
-must("overflow-x: hidden" not in APP,
-     "the app never sets overflow-x:hidden",
-     "On <body> it promotes the element to a scroll container. Combined with "
-     "height:100% that container is one viewport tall, so every page was "
-     "clipped at the fold with dead grey below. Use `overflow-x: clip` on "
-     "<html>, or fix the wide child instead.")
+# WHAT THIS RULE ACTUALLY IS, AND WHY IT WAS WRITTEN TOO WIDE.
+#
+# The bug was `html, body { overflow-x: hidden }`: on the document it promotes
+# the element to a scroll container, and with the height:100% above it that
+# container is exactly one viewport tall, so every page was clipped at the
+# fold with dead grey below. It looked like the app had failed to load.
+#
+# The check used to forbid the string ANYWHERE in the stylesheet. That is not
+# the rule. On a bounded box — a popup, a scrolling table — `overflow-x:
+# hidden` is correct and deliberate, and the app relies on it: `.modal` uses it
+# to guarantee a popup can never slide sideways whatever it is given.
+#
+# It passed for a long time only because the one occurrence in the file sat
+# inside a comment that the stripper above removes. The first real declaration
+# to appear made it fail, having proved nothing in between. So it now checks
+# the thing it always meant: not on the document, and not on a full-page
+# container. Anywhere else is the author's business.
+_doc_clip = re.search(
+    r"(?:^|[}\n])\s*(?:html|body|html\s*,\s*body|body\s*,\s*html|#view|\.main)"
+    r"\s*\{[^}]*overflow-x:\s*hidden", APP, re.M)
+must(_doc_clip is None,
+     "overflow-x:hidden is never put on the document or a full-page container",
+     "On <body> it makes the page one viewport tall and clips everything "
+     "below the fold. Use `overflow-x: clip` there, or fix the wide child. "
+     "On a popup or a table box it is fine and the app depends on it.")
 
 must(not re.search(r"^html,\s*body\s*\{[^}]*[^-]height:\s*100%", APP, re.M),
      "the app document can grow past one viewport",
