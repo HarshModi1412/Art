@@ -639,7 +639,17 @@ check("the file picker only offers real video types",
       'accept="video/mp4,video/webm,video/quicktime"' in _js3)
 check("oversized clips are caught before the upload starts",
       "48 * 1024 * 1024" in _js3)
-check("uploading shows the working indicator", "Uploading your clip" in _js3)
+# This used to check for the string "Uploading your clip" — the label on the
+# blocking overlay that sat over the editor for the whole upload. A 40MB reel
+# on mobile data is the better part of a minute behind an indeterminate
+# spinner, which is the same thing the app showed for a 200ms save; the only
+# rational reading of it is "this has hung". The overlay is gone and the
+# upload now reports real bytes sent, in the clip slot itself, so the check
+# is for the bar rather than for the spinner's wording.
+check("uploading shows a real progress bar, not a spinner",
+      "progressBar(" in _js3 and "apiUpload(" in _js3)
+check("and it is driven by bytes actually sent",
+      "xhr.upload.onprogress" in _js3)
 check("the post is told which clip is its own after upload",
       "/api/social/attach-video" in _js3)
 check("a post missing its media says so instead of failing on the day",

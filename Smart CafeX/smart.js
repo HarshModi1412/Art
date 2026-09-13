@@ -141,6 +141,30 @@ function toastUndo(message, undoFn, ms = 7000) {
   _undo = { timer: setTimeout(close, ms) };
 }
 
+/* A toast that offers a next step instead of interrupting with one.
+   Approving a reel used to throw the step-by-step popup open over whatever
+   the seller was doing — fine if they approved one, an ambush if they were
+   working down a list of six. The offer sits there for seven seconds and
+   costs nothing to ignore. */
+function toastAction(message, actionLabel, fn, ms = 7000) {
+  const t = $("toast");
+  clearTimeout(t._t);
+  if (_undo) { clearTimeout(_undo.timer); _undo = null; }
+  t.hidden = false;
+  t.innerHTML = "";
+  const span = document.createElement("span");
+  span.textContent = message;
+  const btn = document.createElement("button");
+  btn.className = "toast-undo";
+  btn.type = "button";
+  btn.textContent = actionLabel;
+  t.appendChild(span);
+  t.appendChild(btn);
+  const close = () => { t.hidden = true; t.textContent = ""; };
+  btn.onclick = () => { close(); try { fn(); } catch (e) {} };
+  t._t = setTimeout(close, ms);
+}
+
 /* Every one of these had to be written out, because `res.statusText` - which
    this function used to fall back on - is ALWAYS an empty string over HTTP/2,
    and HTTP/2 is what Render serves. Any error whose body was not JSON with a
@@ -170,6 +194,103 @@ const HTTP_MSG = {
 const RETRY_STATUS = new Set([429, 502, 503, 504]);
 const RETRY_MAX = 2;
 const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* =========================================================================
+   UPLOADS, WITH A BAR THAT MEANS SOMETHING
+   =========================================================================
+   `fetch()` cannot tell you how much of a request body has gone out. That is
+   not a small gap here: a seller uploading a 40MB reel over Indian mobile data
+   waits the better part of a minute, and all they had was a spinner, which is
+   the same thing the app shows for a 200ms save. An indeterminate spinner over
+   a long upload is a lie of omission — it says "wait" without saying "for how
+   long", so the only rational reading is "this has hung".
+
+   XMLHttpRequest still reports upload progress, so uploads use it. The bar is
+   real: it is bytes actually sent, not a timer pretending.
+
+   Past 100% the bytes are gone but the server is still working — cleaning a
+   watermark off a clip takes real seconds — so the bar switches to an
+   indeterminate state and says what is happening rather than sitting at 100%
+   looking stuck.
+   ========================================================================= */
+function apiUpload(path, formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", path, true);
+    xhr.setRequestHeader("X-Session-Id", state.sessionId);
+    if (state.token) xhr.setRequestHeader("Authorization", "Bearer " + state.token);
+    xhr.upload.onprogress = (e) => {
+      if (!onProgress) return;
+      onProgress(e.lengthComputable ? e.loaded / e.total : null, e.loaded, e.total);
+    };
+    // Everything is on the wire; whatever happens now is the server's time.
+    xhr.upload.onload = () => { if (onProgress) onProgress(1, 1, 1); };
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText || "{}"); } catch (e) {}
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(data);
+      const d = data.detail;
+      const msg = (d && typeof d === "object" ? d.message : d)
+        || HTTP_MSG[xhr.status] || `The server returned ${xhr.status}.`;
+      const err = new Error(msg);
+      err.status = xhr.status;
+      reject(err);
+    };
+    xhr.onerror = () => {
+      const e = new Error("Could not reach the server. Check your connection and try again.");
+      e.status = 0;
+      reject(e);
+    };
+    xhr.onabort = () => reject(Object.assign(new Error("Upload cancelled."), { aborted: true }));
+    xhr.send(formData);
+    if (onProgress) onProgress(0, 0, 0);
+    return xhr;
+  });
+}
+
+/* The bar itself. Lives where the file is going — in the clip slot, in the
+   picture frame — never in a modal over the top of it, because the thing the
+   seller wants to look at while it uploads is the place it is going. */
+function progressBar(host, label) {
+  if (!host) return { set() {}, done() {}, fail() {} };
+  const box = document.createElement("div");
+  box.className = "up-prog";
+  box.innerHTML = `<div class="up-prog-h"><span class="up-prog-l">${esc(label || "Uploading")}</span>
+      <span class="up-prog-p">0%</span></div>
+    <div class="up-prog-track"><div class="up-prog-fill" style="width:0%"></div></div>`;
+  host.appendChild(box);
+  const fill = box.querySelector(".up-prog-fill");
+  const pct = box.querySelector(".up-prog-p");
+  const lbl = box.querySelector(".up-prog-l");
+  return {
+    set(frac) {
+      if (frac == null) { box.classList.add("indet"); pct.textContent = ""; return; }
+      box.classList.remove("indet");
+      const p = Math.max(0, Math.min(100, Math.round(frac * 100)));
+      fill.style.width = p + "%";
+      pct.textContent = p + "%";
+      if (p >= 100) { box.classList.add("indet"); pct.textContent = ""; }
+    },
+    /* 100% is not "finished" — it is "your phone is done, ours is not". */
+    working(text) { box.classList.add("indet"); pct.textContent = ""; lbl.textContent = text; },
+    done(text) {
+      box.classList.remove("indet");
+      box.classList.add("ok");
+      fill.style.width = "100%";
+      lbl.textContent = text || "Done";
+      pct.textContent = "";
+      setTimeout(() => { if (box.isConnected) box.remove(); }, 1100);
+    },
+    fail(text) {
+      box.classList.remove("indet");
+      box.classList.add("bad");
+      lbl.textContent = text || "That did not upload";
+      pct.textContent = "";
+      setTimeout(() => { if (box.isConnected) box.remove(); }, 4200);
+    },
+    remove() { if (box.isConnected) box.remove(); },
+  };
+}
 
 async function api(path, opts = {}, attempt = 0) {
   const headers = { "X-Session-Id": state.sessionId, ...(opts.headers || {}) };
@@ -1114,7 +1235,13 @@ function openModal(title, bodyHtml, opts = {}) {
   closeModal();
   const wrap = document.createElement("div");
   wrap.className = "modal-back";
-  wrap.innerHTML = `<div class="modal${opts.wide ? " wide" : ""}">
+  /* `opts.owner` stamps the popup with the thing it is about — a post id, say.
+     Slow work started in one popup finishes after the seller has opened
+     another, and a handler that looks up ".modal-actions" finds whichever
+     popup is open now, not the one it came from. The stamp lets a late
+     arrival check that it is still writing into its own popup. */
+  wrap.innerHTML = `<div class="modal${opts.wide ? " wide" : ""}"${
+      opts.owner ? ` data-post="${esc(String(opts.owner))}"` : ""}>
       <div class="modal-head"><b>${esc(title)}</b>
         <button class="btn ghost tiny" data-mclose title="Close" aria-label="Close this popup">${sic("close")}</button></div>
       <div class="modal-body">${bodyHtml}</div>
@@ -1411,9 +1538,14 @@ function wireSetupCard() {
 function moduleTile(m) {
   const locked = m.needs && !(state.data[m.needs] && state.data[m.needs].ready);
   const upcoming = !!m.upcoming;
-  // "Needs sales data" beats "Locked": one tells you what to do, the other
-  // tells you off.
-  const why = m.needs === "review" ? "Add your reviews first" : "Add your sales file first";
+  /* "Needs sales data" beats "Locked": one tells you what to do, the other
+     tells you off.
+     Shortened from "Add your reviews first" because on a phone the tile is a
+     row, and four words in a badge wrapped to three shouting lines that pushed
+     the module's own name into two. The group heading above it already carries
+     the instruction ("Needs your customer reviews. Optional."), so the badge
+     only has to name the missing thing. */
+  const why = m.needs === "review" ? "Needs reviews" : "Needs sales";
   return `<div class="app-tile ${m.cls} ${locked || upcoming ? "locked" : ""}" data-mod="${m.id}">
       <div class="app-ico">${sic(m.ico)}</div>
       <div class="name">${esc(m.name)}</div>
@@ -1691,21 +1823,52 @@ function todayHeadline(items, tasks) {
    appear here if there were any is the second empty state that made the home
    screen feel like it was apologising twice. The "Add your own task…" box
    sitting right underneath is the explanation. */
+/* HOW MANY THINGS A MORNING LIST CAN BE.
+   Measured on an account that had let work pile up: twenty-one tasks, and the
+   Today card came to 3,412px — four phone screens of list, on the card whose
+   entire job is answering "what do I do now". Past about six rows a list stops
+   being an answer and becomes a backlog, and a backlog is exactly the thing a
+   seller opens this app to avoid looking at.
+   The first six, in the order they already come in (posts by their time, then
+   the seller's own), and the rest one tap away. The headline still counts all
+   of them, because the count is the honest number — it is the reading that is
+   capped, not the truth. */
+const TASKS_SHOWN = 6;
+let _tasksExpanded = false;
+
 function taskRowsHtml(tasks) {
-  const rows = orderTasks(tasks);
-  if (!rows.length) return "";
+  const all = orderTasks(tasks);
+  if (!all.length) return "";
+  const hidden = _tasksExpanded ? 0 : Math.max(0, all.length - TASKS_SHOWN);
+  const rows = hidden ? all.slice(0, TASKS_SHOWN) : all;
+  const more = hidden
+    ? `<button type="button" class="task-more" id="taskMore">${sic("chevron-down")}
+         <span>${hidden} more waiting</span></button>`
+    : (_tasksExpanded && all.length > TASKS_SHOWN
+       ? `<button type="button" class="task-more" id="taskMore">${sic("chevron-down")}
+            <span>Show fewer</span></button>` : "");
   return rows.map((t) => {
     if (t.post_id && !t.done) {
       const steps = t.steps || [];
       const doneSteps = new Set(t.steps_done || []);
       const n = steps.filter((x) => doneSteps.has(x.id)).length;
       const next = steps.find((x) => !doneSteps.has(x.id));
+      /* The task's own text carries its deadline inline — "Make the reel for
+         Linen Dupatta — goes out Mon 14 Sep, 7:00 PM" — which is right in an
+         email digest and wrong in a list, where it wrapped to three bold lines
+         and made a 200px row out of a one-line job. The deadline is context,
+         not the instruction, so it joins the other context underneath. The
+         server's wording is untouched: this is a display decision, and the
+         digest still reads as one sentence. */
+      const cut = String(t.text || "").split(" — ");
+      const title = cut[0];
+      const when = cut.length > 1 ? cut.slice(1).join(" — ") : "";
       return `
       <div class="task-item task-post" data-task="${esc(t.id)}">
         <span class="task-ico ${t.kind === "video" ? "reel" : "photo"}">${sic(t.kind === "video" ? "play" : "image")}</span>
         <div class="t">
-          <b>${esc(t.text)}</b>
-          <span class="task-sub">${n} of ${steps.length} steps done${next ? ` · next: ${esc(next.label)}` : ""}${t.reason ? ` · ${esc(t.reason.length > 90 ? t.reason.slice(0, 88) + "…" : t.reason)}` : ""}</span>
+          <b>${esc(title)}</b>
+          <span class="task-sub">${when ? esc(when.charAt(0).toUpperCase() + when.slice(1)) + " · " : ""}${n} of ${steps.length} steps done${next ? ` · next: ${esc(next.label)}` : ""}${t.reason ? ` · ${esc(t.reason.length > 90 ? t.reason.slice(0, 88) + "…" : t.reason)}` : ""}</span>
           <span class="task-dots">${steps.map((x) => `<i class="${doneSteps.has(x.id) ? "on" : ""}" title="${esc(x.label)}"></i>`).join("")}</span>
         </div>
         <button class="btn primary sm" data-vtask="${esc(t.id)}">${t.kind === "video" ? "Open task" : "Add picture"}</button>
@@ -1717,9 +1880,14 @@ function taskRowsHtml(tasks) {
         <span class="t">${esc(t.text)}</span>
         <button class="task-del" title="Delete this task" aria-label="Delete this task">${sic("close")}</button>
       </div>`;
-  }).join("");
+  }).join("") + more;
 }
 function wireTasks() {
+  const more = $("taskMore");
+  if (more) more.onclick = () => {
+    _tasksExpanded = !_tasksExpanded;
+    paintTasks(((state.lastState || {}).tasks) || []);
+  };
   document.querySelectorAll("#taskList [data-vtask]").forEach((b) => b.onclick = () => openVideoTask(b.dataset.vtask));
   document.querySelectorAll("#taskList [data-task]").forEach((row) => {
     const box = row.querySelector("input[type=checkbox]");
@@ -1752,6 +1920,232 @@ function refreshTaskList(tasks) {
      of small wrongness that makes people stop trusting the number. */
   const head = $("todayTitle");
   if (head) head.textContent = todayHeadline(_todayItems, tasks || []);
+}
+
+/* =========================================================================
+   ONE TAP, AND THE TAP IS THE WHOLE WAIT
+   =========================================================================
+   Approving used to mean: open a blocking overlay, hold the seller there for
+   the entire server round trip — which for a photo post includes drawing the
+   picture with an AI, on half a CPU — then refetch the whole app state, then
+   refetch the social plan, then repaint. The seller taps "Approve" and watches
+   a spinner for several seconds, having already made the only decision that
+   needed them.
+
+   The decision is the seller's part. The work is ours. So the tap now does
+   what the seller means by it: the card leaves, immediately, and the work
+   carries on behind them. Nothing blocks.
+
+   The honest part is what happens when the work fails. A card that vanished on
+   a promise and never came back is worse than a spinner, because the seller
+   believes a thing happened that did not. So a failed job puts its card back,
+   at the top, wearing what went wrong and when — "Tried 4 minutes ago: the
+   picture could not be drawn." The record survives a reload, because the
+   failure outlives the page that saw it.
+
+   This is the machinery. Every approve, dismiss and cancel goes through it.
+   ========================================================================= */
+
+const QUEUE_LANES = 2;          // two at once: enough to feel parallel,
+                                // few enough not to stampede a small dyno
+const FAIL_KEY = "cx_failed_jobs";
+/* Three days, not fourteen. Insight ids repeat — "winback" is a fixed string
+   and a weekly plan can rehash a post to the same id — so a record that
+   outlives its own card attaches itself to a different one. Pruning catches
+   the ids that disappear; this catches the ids that come back. Three days
+   covers a seller who left it on Friday and returns on Monday. */
+const FAIL_TTL_DAYS = 3;
+
+let _jobs = [];                 // {id, label, run, card, state}
+let _lanes = 0;
+let _failed = loadFailures();
+
+function loadFailures() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FAIL_KEY) || "{}");
+    const cut = Date.now() - FAIL_TTL_DAYS * 864e5;
+    const keep = {};
+    for (const [k, v] of Object.entries(raw)) if (v && v.at > cut) keep[k] = v;
+    return keep;
+  } catch (e) { return {}; }
+}
+function saveFailures() {
+  try { localStorage.setItem(FAIL_KEY, JSON.stringify(_failed)); } catch (e) {}
+}
+function clearFailure(id) {
+  if (!_failed[id]) return;
+  delete _failed[id]; saveFailures();
+}
+function noteFailure(id, reason, unsure) {
+  _failed[id] = { reason: String(reason || "It did not go through."),
+                  at: Date.now(), unsure: !!unsure };
+  saveFailures();
+}
+/* "4 minutes ago" beats a timestamp on a card a seller is scanning. */
+function ago(ts) {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 90) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} minute${m === 1 ? "" : "s"} ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} hour${h === 1 ? "" : "s"} ago`;
+  const d = Math.round(h / 24);
+  return `${d} day${d === 1 ? "" : "s"} ago`;
+}
+
+/* The card goes before the request does.
+   id     the insight id, so a failure can put the right card back
+   label  what to say in the working strip ("Making the picture")
+   run    the actual work; resolve = done, throw = put the card back
+   onDone optional, given the resolved value  */
+function runInBackground(id, { label, run, onDone, card } = {}) {
+  /* ONE JOB PER CARD, EVER.
+     The bulk bar holds the list of cards as it was when the panel last
+     painted, and approving a single card does not repaint it — so "Approve all
+     9" could re-send a post the seller had already approved a moment earlier.
+     Two lanes means those two requests are genuinely concurrent: two AI
+     pictures billed, or the same purchase order emailed to a supplier twice.
+     A second job for an id already working is not a retry, it is a duplicate. */
+  if (_jobs.some((j) => j.id === id)) return;
+
+  const insights = ((state.lastState || {}).insights) || [];
+  // The caller may have read the card already (approveWeek has to, because it
+  // removes the whole week's worth before queueing any of them).
+  const keep = card || insights.find((x) => x.id === id) || null;
+
+  clearFailure(id);
+  animateCardOut(id);
+  if (state.lastState) state.lastState.insights = insights.filter((x) => x.id !== id);
+  paintApprovalCount((((state.lastState || {}).insights) || []).filter((i) => !i.summary).length);
+  _jobs.push({ id, label: label || "Working", run, card: keep, onDone, state: "waiting" });
+  syncBulkBar();
+  paintWorkStrip();
+  pumpQueue();
+}
+
+/* "Approve all 9" over a list that is down to two is a lie about how much the
+   tap is agreeing to. The bar counts what is actually left, and goes entirely
+   when there is nothing left to do in bulk. Repainting the whole panel would
+   be simpler and would also cancel the exit animation of the card that just
+   left, which is the one thing on screen the seller is looking at. */
+function syncBulkBar() {
+  const bar = document.querySelector(".ap-bulk");
+  if (!bar) return;
+  const left = (((state.lastState || {}).insights) || []).filter((i) => !i.summary).length;
+  if (left < 2) { bar.remove(); return; }
+  const all = $("apAll");
+  if (all && !all.disabled) all.textContent = `✓ Approve all ${left}`;
+}
+
+function pumpQueue() {
+  while (_lanes < QUEUE_LANES) {
+    const job = _jobs.find((j) => j.state === "waiting");
+    if (!job) break;
+    job.state = "running";
+    _lanes++;
+    paintWorkStrip();
+    Promise.resolve()
+      .then(job.run)
+      .then((r) => {
+        _jobs = _jobs.filter((j) => j !== job);
+        clearFailure(job.id);
+        if (job.onDone) { try { job.onDone(r); } catch (e) {} }
+      })
+      .catch((e) => {
+        _jobs = _jobs.filter((j) => j !== job);
+        /* THERE ARE TWO KINDS OF FAILURE AND ONLY ONE OF THEM IS CERTAIN.
+           A 4xx/5xx is the server saying no: the work did not happen. But
+           `status: 0` is the connection dropping, and that can happen AFTER
+           the request landed — the purchase order is already in the
+           supplier's inbox and only the reply was lost. Telling that seller
+           "This did not go through" and offering "Try again" is how a
+           supplier receives the same order twice. None of these endpoints is
+           idempotent, so the honest word is that we do not know. */
+        const unsure = e && e.status === 0;
+        noteFailure(job.id, unsure
+          ? "The connection dropped before we heard back, so we cannot tell "
+            + "whether it went through. Check before sending it again."
+          : (e && e.message), unsure);
+        /* Back where it was, so the seller can see it and try again. At the
+           top, because a thing that failed is more urgent than a thing that
+           has not been looked at yet. */
+        if (job.card && state.lastState) {
+          const ins = state.lastState.insights || [];
+          if (!ins.some((x) => x.id === job.id)) state.lastState.insights = [job.card, ...ins];
+          renderApprovals(state.lastState.insights);
+        }
+        toast(`${job.label} did not go through — it is back in your approvals.`, 6000);
+      })
+      .finally(() => {
+        _lanes--;
+        paintWorkStrip();
+        if (!_jobs.length) settleAfterQueue();
+        pumpQueue();
+      });
+  }
+}
+
+/* THE ONE PROMISE THIS QUEUE CANNOT KEEP.
+   "Carry on, they finish by themselves" is true of moving around the app —
+   the panel lives outside the view that modules repaint, so jobs survive
+   navigation. It is NOT true of closing the tab: the work is driven from here,
+   and a request that has not gone out yet dies with the page, silently, with
+   no failure record written because the catch never runs.
+   So the one moment it matters, the browser asks. Nothing else in the app does
+   this, and it is deliberately the only thing that does. */
+window.addEventListener("beforeunload", (e) => {
+  if (!_jobs.length) return;
+  e.preventDefault();
+  e.returnValue = "";           // the wording is the browser's, not ours
+  return "";
+});
+
+/* One refresh after the queue drains, not one per job. Approving six posts
+   used to mean six full state refetches racing each other, each repainting
+   the list under the seller's thumb. */
+let _settleTimer = null;
+function settleAfterQueue() {
+  clearTimeout(_settleTimer);
+  _settleTimer = setTimeout(async () => {
+    if (_jobs.length) return;                  // more arrived; that run settles
+    try { await afterPostChange(); } catch (e) {}
+  }, 400);
+}
+
+/* The card's exit. 180ms, inside the window where a person reads movement as
+   their own doing rather than as the app responding to them. */
+function animateCardOut(id) {
+  const sel = window.CSS && CSS.escape ? CSS.escape(String(id)) : String(id);
+  const el = document.querySelector(`.ins-card[data-ins="${sel}"]`);
+  if (!el) return;
+  el.style.setProperty("--h", el.offsetHeight + "px");
+  el.classList.add("ins-leaving");
+  setTimeout(() => { if (el.isConnected) el.remove(); }, 190);
+}
+
+/* The working strip: ambient, never blocking, never in the way. iOS shows
+   background work at the edge of the screen and lets you carry on; it does not
+   put a modal over the thing you were doing. */
+function paintWorkStrip() {
+  let el = $("workStrip");
+  const active = _jobs.length;
+  if (!active) {
+    if (el) { el.classList.remove("on"); setTimeout(() => { if (el.isConnected) el.remove(); }, 260); }
+    return;
+  }
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "workStrip";
+    el.className = "work-strip";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("on"));
+  }
+  const running = _jobs.filter((j) => j.state === "running");
+  const first = running[0] || _jobs[0];
+  el.innerHTML = `<span class="ws-spin" aria-hidden="true"></span>
+    <span class="ws-txt">${esc(first.label)}${active > 1 ? ` · ${active - 1} more` : ""}</span>`;
 }
 
 /* ---------- the panel, on a phone ----------
@@ -1813,6 +2207,21 @@ function paintApprovalCount(n) {
 // ---------- approvals ----------
 function renderApprovals(insights) {
   const list = $("approvalList");
+  // Eleven places paint this panel, and any of them could be holding a list
+  // fetched before the seller's last tap. Filtering here rather than at each
+  // call site means a card can never flicker back for work already in flight.
+  insights = withoutInFlight(insights);
+  /* Anything that failed comes first. A card the seller already decided and
+     which then went wrong is more urgent than one they have not looked at, and
+     it is the one thing in this panel they might otherwise never notice —
+     they believe it is done. Summary cards (the weekly plan header) keep their
+     place at the top; the sort is stable, so everything else holds its order. */
+  if (Object.keys(_failed).length) {
+    const rank = (i) => (i.summary ? 0 : _failed[i.id] ? 1 : 2);
+    insights = (insights || []).map((i, n) => [i, n])
+      .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
+      .map((p) => p[0]);
+  }
   const hist = (state.lastState && state.lastState.history) || { approved: [], dismissed: [] };
   const decidedCount = (hist.approved || []).length + (hist.dismissed || []).length;
   paintApprovalCount((insights || []).filter((i) => !i.summary).length);
@@ -1881,15 +2290,25 @@ function renderApprovals(insights) {
     const why = isPost && i.plan_reason
       ? `<div class="ins-why ${esc(i.signal || "")}">${esc(i.plan_reason)}</div>`
       : i.purchase_order && i.reason ? `<div class="ins-why struggling">${esc(i.reason)}</div>` : "";
+    /* A card that came back. It left on a tap, the work failed behind the
+       seller's back, and it returned — so it has to say so itself, on the
+       card, not in a toast that has long since gone. */
+    const f = _failed[i.id];
+    const failBar = f ? `<div class="ins-failed${f.unsure ? " unsure" : ""}">${sic("alert")}
+        <span><b>${f.unsure
+          ? `We could not confirm this, ${esc(ago(f.at))}.`
+          : `This did not go through ${esc(ago(f.at))}.`}</b>
+        ${esc(f.reason)}</span></div>` : "";
     return head + `
-    <div class="ins-card mgr-card" data-ins="${esc(i.id)}" style="--mgr:${esc(i.manager_colour || "#5c6790")}">
+    <div class="ins-card mgr-card${f ? " has-failed" : ""}" data-ins="${esc(i.id)}" style="--mgr:${esc(i.manager_colour || "#5c6790")}">
       ${kind}
+      ${failBar}
       <div class="ins-title"><span>${esc(i.headline || i.title)}</span></div>
       <div class="ins-detail">${esc(i.body || i.detail)}</div>
       ${why}
       ${need}
       <div class="ins-actions">
-        <button class="btn approve" data-approve="${esc(i.id)}">${esc(i.cta || "Approve")}</button>
+        <button class="btn approve" data-approve="${esc(i.id)}">${f ? (f.unsure ? "Check, then try again" : "Try again") : esc(i.cta || "Approve")}</button>
         <button class="btn ghost" data-details="${esc(i.id)}">Details</button>
         ${isPost
           ? `<button class="btn reject" data-cancel="${esc(i.id)}">Cancel</button>`
@@ -1909,32 +2328,45 @@ function renderApprovals(insights) {
     if (card) approveWeek(card);
   });
 
-  const runAll = async (decision, label) => {
+  /* "Approve all nine" is the tap that most deserves not to be waited on.
+     It used to run nine requests one after another behind a blocking overlay
+     counting "3/9" — the better part of a minute on a small dyno, with the
+     seller pinned to the screen watching a number go up.
+     Now the whole list empties at once and the nine jobs run two at a time
+     behind them. Whichever ones fail come back, individually, each saying what
+     went wrong — which is strictly better than the old behaviour of swallowing
+     every failure and reporting "7 of 9 handled" without ever saying which two
+     or why. */
+  const runAll = (decision, label) => {
+    /* BOTH buttons, not just the one that was pressed.
+       "Dismiss all" stayed live above an emptied list, still wired to the
+       nine insights captured when the bar was drawn — and for posts and
+       purchase orders its branch sends `cancel` with no confirmation. A
+       mis-tap four seconds after "Approve all" cancelled the nine posts the
+       seller had just approved. The bar describes a list that no longer
+       exists; it goes as a whole. */
+    const bar = document.querySelector(".ap-bulk");
+    if (bar) bar.remove();
     const btn = $(decision === "approve" ? "apAll" : "apNone");
     if (btn) { btn.disabled = true; btn.textContent = label + "…"; }
-    // Sequential, not Promise.all: each decision mutates the same server-side
-    // insight list, and firing nine concurrent writes at it loses some of them.
-    // Posts go through the same approve-and-make-ready path as their own
-    // button, so "Approve all" never schedules a post with an empty frame.
-    let done = 0;
     for (const i of actionable) {
-      try {
-        if (String(i.id).startsWith("post_") && decision === "approve") {
-          if (btn) btn.textContent = `${label}… ${done + 1}/${actionable.length}`;
-          await approvePostReady(i.id.slice(5), { batch: true });
-        } else if (String(i.id).startsWith("po_") && decision === "approve") {
-          await api(`/api/supply/po/${encodeURIComponent(i.id.slice(3))}/approve`, { method: "POST", json: {} });
-        } else if (String(i.id).startsWith("post_") || String(i.id).startsWith("po_")) {
-          await api(`/api/smart/insight/${i.id}/decision`, { method: "POST", json: { decision: "cancel" } });
-        } else {
-          await api(`/api/smart/insight/${i.id}/decision`, { method: "POST", json: { decision } });
-        }
-        done++;
+      const id = String(i.id);
+      const jobLabel = i.cta || label;
+      if (id.startsWith("post_") && decision === "approve") {
+        approvePostReady(id.slice(5));
+      } else if (id.startsWith("po_") && decision === "approve") {
+        // Through the same function as its own button, so a PO the server
+        // could not email still opens the "send it yourself" handover here.
+        approvePo(id.slice(3));
+      } else if (id.startsWith("post_") || id.startsWith("po_")) {
+        runInBackground(id, { label: "Cancelling",
+          run: () => api(`/api/smart/insight/${id}/decision`, { method: "POST", json: { decision: "cancel" } }) });
+      } else {
+        runInBackground(id, { label: jobLabel,
+          run: () => api(`/api/smart/insight/${id}/decision`, { method: "POST", json: { decision } }) });
       }
-      catch (e) { /* keep going — one failure should not strand the rest */ }
     }
-    toast(`${done} of ${actionable.length} handled.`);
-    await goHome();
+    toast(`${actionable.length} sent — carry on, they finish by themselves.`, 4000);
   };
   if ($("apAll")) $("apAll").onclick = () => runAll("approve", "Approving");
   if ($("apNone")) $("apNone").onclick = () => runAll("disapprove", "Dismissing");
@@ -1945,31 +2377,47 @@ function renderApprovals(insights) {
 async function approveWeek(card) {
   const ids = card.post_ids || [];
   if (!ids.length) return;
-  const out = { pics: 0, reels: 0, waiting: 0, failed: 0 };
-  try {
-    await withBusy(`Approving ${ids.length} post${ids.length === 1 ? "" : "s"}…`,
-      "Pictures are drawn from your own photos and brand look, cleaned of any watermark and scheduled. Reels go on your task list.",
-      async () => {
-        for (let n = 0; n < ids.length; n++) {
-          busyStep(`Post ${n + 1} of ${ids.length}…`);
-          try {
-            const r = await approvePostReady(ids[n], { batch: true });
-            if (!r) { out.failed++; continue; }
-            if (r.is_reel) out.reels++;
-            else if (r.post && r.post.state === "scheduled") out.pics++;
-            else out.waiting++;
-            if (r.tasks) refreshTaskList(r.tasks);
-          } catch (e) { out.failed++; }
-        }
-      });
-  } catch (e) { toast(e.message); }
-  await afterPostChange();
+
+  /* Approving a week is a single decision about six or seven posts, and it was
+     the longest wait in the app: a blocking overlay counting "Post 4 of 7"
+     while every picture was drawn in turn. A minute, sometimes more, with the
+     seller unable to do anything but watch.
+     The week's card goes on the tap. Each post becomes its own job, so each
+     one can succeed or fail on its own terms — and a post whose picture cannot
+     be drawn comes back as its own card saying so, rather than being summed
+     into "2 could not be approved" with no way to tell which two. */
+  /* READ THE CARDS BEFORE REMOVING THEM.
+     This used to filter the week's posts out of the list first and then look
+     each one up to find out whether it was a reel — by which point the lookup
+     could only ever return undefined. Every job was labelled "Making a
+     picture" even for reels, and, far worse, every job carried a null card, so
+     `pumpQueue`'s failure path had nothing to put back. On a dropped
+     connection the seller got seven toasts saying the posts were "back in your
+     approvals" over an empty panel, and believed a week of posts was
+     scheduled. Nothing but a reload recovered it. */
+  const ins = ((state.lastState || {}).insights) || [];
+  const cards = ids.map((pid) => ins.find((x) => x.id === "post_" + pid) || null);
+
+  animateCardOut(card.id);
+  if (state.lastState) {
+    state.lastState.insights = ins.filter((x) => x.id !== card.id);
+  }
+  ids.forEach((pid, n) => {
+    const isReel = !!(cards[n] && cards[n].kind === "reel");
+    runInBackground("post_" + pid, {
+      card: cards[n],
+      label: isReel ? "Setting up a video task" : "Making a picture",
+      run: () => api("/api/social/approve-ready", { method: "POST", json: { post_id: pid } }),
+      onDone: (r) => { if (r && r.tasks) refreshTaskList(r.tasks); },
+    });
+  });
+  const reels = cards.filter((c) => c && c.kind === "reel").length;
+  const pics = ids.length - reels;
   const bits = [];
-  if (out.pics) bits.push(`${out.pics} picture${out.pics === 1 ? "" : "s"} made & scheduled`);
-  if (out.reels) bits.push(`${out.reels} reel${out.reels === 1 ? "" : "s"} added to your tasks`);
-  if (out.waiting) bits.push(`${out.waiting} waiting on a picture (see tasks)`);
-  if (out.failed) bits.push(`${out.failed} could not be approved`);
-  toast(bits.join(" · ") || "Done.", 8000);
+  if (pics) bits.push(`${pics} picture${pics === 1 ? "" : "s"} being drawn`);
+  if (reels) bits.push(`${reels} reel${reels === 1 ? "" : "s"} going on your task list`);
+  toast(`${ids.length} post${ids.length === 1 ? "" : "s"} approved — ${bits.join(", ")}. `
+        + `You can carry on.`, 6000);
 }
 
 /* Everything that shows a post's state, repainted after one changes. */
@@ -2036,33 +2484,43 @@ function pickVideoEngine(opts) {
    step-by-step popup opens straight away because that is what they need next.
    `batch` keeps it quiet for Approve-all loops, which report once at the end. */
 async function approvePostReady(postId, opts = {}) {
-  const card = (((state.lastState || {}).insights) || []).find((x) => x.id === "post_" + postId);
+  const id = "post_" + postId;
+  const card = (((state.lastState || {}).insights) || []).find((x) => x.id === id);
   const isReel = !!(card && card.kind === "reel");
   const run = () => api("/api/social/approve-ready", { method: "POST", json: { post_id: postId } });
   if (opts.batch) return run();
-  try {
-    const r = await withBusy(
-      isReel ? "Approving and setting up the video task…" : "Approving and making the picture…",
-      isReel
-        ? "A reel is made in Google Flow — this gets you the prompt and puts every step on your task list."
-        : "Drawn from your own product photo and your brand's look, checked for watermarks, then put on the calendar.",
-      run);
-    if (r.tasks) refreshTaskList(r.tasks);
-    await afterPostChange();
-    if (r.is_reel) {
-      toast("Approved — the reel is on your task list at the top of Home.", 6000);
-      if (r.task) openVideoTask(r.task.id, r.post);
-    } else if (r.media_error) {
-      toast("Approved, but the picture could not be made: " + r.media_error
-            + " It is on your task list so it cannot go out empty.", 9000);
-    } else if (r.image) {
-      const wm = r.watermark || {};
-      toast("Approved, picture made" + (wm.removed ? ", watermark removed" : "") + ", scheduled.");
-    } else {
-      toast("Approved and scheduled.");
-    }
-    return r;
-  } catch (e) { toast(e.message, 6000); return null; }
+
+  /* WHY THIS NO LONGER WAITS.
+     Drawing the picture is the slow part — an AI call on a small server — and
+     the seller has nothing to add to it. They said yes. Holding them in front
+     of a spinner until the drawing finishes is asking them to supervise work
+     they already delegated.
+     The card goes now. If the drawing fails, the card comes back saying so. */
+  runInBackground(id, {
+    label: isReel ? "Setting up the video task" : "Making the picture",
+    run,
+    onDone: (r) => {
+      if (r.tasks) refreshTaskList(r.tasks);
+      if (r.is_reel) {
+        /* The one case worth interrupting for: a reel needs the seller to go
+           and film or generate something, and the steps are the whole point.
+           Offered, not forced — they may be halfway through approving six. */
+        toastAction("Reel approved — it needs a clip.", "Open the steps", () => {
+          if (r.task) openVideoTask(r.task.id, r.post);
+        }, 7000);
+      } else if (r.media_error) {
+        /* Not a failure of the approval — the post IS approved — so the card
+           does not come back. But the picture is missing and the seller must
+           know, because the post cannot go out empty. */
+        toast("Approved, but the picture could not be drawn: " + r.media_error
+              + " It is on your task list.", 9000);
+      } else if (r.image) {
+        const wm = r.watermark || {};
+        toast("Picture made" + (wm.removed ? ", watermark removed" : "") + " — scheduled.");
+      }
+    },
+  });
+  return null;
 }
 
 /* The reel task, step by step: copy the prompt → open Google Flow → paste,
@@ -2210,15 +2668,15 @@ async function openVideoTask(taskId, postHint) {
     }
     try {
       await chain;                 // let any step tick land first
-      const att = await withBusy("Uploading and cleaning your clip…",
-        "The watermark remover checks every corner for Flow's mark and paints it out.",
-        async () => {
-          const fd = new FormData(); fd.append("files", f);
-          const up = await api("/api/site/image", { method: "POST", body: fd });
-          const u = up.url || up.image_url;
-          if (!u) throw new Error("The upload did not come back with a file.");
-          return attachClip(post.id, u);
-        });
+      var vtBar = progressBar($("vtSlot") && $("vtSlot").parentElement,
+                              `Uploading ${Math.round(f.size / 1048576)}MB clip`);
+      const fd = new FormData(); fd.append("files", f);
+      const up = await apiUpload("/api/site/image", fd, (frac) => vtBar.set(frac));
+      const u = up.url || up.image_url;
+      if (!u) throw new Error("The upload did not come back with a file.");
+      vtBar.working("Checking every corner for Flow's watermark…");
+      const att = await attachClip(post.id, u);
+      vtBar.done("Clip attached");
       post.video_url = att.video_url;
       $("vtSlot").innerHTML = `<video src="${esc(att.video_url)}" controls playsinline preload="metadata"></video>`;
       $("vtWm").textContent = clipNote(att);
@@ -2234,7 +2692,10 @@ async function openVideoTask(taskId, postHint) {
       const upStep = document.querySelector('#vtSteps li[data-step="upload"]');
       if (upStep) upStep.classList.add("open");
       if (att.tasks) refreshTaskList(att.tasks);
-    } catch (e) { toast(e.message, 7000); }
+    } catch (e) {
+      if (typeof vtBar !== "undefined" && vtBar) vtBar.fail(e.message);
+      toast(e.message, 7000);
+    }
     $("vtFile").value = "";
   };
   $("vtSchedule").onclick = async () => {
@@ -2366,19 +2827,23 @@ function openReelPrompt(post, script) {
         return toast("That clip is over 48MB. Export it at 1080p — a reel rarely "
                      + "needs more.", 7000);
       }
-      const att = await withBusy("Uploading your clip",
-        "Large videos take a moment on a phone connection. Then the watermark remover checks every corner.", async () => {
-          const fd = new FormData(); fd.append("files", f);
-          const up = await api("/api/site/image", { method: "POST", body: fd });
-          const u = up.url || up.image_url;
-          if (!u) throw new Error("The upload did not come back with a file.");
-          return attachClip(post.id, u);
-        });
+      var rpBar = progressBar(document.querySelector(".modal-body") || document.querySelector(".modal"),
+                              `Uploading ${Math.round(f.size / 1048576)}MB clip`);
+      const fd = new FormData(); fd.append("files", f);
+      const up = await apiUpload("/api/site/image", fd, (frac) => rpBar.set(frac));
+      const u = up.url || up.image_url;
+      if (!u) throw new Error("The upload did not come back with a file.");
+      rpBar.working("Checking every corner for a watermark…");
+      const att = await attachClip(post.id, u);
+      rpBar.done("Clip attached");
       closeModal();
       if (_currentModule === "social") { _socialData = await api("/api/social"); await renderSocial(); }
       refreshApprovals(true);
       toast(`Clip attached. This reel is ready to go out.${clipNote(att) ? " " + clipNote(att) : ""}`, att.fallback ? 9000 : 5000);
-    } catch (e) { toast(e.message, 7000); }
+    } catch (e) {
+      if (typeof rpBar !== "undefined" && rpBar) rpBar.fail(e.message);
+      toast(e.message, 7000);
+    }
   };
   $("rpMake").onclick = async () => { closeModal(); await reopen(); };
 
@@ -2466,13 +2931,17 @@ async function decide(id, decision) {
   }
   if (id && id.startsWith("po_") && decision === "approve") return approvePo(id.slice(3));
   if (id && id.startsWith("po_") && decision === "cancel") {
+    // The confirm stays: cancelling an order is not something to do by
+    // accident. Everything after the seller says yes is background work.
     if (!confirm("Cancel this purchase order? Nothing has been sent to the supplier yet.")) return;
-    try {
-      await api(`/api/smart/insight/${id}/decision`, { method: "POST", json: { decision: "cancel" } });
-      await refreshApprovals(true);
-      if (_currentModule === "supply" || _currentModule === "inventory") openSupply();
-      toast("Purchase order cancelled.");
-    } catch (e) { toast(e.message); }
+    runInBackground(id, {
+      label: "Cancelling the order",
+      run: () => api(`/api/smart/insight/${id}/decision`, { method: "POST", json: { decision: "cancel" } }),
+      onDone: () => {
+        if (_currentModule === "supply" || _currentModule === "inventory") openSupply();
+        toast("Purchase order cancelled.");
+      },
+    });
     return;
   }
   // Cancel on a planned post, or on the whole week. Undecided posts only —
@@ -2491,23 +2960,30 @@ async function decide(id, decision) {
     } catch (e) { toast(e.message); }
     return;
   }
-  try {
-    const r = await api(`/api/smart/insight/${id}/decision`, { method: "POST", json: { decision } });
-    if (state.lastState) {
-      state.lastState.insights = r.insights;
-      if (r.history) state.lastState.history = r.history;
-      if (r.tasks) state.lastState.tasks = r.tasks;
-    }
-    renderApprovals(r.insights);
-    if (r.tasks) refreshTaskList(r.tasks);
-    if (decision === "approve") {
-      if (r.download && r.download_url) { await download(r.download_url, `${id}.xlsx`); toast("✅ Approved & executed — Excel downloaded. Moved to History."); }
-      else toast("✅ Approved — moved to History.");
-    } else {
-      toast("✕ Dismissed — you can restore it from History.");
-    }
-    if (!$("historyDrawer").hidden) renderHistory();
-  } catch (e) { toast(e.message); }
+  /* Everything else: approve, dismiss, "not now". All of it goes through the
+     queue, so the card leaves on the tap and the request happens behind it.
+     A dismissal that fails is put back exactly like an approval that fails —
+     the seller is never left believing they cleared something they did not. */
+  const card = (((state.lastState || {}).insights) || []).find((x) => x.id === id);
+  runInBackground(id, {
+    label: decision === "approve" ? (card && card.cta ? card.cta : "Approving") : "Dismissing",
+    run: () => api(`/api/smart/insight/${id}/decision`, { method: "POST", json: { decision } }),
+    onDone: async (r) => {
+      /* The server's view wins once it arrives, but only for the parts the
+         queue is not still changing: replacing `insights` wholesale here would
+         resurrect cards for jobs that are mid-flight. */
+      if (state.lastState) {
+        if (r.history) state.lastState.history = r.history;
+        if (r.tasks) state.lastState.tasks = r.tasks;
+      }
+      if (r.tasks) refreshTaskList(r.tasks);
+      if (decision === "approve" && r.download && r.download_url) {
+        await download(r.download_url, `${id}.xlsx`);
+        toast("Done — the Excel file is in your downloads.");
+      }
+      if (!$("historyDrawer").hidden) renderHistory();
+    },
+  });
 }
 
 // ---------- History drawer ----------
@@ -3219,24 +3695,40 @@ function clipNote(att) {
     : (wm.reason ? wm.reason.charAt(0).toUpperCase() + wm.reason.slice(1) : "");
 }
 
-// ---- shared image picker: uploads to /api/site/image and returns the URL ----
+/* ---- shared image picker: uploads to /api/site/image and returns the URL ----
+   Every photo in the app goes through here — product shots, gallery images,
+   the brand's own pictures — so the progress bar belongs here rather than at
+   each of the dozen call sites. With several files it counts them off, because
+   "3 of 8" is the number a seller waiting on a batch actually wants. */
 function pickImage(onUrl, multiple, accept) {
   const inp = document.createElement("input");
   inp.type = "file"; inp.accept = accept || "image/*"; inp.multiple = !!multiple;
   inp.onchange = async () => {
     const files = Array.from(inp.files || []);
     if (!files.length) return;
-    toast(`Uploading ${files.length} file${files.length === 1 ? "" : "s"}…`);
-    let warned = "", failed = 0;
+    const host = document.querySelector(".modal-back:not([hidden]) .modal-body")
+      || document.querySelector(".modal-back:not([hidden]) .modal")
+      || $("view");
+    const bar = progressBar(host, files.length === 1
+      ? "Uploading your picture"
+      : `Uploading 1 of ${files.length}`);
+    let warned = "", failed = 0, n = 0;
     for (const f of files) {
+      n++;
       const fd = new FormData(); fd.append("files", f);
       try {
-        const r = await api("/api/site/image", { method: "POST", body: fd });
+        const r = await apiUpload("/api/site/image", fd, (frac) => {
+          // One bar across the batch: each file owns its slice of the width,
+          // so it only ever moves forwards.
+          bar.set(((n - 1) + (frac == null ? 0 : frac)) / files.length);
+        });
+        if (files.length > 1 && n < files.length) bar.working(`Uploading ${n + 1} of ${files.length}`);
         onUrl(r.image_url);
         if (r.warning) warned = r.warning;
       } catch (e) { failed++; toast(e.message, 6000); }
     }
-    if (failed) return;
+    if (failed) { bar.fail(`${failed} of ${files.length} did not upload`); return; }
+    bar.done(files.length === 1 ? "Uploaded" : `${files.length} uploaded`);
     // Say plainly when the durable copy did not happen, rather than showing a
     // thumbnail that will be a broken slot after the next deploy.
     toast(warned || (_media && !_media.durable
@@ -4295,7 +4787,7 @@ function renderSupply(d) {
           ${it.suggestions_available ? `<button class="btn ghost tiny" data-apply="${it.id}" title="Apply the values suggested from your sales">✨<span class="btn-lbl">Use the suggested numbers</span></button>` : ""}
           <button class="btn ghost tiny" data-edit="${it.id}" title="Edit">✎<span class="btn-lbl">Edit</span></button>
           <button class="btn ghost tiny" data-waste="${it.id}" title="Record waste">🗑️<span class="btn-lbl">Record waste</span></button>
-          <button class="btn ghost tiny sup-more" data-more="${it.id}">${sic("chevron-down")}<span class="btn-lbl">Show all the numbers</span></button>
+          <button class="btn ghost tiny sup-more" data-more="${it.id}">${sic("chevron-down")}<span class="btn-lbl">The numbers, and what you can do</span></button>
           <button class="btn ghost tiny danger" data-del="${it.id}" title="Remove item">${sic("close")}<span class="btn-lbl">Remove from stock list</span></button>
         </td>
       </tr>`).join("")
@@ -4321,6 +4813,7 @@ function renderSupply(d) {
       ${nexts.filter((x) => x !== "cancelled" && !(send && x === "mailed")).map((x) =>
         `<button class="btn ghost tiny" data-pomove="${esc(p.po_number)}" data-postatus="${x}"
                  title="${esc(PO_STEP_WHY[x] || "")}">${PO_STEP[x] || x}</button>`).join("")}
+      <button class="btn ghost tiny sup-more" data-more="${esc(p.po_number)}">${sic("chevron-down")}<span class="btn-lbl">More</span></button>
       <button class="btn ghost tiny" data-popdf="${esc(p.po_number)}" title="Download the PDF">📄<span class="btn-lbl">PDF</span></button>
       <button class="btn ghost tiny" data-poxls="${esc(p.po_number)}" title="Download as Excel">⬇<span class="btn-lbl">Excel</span></button>
       ${nexts.includes("cancelled") ? `<button class="btn ghost tiny danger" data-pomove="${esc(p.po_number)}" data-postatus="cancelled" title="Cancel this order">${sic("close")}<span class="btn-lbl">Cancel this order</span></button>` : ""}`;
@@ -4383,7 +4876,14 @@ function renderSupply(d) {
     <div id="supPanel" hidden></div>
 
     <div class="section-title" style="margin-top:18px;">What you hold</div>` : `
-    <p class="muted">${esc(salesNote)}</p>
+    <!-- Folded here for the same reason it is folded on the Inventory screen:
+         four sentences of arithmetic, above everything, on every single visit,
+         answering a question a seller asks once. Measured at 147px — a fifth
+         of a phone screen before the first useful pixel. -->
+    <details class="fold quiet">
+      <summary>How "days left" is worked out</summary>
+      <p class="muted tiny" style="margin:8px 0 0;">${esc(salesNote)}</p>
+    </details>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;">
       <button class="btn ghost sm" id="supLoadSales" title="Upload &amp; map the past sales history used ONLY for these supply-chain calculations (separate from your main Sales Data)">${sic("receipt")}Upload previous sales</button>
       <button class="btn ghost sm" id="supCheck">${sic("refresh")}Check stock now</button>
@@ -4436,7 +4936,22 @@ function renderSupply(d) {
     ${inv ? "" : `<div class="section-title" style="margin-top:20px;">Purchase orders</div>
     <div class="table-scroll">
       <table class="sup-table">
-        <thead><tr><th>PO #</th><th>Supplier</th><th>Created</th><th>Status</th><th class="num">Items</th><th class="num">Qty</th><th class="num">Amount</th><th></th></tr></thead>
+        <!-- Seven fields per order, and on a phone each one is a full-width
+             line: the purchase-order list measured 1,521px. What a seller
+             scanning this list wants is which supplier, what it is worth, and
+             where it has got to. When it was raised and how many lines it has
+             are on the order itself, one tap away under "More", along with
+             every action beyond the primary one. -->
+        <thead><tr>
+          <th>PO #</th>
+          <th data-card-label="Supplier">Supplier</th>
+          <th data-card-hide data-card-label="Raised">Created</th>
+          <th data-card-first>Status</th>
+          <th class="num" data-card-hide data-card-label="Lines">Items</th>
+          <th class="num" data-card-hide data-card-label="Total quantity">Qty</th>
+          <th class="num" data-card-label="Worth">Amount</th>
+          <th></th>
+        </tr></thead>
         <tbody>${poRows}</tbody>
       </table>
     </div>`}
@@ -4477,15 +4992,18 @@ function renderSupply(d) {
   document.querySelectorAll("[data-waste]").forEach((b) => b.onclick = () => openWastePanel(b.dataset.waste));
   document.querySelectorAll("[data-apply]").forEach((b) => b.onclick = () => supplyApplySuggested(b.dataset.apply));
   /* The card shows the five fields that answer "have I got enough, and who do
-     I ring". The other six are the arithmetic behind them — real, and worth
-     showing to whoever asks, but not worth a screen and a half per item to
-     someone checking stock on a phone between customers. */
+     I ring". Behind this one tap sit the other six numbers — the arithmetic
+     those five came from — and the three tools for the item: edit it, record
+     waste against it, take it off the list. Measured at 447px a card with all
+     of that always open, which is 2,731px for six items and most of the
+     screen. Someone checking stock between customers is not editing anything;
+     charging them for the tools on every card was the wrong trade. */
   document.querySelectorAll("[data-more]").forEach((b) => b.onclick = () => {
     const tr = b.closest("tr");
     if (!tr) return;
     const open = tr.classList.toggle("show-all");
     const lbl = b.querySelector(".btn-lbl");
-    if (lbl) lbl.textContent = open ? "Hide the workings" : "Show all the numbers";
+    if (lbl) lbl.textContent = open ? "Hide this" : "The numbers, and what you can do";
     b.classList.toggle("is-open", open);
   });
   document.querySelectorAll("[data-openpo]").forEach((b) => b.onclick = () => supplyOpenPo([b.dataset.openpo]));
@@ -5136,15 +5654,28 @@ async function openPoDetail(poNumber) {
    and sends it. If it could not be emailed from here, the seller gets the PDF
    and their own mail app opened with the message, so it still goes today. */
 async function approvePo(poNumber) {
-  let r;
-  try {
-    r = await withBusy("Sending the purchase order…",
-      "Writing the email, attaching the PO as a PDF and sending it to the supplier.",
-      () => api(`/api/supply/po/${encodeURIComponent(poNumber)}/approve`, { method: "POST", json: {} }));
-  } catch (e) { toast(e.message, 7000); return; }
-  if (r.insights) { if (state.lastState) state.lastState.insights = r.insights; renderApprovals(r.insights); }
-  if (_currentModule === "supply" || _currentModule === "inventory") openSupply();
-  if (r.sent) { toast(`Sent to ${r.to} with the PO attached.`, 6000); return; }
+  /* Writing the email, rendering the PDF and handing it to an SMTP server is
+     several seconds the seller has nothing to contribute to. Same rule as a
+     post: the decision was theirs, the sending is ours.
+     The one thing that cannot go quietly is a send that did not happen —
+     a supplier who never got the order is a stockout three weeks later — so
+     the failure path puts the card back exactly as it does for a post, and the
+     "we could not email it, here is the PDF" case still opens its popup, since
+     that one needs the seller to do something. */
+  runInBackground(`po_${poNumber}`, {
+    label: "Sending the purchase order",
+    run: () => api(`/api/supply/po/${encodeURIComponent(poNumber)}/approve`, { method: "POST", json: {} }),
+    onDone: (r) => {
+      if (_currentModule === "supply" || _currentModule === "inventory") openSupply();
+      if (r.sent) { toast(`Sent to ${r.to} with the PO attached.`, 6000); return; }
+      poSendItYourself(poNumber, r);
+    },
+  });
+}
+
+/* The server could not send it. The order is approved either way, so this is
+   not a failure of the decision — it is a handover, and it needs the seller. */
+function poSendItYourself(poNumber, r) {
   openModal("Approved — send it yourself", `
     <p style="margin-top:0;">${esc(r.reason || "It could not be emailed from here.")}</p>
     <p class="muted">The order is approved. Download the PDF and send it with the ready-written message —
@@ -6007,13 +6538,59 @@ function askWinbackSent(rows) {
   };
 }
 
+/* WHY THE SERVER'S LIST IS FILTERED ON THE WAY IN.
+   A job in the queue has not reached the server yet, so the server still
+   reports its insight as pending. Painting that list verbatim would put the
+   card back on screen a second after the seller watched it leave — and then
+   remove it again when the job lands. The card flickers, and a seller who
+   taps the resurrected card approves the same thing twice.
+   Anything currently in flight is held out until its job settles. If the job
+   fails, the failure path puts the card back deliberately, with a reason. */
+function withoutInFlight(insights) {
+  if (!_jobs.length) return insights || [];
+  const busy = new Set(_jobs.map((j) => j.id));
+  return (insights || []).filter((i) => !busy.has(i.id));
+}
+
+/* WHY THIS COUNTS ITS OWN REQUESTS.
+   This is called unawaited from several places at once, and the queue is busy
+   hammering the same small server, so two reads of the app state overlap
+   routinely. Without sequencing:
+     t0  seller approves card A; a slow GET is already in flight, holding the
+         list as it was at t0 — with A still pending on it
+     t7  the job succeeds, a fresh GET goes out and paints the correct list
+     t9  the SLOW one finally lands, overwrites everything, and paints A back
+         as an ordinary undecided card with nothing to explain it
+   The seller taps the resurrected card and pays for a second picture, or a
+   supplier gets the same order twice. A response older than one already
+   painted is stale by definition and is dropped. */
+let _stateGen = 0;
 async function refreshApprovals(silent) {
+  const gen = ++_stateGen;
   try {
     const s = await api("/api/smart/state");
+    if (gen !== _stateGen) return;          // a newer read already landed
     state.lastState = s;
-    renderApprovals(s.insights);
+    renderApprovals(s.insights);            // filters in-flight work itself
+    prunePhantomFailures(s.insights);
     if (!silent) toast("Refreshed");
   } catch (e) { if (!silent) toast(e.message); }
+}
+
+/* A failure record outlives the card it belongs to, and insight ids repeat:
+   "winback" is literally a fixed string, and a weekly plan can rehash a post
+   to the same id. Without this, a nine-day-old failure from one win-back list
+   attaches itself to next week's — sorted to the top as urgent, wearing a
+   reason from work that was never attempted on it, its button reading "Try
+   again" instead of "Approve". Whenever the server tells us what actually
+   exists, anything else in the record is stale. */
+function prunePhantomFailures(insights) {
+  const live = new Set((insights || []).map((i) => i.id));
+  let changed = false;
+  for (const id of Object.keys(_failed)) {
+    if (!live.has(id)) { delete _failed[id]; changed = true; }
+  }
+  if (changed) saveFailures();
 }
 $("refreshApprovals").onclick = () => refreshApprovals();
 
@@ -8461,6 +9038,10 @@ function shortWhen(iso) {
 
 async function decidePost(id, newState) {
   try {
+    // Cancelling a post that had failed resolves the failure. Without this the
+    // record sits in localStorage waiting to attach itself to whatever insight
+    // next carries that id.
+    clearFailure("post_" + id);
     await api("/api/social/state", { method: "POST", json: { post_id: id, state: newState } });
     if (_currentModule === "social" && _socialData) {
       _socialData = await api("/api/social");
@@ -8550,7 +9131,14 @@ function openSocialEditor(post) {
      checks, GST) is to say what the evidence says and let the seller decide;
      refusing to schedule a post because we cannot see a file would be a
      worse product than telling them plainly what is missing. */
-  const needsMedia = isReel ? !post.video_url : !(post.image_url || post.video_url);
+  /* Asked every time, not captured once.
+     This used to be a `const` read at render time, which is wrong the moment
+     the seller uploads the clip WITHOUT closing the popup — the most ordinary
+     path there is. The buttons would still think the post had no media and
+     Save would refuse to schedule something that was sitting right there on
+     screen, already playing. */
+  const mediaMissing = () => (isReel ? !post.video_url : !(post.image_url || post.video_url));
+  const needsMedia = mediaMissing();
 
   const topHtml = isReel ? `
     ${storyBar}
@@ -8639,17 +9227,27 @@ function openSocialEditor(post) {
     <div class="modal-actions">
       <button class="btn ghost" data-mclose2>Close</button>
       ${post.state === "draft" ? `<button class="btn reject" id="smSkip">Cancel post</button>` : ""}
-      ${post.state === "approved" && isReel
-        ? `<button class="btn approve" id="smTask">${sic("play")}Open the video task</button>`
-        : post.state === "approved" && !needsMedia
-          ? `<button class="btn approve" id="smSched">Save &amp; schedule</button>`
+      <!-- ORDER IS THE BUG HERE, AND IT COST REAL POSTS.
+           This used to ask "is it an approved reel?" BEFORE "is it ready?", so
+           an approved reel that already had its clip uploaded was still only
+           offered "Open the video task" — never "Save & schedule". The seller
+           uploaded the clip in this very editor, pressed Save, and the post
+           stayed approved forever. Nothing publishes from the approved state:
+           the publisher selects on scheduled. The post simply never went out
+           and nothing said so.
+           Ready beats reel-ness. A post that has its media can be scheduled,
+           whatever shape it is. -->
+      ${post.state === "approved" && !needsMedia
+        ? `<button class="btn approve" id="smSched">Save &amp; schedule</button>`
+        : post.state === "approved" && isReel
+          ? `<button class="btn approve" id="smTask">${sic("play")}Open the video task</button>`
           : post.state === "draft"
             ? `<button class="btn approve" id="smApprove">${isReel ? "Approve & add the video task" : "Approve & make the picture"}</button>` : ""}
       ${post.state === "scheduled" && !needsMedia
         ? `<button class="btn ghost" id="smNow" title="Send this to Instagram right now instead of waiting for its time">${sic("instagram")}Post now</button>` : ""}
       <button class="btn primary" id="smSave">Save</button>
     </div>
-    <div id="smNowMsg"></div>`);
+    <div id="smNowMsg"></div>`, { owner: post.id });
 
   /* WHY "POST NOW" EXISTS: the only way to find out whether posting really
      works was to schedule something and then wait — for the time to arrive,
@@ -8761,19 +9359,24 @@ function openSocialEditor(post) {
         return toast("That clip is over 48MB. Export it at 1080p — a reel rarely "
                      + "needs more.", 7000);
       }
+      /* The bar goes INSIDE the clip slot — the box the video is about to
+         appear in — rather than behind a modal. The seller watches the thing
+         fill up in the place it is going to end up. */
+      const bar = progressBar($("smVidBlock") || $("smVidSlot"),
+                              `Uploading ${Math.round(f.size / 1048576)}MB clip`);
       try {
-        const url = await withBusy("Uploading your clip…",
-          "Large videos take a moment on a phone connection.",
-          async () => {
-            const fd = new FormData();
-            fd.append("files", f);
-            const up = await api("/api/site/image", { method: "POST", body: fd });
-            const u = up.url || up.image_url;
-            if (!u) throw new Error("The upload did not come back with a file.");
-            const att = await attachClip(post.id, u);
-            if (clipNote(att)) toast(clipNote(att), att.fallback ? 9000 : 4000);
-            return att.video_url || u;     // the cleaned copy when a mark was removed
-          });
+        const fd = new FormData();
+        fd.append("files", f);
+        const up = await apiUpload("/api/site/image", fd, (frac) => bar.set(frac));
+        const u = up.url || up.image_url;
+        if (!u) throw new Error("The upload did not come back with a file.");
+        /* Watermark removal happens after the bytes land and takes real
+           seconds. Saying so beats a bar sitting at 100%. */
+        bar.working("Checking the clip for watermarks…");
+        const att = await attachClip(post.id, u);
+        if (clipNote(att)) toast(clipNote(att), att.fallback ? 9000 : 4000);
+        const url = att.video_url || u;     // the cleaned copy when a mark was removed
+        bar.done("Clip attached");
         post.video_url = url;
         const slotEl = $("smVidSlot");
         if (slotEl) {
@@ -8784,8 +9387,16 @@ function openSocialEditor(post) {
           vidPick.className = "btn ghost sm";
         }
         _socialData = await api("/api/social");
+        /* The post just became schedulable while the popup is still open, so
+           the buttons have to say so now. Without this the seller is looking
+           at their own clip playing above a button that still only offers to
+           open a video task. */
+        syncEditorActions();
         toast("Clip attached — this post is ready to schedule.");
-      } catch (e) { toast(e.message, 7000); }
+      } catch (e) {
+        bar.fail(e.message);
+        toast(e.message, 7000);
+      }
       vidFile.value = "";       // so picking the same file again still fires
     };
   }
@@ -8828,11 +9439,18 @@ function openSocialEditor(post) {
           engine: picked.id || "" } }));
       post.video_url = vid.url;
       showAiLeft(true);
-      const slot = $("smVidSlot");
+      const mine3 = document.querySelector(`.modal[data-post="${post.id}"]`);
+      const slot = mine3 && mine3.querySelector("#smVidSlot");
       if (slot) {
         slot.innerHTML = `<video src="${esc(vid.url)}" controls playsinline preload="metadata"></video>`;
         if (vidPick) { vidPick.innerHTML = sic("arrow-up-right") + "Replace clip"; vidPick.className = "btn ghost sm"; }
         if ($("smWmFix")) $("smWmFix").hidden = false;
+        /* The upload path did this and the paid path did not, so a seller who
+           PAID for a clip watched it appear in the slot and was still told
+           "This reel has no clip yet" above a button offering to walk them
+           through making one. The post was schedulable; only the screen
+           disagreed, which is the worst version of this. */
+        syncEditorActions();
       }
       _socialData = await api("/api/social");
       toast("Clip made and attached. Check it before you schedule — the product "
@@ -8868,12 +9486,16 @@ function openSocialEditor(post) {
           product_id: post.product_id, pillar: post.pillar, format: post.format,
           post_id: post.id, use_reference: useRef, shot_type: post.shot_type || "",
           engine: ($("smEngine") || {}).value || "" } }));
-      // The editor may have been closed while this was drawing — the picture is
-      // saved to the post either way, so there is nothing to recover, only a
-      // missing element to not write into.
+      /* WHOSE POPUP IS THIS? Drawing takes half a minute and sellers do not
+         sit and watch it — they close the popup and open the next post. Asking
+         for `#smEdShot` finds whatever editor is open NOW, so without the
+         ownership check this painted post A's picture into post B's frame.
+         The picture is saved to post A either way; there is nothing to
+         recover, only someone else's popup to not write into. */
       showAiLeft(true);
       post.image_url = img.url;
-      const shotEl = $("smEdShot");
+      const mine = document.querySelector(`.modal[data-post="${post.id}"]`);
+      const shotEl = mine && mine.querySelector("#smEdShot");
       if (shotEl) { shotEl.innerHTML = `<img src="${esc(img.url)}" alt="" /><span class="sm-gen">AI</span>`; offerSchedule(); }
       else toast("Your picture is ready — reopen the post to see it.", 6000);
       if (img.watermark && img.watermark.removed) toast("Picture made — a watermark was found and removed.");
@@ -8892,32 +9514,24 @@ function openSocialEditor(post) {
     try {
       await api("/api/social/attach-image", { method: "POST", json: { post_id: post.id, url } });
       post.image_url = url;
-      const shotEl = $("smEdShot");
+      const mine2 = document.querySelector(`.modal[data-post="${post.id}"]`);
+      const shotEl = mine2 && mine2.querySelector("#smEdShot");
       if (shotEl) shotEl.innerHTML = `<img src="${esc(url)}" alt="" />`;
       offerSchedule();
     } catch (e) { toast(e.message, 6000); }
   });
   // An approved post that was only waiting for its picture can go out as soon
   // as it has one — offer Save & schedule right here instead of a round trip.
-  function offerSchedule() {
-    const warn = document.querySelector(".sm-needs");
-    if (warn) warn.remove();
-    if (post.state !== "approved" || $("smSched")) return;
-    const acts = document.querySelector(".modal-actions");
-    if (!acts) return;
-    const b = document.createElement("button");
-    b.className = "btn approve"; b.id = "smSched"; b.innerHTML = "Save &amp; schedule";
-    acts.insertBefore(b, $("smSave"));
-    b.onclick = async () => {
-      try {
-        const r = await api("/api/social/schedule-ready", { method: "POST",
-          json: { post_id: post.id, scheduled_at: $("smWhen").value } });
-        if (r.tasks) refreshTaskList(r.tasks);
-        closeModal(); await afterEdit();
-        toast("Scheduled.");
-      } catch (e) { toast(e.message, 6000); }
-    };
-  }
+  /* WHY THIS IS NOT ITS OWN FUNCTION ANY MORE.
+     There used to be a second one here — `offerSchedule` — that built a button
+     with the same id, the same label and the same green, but which sent only
+     `post_id` and `scheduled_at`. It was the button the picture paths added,
+     so a seller who rewrote their caption and then pressed "Invent a picture"
+     got a Save & schedule that silently threw the caption away. That is the
+     exact bug the note above `saveEditor` says was fixed on the other path;
+     having two functions build the same button was what let it live on in one
+     of them. There is one now. */
+  const offerSchedule = () => syncEditorActions({ force: true });
   if ($("smGenRef")) $("smGenRef").onclick = async () => { await loadEngines(true); gen(true); };
   if ($("smGenNew")) $("smGenNew").onclick = async () => { await loadEngines(false); gen(false); };
 
@@ -8945,21 +9559,11 @@ function openSocialEditor(post) {
     closeModal();
     openVideoTask(t ? t.id : `post-${post.id}`, post);
   };
-  if ($("smSched")) $("smSched").onclick = async () => {
-    try {
-      const r = await api("/api/social/schedule-ready", { method: "POST",
-        json: { post_id: post.id, scheduled_at: $("smWhen").value } });
-      if (r.tasks) refreshTaskList(r.tasks);
-      closeModal(); await afterEdit();
-      toast("Scheduled.");
-    } catch (e) { toast(e.message, 6000); }
-  };
-  if ($("smSkip")) $("smSkip").onclick = async () => {
-    await decidePost(post.id, "cancelled");
-    closeModal();
-    toast("Cancelled — it will not go out.");
-  };
-  $("smSave").onclick = async () => {
+  /* Everything typed into this popup, in one place.
+     "Save & schedule" used to send only `post_id` and `scheduled_at`, so a
+     seller who rewrote the hook and then pressed the obvious green button
+     watched their edit vanish. Both buttons collect the same patch now. */
+  const collectPatch = () => {
     const tags = ($("smTags").value || "").split(/\s+/).filter(Boolean).slice(0, 5);
     const patch = {
       hook: $("smHook").value, body: $("smBody").value, question: $("smQ").value,
@@ -8971,12 +9575,88 @@ function openSocialEditor(post) {
         voiceover: _smScript.voiceover, caption_hint: _smScript.caption_hint,
       };
     }
+    return patch;
+  };
+
+  /* Turns "Open the video task" into "Save & schedule" in place, the instant
+     the post stops needing media. Surgical rather than a full re-render,
+     because a re-render would throw away whatever the seller has typed into
+     the caption fields but not yet saved. */
+  function syncEditorActions(opts = {}) {
+    /* WHOSE POPUP IS THIS?
+       Generating a picture takes half a minute on a small server, and a seller
+       does not sit and watch it: they close the popup and open the next post.
+       `document.querySelector(".modal-actions")` finds whatever popup is open
+       NOW — thirty-one elements in this app carry that class — so without this
+       check the finished job writes post A's button, closed over post A, into
+       post B's popup. Pressing it scheduled A at B's time.
+       The popup stamps the post it belongs to; a late arrival that finds
+       someone else's popup does nothing, which is the correct outcome. */
+    const acts = document.querySelector(`.modal[data-post="${post.id}"] .modal-actions`);
+    if (!acts) return;
+    if (post.state !== "approved") return;
+    if (!opts.force && mediaMissing()) return;
+    const warn = acts.closest(".modal").querySelector(".sm-needs");
+    if (warn) warn.remove();
+    if ($("smSched")) return;                       // already the right button
+    const task = $("smTask");
+    const b = document.createElement("button");
+    b.className = "btn approve";
+    b.id = "smSched";
+    b.innerHTML = "Save &amp; schedule";
+    b.onclick = () => saveEditor({ schedule: true });
+    if (task) task.replaceWith(b);
+    else acts.insertBefore(b, $("smSave"));
+  }
+
+  if ($("smSched")) $("smSched").onclick = () => saveEditor({ schedule: true });
+  if ($("smSkip")) $("smSkip").onclick = async () => {
+    await decidePost(post.id, "cancelled");
+    closeModal();
+    toast("Cancelled — it will not go out.");
+  };
+  $("smSave").onclick = () => saveEditor({ schedule: "if-ready" });
+
+  /* WHY PLAIN "SAVE" ALSO SCHEDULES.
+     A seller approves a reel, comes here, uploads the clip, fixes the caption
+     and presses Save — and reasonably believes the post is now going out. It
+     was not: Save only patched the fields, the post stayed `approved`, and the
+     publisher only ever selects `scheduled`. The post sat there until someone
+     noticed it had never appeared.
+     There is no case where a seller edits an approved, media-complete post and
+     means "and do not put it in the calendar". So Save finishes the job and
+     says which of the two things it did. Where it cannot — the media is still
+     missing — it says that too, instead of succeeding silently and leaving a
+     post that can never go out. */
+  async function saveEditor({ schedule }) {
+    const btn = schedule === true ? $("smSched") : $("smSave");
+    const was = btn ? btn.innerHTML : "";
+    if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+    const wantSchedule = schedule === true
+      || (schedule === "if-ready" && post.state === "approved" && !mediaMissing());
     try {
-      await api("/api/social/post", { method: "POST", json: { post_id: post.id, patch } });
+      await api("/api/social/post", { method: "POST", json: { post_id: post.id, patch: collectPatch() } });
+      let scheduled = false;
+      if (wantSchedule) {
+        const r = await api("/api/social/schedule-ready", { method: "POST",
+          json: { post_id: post.id, scheduled_at: $("smWhen").value } });
+        if (r.tasks) refreshTaskList(r.tasks);
+        scheduled = true;
+      }
       closeModal();
       await afterEdit();
-    } catch (e) { toast(e.message); }
-  };
+      toast(scheduled
+        ? `Saved and scheduled for ${shortWhen($("smWhen").value || post.scheduled_at)}.`
+        : mediaMissing() && post.state === "approved"
+          ? (isReel
+             ? "Saved. It still needs a clip before it can go out — upload one and it schedules itself."
+             : "Saved. It still needs a picture before it can go out.")
+          : "Saved.");
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.innerHTML = was; }
+      toast(e.message, 6000);
+    }
+  }
 }
 
 /* The reel shot-list editor: an empty/generate state for reels planned

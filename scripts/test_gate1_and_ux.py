@@ -235,8 +235,15 @@ check("and both are still routed", 'if (id === "marketing")' in JS and 'if (id =
 check("reachable by URL — #/module/marketing and #/module/gst",
       "#\\/module\\/([a-z]+)" in JS or "/^#\\/module\\/([a-z]+)$/" in JS)
 check("tiles are grouped under plain-language headings", "MODULE_GROUPS" in JS)
-check("and a locked tile says what to do, not just 'Locked'",
-      "Add your sales file first" in JS)
+# The point of this check is that a locked tile names the thing that is
+# missing rather than telling the seller off with the word "Locked". It used to
+# pin the literal "Add your sales file first", which stopped being the wording
+# when the tiles became rows on a phone: four words in a row's badge wrapped to
+# three shouting lines and pushed the module's own name onto two. "Needs sales"
+# still names the missing thing, which is what the check is actually for.
+check("and a locked tile says what is missing, not just 'Locked'",
+      '"Needs sales"' in JS and '"Needs reviews"' in JS
+      and 'const why = m.needs === "review"' in JS)
 
 # =========================================================================
 print("\n== headline cards show at any volume ==")

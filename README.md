@@ -1272,6 +1272,230 @@ answers how many came back and what they spent in the following 30 days. The
 headline lands on the home screen. The method is stated on screen rather than
 implied — it is not a controlled test, it is what their own sales data says.
 
+## How much screen a phone actually has
+
+The app was legible everywhere after the UI pass and still asked for four or
+five screens of scrolling to reach anything. Length was the last thing making it
+feel heavy. Measured section by section at 390px, the three biggest costs were
+navigation, a list with no ceiling, and tools carried on every row.
+
+| | before | after |
+|---|---|---|
+| Home (21 tasks piled up) | 7,331px | **4,412px** |
+| Suppliers & Purchase Orders | 5,625px | **4,517px** |
+| Inventory | 3,249px | **2,667px** |
+
+### Twelve doors, on a phone
+
+The module tiles are the app's navigation, and as two columns of cards they
+measured 221–260px each: twelve across four groups came to **1,975px**, two and
+a half phone screens of doors before the seller opens one. A card earns that
+space when you are choosing between things by comparing them. Nobody compares
+"Orders" with "Website Builder" — they are looking for the one they came for.
+
+On a phone each door is now a row: icon, name, what it does, its state, read
+down like a list, the way every phone OS presents a list of places to go. Same
+twelve doors, same words on each, nothing hidden or folded — **1,121px**, and
+every one reachable in a single flick instead of three. Above 720px they are
+cards again, where the width makes the comparison worth having.
+
+The locked badge shrank with them: "Add your reviews first" wrapped to three
+shouting lines in a row and pushed the module's own name onto two, so it says
+"Needs reviews" and lets the group heading carry the instruction.
+
+One trap worth recording — a rule 600 lines further down set two columns and a
+132px minimum height *after* the phone rule, so the first attempt changed
+nothing. The tiles' column count is decided in one place now.
+
+### A morning list needs a ceiling
+
+On an account that had let work pile up — 21 tasks — the Today card measured
+**3,412px**. Four phone screens of list, on the card whose entire job is
+answering "what do I do now". Past about six rows a list stops being an answer
+and becomes a backlog, and a backlog is exactly what a seller opens this app to
+avoid looking at.
+
+Six rows, in the order they already come in, and the rest behind "15 more
+waiting". The headline still counts every one of them, because the count is the
+honest number — it is the reading that is capped, not the truth. **1,336px.**
+
+A task's own text carries its deadline inline ("Make the reel for Linen Dupatta
+— goes out Mon 14 Sep, 7:00 PM"), which is right in an email digest and wrong in
+a list, where it wrapped to three bold lines and made a 200px row out of a
+one-line job. The deadline reads as context underneath now. The server's wording
+is untouched; this is a display decision.
+
+### Tools on every row, for a screen nobody edits on
+
+An inventory card measured **447px, more than half of it buttons** — six items
+came to 2,731px, 84% of the whole Inventory screen. Editing an item, recording
+waste against it and deleting it are real, and they are not what that screen is
+*for*: someone checking stock between customers is not editing anything.
+Carrying all three on every card charged the common case for the rare one.
+
+They moved behind the same disclosure as the arithmetic, so one tap gives
+everything about that item and the resting card is the five lines that answer
+the question the seller came with. **350px.** "Use the suggested numbers" stays
+in the open — it only appears when the sales data actually has something to
+suggest, and it is a prompt rather than a tool.
+
+The same trade on a purchase order, whose seven fields each became a full-width
+line: who, how much and where it has got to stay out; when it was raised, how
+many lines it has, and the PDF/Excel/cancel controls go behind "More". Approve &
+send, Details and the next workflow step stay in the open because they are the
+order's whole point. **1,521px → 1,109px.**
+
+And the days-left explanation — four sentences of arithmetic above everything,
+on every visit, answering a question a seller asks once — was folded on the
+Inventory screen and left open on Suppliers. 147px, a fifth of a phone screen
+before the first useful pixel. Folded on both now.
+
+## One tap, and the tap is the whole wait
+
+Approving used to mean: open a blocking overlay, hold the seller there for the
+entire server round trip — which for a photo post is an AI drawing a picture on
+half a CPU — then refetch the whole app state, then refetch the social plan,
+then repaint. The seller taps Approve and watches a spinner for several
+seconds, having already made the only decision that needed them.
+
+Measured in a headless browser with the approve call held for seven seconds,
+which is roughly what a picture costs on a small dyno:
+
+| | before | after |
+|---|---|---|
+| one tap, seller free after | ~7s | **0.20s** |
+| Approve all (3 cards) | ~21s | **0.21s** |
+
+The decision is the seller's part. The work is ours. `runInBackground()` takes
+the card out of the list on the tap, animates it away in 180ms and runs the
+request behind them, two lanes at a time. Nothing blocks. Every approve,
+dismiss and cancel in the app goes through it — posts, whole weeks, purchase
+orders, win-back lists.
+
+### The honest half
+
+A card that vanished on a promise and never came back is worse than a spinner,
+because the seller believes a thing happened that did not. So a failed job puts
+its card back, at the top, wearing what went wrong and when — *"This did not go
+through 4 minutes ago: the picture could not be drawn"* — and its button reads
+**Try again** rather than pretending this is the first attempt. The record is
+kept in `localStorage` so it survives a reload, because the failure outlives the
+page that saw it.
+
+Two distinctions that took more thought than the happy path:
+
+**A dropped connection is not a failure.** A 4xx/5xx is the server saying no.
+But `status: 0` is the connection dropping, and that can happen *after* the
+request landed — the purchase order is already in the supplier's inbox and only
+the reply was lost. None of these endpoints is idempotent, so that case says
+*"We could not confirm this — check before sending it again"* and its button
+reads **Check, then try again**. Telling that seller "this did not go through"
+is how a supplier receives the same order twice.
+
+**Closing the tab is the one promise the queue cannot keep.** Jobs survive
+moving around the app — the panel lives outside the view that modules repaint —
+but the work is client-driven and dies with the page, silently, with no failure
+record because the catch never runs. So `beforeunload` asks. It is the only
+thing in the app that does.
+
+### The reel that would never go out
+
+Reported as: *"If I approve a reel from the approval list and then go to Social
+Media Manager and change things and save, it is not scheduling."* It was not.
+Two bugs stacked:
+
+The editor asked **"is this an approved reel?" before "does it have its
+media?"**, so an approved reel whose clip was already uploaded was only ever
+offered "Open the video task" — never "Save & schedule". And plain **Save** only
+patched the fields. The post stayed in the `approved` state forever, and nothing
+publishes from there: `publisher.due_posts()` selects on `scheduled`. The post
+silently never went out, and nothing said so.
+
+Ready now beats reel-ness, and Save finishes the job — there is no case where a
+seller edits an approved, media-complete post and means "and do not put it in
+the calendar". Where it cannot schedule, it says why instead of succeeding
+silently. Three smaller fixes came with it: `mediaMissing()` is asked rather
+than captured once (as a const it was wrong the moment the seller uploaded a
+clip without closing the popup, which is the ordinary path); the buttons change
+the instant a clip lands, on the free path *and* the paid one; and "Save &
+schedule" stopped sending only `post_id` and `scheduled_at`, which is why a
+seller who rewrote their hook and pressed the green button watched the edit
+vanish.
+
+### An upload bar that is telling the truth
+
+`fetch()` cannot report how much of a request body has gone out, which is why
+there was nothing to show. A 40MB reel on Indian mobile data is the better part
+of a minute, and all the seller had was a spinner — the same spinner the app
+shows for a 200ms save. An indeterminate spinner over a long upload is a lie of
+omission: it says "wait" without saying "for how long", so the only rational
+reading is "this has hung".
+
+Uploads use `XMLHttpRequest` now, and the bar is real bytes sent. It sits inside
+the clip slot and the picture frame rather than behind a modal, because the
+place the file is going is the thing the seller wants to look at while it goes.
+Past 100% it switches to indeterminate and changes its label — *"Checking the
+clip for watermarks…"* — because 100% is not "finished", it is "your phone is
+done, ours is not", and saying the first when you mean the second is how a
+progress bar loses a seller's trust for good.
+
+### The first hundred milliseconds
+
+Everything above is about how long the work takes. This is about whether the app
+answered the finger at all. iOS's rule is that a control responds to touch
+immediately and visibly — not when the work finishes, not when the network
+answers. Below roughly 100ms a response is experienced as instantaneous; above
+it, as the app deciding whether to bother. Most of "this feels slow" is not slow
+work, it is a control that sat there looking dead while the work happened.
+
+`:active` fires on touch-down, so it costs one rule and no JavaScript and can
+never be late. 60ms in, 150ms out — it moves under the finger and does not
+flicker on release. Rows and tiles got it too; they were the ones that felt
+dead. Safari's own tap highlight is turned off, because it arrives ~300ms after
+the touch, on top of the app's own feedback, late enough to read as lag. And
+`touch-action: pan-y` on the scrolling lists stops a swipe that starts on a tile
+from leaving it looking pressed all the way down the page.
+
+### Eight ways an optimistic queue lies to you
+
+The queue worked, and then it was reviewed adversarially, which is where the
+expensive half of this feature was. All eight are now fixed and pinned by tests;
+the two that mattered most:
+
+**A whole week could vanish.** `approveWeek` filtered the week's posts out of
+the list and *then* looked each one up to decide whether it was a reel — by
+which point the lookup could only ever return undefined. Every job carried a
+null card, so the failure path had nothing to put back. Approving a week on
+patchy 4G gave the seller seven toasts saying the posts were "back in your
+approvals" over an empty panel, and they believed a week of posts was scheduled.
+Only a reload recovered it. Measured after the fix: 2 of 2 cards restored,
+correctly marked *unsure* because the connection dropped rather than the server
+refusing.
+
+**The same card could be sent twice.** The bulk bar holds the list as it was
+when the panel last painted, and approving one card does not repaint it — so
+"Approve all 9" could re-send a post approved a moment earlier. Two lanes makes
+those genuinely concurrent: two AI pictures billed, or one supplier emailed the
+same order twice. One job per id, ever, and the bar now counts what is actually
+left. Its sibling was worse: "Dismiss all" stayed live over an emptied list,
+still wired to the old nine, and for posts its branch sends `cancel` with no
+confirmation — a mis-tap four seconds after "Approve all" cancelled the nine
+posts the seller had just approved.
+
+The other six: a stale read of the app state could overwrite a fresher one and
+paint an approved card back as undecided; a failure record could outlive its
+card and attach itself to next week's insight under the same id (`"winback"` is
+a fixed string) — pruning plus a 3-day TTL; work finishing after the seller
+opened a different post wrote into whichever popup was open, painting post A's
+picture into post B's frame with a button that scheduled A at B's time — popups
+now carry the id they belong to; there were *two* functions building the
+"Save & schedule" button and the one the picture paths used discarded the
+caption; the paid clip generator never refreshed the buttons, so a seller who
+*paid* for a clip was still told "This reel has no clip yet"; and cancelling a
+failed post did not clear its failure.
+
+`scripts/test_instant_approve.py` (65 assertions) holds the whole thing.
+
 ## The UI pass, measured on a 390px render
 
 A seller reported three things: the Social Media popup slid sideways under a

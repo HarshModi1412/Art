@@ -344,6 +344,89 @@ ok("(cal.festivals || []).map((f) => `<span class=\"cal-leg\">" not in JS,
    "'11 Navratri' under a September calendar, when September has the 20th.")
 
 
+# =====================================================================
+print("\nHow much screen a phone actually has")
+# =====================================================================
+# Measured section by section at 390px. Every number below was taken from a
+# real render, and the point of each change is the same: a screen whose job is
+# answering one question should not cost four screens of scrolling first.
+
+ok(re.search(r"@media \(max-width: 720px\)[^@]*?\.app-grid\s*\{[^}]*grid-template-columns:\s*1fr",
+             CSS, re.S),
+   "the module tiles become a single-column list on a phone",
+   "As two columns of cards they measured 221-260px each: twelve across four "
+   "groups came to 1,975px, two and a half phone screens of doors before the "
+   "seller opens one. A card earns that space when you are comparing things. "
+   "Nobody compares 'Orders' with 'Website Builder' — they are looking for the "
+   "one they came for. As rows: 64-85px each, 1,121px for the set.")
+ok(re.search(r"grid-template-areas:\s*\"ico name go\"", CSS),
+   "with the icon, the name, what it does and its state all still on it",
+   "Nothing is hidden or folded away — the same twelve doors, the same words.")
+ok(not re.search(r"\.app-tile\s*\{\s*min-height:\s*132px", CSS),
+   "and nothing later forces them back into cards",
+   "A rule further down the file set two columns and a 132px minimum AFTER "
+   "the phone rule, which is why the rows stayed cards on the first attempt.")
+ok('"Needs reviews"' in JS and '"Needs sales"' in JS,
+   "a locked tile names the missing thing in two words",
+   "'Add your reviews first' wrapped to three shouting lines in a row's badge "
+   "and pushed the module's own name onto two. The group heading above it "
+   "already carries the instruction.")
+
+ok("const TASKS_SHOWN = 6;" in JS,
+   "the Today list stops at six and offers the rest",
+   "On an account that had let work pile up — 21 tasks — the card measured "
+   "3,412px. Four phone screens of list, on the card whose entire job is "
+   "answering 'what do I do now'. Past about six rows a list stops being an "
+   "answer and becomes a backlog, which is the thing the seller opened the app "
+   "to avoid. Capped: 1,336px.")
+ok("more waiting" in JS and "Show fewer" in JS,
+   "in both directions")
+ok("todayHeadline" in JS and "(items || []).length + open.length" in JS,
+   "while the headline still counts every one of them",
+   "It is the reading that is capped, not the truth.")
+ok('const cut = String(t.text || "").split(" — ");' in JS,
+   "a task's deadline reads as context, not as its title",
+   "'Make the reel for Linen Dupatta — goes out Mon 14 Sep, 7:00 PM' wrapped "
+   "to three bold lines and made a 200px row out of a one-line job. The "
+   "server's wording is untouched — the digest email still reads as one "
+   "sentence — because this is a display decision.")
+
+ok(re.search(r"\.table-scroll td\.sup-actions \.btn\[data-edit\],\s*"
+             r"\.table-scroll td\.sup-actions \.btn\[data-waste\],\s*"
+             r"\.table-scroll td\.sup-actions \.btn\[data-del\]\s*\{\s*display:\s*none",
+             CSS),
+   "an item's tools sit behind the same tap as its arithmetic",
+   "447px per item, more than half of it buttons — six items came to 2,731px, "
+   "84% of the whole Inventory screen. Someone checking stock between "
+   "customers is not editing anything; carrying all three tools on every card "
+   "charged the common case for the rare one. Card: 447px -> 350px.")
+ok(".table-scroll tr.show-all td.sup-actions .btn[data-edit]" in CSS,
+   "and one tap brings them back")
+ok('data-apply' in JS and "Use the suggested numbers" in JS
+   and not re.search(r"\.btn\[data-apply\][^{]*\{[^}]*display:\s*none", CSS),
+   "the one genuine prompt stays in the open",
+   "It only appears when the sales data actually has something to suggest, "
+   "and it is a prompt rather than a tool.")
+ok('data-card-hide data-card-label="Raised"' in JS,
+   "a purchase order shows who, how much and where it has got to",
+   "Seven fields per order, each a full-width line on a phone: the list "
+   "measured 1,521px. When it was raised and how many lines it has are on the "
+   "order itself, one tap away. 1,521px -> 1,109px.")
+ok(re.search(r"\.btn\[data-popdf\],\s*\.table-scroll td\.sup-actions \.btn\[data-poxls\],",
+             CSS),
+   "and its downloads and its cancel sit with them",
+   "'Approve & send', 'Details' and the step it can move to next are the "
+   "order's whole workflow and stay in the open.")
+
+ok(CSS.count('details class="fold quiet"') == 0
+   and JS.count('<details class="fold quiet">') >= 2,
+   "the days-left explanation is folded on BOTH stock screens",
+   "Four sentences of arithmetic above everything, on every visit, answering a "
+   "question a seller asks once. It was folded on Inventory and left open on "
+   "Suppliers — 147px, a fifth of a phone screen before the first useful "
+   "pixel.")
+
+
 print()
 if fails:
     print(f"{passed} passed, {len(fails)} FAILED")

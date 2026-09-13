@@ -282,8 +282,18 @@ check("a finished plan does not yank the seller back to Social",
       'if (_currentModule === "social") await renderSocial();' in JS)
 check("it tells them where to look instead",
       "open Social Media Manager to see it" in JS)
+# This used to pin the literal `const shotEl = $("smEdShot")`, which only
+# proved the app checked that SOME editor was open. That was not enough: a
+# picture takes half a minute and sellers close the popup and open the next
+# post, so the lookup found whichever editor was open at the time and painted
+# post A's picture into post B's frame. The popup now carries the id of the
+# post it belongs to, and a late arrival checks it is writing into its own.
+# Strictly stronger than what this line used to assert.
 check("a picture landing after the editor closed does not throw",
-      "const shotEl = $(\"smEdShot\");" in JS and "if (shotEl)" in JS)
+      'document.querySelector(`.modal[data-post="${post.id}"]`)' in JS
+      and "if (shotEl)" in JS)
+check("and a picture landing into somebody else's editor is not painted there",
+      JS.count('.modal[data-post="${post.id}"]') >= 3)
 check("nor does a clip landing after it closed",
       "const slotEl = $(\"smVidSlot\");" in JS and "if (slotEl)" in JS)
 check("Plan cannot be double-pressed now that it no longer blocks the screen",
