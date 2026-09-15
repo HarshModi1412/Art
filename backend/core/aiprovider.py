@@ -204,6 +204,42 @@ def status() -> dict:
             "active": live[0]["name"] if live else "template"}
 
 
+# ---------------------------------------------------------------- house style
+# Every model reaches for the em dash. Asking it not to in the system prompt
+# helps and does not settle it: one caption in ten comes back with one anyway,
+# and that caption goes out on the seller's own Instagram under their own name.
+# An em dash is the single clearest tell that a machine wrote a line, which is
+# the opposite of what a small brand wants its posts to read like.
+#
+# So the instruction stays in the prompts AND the output is repaired here, which
+# is the only place every generated string passes through.
+#
+# The repair is careful about what it replaces the dash with, because the wrong
+# punctuation reads worse than the dash did:
+#   "a word — a word"  is a parenthetical aside, so a comma is right.
+#   "a word—a word"    unspaced, usually a range or a compound, so a plain
+#                      hyphen keeps the meaning.
+#   "— a word"         at the start of a line it is a bullet, so it becomes one.
+_DASHES = "\u2014\u2013"
+
+
+def house_style(text: str) -> str:
+    """Strip the tells. Applied to every generated string before a seller sees it."""
+    if not text:
+        return text
+    import re as _re
+    out = text
+    # A dash opening a line is being used as a bullet.
+    out = _re.sub(r"(?m)^[ \t]*[%s][ \t]+" % _DASHES, "- ", out)
+    # Spaced dash: an aside. A comma carries it, and a comma before an existing
+    # comma or full stop would be wrong, so those cases lose the dash entirely.
+    out = _re.sub(r"\s+[%s]\s+([,.;:!?])" % _DASHES, r"\1", out)
+    out = _re.sub(r"\s+[%s]\s+" % _DASHES, ", ", out)
+    # Unspaced dash: a range or a compound. A hyphen means the same thing.
+    out = _re.sub(r"[%s]" % _DASHES, "-", out)
+    return out
+
+
 def generate(system: str, user: str, *, sensitivity: str,
              max_tokens: int = 400, temperature: float = 0.7,
              fallback: str = "", role: str = "") -> dict:
@@ -224,7 +260,8 @@ def generate(system: str, user: str, *, sensitivity: str,
                 s = _STATS.setdefault(p.name, {"ok": 0, "err": 0, "ms": 0})
                 s["ok"] += 1
                 s["ms"] = int((time.time() - started) * 1000)
-                return {"text": text, "provider": p.name, "free": p.free, "error": ""}
+                return {"text": house_style(text), "provider": p.name,
+                        "free": p.free, "error": ""}
         except urllib.error.HTTPError as e:
             detail = e.read().decode()[:200] if hasattr(e, "read") else str(e)
             # 429 means we burned through a free daily allowance. That is the

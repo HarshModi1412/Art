@@ -190,7 +190,7 @@ function addToCart(id, qty = 1, variantId = "") {
   const next = (S.cart[k] || 0) + qty;
   if (info.available != null && next > info.available) {
     S.cart[k] = info.available;
-    toast(`Only ${info.available} left — cart updated.`, "package");
+    toast(`Only ${info.available} left, so the cart was updated.`, "package");
   } else {
     S.cart[k] = next;
     toast(`${info.display} added to your bag`, "bag");
@@ -1342,7 +1342,7 @@ function openReset(token) {
       try {
         const r = await api("/reset", { method: "POST", json: { token, password: a } });
         clean();
-        toast("Password set — log in with it now", "check");
+        toast("Password set. Log in with it now.", "check");
         setTimeout(() => openAuth(() => loadMe(true)), 500);
       } catch (e) {
         err.textContent = e.message; err.hidden = false;
@@ -1375,7 +1375,7 @@ async function startCheckout() {
     S.priced = await api("/cart", { method: "POST", json: { lines: cartLines() } });
     (S.priced.issues || []).forEach((i) => {
       const k = cartKey(i.product_id, i.variant_id || "");
-      if (i.reason === "out_of_stock") { delete S.cart[k]; toast(`${i.name} sold out — removed`, "close"); }
+      if (i.reason === "out_of_stock") { delete S.cart[k]; toast(`${i.name} sold out, so it was removed`, "close"); }
       if (i.reason === "reduced") { S.cart[k] = i.available; toast(`Only ${i.available} of ${i.name} left`, "package"); }
       if (i.reason === "unavailable") delete S.cart[k];
       if (i.reason === "choose_variant") {
@@ -1635,7 +1635,7 @@ function bindView() {
     if (b && S.priced) b.innerHTML = payButtonLabel(S.priced) + ic("arrow-right");
   });
   const nf = el("newsForm");
-  if (nf) nf.onsubmit = (e) => { e.preventDefault(); nf.reset(); toast("Thanks — we'll be in touch.", "mail"); };
+  if (nf) nf.onsubmit = (e) => { e.preventDefault(); nf.reset(); toast("Thanks. We'll be in touch.", "mail"); };
 }
 
 async function loadMe(rerender) {
@@ -1729,6 +1729,12 @@ function scrollToRegion(key) {
   S.token = store(LS_TOKEN);
   readHash();
   el("boot").hidden = true; el("app").hidden = false;
+  // The server put a plain-HTML copy of this page in the document so that a
+  // crawler which cannot run JavaScript still sees the shop's name, its products
+  // and its policy links. The app has painted now, so it goes: no shopper should
+  // ever see both.
+  const _seo = el("seoFallback");
+  if (_seo) _seo.remove();
   mountSpine();
   render();
   runPreloader();

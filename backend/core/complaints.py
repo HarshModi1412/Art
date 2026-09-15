@@ -84,7 +84,7 @@ def analyze_complaints(df: pd.DataFrame, product_type: str | None = None) -> dic
     lexicon = product_config.complaint_lexicon(product_type)
     text_col = detect_review_column(df)
     if not text_col:
-        raise ValueError("Could not find a review text column — the file needs a column of review text.")
+        raise ValueError("Could not find a review text column, the file needs a column of review text.")
     rating_col = detect_rating_column(df)
     date_col = _detect_date_column(df)
 

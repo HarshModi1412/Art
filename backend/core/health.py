@@ -169,6 +169,34 @@ def report() -> dict:
                      "needs_one_of": keys, "if_off": consequence})
 
     blockers, warnings = [], []
+    # A published site with an unfinished privacy policy or no named grievance
+    # officer is not a cosmetic gap: Rule 3(1)(a) and Rule 3(2) of the IT Rules
+    # 2021 and Rule 4(2)/(4) of the Consumer Protection (E-commerce) Rules 2020
+    # all require these before money changes hands. So it blocks.
+    try:
+        from backend.core import legal
+        legal_state = legal.readiness()
+    except Exception:  # noqa: BLE001
+        legal_state = {"ok": False, "missing": [], "note": "legal module failed to load"}
+    if not legal_state["ok"]:
+        names = ", ".join(m["label"].lower() for m in legal_state.get("missing", []))
+        blockers.append(
+            "The legal pages cannot name who operates this service. Still "
+            f"needed: {names or 'configuration'}. Until these are set the privacy "
+            "policy, terms and grievance page publish with gaps in them, which is "
+            "worse than not publishing them.")
+    # Switching the watermark remover on makes the deployment do the one thing
+    # Rule 3 of the IT Rules as amended on 20 February 2026 names: it enables the
+    # removal of an AI label. The cost is safe harbour under section 79 of the IT
+    # Act, so it blocks rather than warns, and it says how to undo it.
+    try:
+        from backend.core import ailabel
+        ai_label_state = ailabel.compliance_state()
+    except Exception:  # noqa: BLE001
+        ai_label_state = {"ok": False, "removal_enabled": None,
+                          "note": "AI label module failed to load"}
+    if not ai_label_state.get("ok"):
+        blockers.append(ai_label_state.get("note") or "AI labelling is not working.")
     if not runtime["supported"]:
         blockers.append(runtime["note"])
     # Supabase reads degrade rather than 500 now (see db._read), which means a
@@ -221,6 +249,8 @@ def report() -> dict:
         "degraded_tables": bad,
         "storage": storage,
         "runtime": runtime,
+        "legal": legal_state,
+        "ai_label": ai_label_state,
         "capabilities": caps,
         "launch_mode": launch,
     }

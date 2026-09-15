@@ -56,7 +56,7 @@
 
   --radius:    10px;
   --radius-lg: 14px;
-  --font:      "Inter", "Noto Sans Devanagari", system-ui, sans-serif;
+  --font:      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans Devanagari", system-ui, sans-serif;
 
   --topbar:      linear-gradient(135deg, #3c4257, #5c6790);
   --topbar-ink:  #ffffff;
@@ -1473,6 +1473,22 @@ svg { width: 1em; height: 1em; flex: none; vertical-align: -0.125em; }
 .app-tile .meta .go { display: inline-flex; align-items: center; gap: 4px; }
 .app-tile .meta .go svg { width: 13px; height: 13px; }
 .btn svg { width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; }
+
+/* Inline icons in the app shell (smart.html). These replaced emoji: an emoji
+   renders as a different picture on every device, cannot take the surrounding
+   text colour, and is read aloud by a screen reader as its own long name in the
+   middle of a heading. `.uic` is the same 24x24 grid and 1.6 stroke as every
+   icon sic() draws, so the two sets cannot drift apart visually. They inherit
+   colour, so they are correct in both themes without a second rule. */
+.uic { width: 15px; height: 15px; vertical-align: -2.5px; flex: none; }
+.btn .uic, button .uic { margin-right: 5px; }
+h3 .uic, .modal-head b .uic { width: 17px; height: 17px; vertical-align: -3px; margin-right: 6px; }
+.mode-switch .uic, .mode-sw .uic { width: 16px; height: 16px; margin: 0; }
+label .uic { margin: 0 4px 0 0; }
+/* A close button is an icon alone, so the label is the aria-label and the icon
+   must not also carry a right margin meant for icon-plus-text. */
+[aria-label="Close"] .uic { margin-right: 0; width: 14px; height: 14px; }
+
 .btn.tiny svg { width: 12px; height: 12px; margin-right: 4px; }
 .pt-chip svg { width: 13px; height: 13px; }
 .data-card-ico svg { width: 20px; height: 20px; }

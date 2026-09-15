@@ -83,6 +83,15 @@ site.update({"handle": HANDLE, "brand": "Aureva", "tagline": "Small-batch perfum
 site["commerce"].update({"shipping_fee": 49, "free_shipping_above": 2000, "gst_percent": 18, "gst_inclusive": True})
 site["hero"].update({"heading": "Scent that stays", "sub": "Bottled in Bengaluru."})
 site["style"].update({"heading_font": "playfair", "accent": "#8a6f43", "motion": "full"})
+# A shop cannot be published until it can say who runs it and how to reach
+# them: Consumer Protection (E-commerce) Rules 2020, Rule 5(4) on our side
+# and Rule 6 on the seller's. So these fields are part of the setup a real
+# seller does, and the test does it too rather than working around the gate.
+site["trust"].update({"business_name": "Aureva Perfumery",
+                      "address": "18 Cunningham Road, Bengaluru 560052",
+                      "support_email": "care@aureva.in",
+                      "support_phone": "9845000000",
+                      "grievance_name": "Nikhil Rao"})
 r = c.post("/api/site/save", headers=H, json={"site": site})
 must(r.status_code == 200, f"save site ({r.status_code})", r.text[:400])
 saved = r.json()["site"]

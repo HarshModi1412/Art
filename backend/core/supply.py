@@ -1441,7 +1441,7 @@ def set_po_line_qty(email: str, po_number: str, qty_by_item: dict) -> dict | Non
             ln["line_amount"] = round(q * float(uc), 2) if not _blank(uc) else None
         lines.append(ln)
     if not lines:
-        raise ValueError("An order needs at least one line — cancel it instead.")
+        raise ValueError("An order needs at least one line, cancel it instead.")
     return update_po(email, po_number, {"lines": lines, **_totals(lines)})
 
 

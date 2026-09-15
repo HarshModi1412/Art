@@ -27,7 +27,7 @@ def get_client():
     if _client is None:
         key = os.environ.get("OPENAI_API_KEY")
         if not key:
-            raise RuntimeError("OPENAI_API_KEY missing — set it as an environment variable.")
+            raise RuntimeError("OPENAI_API_KEY missing, set it as an environment variable.")
         if OpenAI is None:
             raise RuntimeError("openai package not installed. Run: pip install openai")
         _client = OpenAI(api_key=key)
@@ -167,20 +167,20 @@ def _fallback_message(c: dict) -> str:
     import random
     if c["signal_strength"] == "strong":
         msg = (
-            f"Hi! It's been {c['recency_days']} days since we last saw you — "
+            f"Hi! It's been {c['recency_days']} days since we last saw you, "
             f"your usual {c['favorite_item']} is still on the menu and waiting for you."
         )
         if c.get("cross_sell_item"):
-            msg += f" This time, you might also love the {c['cross_sell_item']} — a favorite pairing with {c['favorite_item']}."
+            msg += f" This time, you might also love the {c['cross_sell_item']}, a favorite pairing with {c['favorite_item']}."
         if c.get("price_tier") == "premium":
             msg += " We'd love to have one of our regulars back!"
         msg += " Come by soon 🙂"
     else:
         creative = [
             "It's been a while! We've got a few new things on the menu we think you'd enjoy discovering.",
-            "Long time no see! Swing by sometime this week — there's always something fresh brewing.",
+            "Long time no see! Swing by sometime this week. There's always something fresh brewing.",
             "We noticed you haven't stopped by in a bit. Come treat yourself to something new soon!",
-            "Missed seeing you around! Next time you're nearby, drop in — we'd love to catch up.",
+            "Missed seeing you around! Next time you're nearby, drop in, we'd love to catch up.",
         ]
         msg = random.choice(creative)
     return msg[:300]
@@ -222,7 +222,7 @@ def generate_winback_messages(customers: list[dict]) -> list[dict]:
                     + f" | {c['trend']}"
                 )
             else:
-                detail = "not enough purchase history to personalize — write something warm and creative instead"
+                detail = "not enough purchase history to personalize, write something warm and creative instead"
             lines.append(
                 f"- id: {c['customer_id']} | last visit: {c['last_purchase_date']} "
                 f"({c['recency_days']} days ago) | total spend: {c['monetary']:.0f} | {detail}"
@@ -232,7 +232,7 @@ def generate_winback_messages(customers: list[dict]) -> list[dict]:
         prompt = f"""
 You are a savvy small-business marketer writing short win-back messages to customers
 who used to buy regularly but haven't visited in a while. You understand customer
-segmentation and market basket analysis — you use recency, spend tier, category
+segmentation and market basket analysis, you use recency, spend tier, category
 preference, purchase trend, and cross-sell pairings to make each message feel
 personally relevant, not like a mass blast.
 
@@ -242,17 +242,17 @@ Customers:
 For each customer, write ONE short, warm, non-pushy WhatsApp-style message (under 300 characters):
 
 - If real purchase signals are given (favorite item, category, spend tier, trend, cross-sell pairing),
-  weave ONE or TWO of them in naturally — e.g. reference their favorite item by name, suggest the
+  weave ONE or TWO of them in naturally, e.g. reference their favorite item by name, suggest the
   item that's commonly bought alongside it (from market basket analysis) as something new to try,
   or acknowledge they're a valued regular if their spend tier is premium. Don't cram in every data
-  point — pick what feels natural.
+  point, pick what feels natural.
 - If a customer is marked "not enough purchase history to personalize", do NOT invent fake
-  specifics. Instead write something genuinely creative and inviting — a bit of warmth,
-  curiosity, or a light reason to try something new — that doesn't pretend to know them.
+  specifics. Instead write something genuinely creative and inviting, a bit of warmth,
+  curiosity, or a light reason to try something new, that doesn't pretend to know them.
 - No mass-marketing tone: no ALL CAPS, no emoji spam, no fake urgency, no generic "we miss you!"
   copy-pasted across everyone.
 
-Return ONLY a JSON array, one object per customer, in this exact format, and nothing else —
+Return ONLY a JSON array, one object per customer, in this exact format, and nothing else -
 no markdown code fences, no commentary before or after:
 [
 {{"customer_id": "the id exactly as given", "message": "the message text"}}

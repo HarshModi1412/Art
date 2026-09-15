@@ -78,7 +78,7 @@ def mark_sent(email: str, customers: list[dict], channel: str = "whatsapp",
             "prior_value": float(c.get("monetary") or c.get("value") or 0),
         })
     if not targets:
-        raise ValueError("Nothing to mark — generate the campaign first.")
+        raise ValueError("Nothing to mark, generate the campaign first.")
 
     row = {
         "id": secrets.token_hex(6),
@@ -181,7 +181,7 @@ def summary(email: str) -> dict:
         r["counts_toward_total"] = r.get("state") != "pending"
         if r["state"] == "pending":
             r["measurable"] = False
-            r["note_state"] = ("Waiting for you to confirm you sent these — "
+            r["note_state"] = ("Waiting for you to confirm you sent these, "
                                "until then they are not counted.")
     counted = [r for r in measured if r["counts_toward_total"]]
     pending = [r for r in measured if not r["counts_toward_total"]]
@@ -196,11 +196,11 @@ def summary(email: str) -> dict:
         first = min((r.get("sent_at") or "" for r in measured if r.get("sent_at")), default="")
         since = pd.to_datetime(first, errors="coerce")
         when = f" since {since:%B}" if not pd.isna(since) else ""
-        headline = (f"₹{recovered:,.0f} recovered from win-backs{when} — "
+        headline = (f"₹{recovered:,.0f} recovered from win-backs{when}, "
                     f"{returned} of {contacted} customers you contacted came back.")
     elif ready:
-        headline = (f"{contacted} customers contacted. None have come back yet — "
-                    f"it is still early for {len(measured)} campaign"
+        headline = (f"{contacted} customers contacted. None have come back yet. "
+                    f"It is still early for {len(measured)} campaign"
                     f"{'s' if len(measured) != 1 else ''}.")
     elif contacted:
         headline = (f"{contacted} customers contacted. Upload fresher sales data "
@@ -209,7 +209,7 @@ def summary(email: str) -> dict:
         n = sum(r["n_targets"] for r in pending)
         headline = (f"{n} message{'s' if n != 1 else ''} "
                     f"{'is' if n == 1 else 'are'} ready to send on WhatsApp. "
-                    f"Send them, then mark them sent — that is when this starts counting.")
+                    f"Send them, then mark them sent. That is when this starts counting.")
     else:
         headline = ""
 
@@ -224,5 +224,5 @@ def summary(email: str) -> dict:
         "window_days": DEFAULT_WINDOW_DAYS,
         "method": "A customer counts as recovered if they bought within "
                   f"{DEFAULT_WINDOW_DAYS} days of the campaign going out. "
-                  "It is not a controlled test — it is what your own sales data says.",
+                  "It is not a controlled test. It is what your own sales data says.",
     }

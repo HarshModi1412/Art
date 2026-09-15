@@ -132,6 +132,14 @@ HANDLE = f"rep{int(time.time())}"
 pid = c.get("/api/products/state", headers=H).json()["products"][0]["id"]
 site = c.get("/api/site/state", headers=H).json()["site"]
 site.update({"handle": HANDLE, "brand": "Kora Studio"})
+# A shop cannot be published until it can say who runs it and how to reach
+# them: Consumer Protection (E-commerce) Rules 2020, Rule 5(4) on our side
+# and Rule 6 on the seller's. So these fields are part of the setup a real
+# seller does, and the test does it too rather than working around the gate.
+site["trust"] = {**(site.get("trust") or {}),
+                 "business_name": "Kora Studio", "support_email": "care@kora.in",
+                 "address": "3 Laxmi Road, Pune 411030", "support_phone": "9822000000",
+                 "grievance_name": "Kora Studio"}
 c.post("/api/site/save", headers=H, json={"site": site})
 c.post("/api/site/publish", headers=H, json={"published": True})
 r = c.post(f"/api/shop/{HANDLE}/order", json={

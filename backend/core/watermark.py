@@ -53,8 +53,43 @@ neighbour-fill in numpy, and videos are returned untouched with the reason.
 
 Nothing here raises. A failure returns the original bytes and a report that
 says why, because cleaning is a nicety and must never cost a seller their clip.
+
+COMPLIANCE GATE ADDED 15 SEPTEMBER 2026
+---------------------------------------
+Every public entry point below now returns without touching anything unless
+`ailabel.removal_enabled()` is True, and that is False unless the deployment
+sets WATERMARK_REMOVAL. The reason is in backend/core/ailabel.py: the IT Rules
+as amended on 20 February 2026 require an intermediary that offers AI
+generation to ensure "the modification, suppression or removal of the label,
+permanent metadata shall not be enabled", and this file is that removal. The
+code is left intact rather than deleted because it is careful work with
+legitimate uses outside that rule, and because the decision to run it belongs
+to whoever operates the deployment, not to the file.
+
+The product now gets the clean corner the lawful way: the generator's own mark
+is turned off at the generator (Flow: Settings, Media Watermark), and
+ailabel.label_image() applies our own compliant label in its place.
 """
 from __future__ import annotations
+
+# --------------------------------------------------------------- compliance gate
+_OFF_REASON = (
+    "Removing another tool's AI watermark is switched off. Indian law (IT Rules "
+    "2021 as amended on 20 February 2026) requires a platform that offers AI "
+    "generation to make sure an AI label cannot be removed, and breaking that "
+    "costs the platform its safe harbour under section 79 of the IT Act. Turn "
+    "the mark off in the generator instead: in Google Flow it is Settings, then "
+    "Media Watermark, and free accounts have it. We then add our own label.")
+
+
+def _removal_allowed() -> bool:
+    """One place, so no entry point can be added later that forgets the gate."""
+    try:
+        from backend.core import ailabel
+        return ailabel.removal_enabled()
+    except Exception:  # noqa: BLE001 - if the gate cannot be read, stay compliant
+        return False
+
 
 import io
 import json
@@ -182,7 +217,15 @@ def capabilities() -> dict:
     """What this server can clean — surfaced so the UI never over-promises."""
     cv = _cv2() is not None
     ff = ffmpeg_exe() is not None
+    if not _removal_allowed():
+        # The UI reads this to decide whether to offer "still see a watermark?".
+        # With removal switched off it must offer nothing, or a seller presses a
+        # button that reports success and changes no pixel.
+        return {"images": False, "image_method": "", "videos": False,
+                "removal_enabled": False, "video_note": _OFF_REASON,
+                "note": _OFF_REASON}
     return {"images": True, "image_method": "opencv" if cv else "basic",
+            "removal_enabled": True,
             "videos": cv and ff,
             "video_note": "" if (cv and ff) else
             ("Video cleaning needs OpenCV and ffmpeg on the server "
@@ -524,6 +567,10 @@ def clean_image(data: bytes, source: str = "") -> tuple[bytes, dict]:
     """
     report = {"checked": False, "removed": False, "regions": [], "kind": "image",
               "method": "", "reason": ""}
+    if not _removal_allowed():
+        report["reason"] = _OFF_REASON
+        report["blocked_by_law"] = True
+        return data, report
     try:
         from PIL import Image
         im = Image.open(io.BytesIO(data))
@@ -760,6 +807,10 @@ def _rm(path: str) -> None:
 def clean_video_bytes(data: bytes, filename_hint: str = "clip.mp4",
                       source: str = "", corner: str = "") -> tuple[bytes, dict]:
     """Bytes in, bytes out. The original comes back when nothing was removed."""
+    if not _removal_allowed():
+        return data, {"checked": False, "removed": False, "kind": "video",
+                      "regions": [], "reason": _OFF_REASON,
+                      "blocked_by_law": True}
     ext = os.path.splitext(filename_hint or "")[1].lower() or ".mp4"
     tmp = tempfile.mkdtemp(prefix="wm_")
     src, dst = os.path.join(tmp, "in" + ext), os.path.join(tmp, "out.mp4")
@@ -789,6 +840,10 @@ def clean_media_url(url: str, email: str = "", source: str = "", corner: str = "
     name = os.path.basename((url or "").split("?", 1)[0])
     out = {"url": url, "report": {"checked": False, "removed": False,
                                   "reason": "not a stored file"}}
+    if not _removal_allowed():
+        out["report"] = {"checked": False, "removed": False,
+                         "reason": _OFF_REASON, "blocked_by_law": True}
+        return out
     if not name:
         return out
     got = media.read(name)

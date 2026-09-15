@@ -237,7 +237,7 @@ def build_batch(email: str) -> dict:
         return {"ok": False, "rows": [], "skipped": skipped,
                 "reason": (f"everyone at risk was already contacted in the last "
                            f"{COOLDOWN_DAYS} days" if skipped and not fresh
-                           else f"only {len(fresh)} to reach — not worth a campaign yet")}
+                           else f"only {len(fresh)} to reach, not worth a campaign yet")}
 
     rows = templates.build_winback_messages(fresh)
     reachable = [r for r in rows

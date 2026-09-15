@@ -10,7 +10,14 @@ services:
     runtime: python
     plan: starter                # $7/mo — no spin-down, unlike free
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    # --proxy-headers is not optional. Render terminates TLS at the edge and
+    # forwards plain HTTP to this process, so without it request.url.scheme is
+    # "http" on every request to an https-only site. That fed every canonical
+    # tag, every og:url and every media URL handed to Meta. backend/core/
+    # publicurl.py defends against it independently, so the app is correct
+    # either way, but this is the right setting and it also makes the client IP
+    # in the logs the real one instead of Render's proxy.
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
 
     envVars:
       - key: OPENAI_API_KEY
@@ -49,6 +56,38 @@ services:
       # The cron below needs this to authenticate. Same value in both places.
       - key: ADMIN_TOKEN
         generateValue: true
+      # ---------------------------------------------------------------------
+      # The public address, and who runs this service.
+      # ---------------------------------------------------------------------
+      # PUBLIC_BASE_URL is what to set the day a custom domain is connected.
+      # Every absolute URL the app writes follows it: canonical tags, og:url,
+      # the sitemap, password-reset links in email, and the image URLs handed
+      # to Instagram. Leave it unset and the app uses the host the request
+      # arrived on, which is correct on Render's own domain.
+      - key: PUBLIC_BASE_URL
+        sync: false               # e.g. https://onetapmanager.in
+      # These six fill in the legal pages. Until they are set, /legal/* say
+      # plainly that they are unfinished and GET /api/admin/health refuses to
+      # call the deployment launch-ready, because a privacy policy that cannot
+      # name who operates the service is worse than not publishing one.
+      # Rule 3(1)(a) and 3(2) of the IT Rules 2021, and Rule 4(2) and 4(4) of
+      # the Consumer Protection (E-commerce) Rules 2020.
+      - key: LEGAL_NAME
+        sync: false               # the legal name of whoever operates this
+      - key: BUSINESS_ADDRESS
+        sync: false               # full address of the place of business
+      - key: SUPPORT_EMAIL
+        sync: false
+      - key: SUPPORT_PHONE
+        sync: false
+      - key: GRIEVANCE_NAME
+        sync: false               # the named grievance officer, Rule 3(2)
+      - key: GRIEVANCE_EMAIL
+        sync: false
+      # Google Analytics. Leave it unset and no cookie banner appears at all,
+      # because with no tracker there is nothing to ask permission for.
+      - key: GA4_MEASUREMENT_ID
+        sync: false               # G-XXXXXXXXXX
     disk:
       name: cafex-data
       # THIS PATH AND CAFEX_DATA_DIR ABOVE MUST BE THE SAME STRING.

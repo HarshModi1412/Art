@@ -791,3 +791,22 @@ button:focus-visible, .nav-item:focus-visible, a:focus-visible {
 }
 .wb-table input:focus { outline: none; border-color: var(--accent); }
 .wb-del { padding: 3px 9px !important; font-size: 12px !important; }
+
+/* ---------------------------------------------------------------------------
+   Inline icons (Classic shell)
+   ---------------------------------------------------------------------------
+   These replaced emoji throughout index.html. An emoji renders as a different
+   picture on every device, cannot take the surrounding text colour, and a screen
+   reader announces its full name in the middle of a heading ("bar chart Sales
+   Analytics"). `.uic` is the same 24x24 grid and 1.6 stroke weight as the icon
+   set Smart uses, drawn from backend/core/sitebuilder.ICONS, so the two surfaces
+   read as one product. They inherit colour, so light and dark both work with no
+   second rule.
+   --------------------------------------------------------------------------- */
+.uic { width: 15px; height: 15px; vertical-align: -2.5px; flex: none; }
+button .uic, .nav-item .uic, .ghost-btn .uic, .primary-btn .uic { margin-right: 6px; }
+h1 .uic, h2 .uic { width: 19px; height: 19px; vertical-align: -3px; margin-right: 8px; }
+h3 .uic, h4 .uic { width: 17px; height: 17px; vertical-align: -3px; margin-right: 6px; }
+.pro-pill .uic { width: 12px; height: 12px; margin: 0; vertical-align: -1.5px; }
+.hamburger .uic { width: 20px; height: 20px; margin: 0; }
+[aria-label="Close"] .uic { margin-right: 0; }

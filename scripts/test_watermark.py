@@ -2,6 +2,21 @@
 Watermark remover — synthetic pictures and clips with a known mark, so the
 test knows exactly which pixels should change and which must not.
 
+WHY THIS FILE SETS WATERMARK_REMOVAL
+------------------------------------
+Since 15 September 2026 the remover is switched OFF in the product. The IT Rules
+as amended on 20 February 2026 forbid a platform that offers AI generation from
+enabling the removal of an AI label, and the price of breaking that is safe
+harbour under section 79 of the IT Act. See backend/core/ailabel.py.
+
+The detection and inpainting code was not deleted, because it is careful work
+with uses outside that rule (a seller's own logo on their own photograph), and
+because the decision to run it belongs to whoever operates the deployment. So
+this file turns the switch on deliberately in order to test the algorithm, and
+the LAST section turns it off again and checks that the default state really does
+refuse. If that last section ever goes red, the product is shipping something
+that costs it safe harbour, which matters more than any check above it.
+
 Run: python3 scripts/test_watermark.py
 """
 import io
@@ -15,7 +30,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np  # noqa: E402
 from PIL import Image, ImageDraw, ImageFont  # noqa: E402
 
-from backend.core import watermark  # noqa: E402
+# Set BEFORE watermark is imported, so the gate sees it on the first call.
+os.environ["WATERMARK_REMOVAL"] = "on"
+from backend.core import ailabel, watermark  # noqa: E402
 
 PASS = FAIL = 0
 
@@ -380,6 +397,36 @@ MAIN = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 check("the upload is read in pieces and stopped at the size cap",
       "await f.read(1024 * 1024)" in MAIN and "clean: bool = True" in MAIN)
 shutil.rmtree(tmp, ignore_errors=True)
+
+# =========================================================================
+print("\n== and with the switch back off, nothing can remove anything ==")
+# =========================================================================
+# This is the state the product actually ships in. Everything above ran with the
+# switch forced on to exercise the algorithm; these checks are the ones that
+# describe what a seller's deployment does.
+import importlib  # noqa: E402
+
+os.environ.pop("WATERMARK_REMOVAL", None)
+importlib.reload(ailabel)
+
+check("with nothing set, removal is off", ailabel.removal_enabled() is False)
+_img = np.full((400, 400, 3), 180, np.uint8)
+_buf = io.BytesIO()
+Image.fromarray(_img).save(_buf, format="PNG")
+_plain = _buf.getvalue()
+_out, _rep = watermark.clean_image(_plain)
+check("clean_image refuses, citing the rule",
+      _rep.get("blocked_by_law") is True and "20 February 2026" in _rep["reason"])
+check("and hands back the identical bytes", _out == _plain)
+_vout, _vrep = watermark.clean_video_bytes(b"x", "clip.mp4")
+check("clean_video_bytes refuses too", _vrep.get("blocked_by_law") is True)
+check("the stored-media route refuses",
+      watermark.clean_media_url("/media/x.png", "a@b.in")["report"].get("blocked_by_law") is True)
+_caps = watermark.capabilities()
+check("and the UI is told there is nothing on offer",
+      _caps["images"] is False and _caps["videos"] is False)
+check("so no button is shown that would change no pixel",
+      _caps.get("removal_enabled") is False)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

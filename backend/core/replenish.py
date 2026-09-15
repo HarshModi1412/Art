@@ -299,7 +299,7 @@ def send_po(email: str, po_number: str, subject: str = "", body: str = "",
     if not po:
         raise ValueError("Purchase order not found.")
     if po.get("status") in ("cancelled", "received"):
-        raise ValueError(f"This order is {po.get('status')} — nothing to send.")
+        raise ValueError(f"This order is {po.get('status')}, nothing to send.")
 
     draft = email_draft(email, po_number) if not (subject and body) else {}
     subject = (subject or draft.get("subject") or f"Purchase order {po_number}").strip()

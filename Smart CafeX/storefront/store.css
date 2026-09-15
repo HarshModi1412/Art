@@ -1119,3 +1119,17 @@ html.editing .announce:hover > .edit-tag { transform: translateY(-50%); }
   /* Quantity steppers were comfortably mouse-sized and thumb-hostile. */
   .qty button { min-width: 40px; min-height: 40px; }
 }
+
+/* The server-rendered fallback (see sitebuilder.storefront_fallback_html).
+   It is removed by store.js the moment the app paints, so this styling only
+   ever applies for the fraction of a second before that, or for a visitor with
+   JavaScript switched off, where it should be plain and readable rather than
+   invisible. Deliberately NOT display:none: hiding text from a person while
+   showing it to a crawler is cloaking, and it is penalised. */
+#seoFallback { max-width: 760px; margin: 0 auto; padding: 32px 20px;
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+#seoFallback h1 { font-size: 28px; margin: 0 0 8px; }
+#seoFallback h2 { font-size: 18px; margin: 28px 0 8px; }
+#seoFallback ul { padding-left: 20px; }
+#seoFallback li { margin-bottom: 6px; }
+#seoFallback nav { margin-top: 28px; display: flex; gap: 14px; flex-wrap: wrap; }

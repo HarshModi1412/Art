@@ -41,14 +41,14 @@ POSITIONS: dict[str, dict] = {
         "price": "premium", "focus": "product",
         "tagline": "People pay more because the product itself is clearly better.",
         "pros": [
-            "Highest margin per order — buyers already accept premium pricing.",
+            "Highest margin per order, buyers already accept premium pricing.",
             "Reputation rides on product quality, which you control directly.",
             "Attracts serious buyers who become repeat customers and refer friends.",
             "Easy to justify limited drops and higher-priced signature pieces.",
         ],
         "cons": [
             "Quality has to be flawless every time, or the price feels unfair.",
-            "Smaller audience — the price filters out casual browsers.",
+            "Smaller audience, the price filters out casual browsers.",
             "Vulnerable if a cheaper seller gets 'good enough'.",
             "Higher material and QC cost to hold the standard.",
         ],
@@ -56,15 +56,15 @@ POSITIONS: dict[str, dict] = {
     "value_product": {
         "name": "Everyday value brand",
         "price": "value", "focus": "product",
-        "tagline": "Genuinely good products at a fair price — the reliable go-to.",
+        "tagline": "Genuinely good products at a fair price, the reliable go-to.",
         "pros": [
-            "Broadest audience — the price welcomes almost everyone.",
+            "Broadest audience, the price welcomes almost everyone.",
             "High repeat rate; becomes a habit, not a one-off splurge.",
             "Word of mouth compounds fast when value is obvious.",
-            "Resilient — 'affordable treat' spending holds up in a downturn.",
+            "Resilient, 'affordable treat' spending holds up in a downturn.",
         ],
         "cons": [
-            "Thin margins — profit depends on volume and tight sourcing.",
+            "Thin margins, profit depends on volume and tight sourcing.",
             "Hard to raise prices later without upsetting regulars.",
             "Easy to copy; little that's defensible beyond consistency.",
             "Busy-but-broke risk if fulfilment isn't efficient.",
@@ -75,13 +75,13 @@ POSITIONS: dict[str, dict] = {
         "price": "premium", "focus": "brand",
         "tagline": "People pay for the brand, the aesthetic and how it makes them feel.",
         "pros": [
-            "Highest perceived value — story and aesthetic justify the price.",
-            "Strong on Instagram — the brand markets itself for free.",
+            "Highest perceived value, story and aesthetic justify the price.",
+            "Strong on Instagram, the brand markets itself for free.",
             "Great for collabs, drops, and aspirational content.",
             "The brand world is hard for a bare-product seller to copy.",
         ],
         "cons": [
-            "Heavy upfront work — photography, packaging, consistent identity.",
+            "Heavy upfront work, photography, packaging, consistent identity.",
             "The product still has to be at least good, or the brand rings hollow.",
             "Trends move; an aesthetic dates and needs refreshing.",
             "Slower to build trust than a straightforward value pitch.",
@@ -92,14 +92,14 @@ POSITIONS: dict[str, dict] = {
         "price": "value", "focus": "brand",
         "tagline": "On-trend looks at a price young buyers can say yes to.",
         "pros": [
-            "Magnet for trend-driven, social-first buyers — high shareability.",
+            "Magnet for trend-driven, social-first buyers, high shareability.",
             "Low price + strong aesthetic is a very viral combination.",
             "Fast to ride trends and test new drops cheaply.",
             "Community and identity build loyalty price alone can't.",
         ],
         "cons": [
-            "Lowest margin — you live and die by volume and virality.",
-            "Trend risk — today's hot look is next month's dead stock.",
+            "Lowest margin, you live and die by volume and virality.",
+            "Trend risk, today's hot look is next month's dead stock.",
             "Crowded space; lots of lookalike sellers competing on price.",
             "Hard to trade up either the price or the product later.",
         ],
@@ -119,8 +119,8 @@ QUADRANT_TO_ID = {
 
 # Foundations that matter in EVERY position.
 UNIVERSAL_KEEP = [
-    "Reply to every review and DM quickly — responsiveness is free trust.",
-    "Consistent core quality — your bestsellers are the same every order.",
+    "Reply to every review and DM quickly. Responsiveness is free trust.",
+    "Consistent core quality, your bestsellers are the same every order.",
     "Honest photos and descriptions so what arrives matches what was promised.",
     "Reliable dispatch and clear tracking on every order.",
 ]
@@ -131,37 +131,37 @@ UNIVERSAL_KEEP = [
 # ---------------------------------------------------------
 _PRICE_UP = {  # value -> premium
     "label": "Move from value pricing to premium pricing",
-    "keep_note": "You're keeping what you're known for — you're changing what you charge and how premium it feels.",
+    "keep_note": "You're keeping what you're known for. What changes is what you charge and how premium it feels.",
     "steps": [
         ("Cost your 5 bestsellers precisely (materials + making + overhead + shipping per unit).",
          "You can't price up safely until you know your true unit cost and current margin."),
         ("Upgrade the visible quality cues of those 5: better finish, better packaging, better photos.",
          "A premium price needs a premium cue the buyer can see and photograph."),
-        ("Introduce 2–3 higher-priced signature pieces ABOVE your current range.",
+        ("Introduce 2-3 higher-priced signature pieces ABOVE your current range.",
          "This lifts the price ceiling gently instead of raising everything at once."),
-        ("Raise prices on the upgraded pieces by 10–15%, holding one or two 'anchor' favourites steady.",
+        ("Raise prices on the upgraded pieces by 10-15%, holding one or two 'anchor' favourites steady.",
          "A kept anchor stops regulars feeling the whole shop got expensive."),
         ("Write a one-line quality/sourcing story for each piece ('hand-finished', 'small-batch').",
          "Story justifies price; silence makes it feel like a hike."),
         ("Refresh your feed and product pages to look considered and premium, not busy.",
          "Your grid is the price tag buyers stare at longest."),
         ("Watch repeat rate and average order value for 4 weeks; tune the two weakest pieces.",
-         "Repositioning is a dial, not a switch — adjust with real data."),
+         "Repositioning is a dial, not a switch, adjust with real data."),
     ],
 }
 _PRICE_DOWN = {  # premium -> value
     "label": "Move from premium pricing to value pricing",
-    "keep_note": "You're keeping what you're known for — you're making it more affordable and higher-volume.",
+    "keep_note": "You're keeping what you're known for. What changes is the price and the volume.",
     "steps": [
         ("Find your highest-margin pieces and build bundles/sets around them.",
          "Value positioning wins on bundles, not across-the-board price cuts."),
-        ("Trim the catalogue — drop slow, costly pieces so fulfilment gets faster and cheaper.",
+        ("Trim the catalogue, drop slow, costly pieces so fulfilment gets faster and cheaper.",
          "Value economics only work when operations are lean."),
         ("Introduce one clear 'everyday' price point that undercuts the premium options.",
          "Give buyers one obvious reason you're the smart daily choice."),
         ("Renegotiate your top 3 supplier costs or switch to bulk on your highest-volume inputs.",
          "Protected margin is what makes low prices survivable."),
-        ("Message value loudly — bundle offers, first-order discount, loyalty perks.",
+        ("Message value loudly, bundle offers, first-order discount, loyalty perks.",
          "Value has to be advertised; premium sells on restraint, value sells on shouting it."),
         ("Speed up fulfilment: pre-pack bestsellers, streamline dispatch, offer quick shipping.",
          "More orders per week is how volume pricing makes money."),
@@ -171,25 +171,25 @@ _PRICE_DOWN = {  # premium -> value
 }
 _FOCUS_TO_PRODUCT = {  # brand -> product
     "label": "Shift what you're known for from the brand to the product",
-    "keep_note": "You're keeping your price positioning — you're changing what buyers come for.",
+    "keep_note": "You're keeping your price positioning. What changes is what buyers come to you for.",
     "steps": [
-        ("Pick 2–3 pieces to become your signature and perfect them until they're undeniable.",
+        ("Pick 2-3 pieces to become your signature and perfect them until they're undeniable.",
          "A product reputation is built on a few things done exceptionally, not a huge catalogue."),
         ("Invest in the craft: better materials, tighter QC, real improvements buyers can feel.",
          "Product-led positioning lives or dies on what actually arrives."),
-        ("Put the product front and centre — close-up shots, detail videos, how it's made.",
+        ("Put the product front and centre, close-up shots, detail videos, how it's made.",
          "Buyers switch to coming-for-the-product only when the product is the story."),
         ("Run a small drop of your signature pieces and collect honest buyer feedback.",
          "Direct feedback tells you which piece deserves the spotlight."),
         ("Shift your content from lifestyle/aesthetic to product detail and quality proof.",
          "Your feed teaches buyers what to come for."),
         ("Set a consistency standard (QC checklist, spec cards) so quality never wobbles.",
-         "A product rep is fragile — one bad order undoes ten good ones."),
+         "A product rep is fragile, one bad order undoes ten good ones."),
     ],
 }
 _FOCUS_TO_BRAND = {  # product -> brand
     "label": "Shift what you're known for from the product to the brand & aesthetic",
-    "keep_note": "You're keeping your price positioning — you're changing what buyers come for.",
+    "keep_note": "You're keeping your price positioning. What changes is what buyers come to you for.",
     "steps": [
         ("Define your brand feeling in one line (minimal / bold / vintage / playful) and design to it.",
          "A brand needs one clear identity, not a bit of everything."),
@@ -197,7 +197,7 @@ _FOCUS_TO_BRAND = {  # product -> brand
          "Aesthetic consistency is what turns a shop into a brand."),
         ("Create one genuinely shareable signature detail (packaging, a motif, an unboxing moment).",
          "The brand spreads only if there's something worth posting."),
-        ("Build a content rhythm — a recognisable style of reels/posts people start to expect.",
+        ("Build a content rhythm, a recognisable style of reels/posts people start to expect.",
          "Brand positioning is about presence, not just products."),
         ("Tell your founder/brand story across bio, highlights and captions.",
          "People buy a small brand partly for who's behind it."),
@@ -223,9 +223,9 @@ def _improve_blocks(pid: str) -> list[dict]:
     price_word = "premium" if p["price"] == "premium" else "value"
     return [
         {"label": "Level 1 · Make it undeniable",
-         "keep_note": f"You're staying a “{p['name']}” — Level 1 hardens the foundations so nobody has a reason to doubt you.",
+         "keep_note": f"You're staying a “{p['name']}”, Level 1 hardens the foundations so nobody has a reason to doubt you.",
          "steps": [
-            (f"List your top 5 pieces and make each one's {focus_word} visibly excellent — fix the weakest first.",
+            (f"List your top 5 pieces and make each one's {focus_word} visibly excellent, fix the weakest first.",
              "You strengthen a position by removing its single biggest reason-to-doubt."),
             ("Rewrite your bio and pinned posts so your one-line positioning is instantly clear.",
              "If a new visitor can't tell what you stand for in 3 seconds, the position isn't working yet."),
@@ -233,15 +233,15 @@ def _improve_blocks(pid: str) -> list[dict]:
              "Trust is the base layer of every position; unanswered gripes leak it away."),
          ]},
         {"label": "Level 2 · Get more people to see it",
-         "keep_note": "Level 2 turns a solid position into reach — more of the right people discovering you.",
+         "keep_note": "Level 2 turns a solid position into reach, more of the right people discovering you.",
          "steps": [
             (f"Post 3x/week of content that proves your {focus_word}, not just shows product.",
              "Proof content converts strangers; pretty-but-empty content doesn't."),
             (f"Lean into your {price_word} angle in every caption and offer so the message is consistent.",
              "A position compounds only when every touchpoint repeats it."),
-            ("Collaborate with 2–3 micro-creators whose audience matches your buyer.",
+            ("Collaborate with 2-3 micro-creators whose audience matches your buyer.",
              "Borrowed audiences are the fastest honest way to grow a small brand."),
-            ("Turn your happiest buyers into content — reshare their photos, ask for reviews.",
+            ("Turn your happiest buyers into content, reshare their photos, ask for reviews.",
              "Social proof at scale is what makes a position believable."),
          ]},
         {"label": "Level 3 · Defend & compound",
@@ -250,7 +250,7 @@ def _improve_blocks(pid: str) -> list[dict]:
             ("Launch a signature drop or limited edition that only your brand could do.",
              "A signature nobody can copy is what makes a position defensible."),
             ("Start a simple loyalty or repeat-buyer perk to raise lifetime value.",
-             "Keeping a buyer is cheaper than winning a new one — that's where margin compounds."),
+             "Keeping a buyer is cheaper than winning a new one, that's where margin compounds."),
             ("Re-upload reviews monthly and watch your positioning score hold or climb.",
              "What you measure monthly is what you keep improving."),
          ]},
@@ -261,14 +261,14 @@ def _shared(cur: dict, tgt: dict) -> list[str]:
     keep = list(UNIVERSAL_KEEP)
     if cur["price"] == tgt["price"]:
         if cur["price"] == "premium":
-            keep.append("Your premium price positioning stays — protect the quality cues that justify it.")
+            keep.append("Your premium price positioning stays, protect the quality cues that justify it.")
         else:
-            keep.append("Your value/affordable positioning stays — keep prices honest and visible.")
+            keep.append("Your value/affordable positioning stays, keep prices honest and visible.")
     if cur["focus"] == tgt["focus"]:
         if cur["focus"] == "product":
-            keep.append("Your product reputation stays — never let signature quality slip while you change the rest.")
+            keep.append("Your product reputation stays, never let signature quality slip while you change the rest.")
         else:
-            keep.append("Your brand & aesthetic stays — keep the identity your followers already recognise.")
+            keep.append("Your brand & aesthetic stays, keep the identity your followers already recognise.")
     return keep
 
 
@@ -342,7 +342,7 @@ def build_plan(current_id: str, target_id: str) -> dict:
     _assign_levels(checklist, blocks)
 
     if same:
-        gap = "You're staying put and getting stronger — no repositioning, just compounding what already works."
+        gap = "You're staying put and getting stronger, no repositioning, just compounding what already works."
     else:
         gap_bits = []
         if cur["price"] != tgt["price"]:
@@ -358,7 +358,7 @@ def build_plan(current_id: str, target_id: str) -> dict:
         "same_position": same,
         "keep_same": _shared(cur, tgt),
         "keep_note": blocks[0]["keep_note"] if len(blocks) == 1 or same else
-                     "This is a big move on both axes — change one axis at a time, and keep the foundations below rock-solid throughout.",
+                     "This is a big move on both axes, change one axis at a time, and keep the foundations below rock-solid throughout.",
         "gap": gap,
         "axes_changing": 0 if same else len(_axis_plan(cur, tgt)),
         "levels": levels,

@@ -244,6 +244,9 @@ ICONS = {
     "whatsapp": '<path d="M4 20l1.3-4A8 8 0 1 1 8 18.7L4 20Z"/><path d="M9 9.4c.4 2.4 2.2 4.2 4.6 4.6l1-1.3 1.8.8v1.2c0 .6-.5 1.1-1.1 1a7.6 7.6 0 0 1-6.9-6.9c-.1-.6.4-1.1 1-1.1h1.2l.8 1.8-1.4 1"/>',
     "scissors": '<circle cx="6.5" cy="7" r="2.2"/><circle cx="6.5" cy="17" r="2.2"/><path d="M8.4 8.4 19 17M19 7 8.4 15.6"/>',
     "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/>',
+    "moon": '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+    "hand": '<path d="M9 11V5.6a1.6 1.6 0 0 1 3.2 0V11"/><path d="M12.2 11V4.8a1.6 1.6 0 0 1 3.2 0V11"/><path d="M15.4 11.4V7.4a1.6 1.6 0 0 1 3.2 0V15a5.5 5.5 0 0 1-5.5 5.5h-1.3a5 5 0 0 1-3.7-1.6L5 15.4a1.6 1.6 0 0 1 2.4-2.1L9 15"/>',
+    "history": '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4.2l2.8 1.8"/>',
     "droplet": '<path d="M12 3.5c3.4 4 5.5 6.7 5.5 9.3a5.5 5.5 0 1 1-11 0c0-2.6 2.1-5.3 5.5-9.3Z"/>',
     "flame": '<path d="M12 21a5.5 5.5 0 0 0 5.5-5.5c0-4-3.5-5.5-3-9.5-2.5 1-4 3.5-4 5.5-1 0-2-1-2-2.5-1.3 1.4-2 3.4-2 6.5A5.5 5.5 0 0 0 12 21Z"/>',
     "globe": '<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/><path d="M12 4c2.2 2.2 3.3 5 3.3 8s-1.1 5.8-3.3 8c-2.2-2.2-3.3-5-3.3-8s1.1-5.8 3.3-8Z"/>',
@@ -699,6 +702,12 @@ def default_site(email: str) -> dict:
             "business_name": "", "gstin": "", "address": "",
             "support_phone": "", "support_email": email,
             "returns_days": 7, "dispatch_days": 2,
+            # Rule 6 of the Consumer Protection (E-commerce) Rules 2020 makes
+            # each seller name someone who handles complaints, and display a
+            # return/refund policy. Neither existed here, so a published shop was
+            # missing two things the law requires it to show.
+            "grievance_name": "",
+            "refund_policy": "7day",
             "show": True,
         },
         "seeded": False,
@@ -762,7 +771,7 @@ def save_site(email: str, patch: dict) -> dict:
     if not wanted:
         wanted = suggest_handle(site["brand"] or "my-store", email)
     if wanted != previous_handle and not handle_available(wanted, email):
-        raise ValueError(f"The address “{wanted}” is already taken — try another.")
+        raise ValueError(f"The address “{wanted}” is already taken, try another.")
     if wanted in RESERVED_HANDLES or len(wanted) < 3:
         raise ValueError("Pick an address of at least 3 letters that isn't a reserved word.")
     site["handle"] = wanted
@@ -773,7 +782,7 @@ def save_site(email: str, patch: dict) -> dict:
     if wanted_domain:
         if not valid_domain(wanted_domain):
             raise ValueError("That does not look like a domain. Enter it like korastudio.com "
-                             "— no https://, no slashes.")
+                             "- no https://, no slashes.")
         taken_by = domain_owner(wanted_domain, email)
         if taken_by:
             raise ValueError(f"{wanted_domain} is already pointed at another shop here.")
@@ -907,6 +916,8 @@ def save_site(email: str, patch: dict) -> dict:
         "support_email": str(tr.get("support_email") or "").strip()[:120],
         "returns_days": max(0, min(90, int(_f(tr.get("returns_days"), 7)))),
         "dispatch_days": max(0, min(30, int(_f(tr.get("dispatch_days"), 2)))),
+        "grievance_name": str(tr.get("grievance_name") or "").strip()[:120],
+        "refund_policy": _refund_id(tr.get("refund_policy")),
         "show": _b(tr.get("show"), True),
     }
     site["seeded"] = _b(site.get("seeded"), False)
@@ -935,12 +946,60 @@ def _persist(email: str, site: dict) -> None:
                 "site upsert failed — run supabase/site.sql; using JSON state.")
 
 
+def _refund_id(v) -> str:
+    """Only one of the offered policies. A free-text refund policy would let a
+    seller publish something unenforceable, or nothing at all."""
+    from backend.core import legal
+    want = str(v or "").strip()
+    return want if any(c["id"] == want for c in legal.REFUND_CHOICES) else "7day"
+
+
+def legal_details(site: dict) -> dict:
+    """The shop's trust block, in the shape legal.seller_docs() expects.
+
+    One translation in one place. The builder's field names grew organically and
+    the legal module names things the way the rules do; mapping them here means
+    neither has to be renamed and they cannot drift.
+    """
+    tr = (site or {}).get("trust") or {}
+    return {
+        "legal_name": tr.get("business_name") or "",
+        "address": tr.get("address") or "",
+        "email": tr.get("support_email") or "",
+        "phone": tr.get("support_phone") or "",
+        "grievance_name": tr.get("grievance_name") or "",
+        "gstin": tr.get("gstin") or "",
+        "refund_policy": tr.get("refund_policy") or "7day",
+    }
+
+
+def legal_gaps(site: dict) -> list[dict]:
+    """What this shop still has to fill in before it may be published."""
+    from backend.core import legal
+    return legal.seller_missing(legal_details(site))
+
+
 def set_published(email: str, published: bool) -> dict:
     site = get_site(email)
     if published and not site.get("handle"):
         raise ValueError("Give your site an address before publishing it.")
     if published and not site.get("brand"):
         raise ValueError("Give your site a brand name before publishing it.")
+    # A shop that goes live without saying who runs it and how to complain is
+    # not a small omission. Consumer Protection (E-commerce) Rule 5(4) makes
+    # displaying the seller's details OUR duty as the platform, and Rule 6 makes
+    # the policies the seller's. So the gate is here rather than a reminder the
+    # seller can ignore: the shop does not publish until it can answer.
+    if published:
+        gaps = legal_gaps(site)
+        if gaps:
+            names = ", ".join(g["label"].lower() for g in gaps)
+            raise ValueError(
+                "Before your shop can go live it has to show who runs it and "
+                f"how to reach you. Still needed: {names}. You can set these in "
+                "Site Management under Legal and contact details. This is a "
+                "legal requirement for any shop selling in India, not a "
+                "preference of ours.")
     site["published"] = bool(published)
     site["updated_at"] = _now()
     # Stamped so the builder can tell "saved" from "saved AND live" — a saved
@@ -1181,14 +1240,14 @@ def seo_meta(handle: str, site: dict, product: dict | None = None) -> dict:
     brand = (site.get("brand") or handle or "Store").strip()
     hero = site.get("hero") or {}
     if product:
-        title = f"{product.get('name')} — {brand}"
+        title = f"{product.get('name')} | {brand}"
         desc = (product.get("description") or "").strip() or \
             (f"{product.get('name')} from {brand}." +
              (f" ₹{float(product['price']):,.0f}." if product.get("price") else ""))
         image = product.get("image_url") or seo.get("og_image") or hero.get("image_url") or ""
     else:
         title = (seo.get("title") or "").strip() or \
-            (f"{brand} — {site.get('tagline')}" if site.get("tagline") else brand)
+            (f"{brand} | {site.get('tagline')}" if site.get("tagline") else brand)
         desc = (seo.get("description") or "").strip() or \
             (site.get("tagline") or hero.get("sub") or
              f"Shop {brand}. Ordering takes a few taps.")
@@ -1200,6 +1259,239 @@ def seo_meta(handle: str, site: dict, product: dict | None = None) -> dict:
         "site_name": brand,
         "keywords": (seo.get("keywords") or "").strip()[:300],
     }
+
+
+# ---------------------------------------------------------------------------
+# What a crawler sees
+# ---------------------------------------------------------------------------
+# The storefront is a one-page app. Everything a shopper reads is drawn by
+# JavaScript after the page loads, which means the HTML a crawler is first handed
+# is an empty div and a spinner. Google will usually render the JavaScript
+# eventually; "usually" and "eventually" are doing a lot of work in that sentence,
+# and every other crawler that matters here does not render at all: WhatsApp's
+# link preview, Facebook's, Bing's, and the ones behind the shopping surfaces.
+#
+# So two things are put into the HTML itself, server side:
+#
+#   1. Structured data (JSON-LD). This is what turns a product page into a result
+#      with a price and an in-stock line under it rather than a blue link. It is
+#      built from the seller's own catalogue, so nothing in it is a claim we made
+#      up: if a price is not set, the offer is left out rather than guessed at.
+#      Schema that disagrees with the page is treated as spam, and a made-up
+#      price is also a misleading-advertisement problem under the Consumer
+#      Protection Act, so "leave it out" is the only safe default.
+#
+#   2. A plain HTML fallback: the shop's name as an h1, its products as real
+#      links with their names and prices, and the legal pages. The app removes it
+#      the moment it paints, so no shopper ever sees it, but it means the page is
+#      never empty to something that cannot run JavaScript. It also gives the
+#      product pages internal links, which they otherwise had none of.
+#
+# Deliberately NOT included: aggregateRating or review markup. No shop here has
+# reviews yet, and invented review markup is the most common reason a site picks
+# up a manual action from Google.
+
+
+def _abs(base: str, url: str) -> str:
+    if not url:
+        return ""
+    if url.startswith(("http://", "https://")):
+        return url
+    return base.rstrip("/") + "/" + url.lstrip("/")
+
+
+def storefront_jsonld(handle: str, site: dict, catalogue: list[dict],
+                      product: dict | None, base_url: str,
+                      store_path: str = "") -> str:
+    """The structured data for one page of one seller's shop."""
+    import json as _json
+    store_path = store_path or f"/s/{handle}"
+    shop_url = _abs(base_url, store_path)
+    brand = (site.get("brand") or handle or "Shop").strip()
+    trust = site.get("trust") or {}
+    graph = []
+
+    # The shop itself. Store rather than Organization: it is a retail business
+    # with a catalogue, and Store is the type the shopping surfaces read.
+    store = {
+        "@type": "Store",
+        "@id": shop_url + "#shop",
+        "name": brand,
+        "url": shop_url,
+    }
+    if site.get("tagline"):
+        store["description"] = str(site["tagline"])[:300]
+    if (site.get("hero") or {}).get("image_url") or site.get("logo_url"):
+        store["image"] = _abs(base_url, (site.get("hero") or {}).get("image_url")
+                              or site.get("logo_url"))
+    # Only what the seller actually filled in. An address we invented would be
+    # worse than no address.
+    if trust.get("address"):
+        store["address"] = {"@type": "PostalAddress",
+                            "streetAddress": str(trust["address"])[:200],
+                            "addressCountry": "IN"}
+    if trust.get("support_phone"):
+        store["telephone"] = str(trust["support_phone"])
+    if trust.get("support_email"):
+        store["email"] = str(trust["support_email"])
+    if trust.get("business_name") and trust["business_name"] != brand:
+        store["legalName"] = str(trust["business_name"])
+    graph.append(store)
+
+    def offer(p: dict) -> dict | None:
+        price = p.get("price")
+        if price in (None, ""):
+            return None
+        try:
+            price = float(price)
+        except (TypeError, ValueError):
+            return None
+        return {
+            "@type": "Offer",
+            "price": f"{price:.2f}",
+            "priceCurrency": "INR",
+            "availability": ("https://schema.org/InStock" if p.get("in_stock")
+                             else "https://schema.org/OutOfStock"),
+            "url": _abs(base_url, f"{store_path}/p/{product_slug(p)}"),
+            "seller": {"@id": shop_url + "#shop"},
+        }
+
+    if product:
+        node = {
+            "@type": "Product",
+            "@id": _abs(base_url, f"{store_path}/p/{product_slug(product)}") + "#product",
+            "name": product.get("name") or "",
+            "url": _abs(base_url, f"{store_path}/p/{product_slug(product)}"),
+            "brand": {"@type": "Brand", "name": brand},
+        }
+        if product.get("description"):
+            node["description"] = " ".join(str(product["description"]).split())[:500]
+        imgs = [_abs(base_url, u) for u in
+                ([product.get("image_url")] + list(product.get("images") or []))
+                if u]
+        if imgs:
+            node["image"] = imgs[:6]
+        if product.get("category"):
+            node["category"] = str(product["category"])
+        o = offer(product)
+        if o:
+            node["offers"] = o
+        graph.append(node)
+        # A breadcrumb is what puts "shop > category > product" under the result
+        # instead of a raw URL.
+        crumbs = [{"@type": "ListItem", "position": 1, "name": brand, "item": shop_url}]
+        if product.get("category"):
+            crumbs.append({"@type": "ListItem", "position": 2,
+                           "name": str(product["category"])})
+        crumbs.append({"@type": "ListItem", "position": len(crumbs) + 1,
+                       "name": product.get("name") or "",
+                       "item": node["url"]})
+        graph.append({"@type": "BreadcrumbList", "itemListElement": crumbs})
+    else:
+        # The shop's front page: an item list, so the catalogue is discoverable
+        # even though the grid is drawn by JavaScript.
+        items = []
+        for i, p in enumerate(catalogue[:30], start=1):
+            entry = {"@type": "ListItem", "position": i,
+                     "url": _abs(base_url, f"{store_path}/p/{product_slug(p)}"),
+                     "name": p.get("name") or ""}
+            items.append(entry)
+        if items:
+            graph.append({"@type": "ItemList", "name": f"Products from {brand}",
+                          "numberOfItems": len(items), "itemListElement": items})
+        graph.append({"@type": "WebSite", "@id": shop_url + "#website",
+                      "url": shop_url, "name": brand,
+                      "publisher": {"@id": shop_url + "#shop"}})
+
+    return _json.dumps({"@context": "https://schema.org", "@graph": graph},
+                       ensure_ascii=False, separators=(",", ":"))
+
+
+def storefront_fallback_html(handle: str, site: dict, catalogue: list[dict],
+                             product: dict | None, store_path: str = "") -> str:
+    """Real content in the HTML, for anything that cannot run JavaScript.
+
+    Removed by the storefront bundle the instant it paints, so it is never what a
+    shopper reads. Its whole job is to make sure the page is not empty to a
+    crawler, and to give the product pages the internal links they had none of.
+    """
+    def esc(v):
+        return (str(v if v is not None else "").replace("&", "&amp;")
+                .replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;"))
+
+    store_path = store_path or f"/s/{handle}"
+    brand = (site.get("brand") or handle or "Shop").strip()
+    parts = []
+    if product:
+        parts.append(f"<h1>{esc(product.get('name'))}</h1>")
+        if product.get("price") not in (None, ""):
+            try:
+                parts.append(f"<p>Rs {float(product['price']):,.0f}</p>")
+            except (TypeError, ValueError):
+                pass
+        if product.get("description"):
+            parts.append(f"<p>{esc(' '.join(str(product['description']).split())[:600])}</p>")
+        parts.append(f'<p><a href="{esc(store_path)}">Back to {esc(brand)}</a></p>')
+    else:
+        parts.append(f"<h1>{esc(brand)}</h1>")
+        if site.get("tagline"):
+            parts.append(f"<p>{esc(site['tagline'])}</p>")
+        if catalogue:
+            rows = []
+            for p in catalogue[:60]:
+                price = ""
+                if p.get("price") not in (None, ""):
+                    try:
+                        price = f" Rs {float(p['price']):,.0f}"
+                    except (TypeError, ValueError):
+                        price = ""
+                rows.append(
+                    f'<li><a href="{esc(store_path)}/p/{esc(product_slug(p))}">'
+                    f'{esc(p.get("name"))}</a>{esc(price)}</li>')
+            parts.append("<h2>What we sell</h2><ul>" + "".join(rows) + "</ul>")
+    parts.append(
+        '<nav><a href="%s/legal/privacy">Privacy</a> '
+        '<a href="%s/legal/terms">Terms of sale</a> '
+        '<a href="%s/legal/refunds">Returns and refunds</a></nav>'
+        % (esc(store_path), esc(store_path), esc(store_path)))
+    return ('<div id="seoFallback">' + "".join(parts) + "</div>")
+
+
+def product_slug(product: dict) -> str:
+    """A readable path segment for a product, with its id kept on the end.
+
+    WHAT THIS FIXES: a product's address was /p/72201c00633c7895. That URL tells
+    a shopper nothing before they click, tells a search engine nothing at all,
+    and looks like a tracking link when it is pasted into WhatsApp, which is
+    where most of these are shared. "kaya-card-holder-72201c00633c7895" reads as
+    what it is.
+
+    The id stays on the end rather than being replaced, deliberately. A slug made
+    only of the name would change the moment a seller edits the name, and every
+    link anyone had shared would break. With the id still there the old form and
+    the new form both resolve, forever, and renaming a product costs nothing.
+    """
+    import re as _re
+    name = str((product or {}).get("name") or "").strip().lower()
+    # Keep ASCII letters and digits. An Indic name transliterates to nothing
+    # useful, so those products keep the bare id, which is no worse than before.
+    slug = _re.sub(r"[^a-z0-9]+", "-", name).strip("-")[:60].strip("-")
+    pid = str((product or {}).get("id") or "")
+    return f"{slug}-{pid}" if slug else pid
+
+
+def product_id_from_slug(slug: str) -> str:
+    """The id out of a slug, whichever form the link is in.
+
+    Accepts the bare id (every link shared before this existed), the slug form,
+    and a slug whose name no longer matches because the seller renamed the
+    product. The id is the last hyphen-separated piece, so this is a split, not a
+    lookup, and it cannot get slower as a catalogue grows.
+    """
+    s = str(slug or "").strip()
+    if "-" not in s:
+        return s
+    return s.rsplit("-", 1)[-1]
 
 
 def public_site(handle: str) -> dict | None:

@@ -1107,7 +1107,7 @@ def image_engine(preferred: str = "", for_reshoot: bool = False) -> dict:
         spec = next((s for s in IMAGE_ENGINES if s["id"] == preferred), None)
         if spec and for_reshoot and not spec["reshoot"]:
             raise ValueError(
-                f"{spec['label']} cannot re-shoot from your own photograph — it "
+                f"{spec['label']} cannot re-shoot from your own photograph, it "
                 f"would redraw the product. Use 'Invent a picture' with it, or "
                 f"pick another engine for a re-shoot.")
         raise ValueError(
@@ -1243,7 +1243,7 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     if not content:
         raise RuntimeError(
             f"{eng['label']} could not {'re-shoot your photo' if reference else 'draw the picture'} "
-            f"just now. This is usually that account's allowance being spent — "
+            f"just now. This is usually that account's allowance being spent, "
             f"try another engine from the list, or again later.")
 
     # The corner tag is for INVENTED pictures only. A re-shoot starts from the
@@ -1257,14 +1257,26 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     # the seller's own corner plate. Engines known to return unmarked pictures
     # are checked with stricter limits (see backend/core/watermark.py), so a
     # white stitch near the corner of a re-shoot is never rubbed out.
-    from backend.core import watermark
+    from backend.core import watermark, ailabel
     content, wm_report = watermark.clean_image(content, source=eid)
 
     if not from_ref:
         content = _stamp_brand(content, brief.get("brand_name") or "")
+
+    # The AI label goes on LAST, after the brand plate, and it is not optional.
+    # Rule 3 of the IT Rules as amended on 20 February 2026 requires every
+    # synthetically generated picture this platform hands back to be clearly and
+    # prominently labelled and to carry provenance metadata. Doing it here rather
+    # than at each caller means there is exactly one place a generated picture
+    # becomes a stored file, so an unlabelled one cannot get out through a route
+    # somebody adds later. The brand plate sits bottom-right and the label
+    # bottom-left, so neither covers the other.
+    content, label_report = ailabel.label_image(content, engine=eid,
+                                               model=eng.get("model", ""))
     saved = media.save(f"{uuid.uuid4().hex}.png", content, email)
     return {"url": saved["url"], "durable": saved["durable"], "generated": True,
             "watermark": wm_report,
+            "ai_label": label_report,
             "prompt": prompt, "engine": eng["engine"],
             "engine_label": eng["label"], "model": eng["model"],
             "free": eng["free"],
@@ -1459,11 +1471,18 @@ def generate_video(email: str, product_id: str, prompt: str = "",
     aicaps.consume(email, "video")
     # Same rule as stills: a generated clip is cleaned of any visible corner
     # mark before it is stored against the seller's post.
-    from backend.core import watermark
+    from backend.core import watermark, ailabel
     data, wm_report = watermark.clean_video_bytes(data, "clip.mp4", source=eng["engine"])
+    # Same duty as stills, and the label is burned into the picture rather than
+    # added as a track, because a track is not shown by Instagram, WhatsApp or
+    # anything else the seller will post the clip to.
+    data, label_report = ailabel.label_video_bytes(data, "clip.mp4",
+                                                  engine=eng["engine"],
+                                                  model=eng.get("model", ""))
     saved = media.save(f"{uuid.uuid4().hex}.mp4", data, email)
     return {"url": saved["url"], "durable": saved["durable"], "generated": True,
             "watermark": wm_report,
+            "ai_label": label_report,
             "product_id": product_id, "prompt": motion,
             "engine": eng["engine"], "engine_label": eng.get("label", ""),
             "model": eng["model"],

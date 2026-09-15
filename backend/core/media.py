@@ -452,3 +452,93 @@ def instagram_mp4(filename: str, email: str = "") -> tuple[str, dict]:
     except Exception:  # noqa: BLE001
         return name, report
     return twin, {**report, "converted": True}
+
+
+# ---------------------------------------------------------------------------
+# Making an uploaded photo fit to serve
+# ---------------------------------------------------------------------------
+# A seller uploads what came off their phone: a 4000px, 6MB JPEG. It was stored
+# exactly as received and served exactly as received, to every shopper, on a
+# mobile connection, for a card displayed 400px wide. That is the single largest
+# thing on a storefront's Core Web Vitals, and it costs the shopper their data
+# as well as their patience.
+#
+# So an uploaded photo is resized once, on the way in, and the original is not
+# kept: the seller's own copy is on their phone, and holding a second 6MB file
+# per product on a 1GB disk is how the disk fills.
+#
+# The rules, and why each one is where it is:
+#   * 1600px on the long edge. Enough to look sharp on a 2x phone screen at full
+#     width, and enough to zoom a product photo a little. Beyond that a shopper
+#     is paying for pixels their screen cannot show.
+#   * JPEG at quality 82. The point on the curve where the next 10 points of
+#     quality cost more bytes than the eye collects.
+#   * Transparency survives as PNG. A logo flattened onto white is a visible
+#     defect on a dark theme, and the builder has dark themes.
+#   * A file already smaller than the floor is left alone. Re-encoding a small,
+#     already-optimised image makes it worse, not better.
+#   * GIF and SVG are passed through untouched. A GIF may be animated and an SVG
+#     is text; both would be destroyed by this.
+MAX_EDGE = 1600
+JPEG_QUALITY = 82
+LEAVE_ALONE_UNDER = 180 * 1024        # already small enough to not be the problem
+
+
+def compress_upload(data: bytes, filename: str) -> tuple[bytes, str, dict]:
+    """(bytes, filename, report). Returns the input unchanged on any doubt.
+
+    Never raises. A photo that cannot be processed is a photo that gets stored as
+    it came, which is exactly what used to happen to all of them.
+    """
+    report = {"original_bytes": len(data), "bytes": len(data),
+              "resized": False, "reason": ""}
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext in (".gif", ".svg"):
+        report["reason"] = "left as it is: a GIF may be animated and an SVG is text"
+        return data, filename, report
+    if is_video(filename):
+        report["reason"] = "video, not touched here"
+        return data, filename, report
+    try:
+        import io
+        from PIL import Image
+        img = Image.open(io.BytesIO(data))
+        w, h = img.size
+        has_alpha = img.mode in ("RGBA", "LA") or "transparency" in img.info
+        if len(data) < LEAVE_ALONE_UNDER and max(w, h) <= MAX_EDGE:
+            report["reason"] = "already small enough to serve as it is"
+            return data, filename, report
+
+        if max(w, h) > MAX_EDGE:
+            scale = MAX_EDGE / float(max(w, h))
+            img = img.resize((max(1, int(round(w * scale))),
+                              max(1, int(round(h * scale)))), Image.LANCZOS)
+            report["resized"] = True
+
+        buf = io.BytesIO()
+        if has_alpha:
+            img.convert("RGBA").save(buf, format="PNG", optimize=True)
+            out_ext = ".png"
+        else:
+            img.convert("RGB").save(buf, format="JPEG", quality=JPEG_QUALITY,
+                                    optimize=True, progressive=True)
+            out_ext = ".jpg"
+        out = buf.getvalue()
+
+        # If the "optimised" version is bigger, the original was better. This
+        # happens with small PNGs and with photos already run through a
+        # compressor, and shipping the larger file would be an own goal.
+        if len(out) >= len(data) and not report["resized"]:
+            report["reason"] = "the original was already smaller"
+            return data, filename, report
+
+        stem = os.path.splitext(os.path.basename(filename or "image"))[0]
+        report.update(bytes=len(out), width=img.size[0], height=img.size[1],
+                      reason=(f"{len(data) // 1024}KB to {len(out) // 1024}KB"
+                              + (f", {w}x{h} to {img.size[0]}x{img.size[1]}"
+                                 if report["resized"] else "")))
+        return out, f"{stem}{out_ext}", report
+    except Exception as e:  # noqa: BLE001 — never lose an upload to this
+        log.warning("image compression skipped for %s: %s", filename, e)
+        report["reason"] = f"could not process: {e}"
+        return data, filename, report

@@ -160,7 +160,7 @@ def _festival(card: dict) -> dict:
     late = bool(card.get("act_now"))
     return {
         "headline": f"Start the {fest} campaign",
-        "body": (f"{fest} is {days} days out — "
+        "body": (f"{fest} is {days} days out, "
                  + ("we are already late." if late else f"posting starts {start}.")),
         "why": (f"{fest} is {days} days away. "
                 + ("We are already inside the window, so this should have started."
@@ -184,7 +184,7 @@ def _reorder(card: dict) -> dict:
         "why": (f"{names} {'are' if n != 1 else 'is'} down to fewer days of supply "
                 f"than 1.2 × the supplier's lead time, and no order is on its way."
                 + (f" The tightest is down to {_n(cover)} days of cover." if cover else "")
-                + f" Each quantity is the default order quantity — the supplier's "
+                + f" Each quantity is the default order quantity, the supplier's "
                   f"minimum, or the economic order quantity once your ordering and "
                   f"holding costs are in. Approve and I will draft one purchase "
                   f"order per supplier for you to check and send."),
@@ -199,13 +199,13 @@ def _overstock(card: dict) -> dict:
     return {
         "headline": f"Too much stock on {n} item{'s' if n != 1 else ''}",
         "body": (f"About {_rupees(cash)} sitting still. Stop reordering, or push them."
-                 if cash else f"{names[:60]} — far more cover than sales justify."),
+                 if cash else f"{names[:60]}, far more cover than sales justify."),
         "why": (f"{names} {'have' if n != 1 else 'has'} far more cover than the "
                 f"sales rate justifies."
                 + (f" That is roughly {_rupees(cash)} sitting still." if cash else "")
                 + " Nothing is going wrong, but that is working capital doing "
                   "nothing and stock that ages. Either stop reordering these for "
-                  "now, or push them — a bundle or a feature slot moves them "
+                  "now, or push them, a bundle or a feature slot moves them "
                   "faster than a discount does."),
         "cta": "Review what we are holding",
     }
@@ -234,7 +234,7 @@ def _reputation(card: dict) -> dict:
         "body": f"{n} move{'s' if n != 1 else ''} from what your reviews already say.",
         "why": (f"Your reviews say something fairly specific about what people "
                 f"come to you for. I have {n} move{'s' if n != 1 else ''} that "
-                f"would make that clearer — on the website, in the listings and "
+                f"would make that clearer, on the website, in the listings and "
                 f"in what we lead with. This is the difference between being "
                 f"chosen for a reason and being chosen on price."),
         "cta": "See the positioning plan",
@@ -261,7 +261,7 @@ def _social(card: dict) -> dict:
     return {
         "headline": (f"{occ} post ready to check" if occ else "A post is ready to check"),
         "body": f"Drafted around {product}. Caption, question and hashtags done.",
-        "why": (f"I have drafted this around {product} — caption, question and "
+        "why": (f"I have drafted this around {product}, caption, question and "
                 f"hashtags"
                 + (f", tied to {occ}." if occ else ".")
                 + " Worth remembering that the posts which sell are the boring "
@@ -283,8 +283,8 @@ def _social_post(card: dict) -> dict:
     overdue = bool(card.get("overdue"))
     headline = (f"Overdue: {occ} post for {product}" if overdue and occ
                 else f"Overdue post for {product}" if overdue
-                else f"{occ} post — {when}" if occ and when
-                else f"Post ready — {when}" if when
+                else f"{occ} post, {when}" if occ and when
+                else f"Post ready, {when}" if when
                 else "A post is ready to check")
     body = hook if hook else f"Drafted around {product}. Caption, question and hashtags done."
     if len(body) > 140:
@@ -292,7 +292,7 @@ def _social_post(card: dict) -> dict:
     why = (f"Scheduled for {when or 'this week'}, built around {product}"
            + (f" for {occ}" if occ else "") + "."
            + (f' The hook: "{hook}"' if hook else "")
-           + (" This one is already overdue — it stayed a draft past its own"
+           + (" This one is already overdue, it stayed a draft past its own"
               " posting time." if overdue else "")
            # Auto-planned posts say why THIS product this week — the sales
            # signal or the festival that put it on the calendar.
@@ -322,14 +322,14 @@ def _autoplan_week(card: dict) -> dict:
     why = (f"I planned {card.get('week_label') or 'next week'}. "
            + (f"{existing} post{'' if existing == 1 else 's'} were already on the "
               f"calendar, so I added {added} to reach your {target}. " if existing
-              else f"I added {added} — your week is {target}. ")
+              else f"I added {added}, your week is {target}. ")
            + (f"{occ} is live, so the week builds towards it. " if occ else "")
-           + (f"Selling well: {', '.join(wins)} — those get the proof posts. " if wins else "")
-           + (f"Struggling: {', '.join(slow)} — those get the detail posts, which "
+           + (f"Selling well: {', '.join(wins)}, those get the proof posts. " if wins else "")
+           + (f"Struggling: {', '.join(slow)}, those get the detail posts, which "
               f"are the ones that actually sell. " if slow else "")
            + "Approve makes each picture and schedules it; reels go on your task "
              "list with the prompt ready for Google Flow.")
-    return {"headline": f"Next week is planned — {n} post{'' if n == 1 else 's'} waiting",
+    return {"headline": f"Next week is planned, {n} post{'' if n == 1 else 's'} waiting",
             "body": body, "why": why, "cta": f"Approve all {n}"}
 
 
@@ -348,7 +348,7 @@ def _purchase_order(card: dict) -> dict:
            + (" Approve and I will write the email, attach the PO as a PDF and send it to "
               f"{card.get('supplier_email')}." if card.get("has_email") else
               " There is no email on file for this supplier, so Approve gives you the PDF "
-              "and a ready email to send yourself — add their email in Suppliers for next time."))
+              "and a ready email to send yourself, add their email in Suppliers for next time."))
     return {"headline": f"Send {sup} an order for {n} item{'s' if n != 1 else ''}",
             "body": body, "why": why.strip(),
             "cta": card.get("cta") or "Approve & send"}

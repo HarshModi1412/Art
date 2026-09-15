@@ -358,13 +358,23 @@ with open(src, "rb") as fh:
                 headers={"Authorization": H6["Authorization"]})
 check("the clip uploads", up.status_code == 200, up.text[:200])
 raw_url = up.json()["url"]
-r = c.post("/api/social/attach-video", json={"post_id": reel["id"], "url": raw_url}, headers=H6)
+# The reel flow sends the seller to Google Flow, so a clip arriving here is AI
+# made and the app says so when it attaches it. What happens next changed on
+# 15 September 2026: it used to have Flow's mark rubbed out, which the IT Rules
+# as amended on 20 February 2026 forbid us from enabling. Now it gets OUR "AI
+# generated" label, which the same rule requires. See backend/core/ailabel.py.
+r = c.post("/api/social/attach-video",
+           json={"post_id": reel["id"], "url": raw_url, "ai_generated": True},
+           headers=H6)
 d = r.json()
-check("attaching it runs the watermark remover", (d.get("watermark") or {}).get("checked"),
-      d.get("watermark"))
-check("the Flow mark is removed", (d.get("watermark") or {}).get("removed"), d.get("watermark"))
-check("the post gets the CLEAN copy, the original upload is kept",
+check("attaching an AI-made clip labels it", (d.get("ai_label") or {}).get("labelled"),
+      d.get("ai_label"))
+check("with a reference id that traces back to this clip",
+      len((d.get("ai_label") or {}).get("gen_id") or "") >= 16, d.get("ai_label"))
+check("the post gets the LABELLED copy, the original upload is kept",
       d["video_url"] and d["video_url"] != raw_url, (d["video_url"], raw_url))
+check("and nothing claimed to remove Flow's own mark",
+      not (d.get("watermark") or {}).get("removed"), d.get("watermark"))
 check("the task's upload step is ticked",
       "upload" in next(x for x in d["tasks"] if x["id"] == t["id"])["steps_done"])
 check("the post still waits for the seller's 'Save & schedule'", d["state"] == "approved")

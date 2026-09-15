@@ -3,9 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>One Tap Manager — Smart</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>One Tap Manager: Smart</title>
+
 <meta name="color-scheme" content="light dark" />
 <script>
   // Apply theme before first paint to avoid a flash of the wrong colour.
@@ -33,6 +32,8 @@
      and cost nothing, so the eventual fetch is just the bytes. -->
 <link rel="preconnect" href="https://cdn.plot.ly" crossorigin>
 <link rel="dns-prefetch" href="https://cdn.plot.ly">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<script src="/consent.js" defer></script>
 </head>
 <body>
 
@@ -40,7 +41,7 @@
 <div id="loginView" class="login-view">
   <div class="login-card">
     <div class="login-brand"><span class="logo-chip">1T</span> One Tap Manager · Smart</div>
-    <p class="muted">Your product-selling command centre. Log in to load your workspace — data, tasks and approvals are saved to your account and shared with Classic mode.</p>
+    <p class="muted">Your product-selling command centre. Log in to load your workspace. Data, tasks and approvals are saved to your account and shared with Classic mode.</p>
     <!-- Google first, because for most sellers it is one tap and no password
          to invent. Hidden until /api/auth/providers says the server has a
          client id, so a deployment without one shows no dead button. -->
@@ -57,8 +58,8 @@
       <a href="#" id="forgotLink">Forgot your password?</a></p>
     <div style="display:flex; justify-content:center; gap:10px; margin-top:14px;">
       <div class="theme-switch" role="group" aria-label="Colour theme">
-        <button type="button" data-theme-set="light" aria-pressed="false">☀️ <span class="tlabel">Light</span></button>
-        <button type="button" data-theme-set="dark" aria-pressed="false">🌙 <span class="tlabel">Dark</span></button>
+        <button type="button" data-theme-set="light" aria-pressed="false"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg> <span class="tlabel">Light</span></button>
+        <button type="button" data-theme-set="dark" aria-pressed="false"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg> <span class="tlabel">Dark</span></button>
       </div>
     </div>
   </div>
@@ -74,12 +75,12 @@
     </div>
     <div class="tb-right">
       <nav class="mode-switch" aria-label="Interface mode">
-        <a href="/app" data-mode="classic"><span>📊</span><span class="mode-label">Classic</span></a>
-        <a href="/smart" data-mode="smart" class="active"><span>✨</span><span class="mode-label">Smart</span></a>
+        <a href="/app" data-mode="classic"><span><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 16v-5"/><path d="M13 16V8"/><path d="M18 16v-3"/></svg></span><span class="mode-label">Classic</span></a>
+        <a href="/smart" data-mode="smart" class="active"><span><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6.3 6.3l3.2 3.2M14.5 14.5l3.2 3.2M17.7 6.3l-3.2 3.2M9.5 14.5l-3.2 3.2"/></svg></span><span class="mode-label">Smart</span></a>
       </nav>
       <div class="theme-switch" role="group" aria-label="Colour theme">
-        <button type="button" data-theme-set="light" aria-pressed="false">☀️<span class="tlabel"> Light</span></button>
-        <button type="button" data-theme-set="dark" aria-pressed="false">🌙<span class="tlabel"> Dark</span></button>
+        <button type="button" data-theme-set="light" aria-pressed="false"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg><span class="tlabel"> Light</span></button>
+        <button type="button" data-theme-set="dark" aria-pressed="false"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><span class="tlabel"> Dark</span></button>
       </div>
       <span class="tb-user" id="tbUser"></span>
       <button class="btn ghost sm" id="logoutBtn">Log out</button>
@@ -90,10 +91,10 @@
     <main class="main" id="view"></main>
     <aside class="approvals" id="approvalPanel">
       <div class="ap-head" id="apHead">
-        <span>✅ Approval panel</span>
+        <span><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4.5 12.5 5 5 10-11"/></svg> Approval panel</span>
         <span class="ap-count" id="apCount" hidden></span>
         <span class="ap-head-actions">
-          <button class="btn ghost tiny" id="historyBtn" title="Show approved &amp; dismissed">🕘 History</button>
+          <button class="btn ghost tiny" id="historyBtn" title="Show approved and dismissed"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4.2l2.8 1.8"/></svg> History</button>
           <button class="btn ghost tiny" id="refreshApprovals" title="Refresh">↻</button>
         </span>
       </div>
@@ -106,15 +107,15 @@
 <!-- MAPPING MODAL -->
 <div class="modal-back" id="mapModal" hidden>
   <div class="modal">
-    <div class="modal-head"><b id="mapTitle">Map your columns</b><button class="btn ghost tiny" id="mapClose">✕</button></div>
+    <div class="modal-head"><b id="mapTitle">Map your columns</b><button class="btn ghost tiny" id="mapClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
     <p class="muted tiny" id="mapHint"></p>
     <div id="mapGrid" class="map-grid"></div>
     <div class="table-scroll" id="mapPreview"></div>
     <div id="mapMode" class="map-mode" hidden>
       <p class="muted tiny" id="mapModeHint"></p>
       <div class="map-mode-opts">
-        <label><input type="radio" name="mapMode" value="append" checked> ➕ Add to existing</label>
-        <label><input type="radio" name="mapMode" value="replace"> ♻ Replace everything</label>
+        <label><input type="radio" name="mapMode" value="append" checked> <svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Add to existing</label>
+        <label><input type="radio" name="mapMode" value="replace"> <svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4.5h-4.5"/></svg> Replace everything</label>
       </div>
     </div>
     <div class="modal-actions">
@@ -128,7 +129,7 @@
 <!-- PRODUCT TYPE PICKER -->
 <div class="modal-back" id="ptModal" hidden>
   <div class="modal">
-    <div class="modal-head"><b>What do you sell?</b><button class="btn ghost tiny" id="ptClose">✕</button></div>
+    <div class="modal-head"><b>What do you sell?</b><button class="btn ghost tiny" id="ptClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
     <p class="muted tiny">We use this to track the right keywords in your reviews and complaints.</p>
     <div class="pt-grid" id="ptGrid"></div>
   </div>
@@ -137,11 +138,11 @@
 <!-- WIN-BACK EDITABLE POPUP -->
 <div class="modal-back" id="wbModal" hidden>
   <div class="modal wide">
-    <div class="modal-head"><b>💌 Win-back list — edit before you export</b><button class="btn ghost tiny" id="wbClose">✕</button></div>
+    <div class="modal-head"><b><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="m3.6 7 8.4 6 8.4-6"/></svg> Win-back list: edit before you export</b><button class="btn ghost tiny" id="wbClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
     <p class="muted tiny">Edit any field, remove a row, or add your own. Then export to Excel.</p>
     <div class="wb-table-wrap"><div class="table-scroll" id="wbTable"></div></div>
     <div class="modal-actions">
-      <button class="btn ghost" id="wbAddRow">➕ Add row</button>
+      <button class="btn ghost" id="wbAddRow"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Add row</button>
       <span style="flex:1"></span>
       <button class="btn ghost" id="wbCancel">Cancel</button>
       <button class="btn primary" id="wbExport">⬇ Export &amp; approve</button>
@@ -149,10 +150,10 @@
   </div>
 </div>
 
-<!-- CONTENT CREATOR — editor popup -->
+<!-- CONTENT CREATOR: editor popup -->
 <div class="modal-back" id="ccModal" hidden>
   <div class="modal wide">
-    <div class="modal-head"><b>✨ Suggested post — edit before you post</b><button class="btn ghost tiny" id="ccClose">✕</button></div>
+    <div class="modal-head"><b><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6.3 6.3l3.2 3.2M14.5 14.5l3.2 3.2M17.7 6.3l-3.2 3.2M9.5 14.5l-3.2 3.2"/></svg> Suggested post: edit before you post</b><button class="btn ghost tiny" id="ccClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
     <div id="ccBody"></div>
   </div>
 </div>
@@ -160,10 +161,10 @@
 <!-- STORE CONNECT MODAL (Shopify / Amazon) -->
 <div class="modal-back" id="coModal" hidden>
   <div class="modal">
-    <div class="modal-head"><b id="coTitle">Connect store</b><button class="btn ghost tiny" id="coClose">✕</button></div>
+    <div class="modal-head"><b id="coTitle">Connect store</b><button class="btn ghost tiny" id="coClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
     <p class="muted tiny" id="coHelp"></p>
     <div id="coGrid" class="map-grid"></div>
-    <p class="muted tiny">🔒 Your credentials are encrypted and linked to your account — we never store them in plain text.</p>
+    <p class="muted tiny"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7"/></svg> Your credentials are encrypted and linked to your account. We never store them in plain text.</p>
     <div class="modal-actions">
       <button class="btn ghost" id="coCancel">Cancel</button>
       <button class="btn primary" id="coConfirm">Connect</button>
@@ -178,11 +179,11 @@
     <div class="chart-modal-head">
       <b id="chartModalTitle">Chart</b>
       <div class="chart-modal-tools">
-        <button class="btn ghost tiny" id="chartZoomBtn" aria-pressed="true">🔍 Zoom</button>
-        <button class="btn ghost tiny" id="chartPanBtn" aria-pressed="false">✋ Pan</button>
+        <button class="btn ghost tiny" id="chartZoomBtn" aria-pressed="true"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg> Zoom</button>
+        <button class="btn ghost tiny" id="chartPanBtn" aria-pressed="false"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11V5.6a1.6 1.6 0 0 1 3.2 0V11"/><path d="M12.2 11V4.8a1.6 1.6 0 0 1 3.2 0V11"/><path d="M15.4 11.4V7.4a1.6 1.6 0 0 1 3.2 0V15a5.5 5.5 0 0 1-5.5 5.5h-1.3a5 5 0 0 1-3.7-1.6L5 15.4a1.6 1.6 0 0 1 2.4-2.1L9 15"/></svg> Pan</button>
         <button class="btn ghost tiny" id="chartResetBtn">⟲ Reset</button>
         <button class="btn ghost tiny" id="chartDownloadBtn">⬇ PNG</button>
-        <button class="btn ghost tiny" id="chartModalClose">✕</button>
+        <button class="btn ghost tiny" id="chartModalClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
       </div>
     </div>
     <div id="chartModalPlot" class="chart-modal-plot"></div>
@@ -193,12 +194,12 @@
 <div class="drawer-back" id="drawerBack" hidden></div>
 <aside class="drawer" id="historyDrawer" hidden>
   <div class="drawer-head">
-    <h3>🕘 Approval history</h3>
-    <button class="btn ghost tiny" id="historyClose">✕</button>
+    <h3><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4.2l2.8 1.8"/></svg> Approval history</h3>
+    <button class="btn ghost tiny" id="historyClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
   </div>
   <div class="hist-tabs" role="tablist">
-    <button data-tab="approved" aria-pressed="true">✓ Approved</button>
-    <button data-tab="dismissed" aria-pressed="false">✕ Dismissed</button>
+    <button data-tab="approved" aria-pressed="true"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4.5 12.5 5 5 10-11"/></svg> Approved</button>
+    <button data-tab="dismissed" aria-pressed="false"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg> Dismissed</button>
   </div>
   <div class="hist-list" id="historyList"></div>
 </aside>
@@ -207,8 +208,8 @@
 
 <div class="modal-back" id="addModal" hidden>
   <div class="modal">
-    <div class="modal-head"><b id="addTitle">Add records</b><button class="btn ghost tiny" id="addClose">✕</button></div>
-    <p class="muted tiny" id="addHint">Type new rows below — they'll be added to your saved data.</p>
+    <div class="modal-head"><b id="addTitle">Add records</b><button class="btn ghost tiny" id="addClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+    <p class="muted tiny" id="addHint">Type new rows below. They will be added to your saved data.</p>
     <div class="table-scroll" id="addGridWrap"><table id="addGrid"></table></div>
     <div class="modal-actions" style="justify-content:space-between">
       <button class="btn ghost sm" id="addRowBtn">＋ Add another row</button>

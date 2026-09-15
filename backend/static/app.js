@@ -281,7 +281,7 @@ function renderInsights(insights, emptyText) {
       const esc = escapeHtml(ins.highlight);
       text = text.split(esc).join(`<span class="hl">${esc}</span>`);
     }
-    const action = ins.action ? `<div class="ins-action lead"><span class="ins-action-label">✅ ${DO_THIS[state.lang] || "DO THIS"}</span><b>${escapeHtml(ins.action)}</b></div>` : "";
+    const action = ins.action ? `<div class="ins-action lead"><span class="ins-action-label"> ${DO_THIS[state.lang] || "DO THIS"}</span><b>${escapeHtml(ins.action)}</b></div>` : "";
     return `<div class="insight-card ${type}">
         <span class="tag">${icons[type]} ${type}</span>
         ${action}
@@ -291,9 +291,55 @@ function renderInsights(insights, emptyText) {
   return `<div class="insights-strip">${cards}</div>`;
 }
 
+/* The charting library, fetched only when a chart actually needs it.
+
+   WHAT THIS FIXES: plotly.min.js was a render-blocking <script> in the head of
+   index.html, so every single page view paid for roughly 3.5MB and a round trip
+   to a third-party CDN before anything painted. Most views never draw a chart at
+   all: the login screen, the instructions page, the mapping screen. It was also
+   the only third-party request the app made, which means every visitor's IP
+   reached plot.ly whether or not they ever looked at a graph.
+
+   Now it is fetched on first use and warmed in the background once the app is
+   idle, which is what the Smart shell already did. The behaviour a seller sees
+   is identical, except the first paint is faster. */
+let _plotlyPromise = null;
+
+function ensurePlotly() {
+  if (typeof Plotly !== "undefined") return Promise.resolve(true);
+  if (_plotlyPromise) return _plotlyPromise;
+  _plotlyPromise = new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.plot.ly/plotly-2.35.2.min.js";
+    s.async = true;
+    s.onload = () => resolve(true);
+    // Null the promise so a later chart retries rather than inheriting the
+    // failure for the rest of the session.
+    s.onerror = () => {
+      const alt = document.createElement("script");
+      alt.src = "https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js";
+      alt.async = true;
+      alt.onload = () => resolve(true);
+      alt.onerror = () => { _plotlyPromise = null; resolve(false); };
+      document.head.appendChild(alt);
+    };
+    document.head.appendChild(s);
+  });
+  return _plotlyPromise;
+}
+
+/* Once the page is up and idle, pull it down so the first chart is instant.
+   requestIdleCallback keeps it off the critical path; the timeout covers Safari,
+   which still has not shipped it. */
+function warmPlotly() {
+  const go = () => ensurePlotly();
+  if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 4000 });
+  else setTimeout(go, 2500);
+}
+
 function plotlyReady(el) {
   if (typeof Plotly !== "undefined") return true;
-  el.innerHTML = '<div class="chart-missing">Chart library failed to load — check your internet connection and refresh the page.</div>';
+  el.innerHTML = '<div class="chart-missing">The chart library could not be reached. Check your internet connection and refresh the page.</div>';
   return false;
 }
 
@@ -325,7 +371,17 @@ function chartShell(el, title) {
 }
 
 function plot(el, traces, title, extra = {}) {
-  if (!plotlyReady(el)) return;
+  // First chart of the session: the library is still coming. The card keeps its
+  // shape so the page does not jump when it lands, and the chart draws itself
+  // as soon as it is there.
+  if (typeof Plotly === "undefined") {
+    el.innerHTML = '<div class="chart-wait">Loading the chart</div>';
+    ensurePlotly().then((ok) => {
+      if (ok) plot(el, traces, title, extra);
+      else plotlyReady(el);
+    });
+    return;
+  }
   const canvas = chartShell(el, title);
   const layout = { ...baseLayout(), ...extra };
   delete layout.title;                       // the heading is HTML now
@@ -440,7 +496,7 @@ let authMode = "login";
 function setAuthMode(mode) {
   authMode = mode;
   const signup = mode === "signup";
-  $("authTitle").textContent = signup ? "🛍️ Create your free account" : "👋 Welcome back";
+  $("authTitle").textContent = signup ? "Create your free account" : "Welcome back";
   $("authSub").textContent = signup
     ? "Free during launch — no card needed. Your data and insights stay private to you."
     : "Log in to your One Tap Manager account — your data and insights stay private to you.";
@@ -471,7 +527,7 @@ if ($("loginPassword2")) $("loginPassword2").addEventListener("keydown", (e) => 
 async function doLogin() {
   try {
     if (authMode === "signup" && $("loginPassword").value !== $("loginPassword2").value) {
-      $("loginError").textContent = "Passwords don't match — please type the same password in both boxes.";
+      $("loginError").textContent = "Passwords don't match, please type the same password in both boxes.";
       $("loginError").hidden = false;
       return;
     }
@@ -484,7 +540,7 @@ async function doLogin() {
     closeLogin();
     refreshUserUI(data.usage, data.plan);
     syncLockedPreviews();
-    toast(authMode === "signup" ? "🎉 Account created — welcome to One Tap Manager!" : "Welcome back 👋");
+    toast(authMode === "signup" ? "Account created — welcome to One Tap Manager!" : "Welcome back ");
     if (state.pendingPage) { const p = state.pendingPage; state.pendingPage = null; go(p); }
   } catch (e) {
     $("loginError").textContent = e.message;
@@ -566,9 +622,9 @@ async function uploadFiles(fileList) {
       state.files = state.files.filter((f) => f.id !== "joined_auto");
       state.files.unshift(data.join.file);
       const keys = data.join.joins.map((j) => `${j.base_key}↔${j.other_key}`).join(", ");
-      toast(`🔗 Auto-joined your files on ${keys} — map the "Joined dataset" for combined insights`, 8000);
+      toast(`Auto-joined your files on ${keys}, map the "Joined dataset" for combined insights`, 8000);
     } else {
-      toast(`Uploaded ${data.files.length} file(s) — now confirm the mapping`);
+      toast(`Uploaded ${data.files.length} file(s), now confirm the mapping`);
     }
     renderFileList();
     go("mapping");
@@ -582,7 +638,7 @@ function renderFileList() {
   state.files.forEach((f) => {
     const item = document.createElement("div");
     item.className = "file-item";
-    item.innerHTML = `<span class="fname" title="${f.name}">📄 ${f.name}</span>
+    item.innerHTML = `<span class="fname" title="${f.name}">${f.name}</span>
       <span class="frows">${f.rows.toLocaleString()}</span>
       <button class="file-del" title="Delete file" aria-label="Delete ${f.name}">✕</button>`;
     item.querySelector(".file-del").onclick = async () => {
@@ -608,11 +664,11 @@ on("demoBtn", async () => {
     state.files.push(...d.files);
     state.mapped = d.mapped;
     renderFileList();
-    toast("🛍️ Sample data loaded — 90 days of orders. Explore the Analytics tab!");
+    toast("Sample data loaded, 90 days of orders. Explore the Analytics tab!");
     go("analytics");
   } catch (e) { toast(e.message); }
   $("demoBtn").disabled = false;
-  $("demoBtn").textContent = "✨ No file handy? Try with sample data";
+  $("demoBtn").textContent = "No file handy? Try with sample data";
 });
 
 // ---------- mapping ----------
@@ -630,7 +686,7 @@ function renderMapping() {
     card.className = "card";
     const opts = (sel) => `<option value="">—</option>` + f.columns.map((c) => `<option ${c === sel ? "selected" : ""}>${c}</option>`).join("");
     card.innerHTML = `
-      <h4>📄 ${f.name} <span class="subtle">· ${f.rows.toLocaleString()} rows · detected: ${f.kind}</span></h4>
+      <h4> ${f.name} <span class="subtle">· ${f.rows.toLocaleString()} rows · detected: ${f.kind}</span></h4>
       <div class="map-grid">
         ${ROLES.map((r) => `<label>${r}${["date","amount"].includes(r) ? " *" : ""}<select data-role="${r}">${opts(f.suggested_mapping[r])}</select></label>`).join("")}
       </div>
@@ -648,7 +704,7 @@ function renderMapping() {
         if (res.warning) {
           toast(`⚠️ ${res.warning}`, 8000);
         } else {
-          toast(`Mapping done — ${res.rows.toLocaleString()} transactions ready`);
+          toast(`Mapping done, ${res.rows.toLocaleString()} transactions ready`);
         }
         go("analytics");
       } catch (e) { toast(e.message); }
@@ -693,13 +749,13 @@ function renderPositioning(d) {
   const pos = d.position || {};
   area.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
-      <h3 style="margin:0;">✅ What to do about your positioning</h3>
-      <button class="ghost-btn" id="posPdfBtn" style="font-size:12.5px;">📄 Download PDF report</button>
+      <h3 style="margin:0;"> What to do about your positioning</h3>
+      <button class="ghost-btn" id="posPdfBtn" style="font-size:12.5px;"> Download PDF report</button>
     </div>
     ${renderInsights(d.insights)}
     <div class="card" style="border-left:4px solid var(--accent);">
       <div class="subtle" style="font-size:12px;">Your position, read from your own reviews</div>
-      <h3 style="margin:2px 0 0;">📍 ${escapeHtml(pos.quadrant || "—")}</h3>
+      <h3 style="margin:2px 0 0;"> ${escapeHtml(pos.quadrant || "—")}</h3>
     </div>
     <div class="kpis">
       <div class="kpi"><div class="label">Reviews Analyzed</div><div class="value">${d.n_reviews.toLocaleString()}</div></div>
@@ -788,7 +844,7 @@ function stratUploadZone(label) {
       <div class="upload-icon">⇪</div>
       <div>${label} — drop your reviews file or <span class="link">browse</span></div>
       <div class="subtle" style="font-size:11px;">Same Google/Zomato reviews file you'd use for Positioning</div>
-      <div class="subtle" style="font-size:10.5px;">🔒 Private to your account.</div>
+      <div class="subtle" style="font-size:10.5px;"> Private to your account.</div>
     </div>`;
 }
 
@@ -816,7 +872,7 @@ async function detectStrategy(fileList) {
   fd.append("files", fileList[0]);
   try {
     const d = await api(`/api/position-strategy/detect?lang=${state.lang}`, { method: "POST", body: fd });
-    toast("📍 Current position detected — now pick where you want to go");
+    toast("Current position detected, now pick where you want to go");
     renderStrategy(d);
   } catch (e) {
     toast(e.message, 6000);
@@ -832,7 +888,7 @@ function positionCardHtml(p, eyebrow) {
       <div class="strat-title">${escapeHtml(p.name)}</div>
       <div class="strat-tagline">${escapeHtml(p.tagline)}</div>
       <div class="proscons">
-        <div class="col pros"><h5>✅ Pros</h5><ul>${p.pros.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>
+        <div class="col pros"><h5> Pros</h5><ul>${p.pros.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>
         <div class="col cons"><h5>⚠️ Cons</h5><ul>${p.cons.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>
       </div>
     </div>`;
@@ -851,7 +907,7 @@ function renderStrategy(d) {
     return;
   }
 
-  let html = positionCardHtml(d.current, `📍 You are here${d.n_reviews ? ` · from ${d.n_reviews} reviews` : ""}`);
+  let html = positionCardHtml(d.current, `You are here${d.n_reviews ? ` · from ${d.n_reviews} reviews` : ""}`);
   html += `<div style="display:flex; gap:10px; flex-wrap:wrap; margin:-4px 0 16px;">
       <button class="ghost-btn" id="stratRedetect" style="font-size:12.5px;">↻ Re-detect from new reviews</button>
       <button class="ghost-btn" id="stratReset" style="font-size:12.5px;">Start over</button>
@@ -871,7 +927,7 @@ function renderStrategy(d) {
   if (d.plan) {
     const pl = d.plan;
     const pct = pl.progress.total ? Math.round(pl.progress.done / pl.progress.total * 100) : 0;
-    if (!pl.same_position) html += positionCardHtml(pl.target, "🎯 Your target");
+    if (!pl.same_position) html += positionCardHtml(pl.target, "Your target");
     html += `<div class="gap-banner"><b>${pl.same_position ? "Plan:" : "The gap:"}</b> ${escapeHtml(pl.gap)}</div>`;
     html += `<div class="keep-box">
         <h4>Keep these the same</h4>
@@ -893,10 +949,10 @@ function renderStrategy(d) {
       const phaseName = (items[0] ? items[0].phase : `Level ${lv}`).replace(/^Level \d+ · /, "");
       const locked = !prevComplete;
       const levelDone = (doneByLevel[lv] || 0) === totByLevel[lv];
-      html += `<div class="phase-head">🏁 Level ${lv} · ${escapeHtml(phaseName)} <span class="subtle" style="font-weight:400;">${doneByLevel[lv] || 0}/${totByLevel[lv]}</span>${locked ? ` <span style="color:var(--amber);">🔒 finish Level ${lv - 1} first</span>` : (levelDone ? ` <span style="color:var(--green);">✓ done</span>` : "")}</div>`;
+      html += `<div class="phase-head"> Level ${lv} · ${escapeHtml(phaseName)} <span class="subtle" style="font-weight:400;">${doneByLevel[lv] || 0}/${totByLevel[lv]}</span>${locked ? ` <span style="color:var(--amber);"> finish Level ${lv - 1} first</span>` : (levelDone ? ` <span style="color:var(--green);">✓ done</span>` : "")}</div>`;
       items.forEach((it) => {
         html += `<label class="check-item ${it.done ? "done" : ""}" data-item="${it.id}" style="${locked ? "opacity:.55;pointer-events:none;" : ""}">
-            <input type="checkbox" ${it.done ? "checked" : ""} ${locked ? "disabled" : ""} />
+            <input type="checkbox"${it.done ? "checked" : ""} ${locked ? "disabled" : ""} />
             <div><div class="ctext">${escapeHtml(it.text)}</div><div class="cwhy">Why: ${escapeHtml(it.why)}</div></div>
           </label>`;
       });
@@ -913,7 +969,7 @@ function renderStrategy(d) {
     wireStratZone();
   });
   on("stratReset", async () => {
-    try { await api("/api/position-strategy/reset", { method: "POST" }); toast("Reset — start fresh"); loadStrategy(); }
+    try { await api("/api/position-strategy/reset", { method: "POST" }); toast("Reset, start fresh"); loadStrategy(); }
     catch (e) { toast(e.message); }
   });
   area.querySelectorAll(".opt-card").forEach((c) => c.onclick = () => selectTarget(c.dataset.target));
@@ -963,8 +1019,8 @@ async function loadAnalytics() {
     const fmt = (n) => n == null ? "—" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
     area.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
-        <h3 style="margin:0;">✅ What to do next</h3>
-        <button class="ghost-btn" id="pdfBtn" style="font-size:12.5px;">📄 Download PDF report</button>
+        <h3 style="margin:0;"> What to do next</h3>
+        <button class="ghost-btn" id="pdfBtn" style="font-size:12.5px;"> Download PDF report</button>
       </div>
       ${renderInsights(d.insights)}
       <p class="subtle">${k.date_from} → ${k.date_to}</p>
@@ -1054,8 +1110,8 @@ function renderSubcatOverview(d) {
   const area = $("subcatArea");
   area.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
-      <h3 style="margin:0;">✅ What to do across ${d.field === "subcategory" ? "sub-categories" : "categories"}</h3>
-      <button class="ghost-btn" id="subPdfBtn" style="font-size:12.5px;">📄 Download PDF report</button>
+      <h3 style="margin:0;"> What to do across ${d.field === "subcategory" ? "sub-categories" : "categories"}</h3>
+      <button class="ghost-btn" id="subPdfBtn" style="font-size:12.5px;"> Download PDF report</button>
     </div>
     ${renderInsights(d.insights)}
     <div class="card chart" id="chSubTrend"></div>
@@ -1074,7 +1130,7 @@ async function renderSubcatDetail(value) {
     const k = d.kpis;
     const fmt = (n) => n == null ? "—" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
     area.innerHTML = `
-      <h3 style="margin-top:0;">✅ ${escapeHtml(value)} — what to do, ranked by impact</h3>
+      <h3 style="margin-top:0;"> ${escapeHtml(value)} — what to do, ranked by impact</h3>
       ${renderInsights(d.insights)}
       <div class="kpis">
         <div class="kpi"><div class="label">Revenue</div><div class="value">₹${fmt(k.revenue)}</div></div>
@@ -1108,7 +1164,7 @@ async function loadRFM() {
     }
     area.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:6px;">
       <p class="subtle" style="margin:0;">${d.customer_count.toLocaleString()} customers scored (R·F·M quintiles, 5 = best). Showing top 500 by spend.</p>
-      <button class="ghost-btn" id="rfmPdfBtn" style="font-size:12.5px;">📄 Download PDF report</button>
+      <button class="ghost-btn" id="rfmPdfBtn" style="font-size:12.5px;"> Download PDF report</button>
       </div>
       <div class="card chart" id="chSegments"></div>
       <div class="table-wrap"><table><thead><tr>${d.columns.map((c) => `<th>${c}</th>`).join("")}</tr></thead>
@@ -1180,7 +1236,7 @@ on("winbackExport", async () => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = "winback_messages.xlsx";
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
-    toast("📄 Win-back list exported!");
+    toast("Win-back list exported!");
     closeWinbackModal();
   } catch (e) { toast(e.message, 6000); }
 });
@@ -1201,7 +1257,7 @@ $("runAnalystBtn").onclick = async () => {
     area.innerHTML = "";
     d.results.forEach((file, fi) => {
       const h = document.createElement("h3");
-      h.textContent = "📄 " + file.file;
+      h.textContent = " " + file.file;
       area.appendChild(h);
       if (!file.insights.length) {
         area.insertAdjacentHTML("beforeend", `<div class="card empty">No insights generated for this file.</div>`);
@@ -1211,7 +1267,7 @@ $("runAnalystBtn").onclick = async () => {
         const card = document.createElement("div");
         card.className = "card insight";
         card.innerHTML = `
-          <h4>🔎 ${ins.decision || ""}</h4>
+          <h4> ${ins.decision || ""}</h4>
           <div class="row"><span class="k">OBSERVATION</span>${ins.observation || ""}</div>
           <div class="row"><span class="k">WHY</span>${ins.why_it_matters || ""}</div>
           <div class="row"><span class="k">ACTION</span>${ins.action || ""}</div>
@@ -1299,7 +1355,7 @@ function renderComplaints(d) {
   const area = $("compArea");
   const det = d.detected;
   if (!d.actions.length) {
-    area.innerHTML = `<div class="card empty">🎉 Good news — out of ${det.n_reviews} reviews we found almost no complaints. Keep doing what you're doing.</div>`;
+    area.innerHTML = `<div class="card empty"> Good news — out of ${det.n_reviews} reviews we found almost no complaints. Keep doing what you're doing.</div>`;
     return;
   }
   const sevColor = {
@@ -1313,7 +1369,7 @@ function renderComplaints(d) {
   const f = d.focus;
   const focusBlock = f && f.focus_now.length ? `
     <div class="focus-box">
-      <div class="focus-head">🎯 Focus here first — don't fix everything at once</div>
+      <div class="focus-head"> Focus here first — don't fix everything at once</div>
       <p class="subtle" style="margin:2px 0 12px;">${escapeHtml(f.principle)}</p>
       ${f.focus_now.map((x, i) => `
         <div class="focus-item">
@@ -1323,11 +1379,11 @@ function renderComplaints(d) {
               <span class="focus-badge" style="background:${sevColor[x.severity]}22; color:${sevColor[x.severity]};">${escapeHtml(x.severity)}</span>
               ${x.growth_pct != null && x.growth_pct > 20 ? `<span class="focus-badge" style="background:var(--red-soft); color:var(--red);">rising ↗ ${x.growth_pct}%</span>` : ""}
             </div>
-            <div class="focus-action">✅ ${escapeHtml(x.action)}</div>
+            <div class="focus-action"> ${escapeHtml(x.action)}</div>
             <div class="subtle" style="font-size:12px; margin-top:4px;">${x.count} complaints · ${x.share_pct}% of all · focus score ${x.focus_score}</div>
           </div>
         </div>`).join("")}
-      ${f.watch.length ? `<div class="focus-watch">👁️ Watch (fix only after the above): ${f.watch.map((w) => `${escapeHtml(w.theme)} (${w.count})`).join(" · ")}</div>` : ""}
+      ${f.watch.length ? `<div class="focus-watch"> Watch (fix only after the above): ${f.watch.map((w) => `${escapeHtml(w.theme)} (${w.count})`).join(" · ")}</div>` : ""}
     </div>` : "";
 
   // ---- monthly complaint volume (the "how many per month" ask) ----
@@ -1335,7 +1391,7 @@ function renderComplaints(d) {
   const monthlyBlock = m ? `
     <div class="card" style="margin:14px 0;">
       <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
-        <h4 style="margin:0;">📅 Complaints per month</h4>
+        <h4 style="margin:0;"> Complaints per month</h4>
         <div class="subtle" style="font-size:13px;">Averaging <b style="color:var(--text);">${m.avg_per_month}/month</b> · latest (${m.latest_month}): <b style="color:var(--text);">${m.latest_count}</b> · ${m.mom_change_pct >= 0 ? `<span style="color:var(--red);">up ${m.mom_change_pct}% vs earlier</span>` : `<span style="color:var(--green);">down ${Math.abs(m.mom_change_pct)}% vs earlier</span>`}</div>
       </div>
       <div class="card chart" id="chCompMonthly" style="margin-top:10px; border:none; padding:0;"></div>
@@ -1346,8 +1402,8 @@ function renderComplaints(d) {
 
   area.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
-      <h3 style="margin:0;">✅ What to do first</h3>
-      <button class="ghost-btn" id="compPdfBtn" style="font-size:12.5px;">📄 Download PDF report</button>
+      <h3 style="margin:0;"> What to do first</h3>
+      <button class="ghost-btn" id="compPdfBtn" style="font-size:12.5px;"> Download PDF report</button>
     </div>
     ${focusBlock}
     <p class="subtle">${det.n_reviews} reviews analysed · ${det.n_complaints} complaints found (${det.complaint_rate}% complaint rate)</p>
@@ -1355,7 +1411,7 @@ function renderComplaints(d) {
     ${monthlyBlock}
     ${d.trend ? `<div class="card chart" id="chCompTrend"></div>` : `<div class="card empty">No usable dates found in the file — trend needs a date column.</div>`}
     <div class="card chart" id="chCompQuad"></div>
-    <h3>🔎 Deep analysis</h3>
+    <h3> Deep analysis</h3>
     <div class="table-wrap"><table>
       <thead><tr><th>Theme</th><th>Complaints</th><th>Share</th><th>Severity</th><th>Avg rating</th><th>Trend</th><th>Example (from your reviews)</th></tr></thead>
       <tbody>${d.deep.map((r) => `<tr>
@@ -1408,16 +1464,16 @@ function renderMenuEngineering(me) {
     <tr>
       <td><b>${escapeHtml(b.item)}</b><div class="subtle" style="font-size:11px;">${escapeHtml(b.quadrant)} · ${b.units} units</div></td>
       <td style="font-size:18px; color:var(--accent); text-align:center;">+</td>
-      <td><b>🥤 ${escapeHtml(b.pair_with)}</b><div class="subtle" style="font-size:11px;">${escapeHtml(b.reason)}</div></td>
+      <td><b> ${escapeHtml(b.pair_with)}</b><div class="subtle" style="font-size:11px;">${escapeHtml(b.reason)}</div></td>
     </tr>`).join("");
 
   return `
-    <h3 style="margin-top:22px;">🍽️ Menu engineering — move your slow items</h3>
+    <h3 style="margin-top:22px;"> Menu engineering — move your slow items</h3>
     <p class="subtle" style="margin-top:-4px;">Every item scored on how much it sells (popularity) vs its price (profit proxy). Your slow food items, each paired with the drink most likely to pull it along.</p>
     <div class="card chart" id="chMenuQuad"></div>
     ${bundleRows ? `
       <div class="card" style="margin-top:14px;">
-        <h4 style="margin:0 0 4px;">✅ Do this: put these combos on your board</h4>
+        <h4 style="margin:0 0 4px;"> Do this: put these combos on your board</h4>
         <p class="subtle" style="margin:0 0 10px; font-size:12px;">Slow food moves fastest riding on a drink customers already want. Price each combo just below buying the two separately.</p>
         <div class="table-wrap"><table>
           <thead><tr><th>Slow item</th><th></th><th>Sell it with</th></tr></thead>
@@ -1466,9 +1522,9 @@ async function downloadPdfReport() {
     a.href = url; a.download = "content_seller_sales_report.pdf";
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
-    toast("📄 Report downloaded!");
+    toast("Report downloaded!");
   } catch (e) { toast(e.message, 6000); }
-  if (btn) { btn.disabled = false; btn.textContent = "📄 Download PDF report"; }
+  if (btn) { btn.disabled = false; btn.textContent = "Download PDF report"; }
 }
 
 // ---------- connect your POS ----------
@@ -1486,7 +1542,7 @@ async function openPosModal() {
     const demos = d.connectors.filter((c) => c.id.startsWith("mock_"));
     body.innerHTML = `
       <div class="focus-box" style="border-left-color:var(--green);">
-        <div class="focus-head" style="font-size:14.5px;">📧 Set it once, forget it forever</div>
+        <div class="focus-head" style="font-size:14.5px;"> Set it once, forget it forever</div>
         <p class="subtle" style="margin:4px 0 8px;">Your POS can already email your sales report on a schedule — most owners set this up for their accountant. Add one more address and One Tap Manager updates itself. No login, no file, no website.</p>
         <ol class="steps" style="margin:0 0 4px 18px; font-size:12.5px;">
           <li>In your POS (PetPooja: Reports → Automate report alerts), turn on scheduled email reports</li>
@@ -1531,7 +1587,7 @@ async function pullFromPos(connectorId) {
     state.files.push(d.file);
     renderFileList();
     $("posModal").style.display = "none";
-    toast(`🔌 Pulled ${d.rows.toLocaleString()} rows (${d.from} → ${d.to}) — already mapped`, 6000);
+    toast(`Pulled ${d.rows.toLocaleString()} rows (${d.from} → ${d.to}), already mapped`, 6000);
     go("analytics");
   } catch (e) {
     body.innerHTML = `<p class="subtle">⚠️ ${escapeHtml(e.message)}</p>`;
@@ -1559,9 +1615,9 @@ async function downloadPagePdf(page, file, btnId) {
     a.href = url; a.download = names[page];
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
-    toast("📄 Report downloaded!");
+    toast("Report downloaded!");
   } catch (e) { toast(e.message, 6000); }
-  if (btn) { btn.disabled = false; btn.textContent = "📄 Download PDF report"; }
+  if (btn) { btn.disabled = false; btn.textContent = "Download PDF report"; }
 }
 
 // ---------- pricing & payments (à-la-carte, Razorpay) ----------
@@ -1641,12 +1697,12 @@ async function openPricing(highlightProduct, message) {
     // Pricing validation: one-tap "would you pay this?" — logged server-side.
     const fb = document.createElement("div");
     fb.className = "subtle price-feedback";
-    fb.innerHTML = `Would you pay this? <a href="#" data-vote="yes">👍</a> <a href="#" data-vote="no">👎</a>`;
+    fb.innerHTML = `Would you pay this? <a href="#" data-vote="yes"></a> <a href="#" data-vote="no"></a>`;
     fb.querySelectorAll("a").forEach((a) => a.onclick = async (e) => {
       e.preventDefault();
       try {
         await api("/api/feedback", { method: "POST", json: { product: prod.id, vote: a.dataset.vote } });
-        fb.textContent = "Thanks — this genuinely helps us price fairly 🙏";
+        fb.textContent = "Thanks, this genuinely helps us price fairly ";
       } catch { fb.textContent = "Thanks!"; }
     });
     div.appendChild(fb);
@@ -1672,7 +1728,7 @@ async function buyProduct(productId) {
   if (!state.token) { closePricing(); state.pendingPage = null; openLogin(); toast("Log in first, then reopen pricing"); return; }
   try {
     const order = await api("/api/pay/create-order", { method: "POST", json: { product: productId } });
-    if (order.launch_free) { toast("It's free during launch — just use it! 🎉"); closePricing(); return; }
+    if (order.launch_free) { toast("It's free during launch, just use it! "); closePricing(); return; }
     await loadRazorpayScript();
     const rzp = new Razorpay({
       key: order.key_id,
@@ -1692,7 +1748,7 @@ async function buyProduct(productId) {
           }});
           refreshUserUI(v.usage);
           closePricing();
-          toast("🎉 Payment successful — " + (productId === "chain_monthly" ? "Chain plan active!" : "unlocked and ready to use!"), 5000);
+          toast("Payment successful, " + (productId === "chain_monthly" ? "Chain plan active!" : "unlocked and ready to use!"), 5000);
         } catch (e) { toast(e.message, 6000); }
       },
     });
@@ -1758,6 +1814,9 @@ document.querySelectorAll(".pt-select").forEach((sel) => sel.onchange = async ()
     setTimeout(() => openPricing(), 400);
   }
   loadPricing().then(() => refreshUserUI()).catch(() => {});
+  // Pull the charting library down while the page is idle, so the first chart a
+  // seller opens is instant even though nothing blocked the first paint on it.
+  warmPlotly();
   try {
     const f = await api("/api/files");
     state.files = f.files;

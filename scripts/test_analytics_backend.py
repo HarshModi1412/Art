@@ -53,7 +53,16 @@ c.post("/api/products/item", json={"name": "Cotton Kurta", "category": "Clothing
 pid = c.get("/api/products/state", headers=H).json()["products"][0]["id"]
 c.post("/api/site/seed", headers=H)
 handle = f"antest{int(time.time() * 1000) % 10**8}"
-c.post("/api/site/save", json={"site": {"handle": handle, "brand": "AN Test"}}, headers=H)
+# A shop cannot be published until it can say who runs it and how to reach
+# them: Consumer Protection (E-commerce) Rules 2020, Rule 5(4) on our side
+# and Rule 6 on the seller's. So these fields are part of the setup a real
+# seller does, and the test does it too rather than working around the gate.
+c.post("/api/site/save", json={"site": {
+    "handle": handle, "brand": "AN Test",
+    "trust": {"business_name": "AN Test Crafts",
+              "address": "7 Brigade Road, Bengaluru 560001",
+              "support_email": "care@antest.in", "support_phone": "9800000000",
+              "grievance_name": "AN Test Crafts"}}}, headers=H)
 c.post("/api/site/publish", json={"published": True}, headers=H)
 r = c.post(f"/api/shop/{handle}/order", json={
     "lines": [{"product_id": pid, "qty": 2}],

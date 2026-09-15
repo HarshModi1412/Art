@@ -14,8 +14,12 @@ requests
 cryptography>=41
 supabase>=2.0,<3
 huggingface_hub>=0.34
-# Watermark remover (backend/core/watermark.py): OpenCV inpaints the corner
-# mark, imageio-ffmpeg ships a static ffmpeg to re-encode cleaned clips as H.264.
+# imageio-ffmpeg ships a static ffmpeg, which is what burns the "AI generated"
+# label into a clip and writes its provenance metadata (backend/core/ailabel.py).
+# Required, not optional: an unlabelled AI clip is a compliance failure.
+# OpenCV is used by the watermark remover in backend/core/watermark.py, which
+# ships switched OFF (see ailabel.py for why), and by the video frame sampling
+# the label step reuses.
 opencv-python-headless>=4.9
 imageio-ffmpeg>=0.5
 # Optional: only imported when SENTRY_DSN is set. The built-in

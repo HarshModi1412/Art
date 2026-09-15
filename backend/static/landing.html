@@ -3,10 +3,77 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>One Tap Manager — Connect what you already sell on. Get told what to fix.</title>
-<meta name="description" content="One Tap Manager reads the sales you already make on Amazon, Shopify, Instagram or your own counter, and tells you what to restock, who to win back and what to fix. Analytics free forever. ₹499 or ₹999 a month replaces four to six separate apps — one flat number, never a cut of your sales." />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;600&family=Noto+Sans+Tamil:wght@400;600&family=Noto+Sans+Bengali:wght@400;600&family=Noto+Sans+Telugu:wght@400;600&display=swap" rel="stylesheet">
+<title>One Tap Manager: run your shop the way a big brand runs theirs</title>
+<meta name="description" content="One Tap Manager reads the sales you already make on Amazon, Shopify, Instagram or your own counter, then tells you what to restock, who to win back and what to fix. Analytics free forever. One flat monthly price that replaces four to six separate apps, and never a cut of your sales." />
+<meta name="robots" content="index, follow" />
+<link rel="canonical" href="__BASE_URL__/" />
+
+<!-- What a pasted link looks like in WhatsApp, which is where an Indian seller
+     will actually see it first. The image is a card this app draws itself rather
+     than a stock photo: nothing to licence, no photograph of a person who did
+     not agree to appear in it, and it shows the product's real output.
+     PNG, not SVG: WhatsApp, X and LinkedIn all silently refuse an SVG card, and
+     a preview that does not render is worse than no preview. -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="One Tap Manager" />
+<meta property="og:title" content="Run your shop the way a big brand runs theirs" />
+<meta property="og:description" content="It reads your sales, tells you the three things worth doing this morning, and then does most of them for you. Free to start, no card." />
+<meta property="og:url" content="__BASE_URL__/" />
+<meta property="og:image" content="__BASE_URL__/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:alt" content="One Tap Manager: three example cards telling a seller what to restock, who to win back, and what to fix." />
+<meta property="og:locale" content="en_IN" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<!-- Structured data. Two types, because this page is both an organisation's home
+     page and the page for a piece of software, and Google uses them for
+     different things. Every claim here is repeated verbatim on the page, which
+     is the rule: schema that says something the page does not say is spam.
+     No aggregateRating and no review markup, deliberately. We have no customers
+     yet, so a rating would be invented, and invented review markup is the single
+     most common reason a site gets a manual action. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "__BASE_URL__/#org",
+      "name": "One Tap Manager",
+      "url": "__BASE_URL__/",
+      "description": "Operations and analytics software for small Indian sellers.",
+      "areaServed": { "@type": "Country", "name": "India" }
+    },
+    {
+      "@type": "WebSite",
+      "@id": "__BASE_URL__/#website",
+      "url": "__BASE_URL__/",
+      "name": "One Tap Manager",
+      "inLanguage": "en-IN",
+      "publisher": { "@id": "__BASE_URL__/#org" }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "One Tap Manager",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web browser",
+      "url": "__BASE_URL__/",
+      "publisher": { "@id": "__BASE_URL__/#org" },
+      "offers": [
+        { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "INR",
+          "description": "Sales analytics, customer segments and your own selling website." },
+        { "@type": "Offer", "name": "Semi Pro", "price": "499", "priceCurrency": "INR",
+          "description": "Adds win-back campaigns, complaint analysis and the morning digest." },
+        { "@type": "Offer", "name": "Pro", "price": "999", "priceCurrency": "INR",
+          "description": "Adds stock and supplier ordering, purchase orders and a custom domain." }
+      ]
+    }
+  ]
+}
+</script>
+
 <style>
 :root {
   --paper: #F7F5EF;
@@ -14,7 +81,16 @@
   --ink: #101828;
   --ink-soft: #475467;
   --line: #DCD8CC;
-  --violet: #6D28D9;
+  /* The accent is the indigo that was already in this palette. It replaced a
+     violet (#6D28D9) that was doing the same job, because purple accents and
+     purple gradients are the visual signature of a page nobody designed, and a
+     seller deciding whether to trust us with their sales file reads that
+     signature before they read a word. Indigo on warm paper is the palette a
+     printed ledger has, which is the right association for this product.
+     Contrast on --paper #F7F5EF: 8.9:1, so it passes for body text, not just
+     for headings. */
+  --accent: #1E3A8A;
+  --accent-ink: #16306F;
   --indigo: #1E3A8A;
   --marigold: #F5A623;
   --card-dark: #111827;
@@ -22,9 +98,13 @@
   --card-text: #E5E7EB;
   --card-muted: #9CA3AF;
   --green: #34D399;
-  --font-display: "Sora", sans-serif;
-  --font-body: "Inter", "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Bengali", "Noto Sans Telugu", sans-serif;
-  --font-mono: "IBM Plex Mono", monospace;
+  /* System stacks, on purpose. Nothing is fetched from a third party, so no
+     visitor's IP address reaches a font CDN before they have had any say, and
+     nothing blocks the first paint. The Indic families are the ones already
+     installed on Indian devices, kept so the Hindi copy renders properly. */
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Bengali", "Noto Sans Telugu", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -32,7 +112,7 @@ body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(
 h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.02em; line-height: 1.15; }
 a { color: inherit; }
 .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
-.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--violet); }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
 
 /* pricing: the comparison and the usage plan */
 .stack-compare { max-width: 720px; margin: 0 auto 40px; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 26px 28px; }
@@ -43,14 +123,14 @@ a { color: inherit; }
 .stack-table td:last-child { text-align: right; font-family: var(--font-mono); font-size: 14px; white-space: nowrap; }
 .stack-table tr:last-child td { border-bottom: 0; }
 .stack-sum td { font-weight: 700; border-top: 2px solid var(--ink); padding-top: 14px; }
-.stack-ours td { font-weight: 700; color: var(--violet); font-size: 16px; }
+.stack-ours td { font-weight: 700; color: var(--accent); font-size: 16px; }
 .stack-ours td:last-child { font-size: 17px; }
 .usage-plan { display: grid; grid-template-columns: 1.35fr .65fr; gap: 34px; align-items: start; max-width: 940px; margin: 44px auto 0; padding: 28px 30px; background: #fff; border: 1px solid var(--line); border-radius: 16px; }
 .usage-plan h3 { font-size: 22px; margin: 10px 0 12px; }
 .usage-plan p { font-size: 15px; color: var(--ink-soft); margin: 0 0 12px; line-height: 1.6; }
 .credit-packs { display: grid; gap: 10px; }
 .credit-pack { display: grid; gap: 2px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; }
-.credit-pack.best { border-color: var(--violet); box-shadow: 0 0 0 1px var(--violet); }
+.credit-pack.best { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .credit-pack b { font-size: 15px; }
 .credit-pack span { font-family: var(--font-mono); font-size: 18px; }
 .credit-pack i { font-style: normal; font-size: 12.5px; color: var(--ink-soft); }
@@ -60,15 +140,35 @@ a { color: inherit; }
 .nav { position: sticky; top: 0; z-index: 10; background: rgba(247,245,239,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
 .nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1120px; margin: 0 auto; }
 .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 800; font-size: 18px; text-decoration: none; }
-.brand-mark { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, var(--indigo), var(--violet)); color: #fff; display: grid; place-items: center; font-family: var(--font-mono); font-size: 13px; }
+/* Flat, not a gradient. A two-stop diagonal gradient on a logo mark and again on
+   the primary button is the tell of a template, and it is the first thing the
+   brief here ruled out. One solid ink colour reads as deliberate. */
+.brand-mark { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: #fff; display: grid; place-items: center; font-family: var(--font-mono); font-size: 13px; }
 .nav-links { display: flex; gap: 26px; align-items: center; font-size: 14.5px; }
 .nav-links a { text-decoration: none; color: var(--ink-soft); }
 .nav-links a:hover { color: var(--ink); }
-.btn { display: inline-block; text-decoration: none; border-radius: 10px; padding: 11px 22px; font-weight: 600; font-size: 15px; border: none; cursor: pointer; font-family: var(--font-body); }
-.btn-primary { background: linear-gradient(135deg, var(--indigo), var(--violet)); color: #fff; }
-.btn-primary:hover { filter: brightness(1.12); }
+/* BUG THIS FIXES: the rule above and .btn-primary have the same specificity, and
+   this one comes later in the stylesheet, so it won that tie and painted the
+   page's main call to action in #475467 on a #1E3A8A button. That is about
+   1.5:1, which is not "a bit low", it is unreadable, and it was the button
+   asking people to open the app. Stated explicitly so the tie cannot come
+   back. */
+.nav-links a.btn-primary { color: #fff; }
+.nav-links a.btn-primary:hover { color: #fff; }
+/* 8px corners, not pills. A fully rounded button is the other template tell, and
+   a rectangle with a small radius is what every interface a seller already trusts
+   (their bank, their billing app) uses. */
+.btn { display: inline-block; text-decoration: none; border-radius: 8px; padding: 11px 22px; font-weight: 600; font-size: 15px; border: 1px solid transparent; cursor: pointer; font-family: var(--font-body); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
 .btn-ghost { border: 1.5px solid var(--ink); color: var(--ink); background: none; }
 .btn-ghost:hover { background: var(--ink); color: var(--paper); }
+/* A visible focus ring on everything that takes focus, so the page is usable
+   without a mouse. The default outline is removed by nothing here, but browsers
+   draw it thin on coloured backgrounds, so it is made explicit. */
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.skip-link { position: absolute; left: -9999px; }
+.skip-link:focus { left: 12px; top: 12px; z-index: 100; background: #fff; color: var(--ink); padding: 10px 14px; border: 2px solid var(--accent); border-radius: 8px; text-decoration: none; }
 
 
 /* where we sit */
@@ -77,9 +177,9 @@ a { color: inherit; }
 .cmp-col p { font-size: 14px; line-height: 1.6; color: var(--ink-soft); margin: 0 0 12px; }
 .cmp-col p b { color: var(--ink); }
 .cmp-h { font-weight: 700; font-size: 15px; margin-bottom: 12px; }
-.cmp-us { border-color: var(--violet); box-shadow: 0 0 0 1px var(--violet); }
-.cmp-us .cmp-h { color: var(--violet); }
-.cmp-line { border-left: 3px solid var(--violet); padding: 12px 18px; font-size: 15px;
+.cmp-us { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.cmp-us .cmp-h { color: var(--accent); }
+.cmp-line { border-left: 3px solid var(--accent); padding: 12px 18px; font-size: 15px;
   line-height: 1.6; margin-bottom: 16px; }
 .cmp-honest { background: #f7f7f9; border-radius: 12px; padding: 16px 18px; font-size: 14px;
   line-height: 1.6; color: var(--ink-soft); }
@@ -87,31 +187,57 @@ a { color: inherit; }
 @media (max-width: 860px) { .cmp { grid-template-columns: 1fr; } }
 
 /* hero */
-.hero { display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; padding: 72px 0 80px; }
+/* BUG THIS FIXES: this element is `class="wrap hero"`, and .hero used the
+   `padding` SHORTHAND, which reset the 24px side gutter .wrap had given it to
+   zero. On a desktop nothing showed, because the 1120px max-width kept the text
+   away from the edge anyway. On a phone the headline ran right up against both
+   edges of the screen, which is the one place it was certain to be read.
+   padding-block sets only the vertical padding, so the gutter survives. */
+.hero { display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; padding-block: 72px 80px; }
 .hero h1 { font-size: 46px; margin: 14px 0 18px; }
-.hero h1 em { font-style: normal; color: var(--violet); }
+.hero h1 em { font-style: normal; color: var(--accent); }
 .hero p.lead { font-size: 18px; color: var(--ink-soft); max-width: 46ch; margin: 0 0 28px; }
 .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
 .hero-note { font-size: 13px; color: var(--ink-soft); margin-top: 12px; }
 
 /* signature: dark insight tickets floating on light paper */
-.tickets { position: relative; min-height: 380px; }
+/* BUG THIS FIXES: the three cards were absolutely positioned at top: 0, 128px
+   and 258px, which only worked while each one happened to be under 128px tall.
+   Any copy edit, any narrower viewport, any font a device substitutes, and the
+   second card slid under the first with half its sentence hidden. It was doing
+   exactly that on the live page.
+
+   Now they are a flex column and each card takes the height its own text needs,
+   so they cannot collide whatever the copy says. The scattered look that made
+   the design worth having is kept with the rotations and the alternating
+   indents, which are decoration rather than layout. */
+.tickets { display: flex; flex-direction: column; gap: 14px; }
 .ticket {
-  position: absolute; width: 88%;
+  width: 92%;
   background: var(--card-dark); color: var(--card-text);
   border: 1px solid var(--card-dark-border); border-radius: 14px;
   padding: 18px 20px; box-shadow: 0 24px 48px -18px rgba(16,24,40,.45);
 }
 .ticket .t-tag { font-family: var(--font-mono); font-size: 11px; color: var(--marigold); letter-spacing: .1em; }
-.ticket h4 { margin: 6px 0 6px; font-size: 16px; }
+/* Not a heading. These are illustrations beside the hero, not sections of
+   the document, and they sat at h4 directly under the h1, skipping two
+   levels. Someone navigating by heading was offered three entries that
+   lead nowhere. Same look, correct semantics. */
+.ticket .t-title { margin: 6px 0; font-size: 16px; font-weight: 700;
+  font-family: var(--font-display); line-height: 1.25; color: var(--card-text); }
 .ticket p { margin: 0; font-size: 13.5px; color: var(--card-muted); }
 .ticket .t-metric { font-family: var(--font-mono); color: var(--green); font-size: 13px; margin-top: 10px; }
-.ticket:nth-child(1) { top: 0; left: 0; transform: rotate(-2deg); }
-.ticket:nth-child(2) { top: 128px; right: 0; transform: rotate(1.5deg); }
-.ticket:nth-child(3) { top: 258px; left: 6%; transform: rotate(-1deg); }
+.ticket:nth-of-type(1) { transform: rotate(-1.6deg); align-self: flex-start; }
+.ticket:nth-of-type(2) { transform: rotate(1.2deg); align-self: flex-end; }
+.ticket:nth-of-type(3) { transform: rotate(-0.8deg); align-self: flex-start; margin-left: 5%; }
+/* The rotation is decoration. Anyone who has asked their system not to animate
+   or tilt things has asked for a reason, so it goes away for them. */
+@media (prefers-reduced-motion: reduce) {
+  .ticket { transform: none !important; }
+}
 
 /* sections */
-section { padding: 72px 0; }
+section { padding-block: 72px; }   /* the side gutter belongs to .wrap inside */
 .section-head { max-width: 640px; margin-bottom: 40px; }
 .section-head h2 { font-size: 32px; margin: 10px 0 10px; }
 .section-head p { color: var(--ink-soft); margin: 0; }
@@ -130,27 +256,33 @@ section { padding: 72px 0; }
 /* features */
 .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
 .feature { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 24px; }
-.feature .f-icon { font-size: 22px; }
+/* These used to be emoji. An emoji as an interface icon renders differently on
+   every device, cannot be styled, is read aloud by a screen reader as its own
+   long name in the middle of a heading, and looks like a placeholder nobody came
+   back to. Replaced with a drawn line icon in the accent colour, marked
+   aria-hidden because the heading beside it already says what the card is. */
+.feature .f-icon { width: 26px; height: 26px; color: var(--accent); }
+.feature .f-icon svg { width: 26px; height: 26px; display: block; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .feature h3 { font-size: 18px; margin: 10px 0 8px; }
 .feature p { font-size: 14.5px; color: var(--ink-soft); margin: 0; }
 
 /* how it works */
 .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; counter-reset: step; }
 .step { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
-.step::before { counter-increment: step; content: counter(step, decimal-leading-zero); font-family: var(--font-mono); color: var(--violet); font-size: 13px; }
+.step::before { counter-increment: step; content: counter(step, decimal-leading-zero); font-family: var(--font-mono); color: var(--accent); font-size: 13px; }
 .step h3 { font-size: 16px; margin: 8px 0 6px; }
 .step p { font-size: 13.5px; color: var(--ink-soft); margin: 0; }
 
 /* story wall */
 .stories-note {
   display: inline-flex; align-items: center; gap: 8px;
-  background: #fff; border: 1px dashed var(--marigold); border-radius: 99px;
+  background: #fff; border: 1px dashed var(--marigold); border-radius: 8px;
   padding: 7px 16px; font-size: 13.5px; color: var(--ink-soft); margin-top: 14px;
 }
 .stories { columns: 3; column-gap: 18px; margin-top: 36px; }
 .story { break-inside: avoid; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; margin-bottom: 18px; }
-.story .s-chip { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em; color: var(--violet); border: 1px solid var(--violet); border-radius: 99px; padding: 2px 9px; display: inline-block; }
-.story blockquote { margin: 12px 0 12px; font-size: 15px; }
+.story .s-chip { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: 2px 9px; display: inline-block; }
+.story p.s-body { margin: 12px 0 12px; font-size: 15px; }
 .story .s-who { font-size: 13px; color: var(--ink-soft); }
 .story .s-lang { font-family: var(--font-mono); font-size: 11px; color: var(--marigold); float: right; }
 
@@ -159,26 +291,40 @@ section { padding: 72px 0; }
 .plans-3 { grid-template-columns: repeat(3, minmax(0, 360px)); }
 @media (max-width: 1024px) { .plans-3 { grid-template-columns: 1fr; } }
 .plan { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 30px; position: relative; }
-.plan.pro { border: 2px solid var(--violet); box-shadow: 0 24px 48px -24px rgba(109,40,217,.35); }
-.plan .badge { position: absolute; top: -13px; left: 30px; background: var(--violet); color: #fff; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 3px 12px; }
+.plan.pro { border: 2px solid var(--accent); box-shadow: 0 24px 48px -24px rgba(30,58,138,.30); }
+.plan .badge { position: absolute; top: -13px; left: 30px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 3px 12px; }
 .plan h3 { margin: 0 0 4px; font-size: 20px; }
 .plan .price { font-family: var(--font-display); font-size: 38px; font-weight: 800; margin: 10px 0 2px; }
 .plan .price span { font-size: 15px; font-weight: 500; color: var(--ink-soft); font-family: var(--font-body); }
 .plan ul { list-style: none; padding: 0; margin: 20px 0 26px; }
 .plan li { padding: 7px 0; font-size: 14.5px; border-bottom: 1px dashed var(--line); }
 .plan li::before { content: "✓  "; color: var(--green); font-weight: 700; }
-.plan li.no::before { content: "—  "; color: var(--line); }
+/* A minus sign, not an em dash: the row means "not included", and the screen
+   reader should say something sensible rather than a dash used as punctuation. */
+.plan li.no::before { content: "\2212  "; color: var(--line); }
 .plan li.no { color: #98A2B3; }
 .plan .btn { width: 100%; text-align: center; }
 
 /* footer */
 footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.5px; color: var(--ink-soft); }
 .foot { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+/* Every link in the footer gets a real tap target, not just the legal row.
+   These are the links people go looking for on a phone. */
+.foot a { color: var(--accent-ink); display: inline-block; padding: 10px 6px; }
+.foot .foot-links { margin: -10px -6px; }
+/* A 22px-tall link is a miss on a phone, and these are the links somebody goes
+   looking for when they want to know what happens to their data. Padding gives
+   them a 40px target without changing how the row looks. */
+.foot-legal { display: flex; gap: 2px; flex-wrap: wrap; align-items: center;
+  margin: -10px 0; }
+.foot-legal a { display: inline-block; padding: 10px 8px; }
 
 @media (max-width: 900px) {
   .hero { grid-template-columns: 1fr; padding-top: 40px; }
   .hero h1 { font-size: 34px; }
-  .tickets { min-height: 420px; }
+  /* On a phone the tilt costs legibility for nothing, and the cards need the
+     full width. */
+  .ticket { width: 100%; transform: none !important; margin-left: 0 !important; }
   .miss, .features, .steps { grid-template-columns: 1fr; }
   .stories { columns: 1; }
   .plans { grid-template-columns: 1fr; }
@@ -186,8 +332,12 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
 }
 @media (min-width: 901px) and (max-width: 1100px) { .stories { columns: 2; } }
 </style>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<script src="/consent.js" defer></script>
 </head>
 <body>
+
+<a class="skip-link" href="#main">Skip to the main content</a>
 
 <nav class="nav">
   <div class="nav-inner">
@@ -195,7 +345,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#how">How it works</a>
-      <a href="#stories">Stories</a>
+      <a href="#stories">What it finds</a>
       <a href="#pricing">Pricing</a>
       <a class="btn btn-primary" href="/smart">Open the app</a>
     </div>
@@ -203,7 +353,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
 </nav>
 
 <!-- HERO -->
-<header class="wrap hero">
+<header class="wrap hero" id="main">
   <div>
     <span class="eyebrow">For Indian sellers · कपड़े, गहने, परफ़्यूम</span>
     <h1>Run your shop the way a big brand runs theirs. <em>On your own, before lunch.</em></h1>
@@ -213,33 +363,33 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
       <b>One Tap Manager is that team.</b> It reads your sales, tells you the three
       things worth doing this morning, and then does most of them for you.</p>
     <div class="hero-ctas">
-      <button class="btn btn-primary" onclick="openSignup('free')">Start free — no card needed</button>
+      <button class="btn btn-primary" onclick="openSignup('free')">Start free, no card needed</button>
       <a class="btn btn-ghost" href="#opportunity">What you are losing without it</a>
     </div>
     <p class="hero-note">Upload one sales file and the first answers are on screen in about two
-      minutes. Your own selling website is included — we are not going to charge you for a shop
-      and then charge you again to understand it.</p>
+      minutes. Your own selling website is included, because we are not going to charge you for a
+      shop and then charge you again to understand it.</p>
   </div>
   <div class="tickets" aria-label="Examples of what One Tap Manager tells a seller to do">
-    <p class="tickets-label">Examples of the cards you get — made up, using round numbers,
+    <p class="tickets-label">Examples of the cards you get, made up and using round numbers,
       because we would rather show you the shape than invent a customer.</p>
     <div class="ticket">
       <div class="t-tag">EXAMPLE · STOCK</div>
-      <h4>Four things are about to run out</h4>
+      <p class="t-title">Four things are about to run out</p>
       <p>Your best-selling shirt in M lasts three more days at the rate it is going. The order
-        form for that supplier is already written — check it and send it.</p>
+        form for that supplier is already written. Check it and send it.</p>
       <div class="t-metric">order 40 · supplier already on file</div>
     </div>
     <div class="ticket">
       <div class="t-tag">EXAMPLE · CUSTOMERS</div>
-      <h4>38 buyers have not come back in 45 days</h4>
+      <p class="t-title">38 buyers have not come back in 45 days</p>
       <p>They spent ₹1.4 lakh with you. One WhatsApp message to these 38 beats a discount for
-        everybody — and we count how many actually came back, so you know if it worked.</p>
+        everybody, and we count how many actually came back, so you know if it worked.</p>
       <div class="t-metric">the message is written · you press send</div>
     </div>
     <div class="ticket">
       <div class="t-tag">EXAMPLE · REVIEWS</div>
-      <h4>“Sizing runs small” is your loudest complaint</h4>
+      <p class="t-title">“Sizing runs small” is your loudest complaint</p>
       <p>Said again and again in your reviews, and getting worse. A size chart on three product
         pages is the whole fix.</p>
       <div class="t-metric">fix this first · 3 pages to edit</div>
@@ -264,7 +414,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
     <div class="section-head">
       <span class="eyebrow">The opportunity</span>
       <h2>The money is already in your shop. It leaves quietly.</h2>
-      <p>Not because you are doing anything wrong — because one person cannot watch
+      <p>Not because you are doing anything wrong, but because one person cannot watch
         everything at once. A brand with eight people watches all of it. Here is what
         goes out the door while nobody is looking, and what closing it is worth.</p>
     </div>
@@ -287,7 +437,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
       <div class="miss-card">
         <h3>The week you did not post</h3>
         <p>The brands growing on Instagram are not more talented. They are more regular.
-          Four posts a week, every week, is the whole trick — and it is the first thing
+          Four posts a week, every week, is the whole trick, and it is the first thing
           to go when you are packing orders.</p>
         <p class="miss-worth">Posting is the cheapest customer you will ever get.
           <b>Skipping it costs nothing today and everything in a year.</b></p>
@@ -296,7 +446,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
     <div class="cmp-line" style="margin-top:26px;">
       <b>None of this is a knowledge problem.</b> Every big brand knows these three
       things. They have people to act on them. That is the only difference, and it is
-      the difference this closes — for one person, in the time it takes to have chai.
+      the difference this closes, for one person, in the time it takes to have chai.
     </div>
     <p class="stack-note" style="margin-top:14px;">The figures above are worked examples
       with the arithmetic shown, not results from a customer. We are new and would rather
@@ -314,17 +464,17 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
         you to learn anything.</p>
     </div>
     <div class="features">
-      <div class="feature"><div class="f-icon">📊</div><h3>The one who reads the numbers</h3><p>What sold, what it earned you, which days quietly lose money, and what next month looks like — from the sales file you already have. Plain sentences, not a wall of charts.</p></div>
-      <div class="feature"><div class="f-icon">🧭</div><h3>The one who watches your customers</h3><p>Who buys often, who spends most, and who has gone quiet. The message to bring the quiet ones back is written for you, and we count how many actually returned.</p></div>
-      <div class="feature"><div class="f-icon">📦</div><h3>The one who orders stock</h3><p>It knows how fast each thing sells and how long your supplier takes, so it tells you to buy again before you run out — and hands you the order form for that supplier, filled in.</p></div>
-      <div class="feature"><div class="f-icon">🎨</div><h3>The one who shoots your photos</h3><p>Upload five pictures you are proud of. It reads your light, your colours, your framing — and then every picture it makes for you looks like your brand, using your own product photo as the starting point so the item is really yours.</p></div>
-      <div class="feature"><div class="f-icon">📱</div><h3>The one who posts every day</h3><p>A whole week of Instagram planned as one story rather than seven unrelated posts: the tease, the reveal, the proof, the close. Captions written, times chosen, pictures made. You approve, it schedules.</p></div>
-      <div class="feature"><div class="f-icon">🧾</div><h3>The one who does the paperwork</h3><p>Proper tax invoices with the right rates, and one file your accountant can file from. Nobody re-types anything.</p></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 20V11"/><path d="M11 20V5"/><path d="M16 20v-7"/><path d="M21 20v-4"/></svg></div><h3>The one who reads the numbers</h3><p>What sold, what it earned you, which days quietly lose money, and what next month looks like, from the sales file you already have. Plain sentences, not a wall of charts.</p></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M18 19c0-2.3-1-4-2.6-4.8"/></svg></div><h3>The one who watches your customers</h3><p>Who buys often, who spends most, and who has gone quiet. The message to bring the quiet ones back is written for you, and we count how many actually returned.</p></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3.5 8 12 3.5 20.5 8v8L12 20.5 3.5 16z"/><path d="M3.5 8 12 12.5 20.5 8"/><path d="M12 12.5v8"/></svg></div><h3>The one who orders stock</h3><p>It knows how fast each thing sells and how long your supplier takes, so it tells you to buy again before you run out, and hands you the order form for that supplier, filled in.</p></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.4"/></svg></div><h3>The one who shoots your photos</h3><p>Upload five pictures you are proud of. It reads your light, your colours, your framing, and then every picture it makes for you looks like your brand, using your own product photo as the starting point so the item is really yours.</p></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="7" y="2.8" width="10" height="18.4" rx="2.2"/><path d="M10.6 5.4h2.8"/><circle cx="12" cy="18" r="1"/></svg></div><h3>The one who posts every day</h3><p>A whole week of Instagram planned as one story rather than seven unrelated posts: the tease, the reveal, the proof, the close. Captions written, times chosen, pictures made. You approve, it schedules.</p></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-1.8-3 1.8-3-1.8L6 21z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></div><h3>The one who does the paperwork</h3><p>Proper tax invoices with the right rates, and one file your accountant can file from. Nobody re-types anything.</p></div>
     </div>
     <div class="cmp-line" style="margin-top:24px;">
       <b>The new part is the last three.</b> Reading numbers has been possible for years.
       A tool that looks at your own photographs, works out what your brand looks like, and
-      then shoots and writes a month of posts in that style — that has only been possible
+      then shoots and writes a month of posts in that style: that has only been possible
       for about a year, and almost nobody has put it in front of a one-person business yet.
     </div>
   </div>
@@ -339,9 +489,9 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
     </div>
     <div class="steps">
       <div class="step"><h3>Upload your data</h3><p>Export sales from your billing app or Excel as CSV and drop it in.</p></div>
-      <div class="step"><h3>Confirm columns</h3><p>One Tap Manager auto-detects date, amount, customer, product — you just confirm.</p></div>
-      <div class="step"><h3>See the analysis</h3><p>Dashboards, trends and customer segments appear instantly.</p></div>
-      <div class="step"><h3>Act on AI advice</h3><p>The AI Analyst turns numbers into this-week actions.</p></div>
+      <div class="step"><h3>Confirm columns</h3><p>One Tap Manager works out which column is the date, the amount, the customer and the product. You confirm, and it flags any it had to guess.</p></div>
+      <div class="step"><h3>See the analysis</h3><p>Charts, trends and customer groups, with a sentence under each saying what it means.</p></div>
+      <div class="step"><h3>Act on what it found</h3><p>The three things worth doing this week, each with the work already started.</p></div>
     </div>
   </div>
 </section>
@@ -349,42 +499,67 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
 <!-- STORY WALL -->
 <section id="stories">
   <div class="wrap">
+    <!-- ==================================================================
+         This section used to be six cards in quote marks with an attribution
+         line under each, labelled SAMPLE STORY. The label was honest, and it
+         still was not good enough: a quotation with a byline IS a testimonial
+         to anyone skimming, and invented testimonials are exactly what the
+         Consumer Protection Act's misleading-advertisement provisions and the
+         2023 Dark Patterns Guidelines are aimed at. The ASCI code treats an
+         unverifiable endorsement the same way whether or not a disclaimer sits
+         near it.
+
+         What survives is the useful part: the specific FINDINGS the tool
+         produces, in the languages sellers read. Same substance, stated as
+         what the software does rather than as something a person said. No
+         quote marks, no byline, no first person. Nothing here needs a
+         disclaimer, because nothing here is pretending to be anybody's words.
+         ================================================================== -->
     <div class="section-head">
-      <span class="eyebrow">The wall we're building</span>
-      <h2>Stories we're waiting to hear — from you</h2>
-      <p>One Tap Manager is new, and we'd rather earn stories than invent them. These sample cards show the kind of result the tool is built to create — in your language.</p>
-      <div class="stories-note">✍️ Illustrative examples, not customer quotes — after your first month, send us yours and it goes up here with your shop's name.</div>
+      <span class="eyebrow">What it finds</span>
+      <h2>The kind of thing it tells you in week one</h2>
+      <p>One Tap Manager is new. Rather than invent customers, here are the
+        findings it is built to produce, written the way it writes them, in the
+        languages it writes them in.</p>
+      <div class="stories-note">Worked examples of the software's own output.
+        Not quotes, not customers, and not results we are claiming.</div>
     </div>
     <div class="stories">
       <div class="story">
-        <span class="s-chip">SAMPLE STORY</span><span class="s-lang">EN</span>
-        <blockquote>"I always felt Tuesdays were slow, but seeing it measured at 41% below average changed everything. One combo offer later, Tuesdays pay their rent."</blockquote>
-        <div class="s-who">— A seller's story, the kind we're building for</div>
+        <span class="s-chip">EXAMPLE FINDING</span><span class="s-lang">EN</span>
+        <p class="s-body">Tuesdays run 41% below your weekly average. A combo
+          offer on Tuesdays is the smallest change that moves it.</p>
+        <div class="s-who">What the Sales Analytics screen says, in plain words.</div>
       </div>
       <div class="story" lang="hi">
-        <span class="s-chip">SAMPLE STORY</span><span class="s-lang">हिंदी</span>
-        <blockquote>"पहले लगता था कि सब ठीक चल रहा है। One Tap Manager ने दिखाया कि 38 पुराने ग्राहक 45 दिनों से नहीं आए। एक WhatsApp ऑफ़र भेजा — आधे लौट आए।"</blockquote>
-        <div class="s-who">— एक किराना स्टोर की कहानी, जैसी हम आपके लिए बनाना चाहते हैं</div>
+        <span class="s-chip">उदाहरण</span><span class="s-lang">हिंदी</span>
+        <p class="s-body">38 पुराने ग्राहक 45 दिनों से नहीं आए। उन्हें भेजने वाला
+          WhatsApp संदेश तैयार है, और कितने लौटे यह गिना जाएगा।</p>
+        <div class="s-who">ग्राहक स्क्रीन जो बताती है, उसका उदाहरण।</div>
       </div>
       <div class="story" lang="ta">
-        <span class="s-chip">SAMPLE STORY</span><span class="s-lang">தமிழ்</span>
-        <blockquote>"எந்தப் பொருள் லாபம் தருகிறது என்று யூகத்தில் இருந்தேன். One Tap Manager காட்டியது — குளிர்பானங்கள்தான் 61% லாபம். இப்போது சரக்கு தீர்ந்து போவதே இல்லை."</blockquote>
-        <div class="s-who">— ஒரு உணவகத்தின் கதை — அடுத்தது உங்களுடையதாக இருக்கட்டும்</div>
+        <span class="s-chip">எடுத்துக்காட்டு</span><span class="s-lang">தமிழ்</span>
+        <p class="s-body">அதிகம் விற்பனையாகும் பொருள் அல்ல, 61% லாபம் தரும்
+          பொருள் எது என்று காட்டுகிறது. சரக்கு தீர்வதற்கு முன் நினைவூட்டுகிறது.</p>
+        <div class="s-who">துணை வகை பகுப்பாய்வு திரையின் எடுத்துக்காட்டு.</div>
       </div>
       <div class="story" lang="bn">
-        <span class="s-chip">SAMPLE STORY</span><span class="s-lang">বাংলা</span>
-        <blockquote>"খাতায় সব লিখতাম, কিন্তু কখনো পড়া হতো না। One Tap Manager-এ ফাইল তুলে দিলাম — কোন ক্রেতা ফিরে আসছে না, সেটাই প্রথম চোখে পড়ল।"</blockquote>
-        <div class="s-who">— একটি বুটিক দোকানের গল্প, যেমনটা আমরা তৈরি করতে চাই</div>
+        <span class="s-chip">উদাহরণ</span><span class="s-lang">বাংলা</span>
+        <p class="s-body">কোন ক্রেতা আর ফিরে আসছেন না, সেটি আপনার নিজের বিক্রির
+          ফাইল থেকেই প্রথমে দেখানো হয়।</p>
+        <div class="s-who">ফাইল আপলোডের পর প্রথম যে স্ক্রিনটি আসে, তার উদাহরণ।</div>
       </div>
       <div class="story" lang="te">
-        <span class="s-chip">SAMPLE STORY</span><span class="s-lang">తెలుగు</span>
-        <blockquote>"అమ్మకాలు పెరుగుతున్నాయి, కానీ లాభం ఎందుకు పెరగడం లేదో అర్థమయ్యేది కాదు. One Tap Manager చూపించింది — ఎక్కువ అమ్ముడయ్యేవి తక్కువ మార్జిన్ వస్తువులు."</blockquote>
-        <div class="s-who">— ఒక చిన్న వ్యాపారి కథ — తర్వాతది మీదే కావాలి</div>
+        <span class="s-chip">ఉదాహరణ</span><span class="s-lang">తెలుగు</span>
+        <p class="s-body">అమ్మకాలు పెరిగినా లాభం పెరగకపోవడానికి కారణం: ఎక్కువ
+          అమ్ముడయ్యేవి తక్కువ మార్జిన్ వస్తువులు అని చూపిస్తుంది.</p>
+        <div class="s-who">లాభం విశ్లేషణ స్క్రీన్ ఉదాహరణ.</div>
       </div>
       <div class="story" lang="mr">
-        <span class="s-chip">SAMPLE STORY</span><span class="s-lang">मराठी</span>
-        <blockquote>"डेटा म्हणजे मोठ्या कंपन्यांचं काम वाटायचं. One Tap Manager ने माझ्या साध्या Excel मधून आठवड्याचा नफ्याचा नकाशा काढला — आता निर्णय अंदाजावर नाही."</blockquote>
-        <div class="s-who">— एका दुकानदाराची गोष्ट, अशीच तुमचीही असू शकते</div>
+        <span class="s-chip">उदाहरण</span><span class="s-lang">मराठी</span>
+        <p class="s-body">साध्या Excel फाइलमधून आठवड्याचा नफ्याचा नकाशा तयार
+          होतो, म्हणजे निर्णय अंदाजावर घ्यावा लागत नाही.</p>
+        <div class="s-who">अपलोड केल्यानंतर तयार होणाऱ्या अहवालाचे उदाहरण.</div>
       </div>
     </div>
   </div>
@@ -428,7 +603,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
       <div class="cmp-col cmp-us">
         <div class="cmp-h">One Tap Manager</div>
         <p><b>Odoo's joined-up insides.</b> Products, stock, suppliers, orders,
-           bills and GST are one thing, not six — an order on your website takes the
+           bills and GST are one thing, not six. An order on your website takes the
            item out of stock, uses up the materials it needed, writes a proper tax
            invoice and shows up in your numbers, without you entering anything
            twice.</p>
@@ -460,14 +635,16 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
       <span class="eyebrow">Pricing</span>
       <h2>One flat number. Never a cut of your sales.</h2>
       <p><b>Everything is free during launch.</b> No card, no trial clock. Below is exactly what it
-      costs afterwards — written down now so the day we switch it on is a non-event.</p>
+      costs afterwards, written down now so the day we switch it on is a non-event.</p>
     </div>
 
     <!-- What it replaces. The honest comparison, with the app categories named. -->
     <div class="stack-compare">
       <h3>What this replaces</h3>
-      <p class="stack-note">Sellers on Shopify assemble this from separate apps. Prices are typical
-      monthly costs in each category — before any percentage-of-sales charges, which we do not have.</p>
+      <p class="stack-note">Sellers on Shopify assemble this from separate apps. The figures are
+      typical listed monthly prices in each app category as of September 2026, gathered from the
+      app listings themselves, and before any percentage-of-sales charges, which we do not have.
+      They are a guide to the shape of the bill, not a quote: your own stack may cost more or less.</p>
       <table class="stack-table">
         <tbody>
           <tr><td>Sales reports and customer value</td><td>₹1,600</td></tr>
@@ -476,7 +653,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
           <tr><td>Reviews &amp; reputation</td><td>₹1,200</td></tr>
           <tr><td>Order management</td><td>₹800</td></tr>
           <tr class="stack-sum"><td>Four to six apps, every month</td><td>₹7,600</td></tr>
-          <tr class="stack-ours"><td>One Tap Manager Pro — all of it, plus your own selling website</td><td>₹999</td></tr>
+          <tr class="stack-ours"><td>One Tap Manager Pro: all of it, plus your own selling website</td><td>₹999</td></tr>
         </tbody>
       </table>
       <p class="stack-note">Your storefront is included at every tier. We are not going to charge you
@@ -491,7 +668,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
         <ul>
           <li>Sales analytics, category and sub-category trends</li>
           <li>Who your best customers are, and who has gone quiet</li>
-          <li><b>Your own selling website + orders</b> — with our small line in the footer</li>
+          <li><b>Your own selling website and orders</b>, with our small line in the footer</li>
           <li>Up to 25 products</li>
           <li>5 AI Analyst or Chatbot uses a day</li>
         </ul>
@@ -504,7 +681,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
         <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">The actions, not just the numbers.</div>
         <ul>
           <li>Everything in Free</li>
-          <li><b>Win-back campaigns — unlimited.</b> Messages, coupons and Excel, as often as you like</li>
+          <li><b>Win-back campaigns, unlimited.</b> Messages, coupons and Excel, as often as you like</li>
           <li>Complaint analysis and the fix-first plan</li>
           <li>Market position and reputation reports</li>
           <li>The morning digest, by email and WhatsApp</li>
@@ -519,7 +696,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
         <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Runs the shop, not just the reporting.</div>
         <ul>
           <li>Everything in Semi Pro</li>
-          <li><b>Stock &amp; suppliers</b> — when to buy again, how much, and the order form ready to send</li>
+          <li><b>Stock and suppliers:</b> when to buy again, how much, and the order form ready to send</li>
           <li>PDF purchase orders, sent to your suppliers</li>
           <li>Position Strategy checklists</li>
           <li>Unlimited AI, unlimited products, unlimited outlets</li>
@@ -534,7 +711,7 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
       <div>
         <span class="eyebrow">Or don't subscribe at all</span>
         <h3>Buy credits. Spend them only on the heavy things.</h3>
-        <p>Some sellers work in bursts — a season, a launch, a festival — and a monthly bill in the
+        <p>Some sellers work in bursts, a season or a launch or a festival, and a monthly bill in the
         quiet months is money for nothing. So there is a second way to pay: a pack of credits that
         <b>never expires</b>. A win-back campaign is 10, a positioning report 15, a complaint
         analysis 12, an AI run 1. Analytics, your website and your orders stay free either way.</p>
@@ -562,9 +739,21 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
 
 <footer>
   <div class="wrap foot">
-    <div><b>One Tap Manager</b> · Intelligence for India's MSMEs</div>
-    <div>Sample stories on this page are illustrative, clearly labelled, and not customer endorsements.</div>
-    <div><a href="/smart">Open app</a> · <a href="#pricing">Pricing</a></div>
+    <div><b>One Tap Manager</b> · Operations software for small Indian sellers</div>
+    <div>Every figure on this page is a worked example, labelled as one. There are no
+      customer quotes here, because we do not have customers yet.</div>
+    <!-- The legal pages are linked from the footer of every page, which is where a
+         shopper and a regulator both look first. Rule 3(1)(a) of the IT Rules
+         requires them to be published; putting them behind a menu is how a site
+         technically publishes and practically hides them. -->
+    <nav class="foot-legal" aria-label="Legal and support">
+      <a href="/legal/privacy">Privacy</a> ·
+      <a href="/legal/terms">Terms</a> ·
+      <a href="/legal/refunds">Refunds</a> ·
+      <a href="/legal/cookies">Cookies</a> ·
+      <a href="/legal/grievance">Complaints</a>
+    </nav>
+    <div class="foot-links"><a href="/smart">Open the app</a> · <a href="#pricing">Pricing</a> · <a href="/legal">All legal pages</a></div>
   </div>
 </footer>
 
@@ -572,23 +761,55 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
 <!-- SIGNUP MODAL -->
 <div class="su-backdrop" id="signupModal" style="display:none;">
   <div class="su-card">
-    <button class="su-close" onclick="closeSignup()" aria-label="Close">✕</button>
-    <span class="eyebrow" id="suEyebrow">FREE TRIAL · NO CARD NEEDED</span>
+    <button class="su-close" onclick="closeSignup()" aria-label="Close sign up">Close</button>
+    <span class="eyebrow" id="suEyebrow">FREE DURING LAUNCH · NO CARD NEEDED</span>
     <h3 id="suTitle">Create your One Tap Manager account</h3>
-    <p class="su-sub">Pick an email and create a password — you'll use these same credentials to log in to the web app.</p>
-    <label>Email address
-      <input type="email" id="suEmail" placeholder="you@yourshop.com" autocomplete="email" />
-    </label>
-    <label>Create a password <span class="su-hint">(minimum 6 characters)</span>
-      <input type="password" id="suPassword" placeholder="Choose a password" autocomplete="new-password" />
-    </label>
-    <label>Confirm password <span class="su-hint">(typed twice for double protection)</span>
-      <input type="password" id="suPassword2" placeholder="Type it again" autocomplete="new-password" />
-    </label>
-    <div class="su-hint" style="margin:-4px 0 8px;">🔒 Your password is stored encrypted (salted hash) — we never keep it in plain text.</div>
-    <button class="btn btn-primary su-submit" id="suSubmit" onclick="submitSignup()">Create account &amp; open the app</button>
-    <div class="su-error" id="suError" style="display:none;"></div>
-    <p class="su-foot">Already have an account? <a href="/smart">Just log in from the app →</a></p>
+    <p class="su-sub">Pick an email and create a password. You will use these same
+      details to log in to the app.</p>
+    <!-- A real form element, so Enter submits from any field and a password
+         manager recognises it. It used to be three loose inputs and an onclick,
+         which worked with a mouse and not much else. -->
+    <form id="suForm" novalidate>
+      <label for="suEmail">Email address
+        <input type="email" id="suEmail" name="email" placeholder="you@yourshop.com"
+               autocomplete="email" required aria-describedby="suEmailHint" />
+      </label>
+      <div class="su-hint" id="suEmailHint">We use this to sign you in and to send your
+        morning summary. Nothing else.</div>
+      <label for="suPassword">Create a password <span class="su-hint">(at least 6 characters)</span>
+        <input type="password" id="suPassword" name="password" placeholder="Choose a password"
+               autocomplete="new-password" minlength="6" required />
+      </label>
+      <label for="suPassword2">Confirm password <span class="su-hint">(typed twice, so a slip cannot lock you out)</span>
+        <input type="password" id="suPassword2" name="password2" placeholder="Type it again"
+               autocomplete="new-password" minlength="6" required />
+      </label>
+      <div class="su-hint" style="margin:8px 0 4px;">Your password is stored as a salted
+        hash, so we never hold the password itself.</div>
+
+      <!-- Consent, unticked, and separate from the account details.
+           Rule 4(9) of the Consumer Protection (E-commerce) Rules 2020 forbids
+           recording consent from a pre-ticked box, and the 2023 Dark Patterns
+           Guidelines treat a bundled "by continuing you agree" as the same
+           trick. So it is one explicit box, off by default, and the form does
+           not submit without it. The marketing opt-in below is a SEPARATE box,
+           because bundling the two would make the first one meaningless. -->
+      <label class="su-check" for="suAgree">
+        <input type="checkbox" id="suAgree" name="agree" />
+        <span>I have read the <a href="/legal/privacy" target="_blank" rel="noopener">privacy
+          policy</a> and agree to the <a href="/legal/terms" target="_blank" rel="noopener">terms
+          of use</a>.</span>
+      </label>
+      <label class="su-check" for="suMarketing">
+        <input type="checkbox" id="suMarketing" name="marketing" />
+        <span>Send me occasional product emails. Optional, and you can stop them
+          from any email or from Settings.</span>
+      </label>
+
+      <button class="btn btn-primary su-submit" id="suSubmit" type="submit">Create account and open the app</button>
+      <div class="su-error" id="suError" style="display:none;" role="alert"></div>
+    </form>
+    <p class="su-foot">Already have an account? <a href="/smart">Log in from the app</a></p>
   </div>
 </div>
 
@@ -600,12 +821,18 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
 .su-card label { display: block; font-size: 13.5px; font-weight: 600; margin: 12px 0 0; }
 .su-hint { font-weight: 400; color: var(--ink-soft); }
 .su-card input { width: 100%; margin-top: 5px; padding: 11px 13px; border: 1.5px solid var(--line); border-radius: 10px; font: inherit; font-size: 15px; background: var(--paper); }
-.su-card input:focus { outline: 2px solid var(--violet); border-color: var(--violet); }
+.su-card input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
 .su-submit { width: 100%; margin-top: 20px; }
 .su-error { margin-top: 12px; font-size: 13.5px; color: #DC2626; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 9px 12px; }
 .su-foot { font-size: 13px; color: var(--ink-soft); margin: 16px 0 0; text-align: center; }
-.su-close { position: absolute; top: 14px; right: 16px; background: none; border: none; font-size: 15px; color: var(--ink-soft); cursor: pointer; }
-.su-close:hover { color: var(--ink); }
+/* A word, not a glyph. "✕" is read aloud as "multiplication x" by some screen
+   readers and as nothing at all by others, and the aria-label was carrying the
+   whole meaning. */
+.su-close { position: absolute; top: 12px; right: 14px; background: none; border: 1px solid var(--line); border-radius: 6px; font-size: 12.5px; padding: 4px 9px; color: var(--ink-soft); cursor: pointer; font-family: inherit; }
+.su-close:hover { color: var(--ink); border-color: var(--ink); }
+.su-check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; font-weight: 400; margin: 12px 0 0; line-height: 1.5; color: var(--ink-soft); cursor: pointer; }
+.su-check input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--accent); }
+.su-check a { color: var(--accent-ink); }
 </style>
 
 <script>
@@ -621,43 +848,69 @@ function openSignup(plan) {
 function closeSignup() { document.getElementById("signupModal").style.display = "none"; }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSignup(); });
 document.getElementById("signupModal").addEventListener("click", (e) => { if (e.target.id === "signupModal") closeSignup(); });
-document.getElementById("suPassword").addEventListener("keydown", (e) => { if (e.key === "Enter") submitSignup(); });
-document.getElementById("suPassword2").addEventListener("keydown", (e) => { if (e.key === "Enter") submitSignup(); });
+// One submit handler on the form, so Enter works from every field rather than
+// from the two it happened to be wired to.
+document.getElementById("suForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  submitSignup();
+});
 
 async function submitSignup() {
   const btn = document.getElementById("suSubmit");
   const err = document.getElementById("suError");
+  const fail = (msg, focus) => {
+    err.textContent = msg;
+    err.style.display = "block";
+    if (focus) document.getElementById(focus).focus();
+  };
   err.style.display = "none";
+  const email = document.getElementById("suEmail").value.trim();
   const pw = document.getElementById("suPassword").value;
   const pw2 = document.getElementById("suPassword2").value;
-  if (pw !== pw2) {
-    err.textContent = "Passwords don't match — please type the same password in both boxes.";
-    err.style.display = "block";
-    return;
+  if (!email || email.indexOf("@") < 1) {
+    return fail("That does not look like an email address. Check it and try again.", "suEmail");
   }
-  btn.disabled = true; btn.textContent = "Creating your account…";
+  if (pw.length < 6) {
+    return fail("The password needs at least 6 characters.", "suPassword");
+  }
+  if (pw !== pw2) {
+    return fail("The two passwords are different. Type the same one in both boxes.", "suPassword2");
+  }
+  // Consent is checked here rather than with the `required` attribute so the
+  // message explains what is being agreed to instead of the browser's bare
+  // "please tick this box".
+  if (!document.getElementById("suAgree").checked) {
+    return fail("Please tick the box to say you have read the privacy policy and "
+                + "agree to the terms. We cannot create an account without that.",
+                "suAgree");
+  }
+  btn.disabled = true; btn.textContent = "Creating your account";
   try {
     const res = await fetch("/api/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email: document.getElementById("suEmail").value,
-        password: document.getElementById("suPassword").value,
+        email: email,
+        password: pw,
         plan: suPlan,
+        // Recorded so there is an answer to "what did they agree to, and when",
+        // which is what demonstrable consent means. The marketing box is sent
+        // separately and is genuinely optional.
+        consent: { terms: true, privacy: true, at: new Date().toISOString() },
+        marketing_opt_in: document.getElementById("suMarketing").checked,
       }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || "Could not create the account");
     // hand the session to the app so they land already logged in (shared
-    // localStorage keys → logged in across Classic and Smart)
+    // localStorage keys, so they are logged in across Classic and Smart)
     localStorage.setItem("cx_token", data.token);
     localStorage.setItem("cx_email", data.email);
-    btn.textContent = "✓ Account created — opening the app…";
+    btn.textContent = "Account created, opening the app";
     setTimeout(() => (window.location.href = "/smart"), 600);
   } catch (e) {
-    err.textContent = e.message;
-    err.style.display = "block";
-    btn.disabled = false; btn.textContent = "Create account & open the app";
+    btn.disabled = false; btn.textContent = "Create account and open the app";
+    fail(e.message);
   }
 }
 </script>

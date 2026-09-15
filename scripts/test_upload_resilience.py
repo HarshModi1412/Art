@@ -118,23 +118,39 @@ for _ in range(30):
 vw.release()
 up = c.post("/api/site/image", headers=H, files={"files": ("faint.mp4", open(vp, "rb").read(), "video/mp4")})
 orig_url = up.json()["url"]
-r = c.post("/api/social/attach-video", headers=H, json={"post_id": reel["id"], "url": orig_url})
+# This section used to prove that pointing at a corner rubbed a faint mark out.
+# On 15 September 2026 that feature was switched off: the IT Rules as amended on
+# 20 February 2026 forbid a platform offering AI generation from enabling the
+# removal of an AI label, and the cost of breaking that is safe harbour under
+# section 79 of the IT Act. What is checked now is that the refusal is HONEST,
+# because a button that reports success and changes nothing is the worse failure.
+r = c.post("/api/social/attach-video", headers=H,
+           json={"post_id": reel["id"], "url": orig_url, "ai_generated": True})
 post = social.get_post(email, reel["id"])
-check("the post remembers the original upload and what the remover did",
-      post.get("video_original_url") == orig_url and "video_watermark" in post, post.get("video_watermark"))
-r = c.post("/api/social/reclean-video", headers=H, json={"post_id": reel["id"], "corner": "bottom-right"})
-d = r.json()
-check("pointing at the corner removes it", r.status_code == 200 and d["watermark"]["removed"], d.get("watermark"))
-check("the post now has the clean copy, the original kept",
-      d["video_url"] != orig_url and social.get_post(email, reel["id"])["video_original_url"] == orig_url)
-r2 = c.post("/api/social/reclean-video", headers=H, json={"post_id": reel["id"], "corner": "top-left"})
-check("a corner with nothing in it says so, and the clip stays as it was",
-      r2.status_code == 200 and not r2.json()["watermark"]["removed"]
-      and social.get_post(email, reel["id"])["video_url"] == d["video_url"], r2.json().get("watermark"))
-check("a made-up corner is refused",
-      c.post("/api/social/reclean-video", headers=H, json={"post_id": reel["id"], "corner": "middle"}).status_code == 400)
-check("the buttons are in the task popup and the post editor",
-      JS.count('wmFixRow("') == 2 and "/api/social/reclean-video" in JS)
+check("the post remembers the original upload",
+      post.get("video_original_url") == orig_url, post.get("video_original_url"))
+check("and that the AI label went on, with its reference id",
+      (post.get("video_ai_label") or {}).get("labelled") is True
+      and len((post.get("video_ai_label") or {}).get("gen_id") or "") >= 16,
+      post.get("video_ai_label"))
+labelled_url = r.json()["video_url"]
+check("the post carries the labelled copy, the original kept",
+      labelled_url != orig_url and post.get("video_original_url") == orig_url)
+
+r = c.post("/api/social/reclean-video", headers=H,
+           json={"post_id": reel["id"], "corner": "bottom-right"})
+check("asking us to remove another tool's mark is refused outright",
+      r.status_code == 400, r.status_code)
+check("the refusal names the rule, so it does not read as a bug",
+      "20 February 2026" in r.text)
+check("and tells the seller how to get the clean frame legitimately",
+      "Media Watermark" in r.text and "Settings" in r.text, r.text[:160])
+check("the clip on the post is untouched by the refusal",
+      social.get_post(email, reel["id"])["video_url"] == labelled_url)
+check("the corner buttons are gone from the interface entirely",
+      "data-wmcorner" not in JS and "/api/social/reclean-video" not in JS)
+check("and the instruction to switch Flow's own mark off is there instead",
+      JS.count('wmFixRow("') == 2 and "Media Watermark" in JS)
 
 print("\n== NaN / Infinity never reach Postgres ==")
 dirty = {"a": float("nan"), "b": [1.5, float("inf"), {"c": -math.inf}], "d": np.float64(2.5),
@@ -150,6 +166,62 @@ check("the result is valid JSON for JSONB", _json.dumps(clean, allow_nan=False))
 
 check("the app retries the attach without cleaning when cleaning fails",
       "async function attachClip" in JS and "clean: false" in JS)
+
+print("\n== a phone photo is made fit to serve ==")
+# A seller uploads what came off their phone: around 4000px and several
+# megabytes. It used to be stored and served exactly as it arrived, to every
+# shopper, on a mobile connection, for a card displayed 400px wide. That is the
+# single largest thing on a storefront's loading time, and the shopper pays for
+# it in data as well as in waiting.
+import io as _io  # noqa: E402
+from PIL import Image as _Image  # noqa: E402
+from backend.core import media as _media  # noqa: E402
+
+_arr = np.random.default_rng(11).integers(0, 255, (2400, 3200, 3)).astype("uint8")
+_buf = _io.BytesIO()
+_Image.fromarray(_arr).save(_buf, format="JPEG", quality=95)
+_raw = _buf.getvalue()
+check("the test photo really is a big one", len(_raw) > 3 * 1024 * 1024,
+      f"{len(_raw) // 1024}KB")
+
+_up = c.post("/api/site/image", headers=H,
+             files={"files": ("phone.jpg", _raw, "image/jpeg")})
+check("it uploads", _up.status_code == 200, _up.text[:120])
+_j = _up.json()
+_comp = _j.get("compression") or {}
+check("and is reported as shrunk, so the seller is not left wondering",
+      _comp.get("bytes", 0) < _comp.get("original_bytes", 1), _comp)
+check("to under a megabyte", _comp.get("bytes", 10**9) < 1024 * 1024,
+      f"{_comp.get('bytes', 0) // 1024}KB")
+check("with the reason in plain numbers", "KB to " in _comp.get("reason", ""),
+      _comp.get("reason"))
+
+_served = c.get(_j["url"])
+check("what a shopper downloads is the small one", len(_served.content) < 1024 * 1024,
+      f"{len(_served.content) // 1024}KB")
+check("and it is still the right picture, at a sane size",
+      max(_Image.open(_io.BytesIO(_served.content)).size) == 1600,
+      _Image.open(_io.BytesIO(_served.content)).size)
+
+# What it must NOT do, which matters as much.
+_small = _io.BytesIO()
+_Image.new("RGB", (300, 300), (200, 170, 130)).save(_small, format="JPEG", quality=90)
+_, _, _r = _media.compress_upload(_small.getvalue(), "small.jpg")
+check("a small photo is left exactly as it is", "already small" in _r["reason"])
+_png = _io.BytesIO()
+_Image.new("RGBA", (2000, 2000), (10, 20, 30, 255)).save(_png, format="PNG")
+_o, _n, _r = _media.compress_upload(_png.getvalue(), "logo.png")
+check("a logo with transparency stays a PNG, because flattening it onto white "
+      "is a visible defect on a dark theme", _n.endswith(".png"))
+check("a GIF is never touched, since it may be animated",
+      _media.compress_upload(b"GIF89a...", "a.gif")[2]["reason"].startswith("left as it is"))
+check("nor an SVG, which is text",
+      _media.compress_upload(b"<svg/>", "a.svg")[2]["reason"].startswith("left as it is"))
+_bad, _, _r = _media.compress_upload(b"not an image at all", "x.jpg")
+check("a file it cannot read is stored as it came, never lost",
+      _bad == b"not an image at all" and "could not process" in _r["reason"])
+_vid = _media.compress_upload(b"\x00\x00\x00 ftypmp42", "clip.mp4")
+check("and a video is left to the video path", _vid[2]["reason"] == "video, not touched here")
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

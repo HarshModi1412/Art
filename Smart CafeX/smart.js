@@ -208,8 +208,8 @@ const nap = (ms) => new Promise((r) => setTimeout(r, ms));
    XMLHttpRequest still reports upload progress, so uploads use it. The bar is
    real: it is bytes actually sent, not a timer pretending.
 
-   Past 100% the bytes are gone but the server is still working — cleaning a
-   watermark off a clip takes real seconds — so the bar switches to an
+   Past 100% the bytes are gone but the server is still working — burning the
+   AI label into a clip takes real seconds — so the bar switches to an
    indeterminate state and says what is happening rather than sitting at 100%
    looking stuck.
    ========================================================================= */
@@ -349,7 +349,7 @@ async function download(url, filename) {
 }
 
 /* =====================================================================
-   ✨ AI writing help — on every field where a seller has to type.
+   AI writing help — on every field where a seller has to type.
 
    One content writer on the server (backend/core/writer.py) with one set of
    rules and the brand's own voice. It runs on Puter's AI gateway when the
@@ -358,7 +358,7 @@ async function download(url, filename) {
    account, which asks them to sign in once).
 
    Any <textarea data-ai="kind"> or <input data-ai="kind"> anywhere in the app
-   gets a small "✨ Write" button — a MutationObserver wires new ones as
+   gets a small "Write" button — a MutationObserver wires new ones as
    screens render, so a new form only has to add the attribute.
    ===================================================================== */
 let _puterLoading = null;
@@ -1129,7 +1129,7 @@ async function openCached(mod, title, fetcher, render, emptyHtml) {
   } catch (e) {
     if (!stillHere()) return;
     // Keep a usable screen rather than swapping it for an error card.
-    if (painted) toast("Showing your last saved view — could not reach the "
+    if (painted) toast("Showing your last saved view. Could not reach the "
                        + "server just now.", 5000);
     else if (emptyHtml) moduleShell(title, emptyHtml(e.message));
     else moduleShell(title, failed(e.message, () => openModule(_currentModule)));
@@ -1194,7 +1194,7 @@ async function goHome() {
   } catch (e) {
     // A warm screen already on-screen is far better than throwing it away for
     // an error card — the seller keeps working and the next action retries.
-    if (warm) toast("Showing your last saved view — could not reach the server "
+    if (warm) toast("Showing your last saved view. Could not reach the server "
                     + "just now.", 5000);
     else setView(failed(e.message, goHome));
   }
@@ -1265,7 +1265,7 @@ async function startDemo() {
     toast("Loading 90 days of sample data…");
     await api("/api/demo", { method: "POST" });
     await goHome();
-    toast("Sample data loaded — every module is live now.");
+    toast("Sample data loaded, every module is live now.");
   } catch (e) { toast(e.message); }
 }
 
@@ -1662,7 +1662,7 @@ function renderHome(s) {
 
   document.querySelectorAll("[data-mod]").forEach((el) => el.onclick = () => {
     const m = MODULES.find((x) => x.id === el.dataset.mod);
-    if (m.upcoming) { toast("The Instagram content manager is being built — it will live right here."); return; }
+    if (m.upcoming) { toast("The Instagram content manager is being built. It will live right here."); return; }
     if (m.needs && !(state.data[m.needs] && state.data[m.needs].ready)) { toast(`Upload ${m.needs} data first`); return; }
     openModule(m.id);
   });
@@ -1763,7 +1763,7 @@ function openProductTypePicker(afterSet) {
     $("ptModal").hidden = true;
     const shown = label || productLabel(pt);
     toast(`Set to ${shown}`);
-    const chip = $("ptChip"); if (chip) chip.innerHTML = `🏷️ ${esc(shown)}`;
+    const chip = $("ptChip"); if (chip) chip.innerHTML = `${esc(shown)}`;
     const body = { product_type: pt };
     if (label !== undefined) body.label = label;
     api("/api/product-type", { method: "POST", json: body })
@@ -1876,7 +1876,7 @@ function taskRowsHtml(tasks) {
     }
     return `
       <div class="task-item ${t.done ? "done" : ""}" data-task="${esc(t.id)}">
-        <input type="checkbox" ${t.done ? "checked" : ""} ${t.post_id ? "disabled" : ""} />
+        <input type="checkbox"${t.done ? "checked" : ""} ${t.post_id ? "disabled" : ""} />
         <span class="t">${esc(t.text)}</span>
         <button class="task-del" title="Delete this task" aria-label="Delete this task">${sic("close")}</button>
       </div>`;
@@ -1940,7 +1940,7 @@ function refreshTaskList(tasks) {
    a promise and never came back is worse than a spinner, because the seller
    believes a thing happened that did not. So a failed job puts its card back,
    at the top, wearing what went wrong and when — "Tried 4 minutes ago: the
-   picture could not be drawn." The record survives a reload, because the
+   picture could not be drawn."The record survives a reload, because the
    failure outlives the page that saw it.
 
    This is the machinery. Every approve, dismiss and cancel goes through it.
@@ -2074,7 +2074,7 @@ function pumpQueue() {
           if (!ins.some((x) => x.id === job.id)) state.lastState.insights = [job.card, ...ins];
           renderApprovals(state.lastState.insights);
         }
-        toast(`${job.label} did not go through — it is back in your approvals.`, 6000);
+        toast(`${job.label} did not go through. It is back in your approvals.`, 6000);
       })
       .finally(() => {
         _lanes--;
@@ -2366,7 +2366,7 @@ function renderApprovals(insights) {
           run: () => api(`/api/smart/insight/${id}/decision`, { method: "POST", json: { decision } }) });
       }
     }
-    toast(`${actionable.length} sent — carry on, they finish by themselves.`, 4000);
+    toast(`${actionable.length} sent. Carry on, they finish by themselves.`, 4000);
   };
   if ($("apAll")) $("apAll").onclick = () => runAll("approve", "Approving");
   if ($("apNone")) $("apNone").onclick = () => runAll("disapprove", "Dismissing");
@@ -2416,7 +2416,7 @@ async function approveWeek(card) {
   const bits = [];
   if (pics) bits.push(`${pics} picture${pics === 1 ? "" : "s"} being drawn`);
   if (reels) bits.push(`${reels} reel${reels === 1 ? "" : "s"} going on your task list`);
-  toast(`${ids.length} post${ids.length === 1 ? "" : "s"} approved — ${bits.join(", ")}. `
+  toast(`${ids.length} post${ids.length === 1 ? "" : "s"} approved, ${bits.join(", ")}. `
         + `You can carry on.`, 6000);
 }
 
@@ -2455,7 +2455,7 @@ function pickVideoEngine(opts) {
     }
     const rows = opts.map((o, n) => `
       <label class="eng-card">
-        <input type="radio" name="vengine" value="${esc(o.id)}" ${n === 0 ? "checked" : ""} />
+        <input type="radio" name="vengine" value="${esc(o.id)}"${n === 0 ? "checked" : ""} />
         <div><b>${esc(o.label)}</b> <span class="eng-cost">${esc(o.cost || "")}</span>
           <div class="muted tiny">${esc(o.note || "")}</div></div>
       </label>`).join("");
@@ -2479,8 +2479,8 @@ function pickVideoEngine(opts) {
 }
 
 /* Approve one post and make it ready — see _approve_post_ready in main.py.
-   A photo post gets its picture drawn (and cleaned of any watermark) and is
-   scheduled. A reel is approved and gets a task at the top of Home, and the
+   A photo post gets its picture drawn (and labelled "AI generated", which the
+   IT Rules have required since February 2026) and is scheduled. A reel is approved and gets a task at the top of Home, and the
    step-by-step popup opens straight away because that is what they need next.
    `batch` keeps it quiet for Approve-all loops, which report once at the end. */
 async function approvePostReady(postId, opts = {}) {
@@ -2513,10 +2513,11 @@ async function approvePostReady(postId, opts = {}) {
            does not come back. But the picture is missing and the seller must
            know, because the post cannot go out empty. */
         toast("Approved, but the picture could not be drawn: " + r.media_error
-              + " It is on your task list.", 9000);
+              + "It is on your task list.", 9000);
       } else if (r.image) {
-        const wm = r.watermark || {};
-        toast("Picture made" + (wm.removed ? ", watermark removed" : "") + " — scheduled.");
+        const lab = (r.image && r.image.ai_label) || {};
+        toast("Picture made" + (lab.labelled ? ", labelled \u201cAI generated\u201d" : "")
+              + " \u2014 scheduled.");
       }
     },
   });
@@ -2524,8 +2525,8 @@ async function approvePostReady(postId, opts = {}) {
 }
 
 /* The reel task, step by step: copy the prompt → open Google Flow → paste,
-   generate and download → upload the clip here (the watermark remover runs on
-   the way in) → save & schedule. Progress is saved on the task, so it reopens
+   generate and download → upload the clip here (the "AI generated" label goes
+   on it on the way in) → save & schedule. Progress is saved on the task, so it reopens
    where the seller left off — on their phone too. */
 async function openVideoTask(taskId, postHint) {
   const tasks = ((state.lastState || {}).tasks) || [];
@@ -2607,7 +2608,7 @@ async function openVideoTask(taskId, postHint) {
           <div class="sm-vid-slot" id="vtSlot">${post.video_url
             ? `<video src="${esc(post.video_url)}" controls playsinline preload="metadata"></video>`
             : `<div class="sm-vid-empty">${sic("play")}<b>No clip yet</b><span>MP4 or WEBM, up to 48MB.</span></div>`}</div>
-          <div id="vtWm" class="muted tiny" style="margin:6px 0;">${post.video_watermark ? esc(clipNote({ watermark: post.video_watermark })) : ""}</div>
+          <div id="vtWm" class="muted tiny" style="margin:6px 0;">${post.video_url ? esc(clipNote({ ai_label: post.video_ai_label, watermark: post.video_watermark })) : ""}</div>
           ${wmFixRow("vtWmFix")}
           <button class="btn ${post.video_url ? "ghost" : "primary"} sm" id="vtPick">${sic("arrow-up-right")}${post.video_url ? "Replace clip" : "Choose the clip"}</button>
           <input type="file" id="vtFile" accept="video/mp4,video/webm,video/quicktime" hidden />
@@ -2658,13 +2659,13 @@ async function openVideoTask(taskId, postHint) {
   // Copy again on the way out, so the paste on the other side always works.
   $("vtFlow").onclick = () => { copyPrompt(); mark("copy"); mark("flow"); };
   $("vtMade").onclick = () => mark("make");
-  wireWmFix("vtWmFix", post, $("vtSlot"), $("vtWm"));
+  wireWmFix("vtWmFix", post);
   $("vtPick").onclick = () => $("vtFile").click();
   $("vtFile").onchange = async () => {
     const f = $("vtFile").files[0];
     if (!f) return;
     if (f.size > 48 * 1024 * 1024) {
-      return toast("That clip is over 48MB. Export it at 1080p — a reel rarely needs more.", 7000);
+      return toast("That clip is over 48MB. Export it at 1080p, a reel rarely needs more.", 7000);
     }
     try {
       await chain;                 // let any step tick land first
@@ -2674,8 +2675,10 @@ async function openVideoTask(taskId, postHint) {
       const up = await apiUpload("/api/site/image", fd, (frac) => vtBar.set(frac));
       const u = up.url || up.image_url;
       if (!u) throw new Error("The upload did not come back with a file.");
-      vtBar.working("Checking every corner for Flow's watermark…");
-      const att = await attachClip(post.id, u);
+      // This clip came out of Google Flow two steps ago, so it is AI made and
+      // gets the label the law requires without asking the seller again.
+      vtBar.working("Adding the \u201cAI generated\u201d label\u2026");
+      const att = await attachClip(post.id, u, true);
       vtBar.done("Clip attached");
       post.video_url = att.video_url;
       $("vtSlot").innerHTML = `<video src="${esc(att.video_url)}" controls playsinline preload="metadata"></video>`;
@@ -2686,9 +2689,9 @@ async function openVideoTask(taskId, postHint) {
       ["copy", "flow", "make"].forEach((x) => done.add(x));
       done.add("upload");
       paintSteps();
-      // stays open once there is a clip: it holds the clip, what the remover
-      // did and the "still see a watermark?" corners, and painting the steps
-      // moves "current" on to scheduling, which would otherwise fold them away
+      // stays open once there is a clip: it holds the clip, what the label step
+      // did, and what to do if Flow's own mark is still on it. Painting the
+      // steps moves "current" on to scheduling, which would fold them away
       const upStep = document.querySelector('#vtSteps li[data-step="upload"]');
       if (upStep) upStep.classList.add("open");
       if (att.tasks) refreshTaskList(att.tasks);
@@ -2824,7 +2827,7 @@ function openReelPrompt(post, script) {
     if (!f) return;
     try {
       if (f.size > 48 * 1024 * 1024) {
-        return toast("That clip is over 48MB. Export it at 1080p — a reel rarely "
+        return toast("That clip is over 48MB. Export it at 1080p, a reel rarely "
                      + "needs more.", 7000);
       }
       var rpBar = progressBar(document.querySelector(".modal-body") || document.querySelector(".modal"),
@@ -2833,8 +2836,8 @@ function openReelPrompt(post, script) {
       const up = await apiUpload("/api/site/image", fd, (frac) => rpBar.set(frac));
       const u = up.url || up.image_url;
       if (!u) throw new Error("The upload did not come back with a file.");
-      rpBar.working("Checking every corner for a watermark…");
-      const att = await attachClip(post.id, u);
+      rpBar.working("Adding the \u201cAI generated\u201d label\u2026");
+      const att = await attachClip(post.id, u, true);
       rpBar.done("Clip attached");
       closeModal();
       if (_currentModule === "social") { _socialData = await api("/api/social"); await renderSocial(); }
@@ -2979,7 +2982,7 @@ async function decide(id, decision) {
       if (r.tasks) refreshTaskList(r.tasks);
       if (decision === "approve" && r.download && r.download_url) {
         await download(r.download_url, `${id}.xlsx`);
-        toast("Done — the Excel file is in your downloads.");
+        toast("Done, the Excel file is in your downloads.");
       }
       if (!$("historyDrawer").hidden) renderHistory();
     },
@@ -3186,8 +3189,8 @@ $("mapConfirm").onclick = async () => {
   try {
     const res = await api("/api/smart/map", { method: "POST", json: { kind: _mapCtx.kind, mapping, mode } });
     closeMap();
-    if (res && res.mode === "append") toast(`✅ Added ${fmt(res.added)} rows — ${fmt(res.rows)} total saved`);
-    else toast("✅ Data saved to your account");
+    if (res && res.mode === "append") toast(`Added ${fmt(res.added)} rows, ${fmt(res.rows)} total saved`);
+    else toast("Data saved to your account");
     if (_afterUpload) { const f = _afterUpload; _afterUpload = null; f(); } else goHome();
   } catch (e) { const el = $("mapErr"); el.textContent = e.message; el.hidden = false; }
 };
@@ -3253,7 +3256,7 @@ if ($("addSave")) $("addSave").onclick = async () => {
   if (!rows.length) { const e = $("addErr"); e.textContent = "Type at least one row."; e.hidden = false; return; }
   try {
     const res = await api("/api/smart/records/add", { method: "POST", json: { kind: _addCtx.kind, rows } });
-    closeAdd(); toast(`✅ Added ${fmt(res.added)} record(s) — ${fmt(res.rows)} total`); goHome();
+    closeAdd(); toast(`Added ${fmt(res.added)} record(s), ${fmt(res.rows)} total`); goHome();
   } catch (e) { const el = $("addErr"); el.textContent = e.message; el.hidden = false; }
 };
 
@@ -3540,7 +3543,7 @@ function _prodCard(p) {
     <div class="prod-card ${p.status === "archived" ? "archived" : ""}">
       <div class="prod-head">
         <div class="prod-id">
-          <div class="prod-thumb" style="${img ? `background-image:url('${esc(img)}')` : ""}">${img ? "" : "🛍️"}</div>
+          <div class="prod-thumb" style="${img ? `background-image:url('${esc(img)}')` : ""}">${img ? "" : ""}</div>
           <div>
             <b>${esc(p.name)}</b> ${p.status === "archived" ? `<span class="sup-badge moq">archived</span>` : ""}
             <div class="muted tiny">${meta || "—"}</div>
@@ -3548,12 +3551,12 @@ function _prodCard(p) {
           </div>
         </div>
         <div class="sup-actions">
-          <button class="btn ghost tiny" data-editprod="${p.id}" title="Edit">✎<span class="btn-lbl">Edit</span></button>
+          <button class="btn ghost tiny" data-editprod="${p.id}" title="Edit">${sic("edit")}<span class="btn-lbl">Edit</span></button>
           <button class="btn ghost tiny danger" data-delprod="${p.id}" title="Delete">${sic("close")}<span class="btn-lbl">Delete this product</span></button>
         </div>
       </div>
       <label class="site-toggle" title="Show this product on your own website">
-        <input type="checkbox" data-listprod="${p.id}" ${p.listed && p.status !== "archived" ? "checked" : ""} ${p.status === "archived" ? "disabled" : ""} />
+        <input type="checkbox" data-listprod="${p.id}"${p.listed && p.status !== "archived" ? "checked" : ""} ${p.status === "archived" ? "disabled" : ""} />
         <span class="tsw"></span>
         <span class="tlbl">Listed on my website</span>
       </label>
@@ -3576,7 +3579,7 @@ function renderProducts(d) {
 
   const unmatchedBlock = unmatched.length ? `
     <div class="action-card warning" style="margin:10px 0;">
-      <div class="do">🔌 ${unmatched.length} platform name${unmatched.length === 1 ? "" : "s"} in your sales not linked to a product</div>
+      <div class="do"> ${unmatched.length} platform name${unmatched.length === 1 ? "" : "s"} in your sales not linked to a product</div>
       <div class="why">These names came from your sales platforms but aren't tied to any product yet, so their sales don't roll up. Link each to a product, or create it as a new one.</div>
     </div>
     <div class="link-list">
@@ -3585,7 +3588,7 @@ function renderProducts(d) {
           <div class="link-prod"><b>${esc(name)}</b> <span class="muted tiny">(from your sales)</span></div>
           <div class="link-add">
             ${prods.length ? `<select data-um-sel="${esc(name)}">${prodOpts}</select>
-              <button class="btn ghost tiny" data-um-link="${esc(name)}">🔗 Link to product</button>` : ""}
+              <button class="btn ghost tiny" data-um-link="${esc(name)}"> Link to product</button>` : ""}
             <button class="btn ghost tiny" data-um-new="${esc(name)}">＋ New product</button>
           </div>
         </div>`).join("")}
@@ -3630,69 +3633,70 @@ function renderProducts(d) {
   document.querySelectorAll("[data-um-new]").forEach((b) => b.onclick = () => openProductForm(null, b.dataset.umNew));
 }
 
-/* Attach an uploaded clip to a post, through the watermark remover.
-   The upload itself is already stored by then. If the cleaning step cannot
-   finish — the server is short of memory, restarting, or too slow — the clip
-   is attached exactly as uploaded rather than lost, and the seller is told the
-   mark was not checked. Returns the attach result plus `fallback`. */
-async function attachClip(postId, url) {
+/* Attach an uploaded clip to a post.
+   `aiMade` is the seller's own answer to "was this made by an AI tool?". True
+   for anything out of Google Flow, Veo or Kling, which is most reels, because
+   that is where our own shot list sends them. When it is true we stamp the
+   "AI generated" label on the clip, which Indian law has required of us since
+   20 February 2026. When it is false the clip is stored exactly as filmed,
+   because stamping real footage as AI would be its own kind of lie.
+   If the labelling step cannot finish (the server is short of memory,
+   restarting, or too slow) the clip is attached as uploaded rather than lost,
+   and the seller is told the label did not go on. Returns the attach result
+   plus `fallback`. */
+async function attachClip(postId, url, aiMade) {
+  const body = { post_id: postId, url };
+  if (aiMade !== undefined) body.ai_generated = !!aiMade;
   try {
-    return { ...(await api("/api/social/attach-video", { method: "POST",
-      json: { post_id: postId, url } })), fallback: false };
+    return { ...(await api("/api/social/attach-video", { method: "POST", json: body })),
+      fallback: false };
   } catch (e) {
     if (e.status && e.status < 500 && e.status !== 408) throw e;   // a real "no", e.g. post gone
     await nap(1500);            // give a restarting server a moment
     const r = await api("/api/social/attach-video", { method: "POST",
-      json: { post_id: postId, url, clean: false } });
+      json: { post_id: postId, url, ai_generated: false, clean: false } });
     return { ...r, fallback: true,
-      watermark: { checked: false, removed: false,
-        reason: "The watermark remover could not run this time, so the clip is attached as you uploaded it." } };
+      ai_label: { labelled: false,
+        reason: "The AI label could not be added this time, so the clip is attached as you uploaded it. Add the label in Instagram before you post." } };
   }
 }
 
-/* "Still see a watermark?" — the seller points at the corner, and the remover
-   runs again on the original upload, allowed to accept a fainter or smaller
-   mark there (and one on a shot that barely moves). `slot` is the element
-   holding the <video>, `note` the line that reports what happened. */
-const WM_CORNERS = [["bottom-right", "◢", "Bottom right"], ["bottom-left", "◣", "Bottom left"],
-                    ["top-right", "◥", "Top right"], ["top-left", "◤", "Top left"]];
+/* "Still see Flow's watermark?"
+   This used to be four buttons that rubbed the other tool's mark out of the
+   corner. It is now an instruction, because the IT Rules as amended on
+   20 February 2026 forbid a platform that offers AI generation from letting an
+   AI label be removed, and the price of breaking that is our safe harbour under
+   section 79 of the IT Act. The seller still gets the clean frame they wanted,
+   one step earlier and legitimately: Flow has a switch for its own mark.
+   `slot` is the element holding the <video>, `note` the line that reports what
+   happened. */
 function wmFixRow(id) {
   return `<div class="wm-fix" id="${id}">
-    <span class="muted tiny">Still see a watermark? Show us where:</span>
-    ${WM_CORNERS.map(([c, icon, label]) =>
-      `<button type="button" class="btn ghost tiny" data-wmcorner="${c}" title="${label}">${icon} ${label}</button>`).join("")}
+    <span class="muted tiny"><b>Still see Google Flow's mark on the clip?</b>
+    Turn it off in Flow and generate again: open Flow, go to Settings, switch
+    <b>Media Watermark</b> off. Free accounts have that switch. We cannot take
+    another tool's mark off a clip here, because Indian law treats that as
+    removing an AI label. Our own "AI generated" label still goes on, and that
+    one is required.</span>
   </div>`;
 }
-function wireWmFix(id, post, slot, note, onDone) {
+/* Kept as a function so every caller keeps working. There is nothing to wire
+   any more: the row is now text, shown only once a clip exists. */
+function wireWmFix(id, post) {
   const row = $(id);
   if (!row) return;
   row.hidden = !post.video_url;
-  row.querySelectorAll("[data-wmcorner]").forEach((b) => b.onclick = async () => {
-    try {
-      const r = await withBusy("Removing the watermark…",
-        "Looking again at that corner of your original clip.",
-        () => api("/api/social/reclean-video", { method: "POST", json: { post_id: post.id, corner: b.dataset.wmcorner } }));
-      const wm = r.watermark || {};
-      if (wm.removed) {
-        post.video_url = r.video_url;
-        if (slot) slot.innerHTML = `<video src="${esc(r.video_url)}" controls playsinline preload="metadata"></video>`;
-        if (note) note.textContent = "Watermark removed from that corner.";
-        toast("Watermark removed. Play the clip to check it.", 6000);
-      } else {
-        const why = wm.reason || "nothing to remove there";
-        if (note) note.textContent = `Could not find a mark there: ${why}.`;
-        toast(`Could not find a mark in that corner (${why}). Try another corner.`, 8000);
-      }
-      if (onDone) onDone(r);
-    } catch (e) { toast(e.message, 8000); }
-  });
 }
 
 function clipNote(att) {
+  const lab = (att && att.ai_label) || {};
+  if (lab.labelled) {
+    return "Labelled \u201cAI generated\u201d, as the law requires, and saved.";
+  }
+  if (lab.reason) return lab.reason.charAt(0).toUpperCase() + lab.reason.slice(1);
   const wm = (att && att.watermark) || {};
-  return wm.removed ? "Watermark found and removed."
-    : wm.checked ? "Checked — no watermark on this clip."
-    : (wm.reason ? wm.reason.charAt(0).toUpperCase() + wm.reason.slice(1) : "");
+  if (wm.reason) return wm.reason.charAt(0).toUpperCase() + wm.reason.slice(1);
+  return "Clip saved.";
 }
 
 /* ---- shared image picker: uploads to /api/site/image and returns the URL ----
@@ -3921,8 +3925,8 @@ function openProductForm(id, prefillName) {
           <label>Your SKU <span class="muted tiny">internal code, optional</span>
             <input id="pfSku" value="${esc(v("sku"))}" /></label>
           <label>Status<select id="pfStatus">
-            <option value="active" ${v("status", "active") === "active" ? "selected" : ""}>Active — on sale</option>
-            <option value="archived" ${v("status") === "archived" ? "selected" : ""}>Archived — hidden everywhere</option>
+            <option value="active"${v("status", "active") === "active" ? "selected" : ""}>Active — on sale</option>
+            <option value="archived"${v("status") === "archived" ? "selected" : ""}>Archived — hidden everywhere</option>
           </select></label>
         </div>
       </div>
@@ -3959,7 +3963,7 @@ function openProductForm(id, prefillName) {
 
         <div class="sup-sub">Stock</div>
         <div class="sup-form-grid">
-          <label class="inline-check"><input type="checkbox" id="pfTrack" ${v("track_stock", true) === false ? "" : "checked"} />
+          <label class="inline-check"><input type="checkbox" id="pfTrack"${v("track_stock", true) === false ? "" : "checked"} />
             Track stock for this product <span class="muted tiny">— sells out at zero, and site orders deduct from it</span></label>
           <label id="pfStockRow">Units available<input id="pfStock" type="number" min="0" step="1" value="${it && it.stock != null ? it.stock : 0}" /></label>
         </div>
@@ -3967,7 +3971,7 @@ function openProductForm(id, prefillName) {
 
       <div class="pf-panel" data-pf="site">
         <label class="site-toggle big" title="Show this product on your website">
-          <input type="checkbox" id="pfListed" ${listed ? "checked" : ""} />
+          <input type="checkbox" id="pfListed"${listed ? "checked" : ""} />
           <span class="tsw"></span>
           <span class="tlbl">List this product on my website<span class="muted tiny"> — on by default</span></span>
         </label>
@@ -3977,12 +3981,12 @@ function openProductForm(id, prefillName) {
           for you.</div>
         <div class="place-grid">
           <label class="place">
-            <input type="checkbox" id="pfFeatured" ${v("featured") ? "checked" : ""} />
+            <input type="checkbox" id="pfFeatured"${v("featured") ? "checked" : ""} />
             <span class="place-b"><b>Featured rail</b>
               <span>The horizontal row near the top. Pick your best sellers.</span></span>
           </label>
           <label class="place">
-            <input type="checkbox" id="pfSpotlight" ${v("spotlight") ? "checked" : ""} />
+            <input type="checkbox" id="pfSpotlight"${v("spotlight") ? "checked" : ""} />
             <span class="place-b"><b>Spotlight</b>
               <span>The big single-product block with its photo held still. One product only.</span></span>
           </label>
@@ -4330,9 +4334,9 @@ function renderStudio() {
         <label>Who buys it <span class="muted tiny">the person you picture</span>
           <textarea id="sbAud" data-ai="brand_audience" data-ai-ctx="brand" data-ai-label="Who buys it" rows="2" placeholder="People who wear one scent, not ten.">${esc(b.audience)}</textarea></label>
         <label>The look<select id="sbLook">${(d.looks || []).map((l) =>
-          `<option value="${esc(l.id)}" ${b.look === l.id ? "selected" : ""}>${esc(l.label)}</option>`).join("")}</select></label>
+          `<option value="${esc(l.id)}"${b.look === l.id ? "selected" : ""}>${esc(l.label)}</option>`).join("")}</select></label>
         <label>How you sound<select id="sbVoice">${(d.voices || []).map((v) =>
-          `<option value="${esc(v.id)}" ${b.voice === v.id ? "selected" : ""}>${esc(v.label)}</option>`).join("")}</select></label>
+          `<option value="${esc(v.id)}"${b.voice === v.id ? "selected" : ""}>${esc(v.label)}</option>`).join("")}</select></label>
         <label>Your colours <span class="muted tiny">in words — generated images follow these</span>
           <input id="sbPal" data-ai="brand_palette" data-ai-ctx="brand" data-ai-label="Your colours" value="${esc(b.palette)}" placeholder="amber, deep brown, brass" /></label>
         <label>Never say <span class="muted tiny">words or looks to stay away from</span>
@@ -4382,7 +4386,7 @@ function renderStudio() {
         avoid: $("sbAvoid").value.trim(), hashtags: $("sbTags").value.trim(),
       }}});
       _studio.brand = r.brand; _studio.brand_ready = !!(r.brand.name && r.brand.about);
-      toast("Brand saved — every post from here on follows it.");
+      toast("Brand saved, every post from here on follows it.");
       renderStudio();
     } catch (e) { toast(e.message); }
   };
@@ -4525,7 +4529,7 @@ function renderStudioProduct() {
         </div>
         <div class="st-make">
           <button class="btn primary sm" id="stMakeOwn">${sic("image")}Use my photo + write the caption</button>
-          <button class="btn ghost sm" id="stMakeAi" ${_studio.ai_ready ? "" : "disabled"}>
+          <button class="btn ghost sm" id="stMakeAi"${_studio.ai_ready ? "" : "disabled"}>
             ${sic("spark")}Generate an image too</button>
           <button class="btn ghost sm" id="stImageOnly">${sic("image")}Image only</button>
         </div>
@@ -4784,9 +4788,9 @@ function renderSupply(d) {
              The label is hidden again above tablet width, so the desktop row
              keeps its compact icons. -->
         <td class="sup-actions">
-          ${it.suggestions_available ? `<button class="btn ghost tiny" data-apply="${it.id}" title="Apply the values suggested from your sales">✨<span class="btn-lbl">Use the suggested numbers</span></button>` : ""}
-          <button class="btn ghost tiny" data-edit="${it.id}" title="Edit">✎<span class="btn-lbl">Edit</span></button>
-          <button class="btn ghost tiny" data-waste="${it.id}" title="Record waste">🗑️<span class="btn-lbl">Record waste</span></button>
+          ${it.suggestions_available ? `<button class="btn ghost tiny" data-apply="${it.id}" title="Apply the values suggested from your sales">${sic("check")}<span class="btn-lbl">Use the suggested numbers</span></button>` : ""}
+          <button class="btn ghost tiny" data-edit="${it.id}" title="Edit">${sic("edit")}<span class="btn-lbl">Edit</span></button>
+          <button class="btn ghost tiny" data-waste="${it.id}" title="Record waste">${sic("droplet")}<span class="btn-lbl">Record waste</span></button>
           <button class="btn ghost tiny sup-more" data-more="${it.id}">${sic("chevron-down")}<span class="btn-lbl">The numbers, and what you can do</span></button>
           <button class="btn ghost tiny danger" data-del="${it.id}" title="Remove item">${sic("close")}<span class="btn-lbl">Remove from stock list</span></button>
         </td>
@@ -4814,7 +4818,7 @@ function renderSupply(d) {
         `<button class="btn ghost tiny" data-pomove="${esc(p.po_number)}" data-postatus="${x}"
                  title="${esc(PO_STEP_WHY[x] || "")}">${PO_STEP[x] || x}</button>`).join("")}
       <button class="btn ghost tiny sup-more" data-more="${esc(p.po_number)}">${sic("chevron-down")}<span class="btn-lbl">More</span></button>
-      <button class="btn ghost tiny" data-popdf="${esc(p.po_number)}" title="Download the PDF">📄<span class="btn-lbl">PDF</span></button>
+      <button class="btn ghost tiny" data-popdf="${esc(p.po_number)}" title="Download the PDF">${sic("receipt")}<span class="btn-lbl">PDF</span></button>
       <button class="btn ghost tiny" data-poxls="${esc(p.po_number)}" title="Download as Excel">⬇<span class="btn-lbl">Excel</span></button>
       ${nexts.includes("cancelled") ? `<button class="btn ghost tiny danger" data-pomove="${esc(p.po_number)}" data-postatus="cancelled" title="Cancel this order">${sic("close")}<span class="btn-lbl">Cancel this order</span></button>` : ""}`;
   };
@@ -4900,8 +4904,8 @@ function renderSupply(d) {
       <div class="do">Purchase orders will not come from your address yet</div>
       <div class="why">Connect your own email and every order goes out from it, so your
         supplier recognises it and their reply lands in your inbox.${d.email_ready
-          ? " Until then this server's mailbox sends them."
-          : " Until then nothing can be emailed from here at all — Approve just gives you the PDF."}</div></div>`}
+          ? "Until then this server's mailbox sends them."
+          : "Until then nothing can be emailed from here at all — Approve just gives you the PDF."}</div></div>`}
 
     <div id="supForm" hidden></div>
     <div id="supPanel" hidden></div>
@@ -4983,7 +4987,7 @@ function renderSupply(d) {
       _supAfter(d);
       const c = d.check || {}, made = [...(c.created || []), ...(c.appended || [])];
       if (!made.length) { toast("Everything short is already on order."); return; }
-      if (made.length > 1) toast(`${made.length} purchase orders drafted — one per supplier. They are also in the Approval panel.`, 7000);
+      if (made.length > 1) toast(`${made.length} purchase orders drafted, one per supplier. They are also in the Approval panel.`, 7000);
       openPoDetail(made[0]);
     } catch (e) { toast(e.message, 7000); }
   };
@@ -5241,7 +5245,7 @@ function openSupplyForm(id) {
       if (step === 0) {
         const nm = $("sfName").value.trim().toLowerCase();
         const twin = ((_supplyData || {}).inventory || []).find((x) => x.id !== id && String(x.name || "").trim().toLowerCase() === nm);
-        if (twin) return `You already have "${twin.name}". Edit that one (✎ in the list) — or, if another product uses it too, add it under "What each product uses" so its stock is counted once.`;
+        if (twin) return `You already have "${twin.name}". Edit that one ( in the list) — or, if another product uses it too, add it under "What each product uses" so its stock is counted once.`;
       }
       if (step === 0 && $("sfProd").value && !(parseFloat($("sfQpu").value) > 0)) return "How much of it does one unit of the product use? It has to be more than 0.";
       if (step === 1) {
@@ -5304,7 +5308,7 @@ async function supplyApplySuggested(id) {
     ordering_cost: it.ordering_is_auto ? it.effective_ordering_cost : it.ordering_cost,
     holding_cost: it.holding_is_auto ? it.effective_holding_cost : it.holding_cost,
   };
-  try { _supAfter(await api("/api/supply/item", { method: "POST", json: payload })); toast("Suggested values applied — edit them anytime."); }
+  try { _supAfter(await api("/api/supply/item", { method: "POST", json: payload })); toast("Suggested values applied, edit them anytime."); }
   catch (e) { toast(e.message); }
 }
 
@@ -5320,10 +5324,10 @@ function openWastePanel(preId) {
   if (!items.length) { toast("Add an inventory item first."); return; }
   const p = $("supPanel");
   p.hidden = false;
-  const opts = items.map((it) => `<option value="${it.id}" ${it.id === preId ? "selected" : ""}>${esc(it.name)} (${fmt(it.current_stock)} ${esc(it.unit_label || "")})</option>`).join("");
+  const opts = items.map((it) => `<option value="${it.id}"${it.id === preId ? "selected" : ""}>${esc(it.name)} (${fmt(it.current_stock)} ${esc(it.unit_label || "")})</option>`).join("");
   p.innerHTML = `
     <div class="card sup-form">
-      <h4 style="margin:0 0 4px;">🗑️ Record waste</h4>
+      <h4 style="margin:0 0 4px;"> Record waste</h4>
       <p class="muted tiny">Logs the loss and reduces stock — e.g. a packing material spoiled by mistake.</p>
       <div class="sup-form-grid">
         <label>Item<select id="wsItem">${opts}</select></label>
@@ -5340,7 +5344,7 @@ function openWastePanel(preId) {
   $("wsCancel").onclick = _closePanels;
   $("wsSave").onclick = async () => {
     const payload = { inventory_id: $("wsItem").value, qty: parseFloat($("wsQty").value) || 0, reason: $("wsReason").value.trim() };
-    try { _supAfter(await api("/api/supply/waste", { method: "POST", json: payload })); toast("Waste recorded — stock reduced"); }
+    try { _supAfter(await api("/api/supply/waste", { method: "POST", json: payload })); toast("Waste recorded, stock reduced"); }
     catch (e) { const el = $("wsErr"); el.textContent = e.message; el.hidden = false; }
   };
 }
@@ -5384,7 +5388,7 @@ function _renderLinks() {
 
   p.innerHTML = `
     <div class="card sup-form">
-      <h4 style="margin:0 0 4px;">🔗 Product links <span class="muted tiny">— how much inventory each product needs</span></h4>
+      <h4 style="margin:0 0 4px;"> Product links <span class="muted tiny">— how much inventory each product needs</span></h4>
       <p class="muted tiny">When you sell one of a product, how many of this item does it use up? Set that here and we can tell when you are about to run out — based on what you actually sell, not guesswork.</p>
       ${!items.length ? `<p class="muted tiny">Add inventory items first, then link them here.</p>` : `<div class="link-list">${prodBlocks}</div>`}
       <div class="modal-actions"><button class="btn ghost" id="lkClose">Close</button></div>
@@ -5547,7 +5551,7 @@ async function openMailAccount() {
           display_name: $("maName").value.trim() } }));
       closeModal();
       openSupply();
-      toast(`Connected. Check ${r.address} — a test message is waiting there.`, 8000);
+      toast(`Connected. Check ${r.address}, a test message is waiting there.`, 8000);
     } catch (e) { toast(e.message, 9000); }
   };
 }
@@ -5695,7 +5699,7 @@ async function supplyOpenPo(itemIds) {
     const d = await api("/api/supply/po/create", { method: "POST", json: { item_ids: itemIds } });
     if (d.download_url) await download(d.download_url, `${d.po_number}.pdf`);
     _supAfter(d);
-    toast(`✅ ${d.po_number} — PDF saved to your device.`);
+    toast(`${d.po_number}, PDF saved to your device.`);
   } catch (e) { toast(e.message); }
 }
 
@@ -6023,7 +6027,7 @@ function renderReview(d) {
     const html = `
       ${renderActions(d.insights)}
       <div class="card pos-banner"><span class="muted tiny">Your position, from your own reviews</span>
-        <h3 style="margin:4px 0 0;">📍 ${esc(pos.quadrant || "—")}</h3></div>
+        <h3 style="margin:4px 0 0;"> ${esc(pos.quadrant || "—")}</h3></div>
       <div class="kpis">
         <div class="kpi"><div class="label">Reviews</div><div class="value">${fmt(d.n_reviews)}</div></div>
         <div class="kpi"><div class="label">Your rating</div><div class="value">${d.avg_rating ?? "—"}</div></div>
@@ -6050,14 +6054,14 @@ function renderComplaints(d) {
     let html = `<p class="muted">${fmt(det.n_reviews)} reviews · ${fmt(det.n_complaints)} complaints (${det.complaint_rate ?? 0}% rate)</p>`;
     const focus = (d.focus && d.focus.focus_now) || [];
     if (focus.length) {
-      html += `<div class="card"><h4>🎯 Fix these first</h4>${focus.map((x, i) => `
+      html += `<div class="card"><h4> Fix these first</h4>${focus.map((x, i) => `
         <div class="action-card negative"><div class="do">${i + 1}. ${esc(x.theme)} — ${esc(x.severity)}</div>
-        <div class="why">✅ ${esc(x.action)} · ${x.count} complaints (${x.share_pct}%)</div></div>`).join("")}</div>`;
+        <div class="why"> ${esc(x.action)} · ${x.count} complaints (${x.share_pct}%)</div></div>`).join("")}</div>`;
     } else {
-      html += `<div class="card">🎉 No significant complaint patterns found.</div>`;
+      html += `<div class="card"> No significant complaint patterns found.</div>`;
     }
     if (d.monthly) {
-      html += `<div class="chart-card"><h4>📅 Complaints per month (avg ${d.monthly.avg_per_month}/mo)</h4><div class="plot" id="cCompM"></div></div>`;
+      html += `<div class="chart-card"><h4> Complaints per month (avg ${d.monthly.avg_per_month}/mo)</h4><div class="plot" id="cCompM"></div></div>`;
     }
     if (d.deep && d.deep.length) {
       html += `<div class="card"><h4 style="margin-bottom:8px;">Deep analysis</h4>
@@ -6092,13 +6096,13 @@ function posCard(p, eyebrow) {
     <h3 style="margin:2px 0 2px;">${esc(p.name)}</h3>
     <div class="muted" style="font-size:13px;">${esc(p.tagline)}</div>
     <div class="grid-2" style="margin-top:12px;">
-      <div><b style="color:var(--green);">✅ Pros</b><ul style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--text-2);">${p.pros.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
+      <div><b style="color:var(--green);"> Pros</b><ul style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--text-2);">${p.pros.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
       <div><b style="color:var(--red);">⚠️ Cons</b><ul style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--text-2);">${p.cons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
     </div></div>`;
 }
 
 function renderStrategy(d) {
-  let html = posCard(d.current, `📍 You are here${d.n_reviews ? ` · from ${d.n_reviews} reviews` : ""}`);
+  let html = posCard(d.current, `You are here${d.n_reviews ? ` · from ${d.n_reviews} reviews` : ""}`);
   html += `<div class="section-title">Choose a target — or strengthen where you are</div>
     <div class="apps-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));">
     ${d.options.map((o) => `<div class="app-tile opt-tile ${o.id === d.target_id ? "selected" : ""}" data-target="${o.id}" style="text-align:left;">
@@ -6109,7 +6113,7 @@ function renderStrategy(d) {
 
   if (d.plan) {
     const pl = d.plan; const pct = pl.progress.total ? Math.round(pl.progress.done / pl.progress.total * 100) : 0;
-    if (!pl.same_position) html += posCard(pl.target, "🎯 Your target");
+    if (!pl.same_position) html += posCard(pl.target, "Your target");
     html += `<div class="card" style="border-left:4px solid var(--blue);"><b style="color:var(--blue);">${pl.same_position ? "Plan:" : "The gap:"}</b> ${esc(pl.gap)}</div>`;
     html += `<div class="card" style="border-left:4px solid var(--green);"><h4 style="color:var(--green);">Keep these the same</h4>
       <p class="muted tiny" style="margin:4px 0;">${esc(pl.keep_note)}</p>
@@ -6129,10 +6133,10 @@ function renderStrategy(d) {
       const locked = !prevComplete;
       const levelDone = (doneByLevel[lv] || 0) === totByLevel[lv];
       html += `<div class="level-block ${locked ? "locked" : ""}">
-        <div class="level-head"><span class="level-badge">Level ${lv}</span> ${esc(phaseName.replace(/^Level \d+ · /, ""))} <span class="muted tiny">${doneByLevel[lv] || 0}/${totByLevel[lv]}</span>${locked ? ` <span class="lock-note">🔒 finish Level ${lv - 1} first</span>` : (levelDone ? ` <span style="color:var(--green);">✓ done</span>` : "")}</div>`;
+        <div class="level-head"><span class="level-badge">Level ${lv}</span> ${esc(phaseName.replace(/^Level \d+ · /, ""))} <span class="muted tiny">${doneByLevel[lv] || 0}/${totByLevel[lv]}</span>${locked ? ` <span class="lock-note"> finish Level ${lv - 1} first</span>` : (levelDone ? ` <span style="color:var(--green);">✓ done</span>` : "")}</div>`;
       items.forEach((it) => {
         html += `<label class="task-item ${it.done ? "done" : ""}" data-item="${it.id}" data-level="${lv}" style="align-items:flex-start;border:1px solid var(--border);border-radius:8px;padding:11px 13px;margin-bottom:8px;background:var(--surface);${locked ? "opacity:.55;pointer-events:none;" : ""}">
-          <input type="checkbox" ${it.done ? "checked" : ""} ${locked ? "disabled" : ""} style="margin-top:2px;" />
+          <input type="checkbox"${it.done ? "checked" : ""} ${locked ? "disabled" : ""} style="margin-top:2px;" />
           <span class="t"><b>${esc(it.text)}</b><div class="muted tiny" style="margin-top:3px;">Why: ${esc(it.why)}</div></span></label>`;
       });
       html += `</div>`;
@@ -6142,7 +6146,7 @@ function renderStrategy(d) {
 
   html += `<div class="section-title">AI</div>
     <div class="card"><div class="row" style="display:flex;gap:10px;flex-wrap:wrap;">
-      <button class="btn primary sm" id="runAnalyst">🤖 Run AI Analyst</button>
+      <button class="btn primary sm" id="runAnalyst"> Run AI Analyst</button>
     </div><div id="analystOut" style="margin-top:12px;"></div></div>`;
 
   moduleShell("Position Strategy + AI", html);
@@ -6167,8 +6171,8 @@ async function runAnalyst() {
   btn.disabled = true; out.innerHTML = `<div class="ap-empty">Running AI analysis (uses one of your daily AI runs)…</div>`;
   try {
     const d = await api("/api/analyst", { method: "POST" });
-    out.innerHTML = d.results.map((file) => `<h4>📄 ${esc(file.file)}</h4>` + file.insights.map((ins) => `
-      <div class="action-card"><div class="do">🔎 ${esc(ins.decision || "")}</div>
+    out.innerHTML = d.results.map((file) => `<h4> ${esc(file.file)}</h4>` + file.insights.map((ins) => `
+      <div class="action-card"><div class="do"> ${esc(ins.decision || "")}</div>
       <div class="why"><b>Action:</b> ${esc(ins.action || "")}<br><b>Impact:</b> ${esc(ins.impact || "")}</div></div>`).join("")).join("");
     if (!out.innerHTML) out.innerHTML = `<div class="ap-empty">No insights generated.</div>`;
   } catch (e) { out.innerHTML = `<div class="card">${esc(e.message)}</div>`; }
@@ -6179,7 +6183,7 @@ function renderActions(insights) {
   if (!insights || !insights.length) return "";
   return `<div style="margin-bottom:14px;">${insights.map((ins) => {
     const type = ["positive", "negative", "warning", "neutral"].includes(ins.type) ? ins.type : "neutral";
-    return `<div class="action-card ${type}">${ins.action ? `<div class="do">✅ ${esc(ins.action)}</div><div class="why">${esc(ins.text)}</div>` : `<div class="do">${esc(ins.text)}</div>`}</div>`;
+    return `<div class="action-card ${type}">${ins.action ? `<div class="do"> ${esc(ins.action)}</div><div class="why">${esc(ins.text)}</div>` : `<div class="do">${esc(ins.text)}</div>`}</div>`;
   }).join("")}</div>`;
 }
 
@@ -6216,18 +6220,18 @@ async function openMarketing() {
    broken and only found four people". */
 function winbackStrip(a) {
   if (!a) return "";
-  const hr = (h) => { const n = Number(h) || 0; return `${((n + 11) % 12) + 1}${n < 12 ? " AM" : " PM"}`; };
+  const hr = (h) => { const n = Number(h) || 0; return `${((n + 11) % 12) + 1}${n < 12 ? "AM" : "PM"}`; };
   const p = a.pending;
   const last = a.last || null;
   const head = p
     ? `<b>${fmt(p.reachable || p.n)} message${(p.reachable || p.n) === 1 ? "" : "s"} are written and waiting for you</b>
        <span class="muted tiny">Prepared ${esc(String(p.at || "").slice(0, 10))}. Approve them in the panel on the right and they go out from your own email address.${
-         p.skipped_cooldown ? ` ${fmt(p.skipped_cooldown)} more were left out — they were contacted within the last ${a.cooldown_days} days.` : ""}</span>`
+         p.skipped_cooldown ? `${fmt(p.skipped_cooldown)} more were left out — they were contacted within the last ${a.cooldown_days} days.` : ""}</span>`
     : a.enabled
-      ? `<b>Checks every ${esc(a.day_name)} at ${esc(hr(a.hour))}${a.tz_label ? ` ${esc(a.tz_label)}` : ""}</b>
+      ? `<b>Checks every ${esc(a.day_name)} at ${esc(hr(a.hour))}${a.tz_label ? `${esc(a.tz_label)}` : ""}</b>
          <span class="muted tiny">It reads your sales for customers who have gone quiet, writes each message against what that person actually bought, and puts one card in your Approval panel. Nothing is ever sent until you approve it. Anyone contacted in the last ${a.cooldown_days} days is left alone.
-           ${last && !last.ok && last.reason ? ` Last check: ${esc(last.reason)}.` : ""}
-           ${a.next_run_label ? ` Next check ${esc(a.next_run_label)}.` : ""}</span>`
+           ${last && !last.ok && last.reason ? `Last check: ${esc(last.reason)}.` : ""}
+           ${a.next_run_label ? `Next check ${esc(a.next_run_label)}.` : ""}</span>`
       : `<b>Automatic win-back is off</b>
          <span class="muted tiny">Turn it on and it finds your quiet customers every week for you.</span>`;
   return `
@@ -6274,12 +6278,12 @@ async function openWinbackAutoSetup() {
   let a;
   try { a = await api("/api/winback/auto"); } catch (e) { return toast(e.message); }
   const days = (a.day_names || []).map((d, i) =>
-    `<option value="${i}" ${i === a.day ? "selected" : ""}>${esc(d)}</option>`).join("");
+    `<option value="${i}"${i === a.day ? "selected" : ""}>${esc(d)}</option>`).join("");
   const hours = Array.from({ length: 24 }, (_, h) =>
-    `<option value="${h}" ${h === a.hour ? "selected" : ""}>${((h + 11) % 12) + 1}${h < 12 ? " AM" : " PM"}</option>`).join("");
+    `<option value="${h}"${h === a.hour ? "selected" : ""}>${((h + 11) % 12) + 1}${h < 12 ? "AM" : "PM"}</option>`).join("");
   openModal("Automatic win-back", `
     <label class="site-toggle" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-      <input type="checkbox" id="wbaOn" ${a.enabled ? "checked" : ""} />
+      <input type="checkbox" id="wbaOn"${a.enabled ? "checked" : ""} />
       <span class="tsw"></span><b>Look for quiet customers every week</b>
     </label>
     <div class="grid-2">
@@ -6470,7 +6474,7 @@ async function openWinbackSend(rows) {
   };
   let tmr; $("wbTpl").addEventListener("input", () => { clearTimeout(tmr); tmr = setTimeout(repaint, 400); });
 
-  $("wbLater").onclick = () => { closeModal(); toast("Exported & approved — moved to History."); };
+  $("wbLater").onclick = () => { closeModal(); toast("Exported & approved, moved to History."); };
   $("wbGo").onclick = async () => {
     const ch = [];
     if ($("wbEmail").checked && !$("wbEmail").disabled) ch.push("email");
@@ -6526,7 +6530,7 @@ function askWinbackSent(rows) {
       <button class="btn ghost" id="wbLater">Not yet — I'll tick it later</button>
       <button class="btn primary" id="wbSent">I've sent it</button>
     </div>`);
-  $("wbLater").onclick = () => { closeModal(); toast("Exported & approved — moved to History."); };
+  $("wbLater").onclick = () => { closeModal(); toast("Exported & approved, moved to History."); };
   $("wbSent").onclick = async () => {
     try {
       const p = await api("/api/rfm/winback/sent", { method: "POST",
@@ -6604,7 +6608,7 @@ async function openInstagramModule() {
 
     const connectPanel = oauth ? `
       <div class="row" style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn primary sm" id="igOauth">🔗 Connect Instagram</button>
+        <button class="btn primary sm" id="igOauth"> Connect Instagram</button>
         <span class="muted tiny" style="align-self:center;">Opens Instagram's own login. Nothing to paste, and no Facebook Page needed.</span>
       </div>
       <details class="ig-advanced" style="margin-top:12px;">
@@ -6637,7 +6641,7 @@ async function openInstagramModule() {
       <div class="card ig-card">
         <div class="row" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <div style="flex:1;min-width:220px;">
-            <h3 style="margin:0;">${s.connected ? "✅ Connected" : "🔌 Not connected yet"}</h3>
+            <h3 style="margin:0;">${s.connected ? "Connected" : "Not connected yet"}</h3>
             ${s.connected ? `<div class="muted tiny" style="margin-top:4px;">Account: <b>@${esc(s.account_username || "—")}</b> · IG user id: <code>${esc(s.ig_user_id)}</code> · since ${esc(String(s.connected_at || "").slice(0,10))}</div>`
                           : `<div class="muted tiny" style="margin-top:4px;">${oauth ? "Sign in at instagram.com with the password you already use — it never passes through us." : "Follow the steps below."}</div>`}
           </div>
@@ -6721,7 +6725,7 @@ async function openInstagramModule() {
         const at = $("igToken").value.trim(), ig = $("igUserId").value.trim();
         if (!at || !ig) { toast("Fill both fields first."); return; }
         try { await api("/api/instagram/connect", { method: "POST", json: { access_token: at, ig_user_id: ig } });
-          toast("✅ Instagram connected"); openInstagramModule();
+          toast("Instagram connected"); openInstagramModule();
         } catch (e) { $("igMsg").innerHTML = `<span style='color:var(--red)'>${esc(e.message)}</span>`; }
       };
     } else {
@@ -6800,12 +6804,12 @@ async function startInstagramOauth() {
     const x = window.screenX + Math.max(0, (window.innerWidth  - w) / 2);
     const popup = window.open(r.login_url, "ig_oauth",
       `width=${w},height=${h},left=${x},top=${y},resizable=yes,scrollbars=yes`);
-    if (!popup) { toast("Popup was blocked — allow popups for this site and try again."); return; }
+    if (!popup) { toast("Popup was blocked, allow popups for this site and try again."); return; }
     const handler = (ev) => {
       if (!ev.data || ev.data.type !== "ig-oauth") return;
       window.removeEventListener("message", handler);
       const p = ev.data.payload || {};
-      if (p.ok) toast(`✅ Connected @${p.username || "—"}`);
+      if (p.ok) toast(`Connected @${p.username || "-"}`);
       else toast("⚠️ " + (p.message || "Login failed"), 7000);
       openInstagramModule();
     };
@@ -6831,7 +6835,7 @@ async function openContentModule() {
       </div>
       ${s.id ? `<p class="muted tiny">Topic: ${esc(s.topic || "—")}${s.generated ? " · generated" : " · not yet generated — open Details to fill in caption + image"}</p>
       <div class="row" style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn primary sm" id="ccOpen">✎ Open editor</button>
+        <button class="btn primary sm" id="ccOpen"> Open editor</button>
       </div>` : `<p class="muted">No suggestion active yet.</p>`}
     </div>`;
 
@@ -6866,8 +6870,8 @@ function renderContentEditor(sug) {
         ${sug.image_url ? `<img src="${esc(sug.image_url)}" alt="post image" class="cc-image" />`
                         : `<div class="cc-image cc-image-empty">No image</div>`}
         <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
-          <button class="btn ghost sm" id="ccRegenImg">🎨 Regenerate</button>
-          <button class="btn ghost sm" id="ccUploadImg">📁 Upload from device</button>
+          <button class="btn ghost sm" id="ccRegenImg"> Regenerate</button>
+          <button class="btn ghost sm" id="ccUploadImg"> Upload from device</button>
           <input type="file" id="ccImgFile" accept="image/png,image/jpeg,image/webp" hidden />
         </div>
         <label style="margin-top:10px;">Image URL <span class="muted tiny">(or paste a public URL)</span>
@@ -6878,7 +6882,7 @@ function renderContentEditor(sug) {
         <label>Topic <input id="ccTopic" value="${esc(sug.topic || "")}" /></label>
         <label>Platform
           <select id="ccPlat">
-            <option value="instagram" ${sug.platform==="instagram"?"selected":""}>Instagram</option>
+            <option value="instagram"${sug.platform==="instagram"?"selected":""}>Instagram</option>
             <option value="facebook"  ${sug.platform==="facebook"?"selected":""}>Facebook</option>
           </select>
         </label>
@@ -6911,7 +6915,7 @@ function renderContentEditor(sug) {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.detail || "Upload failed");
       _ccData.image_url = d.image_url; renderContentEditor(_ccData);
-      toast("✅ Image uploaded");
+      toast("Image uploaded");
     } catch (err) { $("ccMsg").innerHTML = `<span style='color:var(--red)'>${esc(err.message)}</span>`; }
   };
   $("ccPost").onclick = async () => {
@@ -6958,7 +6962,7 @@ if ($("coConfirm")) $("coConfirm").onclick = async () => {
   const btn = $("coConfirm"); const label = btn.textContent; btn.disabled = true; btn.textContent = "Connecting…";
   try {
     await api("/api/commerce/connect", { method: "POST", json: { connector: _coCtx.id, credentials: creds } });
-    closeCommerce(); toast("✅ Connected — click “Pull orders” to import your sales."); renderChannels();
+    closeCommerce(); toast("Connected, click “Pull orders” to import your sales."); renderChannels();
   } catch (e) { el.textContent = e.message; el.hidden = false; }
   finally { btn.disabled = false; btn.textContent = label; }
 };
@@ -6972,7 +6976,7 @@ async function saveContentToDevice(insightId) {
     if (sug.image_url) {
       await download(`/api/content/asset?insight_id=${encodeURIComponent(insightId)}&kind=image`, `${topic}.png`);
     } else {
-      toast("No image yet — saving the caption only. Open the editor to add an image.", 5000);
+      toast("No image yet, saving the caption only. Open the editor to add an image.", 5000);
     }
     await download(`/api/content/asset?insight_id=${encodeURIComponent(insightId)}&kind=text`, `${topic}.txt`);
     const r = await api(`/api/smart/insight/${insightId}/decision`, { method: "POST", json: { decision: "approve" } });
@@ -6980,7 +6984,7 @@ async function saveContentToDevice(insightId) {
       if (state.lastState) { state.lastState.insights = r.insights; if (r.history) state.lastState.history = r.history; }
       renderApprovals(r.insights);
     }
-    toast("✅ Saved to your device — image + caption downloaded. Moved to History.");
+    toast("Saved to your device, image + caption downloaded. Moved to History.");
   } catch (e) { toast(e.message, 6000); }
 }
 
@@ -7015,14 +7019,14 @@ async function renderChannels() {
           ? `<button class="btn primary sm" data-co-pull="${c.id}">⬇ Pull orders</button>
              <button class="btn ghost sm" data-co-connect="${c.id}">Reconnect</button>
              <button class="btn ghost sm" data-co-disc="${c.id}">Disconnect</button>`
-          : `<button class="btn primary sm" data-co-connect="${c.id}">🔗 Connect</button>`;
+          : `<button class="btn primary sm" data-co-connect="${c.id}"> Connect</button>`;
       return `
         <div class="chan-card ${soon ? "soon" : ""} ${c.id === "site" ? "own" : ""}">
           <div class="chan-top">
             <span class="chan-ico">${c.icon}</span>
             <div class="chan-name"><b>${esc(c.label)}</b>${pill}</div>
             <label class="site-toggle sm" title="${c.toggleable ? "Count this channel's sales in your insights" : "Available once this channel is live"}">
-              <input type="checkbox" data-chan="${c.id}" ${c.enabled ? "checked" : ""} ${c.toggleable ? "" : "disabled"} />
+              <input type="checkbox" data-chan="${c.id}"${c.enabled ? "checked" : ""} ${c.toggleable ? "" : "disabled"} />
               <span class="tsw"></span>
             </label>
           </div>
@@ -7067,7 +7071,7 @@ async function commercePull(id) {
   toast("Pulling orders… this can take a few seconds", 8000);
   try {
     const r = await api("/api/commerce/pull", { method: "POST", json: { connector: id, days: 90 } });
-    toast(`✅ Pulled ${fmt(r.rows)} orders from ${id} → saved as Sales.`);
+    toast(`Pulled ${fmt(r.rows)} orders from ${id} → saved as Sales.`);
     goHome();
   } catch (e) { toast(e.message, 7000); }
 }
@@ -7192,7 +7196,7 @@ async function openSite(step) {
     _step = step || (_site.handle && _site.brand ? "editor" : "setup");
     renderSite();
     if (d.seeded_now) {
-      toast("Started your site from your catalogue — change anything you like.", 6000);
+      toast("Started your site from your catalogue, change anything you like.", 6000);
     }
   } catch (e) { moduleShell("Website Builder", failed(e.message, () => openModule(_currentModule))); }
 }
@@ -7282,7 +7286,7 @@ function renderSite() {
       </div>
       <div class="site-bar-r">
         ${saveState(live)}
-        <button class="btn ghost sm" id="siteSave" ${_siteDirty ? "" : "disabled"}>${_siteDirty ? "Save" : "Saved"}</button>
+        <button class="btn ghost sm" id="siteSave"${_siteDirty ? "" : "disabled"}>${_siteDirty ? "Save" : "Saved"}</button>
         <button class="btn ${live ? "ghost" : "primary"} sm" id="sitePub">${live ? "Unpublish" : "Publish"}</button>
       </div>
     </div>`;
@@ -7358,7 +7362,7 @@ function wireBinds(scope) {
 }
 
 /* Which site fields the content writer can help with, and as what. Contact
-   details, handles, prices and numbers are the seller's facts — no ✨ there. */
+   details, handles, prices and numbers are the seller's facts — no there. */
 const SITE_AI = {
   "tagline": "tagline", "brief": "", "announcement": "announcement",
   "hero.heading": "hero_heading", "hero.sub": "hero_sub", "hero.cta_text": "label",
@@ -7382,10 +7386,10 @@ function field(label, path, opts = {}) {
   if (opts.type === "textarea")
     return `<label>${label}${hint}<textarea rows="${opts.rows || 3}" data-bind="${path}"${ai} placeholder="${esc(opts.ph || "")}">${esc(v || "")}</textarea></label>`;
   if (opts.type === "check")
-    return `<label class="inline-check"><input type="checkbox" data-bind="${path}" ${v ? "checked" : ""} /> ${label}${hint}</label>`;
+    return `<label class="inline-check"><input type="checkbox" data-bind="${path}"${v ? "checked" : ""} /> ${label}${hint}</label>`;
   if (opts.type === "select")
     return `<label>${label}${hint}<select data-bind="${path}">${opts.options.map((o) =>
-      `<option value="${esc(o[0])}" ${String(v) === String(o[0]) ? "selected" : ""}>${esc(o[1])}</option>`).join("")}</select></label>`;
+      `<option value="${esc(o[0])}"${String(v) === String(o[0]) ? "selected" : ""}>${esc(o[1])}</option>`).join("")}</select></label>`;
   if (opts.type === "range") {
     const id = "rng_" + path.replace(/\./g, "_");
     return `<label>${label}
@@ -7606,7 +7610,7 @@ function gHero() {
 function gType() {
   const t = _siteMeta.themes.find((x) => x.id === _site.theme) || _siteMeta.themes[0];
   const opts = (sel) => _siteMeta.fonts.map((f) =>
-    `<option value="${f.id}" ${sel === f.id ? "selected" : ""}>${esc(f.label)} · ${f.kind}</option>`).join("");
+    `<option value="${f.id}"${sel === f.id ? "selected" : ""}>${esc(f.label)} · ${f.kind}</option>`).join("");
   const cur = (id, fallback) => fontStack(id || fallback);
   const chosen = _site.style.pairing || "";
   const hand = !chosen && (_site.style.heading_font || _site.style.body_font || _site.style.accent_font);
@@ -7629,7 +7633,7 @@ function gType() {
     </button>`).join("") || `<div class="ap-empty">Loading pairings…</div>`}</div>
   <button type="button" class="btn ghost sm" id="pairOwn" style="margin:12px 0 4px;">
     ${hand ? "Hide the individual faces" : "Choose each face myself"}</button>
-  <div id="typeManual" ${hand ? "" : "hidden"}>
+  <div id="typeManual"${hand ? "" : "hidden"}>
   <p class="muted tiny" style="margin:10px 0 12px;">Three roles. <b>Display</b> is every headline,
   <b>body</b> is the reading text, and <b>labels</b> is the small uppercase type on eyebrows,
   buttons and prices.</p>
@@ -7863,7 +7867,7 @@ function renderRepeaters() {
   if (ts) {
     ts.innerHTML = (_site.testimonials.length ? _site.testimonials.map((t, i) => `
       <div class="rep-row">
-        <select data-ts="${i}" data-k="rating" class="rep-ico">${[5, 4, 3, 2, 1].map((r) => `<option value="${r}" ${t.rating === r ? "selected" : ""}>${"★".repeat(r)}</option>`).join("")}</select>
+        <select data-ts="${i}" data-k="rating" class="rep-ico">${[5, 4, 3, 2, 1].map((r) => `<option value="${r}"${t.rating === r ? "selected" : ""}>${"★".repeat(r)}</option>`).join("")}</select>
         <input value="${esc(t.name)}" data-ts="${i}" data-k="name" placeholder="Customer name" />
         <input value="${esc(t.text)}" data-ts="${i}" data-k="text" placeholder="What they said" />
         <button class="btn ghost tiny danger" data-tsrm="${i}" title="Remove this review" aria-label="Remove this review">${sic("close")}<span class="btn-lbl">Remove</span></button>
@@ -8030,7 +8034,7 @@ async function renderGateway() {
       _gateway = await api("/api/site/gateway", { method: "POST",
         json: { key_id: $("gwId").value.trim(), key_secret: $("gwSecret").value.trim() } });
       renderGateway();
-      toast("Razorpay connected — turn on “Pay online” to show it at checkout.");
+      toast("Razorpay connected, turn on “Pay online” to show it at checkout.");
     } catch (err) { e2.textContent = err.message; e2.hidden = false; }
   };
 }
@@ -8238,7 +8242,7 @@ async function writeWholeSite() {
   const fb = await puterFallback(r);
   if (fb) { const j = _aiJson(fb.text); if (j && j.hero_heading) { copy = j; via = "Written by AI (Puter, your account)"; } }
   const rows = SITE_COPY_FIELDS.filter(([k]) => copy[k] && (!Array.isArray(copy[k]) || copy[k].length));
-  if (!rows.length) { toast("Nothing came back — try again in a moment."); return; }
+  if (!rows.length) { toast("Nothing came back, try again in a moment."); return; }
   const show = (v) => Array.isArray(v) ? v.map((h) => `<b>${esc(h.title || "")}</b> — ${esc(h.text || "")}`).join("<br>") : esc(v);
   openModal("Your website, written", `
     <p class="muted tiny" style="margin-top:0;">${esc(via)}. Untick anything you want to keep as it is,
@@ -8264,7 +8268,7 @@ async function writeWholeSite() {
     siteMark();
     try { await saveSite({ quiet: true }); } catch (e) { /* saveSite already said why */ }
     renderStep();
-    toast(`${n} part${n === 1 ? "" : "s"} of your site written — see them in the editor.`, 6000);
+    toast(`${n} part${n === 1 ? "" : "s"} of your site written, see them in the editor.`, 6000);
   };
 }
 
@@ -8369,15 +8373,15 @@ function renderOrders() {
     </div>`;
 
   const tabs = `<div class="site-tabs">
-      <button class="${_ordersTab === "orders" ? "on" : ""}" data-otab="orders">🧺 Orders</button>
-      <button class="${_ordersTab === "customers" ? "on" : ""}" data-otab="customers">👥 Customers</button>
+      <button class="${_ordersTab === "orders" ? "on" : ""}" data-otab="orders"> Orders</button>
+      <button class="${_ordersTab === "customers" ? "on" : ""}" data-otab="customers"> Customers</button>
     </div>`;
 
   let body;
   if (_ordersTab === "customers") {
     body = `<div id="custBody"><div class="ap-empty">Loading customers…</div></div>`;
   } else if (!d.orders.length) {
-    body = `<div class="ap-empty">No orders yet.${d.site.published ? "" : " Publish your website from the Website Builder to start taking them."}</div>`;
+    body = `<div class="ap-empty">No orders yet.${d.site.published ? "" : "Publish your website from the Website Builder to start taking them."}</div>`;
   } else {
     const chips = [["", "All", d.orders.length]].concat(d.statuses.map((s) =>
       [s.id, s.label, st.by_status[s.id] || 0])).map(([id, label, n]) =>
@@ -8444,6 +8448,33 @@ async function setOrderStatus(id, status, reason) {
 
 let _cancelReasons = null;
 
+/* "Was this clip made by AI?" — asked once, before a clip is attached.
+   We have to know, because since 20 February 2026 Indian law requires this
+   platform to label AI-made pictures and clips clearly, and it equally requires
+   us not to mislabel: stamping "AI generated" on footage a seller filmed on
+   their own phone would be a false claim about their own product. The reel flow
+   already knows the answer (it sent the seller to Google Flow two steps ago) and
+   passes it straight through; this dialog is for the post editor, where a clip
+   can be either. Resolves to true, false, or null if the seller backs out. */
+function askClipOrigin() {
+  return new Promise((resolve) => {
+    openModal("Where did this clip come from?", `
+      <p class="muted" style="margin-top:0;">One tap, and it only matters for one
+      reason: an AI-made clip has to carry an "AI generated" label, and a clip you
+      filmed must <b>not</b> carry one. We add the label for you either way you
+      answer, correctly.</p>
+      <div class="modal-actions" style="flex-direction:column;align-items:stretch;gap:8px;">
+        <button class="btn primary" id="coAi">An AI tool made it (Flow, Veo, Kling)</button>
+        <button class="btn" id="coReal">I filmed it myself</button>
+        <button class="btn ghost" id="coAbort">Not now</button>
+      </div>`);
+    const pick = (v) => { closeModal(); resolve(v); };
+    $("coAi").onclick = () => pick(true);
+    $("coReal").onclick = () => pick(false);
+    $("coAbort").onclick = () => pick(null);
+  });
+}
+
 async function askCancelReason(id, sel) {
   if (!_cancelReasons) {
     try { _cancelReasons = (await api("/api/cancellations")).reason_options || []; }
@@ -8478,7 +8509,7 @@ function orderCard(o) {
   const items = (o.items || []).map((i) =>
     `<div class="oi"><span>${esc(i.name)} <span class="muted tiny">× ${i.qty}</span></span><b>₹${fmt(i.line_total)}</b></div>`).join("");
   const opts = _ordersData.statuses.map((s) =>
-    `<option value="${s.id}" ${o.status === s.id ? "selected" : ""}>${esc(s.label)}</option>`).join("");
+    `<option value="${s.id}"${o.status === s.id ? "selected" : ""}>${esc(s.label)}</option>`).join("");
   return `
     <div class="ord-card ${esc(o.status)}">
       <div class="ord-card-h">
@@ -8595,7 +8626,7 @@ async function loadCustomers() {
       // Still signed in — let them in and say what happened, rather than
       // pretending their session expired.
       showShell();
-      toast("Could not reach the server just now. You are still signed in — "
+      toast("Could not reach the server just now. You are still signed in, "
             + "press Refresh on any page to try again.", 6000);
     }
   }
@@ -8988,7 +9019,7 @@ function igStrip(ig) {
 
 function autoplanStrip(ap) {
   if (!ap) return "";
-  const hr = (h) => { const n = Number(h) || 0; return `${((n + 11) % 12) + 1}${n < 12 ? " AM" : " PM"}`; };
+  const hr = (h) => { const n = Number(h) || 0; return `${((n + 11) % 12) + 1}${n < 12 ? "AM" : "PM"}`; };
   const last = ap.last || null;
   return `
     <div class="ap-strip ${ap.enabled ? "on" : "off"}">
@@ -8996,13 +9027,13 @@ function autoplanStrip(ap) {
         ${sic("clock")}
         <div>
           <b>${ap.enabled
-            ? `Plans next week by itself every ${esc(ap.day_name)} at ${esc(hr(ap.hour))}${ap.tz_label ? ` ${esc(ap.tz_label)}` : ""}`
+            ? `Plans next week by itself every ${esc(ap.day_name)} at ${esc(hr(ap.hour))}${ap.tz_label ? `${esc(ap.tz_label)}` : ""}`
             : "Automatic weekly planning is off"}</b>
           <span class="muted tiny">${ap.enabled
             ? (ap.pending_week ? `Next week is due now — it runs in the background as soon as it can.`
                : `Next run ${esc(ap.next_run_label || "")}. It checks festivals, what is already planned and how each product is selling, then puts the posts in your Approval panel.`)
             : "Turn it on in Setup and the week plans itself."}
-            ${last ? ` Last plan: ${esc(last.week_label || "")} — ${esc(last.note || "")}` : ""}</span>
+            ${last ? `Last plan: ${esc(last.week_label || "")} — ${esc(last.note || "")}` : ""}</span>
         </div>
       </div>
       <div class="ap-strip-a">
@@ -9122,7 +9153,7 @@ function openSocialEditor(post) {
           : ""}
         <input type="file" id="smVidFile" accept="video/mp4,video/webm,video/quicktime" hidden />
       </div>
-      <div id="smVidWm" class="muted tiny" style="margin:6px 0 0;">${post.video_url && post.video_watermark ? esc(clipNote({ watermark: post.video_watermark })) : ""}</div>
+      <div id="smVidWm" class="muted tiny" style="margin:6px 0 0;">${post.video_url ? esc(clipNote({ ai_label: post.video_ai_label, watermark: post.video_watermark })) : ""}</div>
       ${wmFixRow("smWmFix")}
       <div id="rpTools"></div>
     </div>`;
@@ -9228,7 +9259,7 @@ function openSocialEditor(post) {
       <button class="btn ghost" data-mclose2>Close</button>
       ${post.state === "draft" ? `<button class="btn reject" id="smSkip">Cancel post</button>` : ""}
       <!-- ORDER IS THE BUG HERE, AND IT COST REAL POSTS.
-           This used to ask "is it an approved reel?" BEFORE "is it ready?", so
+           This used to ask "is it an approved reel?"BEFORE "is it ready?", so
            an approved reel that already had its clip uploaded was still only
            offered "Open the video task" — never "Save & schedule". The seller
            uploaded the clip in this very editor, pressed Save, and the post
@@ -9249,7 +9280,7 @@ function openSocialEditor(post) {
     </div>
     <div id="smNowMsg"></div>`, { owner: post.id });
 
-  /* WHY "POST NOW" EXISTS: the only way to find out whether posting really
+  /* WHY "POST NOW"EXISTS: the only way to find out whether posting really
      works was to schedule something and then wait — for the time to arrive,
      and then for the fifteen-minute ticker after it. A forty-minute feedback
      loop on a thing that either works or does not is why "is it even posting?"
@@ -9356,7 +9387,7 @@ function openSocialEditor(post) {
       // Checked here as well as on the server so a seller on a slow connection
       // is told immediately, instead of after uploading 60MB.
       if (f.size > 48 * 1024 * 1024) {
-        return toast("That clip is over 48MB. Export it at 1080p — a reel rarely "
+        return toast("That clip is over 48MB. Export it at 1080p, a reel rarely "
                      + "needs more.", 7000);
       }
       /* The bar goes INSIDE the clip slot — the box the video is about to
@@ -9370,12 +9401,21 @@ function openSocialEditor(post) {
         const up = await apiUpload("/api/site/image", fd, (frac) => bar.set(frac));
         const u = up.url || up.image_url;
         if (!u) throw new Error("The upload did not come back with a file.");
-        /* Watermark removal happens after the bytes land and takes real
-           seconds. Saying so beats a bar sitting at 100%. */
-        bar.working("Checking the clip for watermarks…");
-        const att = await attachClip(post.id, u);
+        /* A clip in the post editor can be either: generated in Flow, or
+           filmed on a phone. The label is required for one and wrong for the
+           other, so this is the one place we ask. Backing out of the question
+           still attaches the clip unlabelled, and says so, rather than losing
+           an upload the seller already waited for. */
+        const aiMade = await askClipOrigin();
+        bar.working(aiMade ? "Adding the \u201cAI generated\u201d label\u2026"
+                           : "Saving the clip\u2026");
+        const att = await attachClip(post.id, u, aiMade === null ? false : aiMade);
+        if (aiMade === null) {
+          toast("Clip saved without a label. If an AI tool made it, add the AI "
+                + "label in Instagram before you post.", 9000);
+        }
         if (clipNote(att)) toast(clipNote(att), att.fallback ? 9000 : 4000);
-        const url = att.video_url || u;     // the cleaned copy when a mark was removed
+        const url = att.video_url || u;     // the labelled copy when a label went on
         bar.done("Clip attached");
         post.video_url = url;
         const slotEl = $("smVidSlot");
@@ -9392,7 +9432,7 @@ function openSocialEditor(post) {
            at their own clip playing above a button that still only offers to
            open a video task. */
         syncEditorActions();
-        toast("Clip attached — this post is ready to schedule.");
+        toast("Clip attached, this post is ready to schedule.");
       } catch (e) {
         bar.fail(e.message);
         toast(e.message, 7000);
@@ -9453,12 +9493,12 @@ function openSocialEditor(post) {
         syncEditorActions();
       }
       _socialData = await api("/api/social");
-      toast("Clip made and attached. Check it before you schedule — the product "
+      toast("Clip made and attached. Check it before you schedule, the product "
             + "holds for the first couple of seconds, then detail can drift.", 9000);
     } catch (e) { toast(e.message, 8000); }
   };
 
-  wireWmFix("smWmFix", post, $("smVidSlot"), $("smVidWm"));
+  wireWmFix("smWmFix", post);
   const vidClear = $("smVidClear");
   if (vidClear) vidClear.onclick = async () => {
     try {
@@ -9497,8 +9537,12 @@ function openSocialEditor(post) {
       const mine = document.querySelector(`.modal[data-post="${post.id}"]`);
       const shotEl = mine && mine.querySelector("#smEdShot");
       if (shotEl) { shotEl.innerHTML = `<img src="${esc(img.url)}" alt="" /><span class="sm-gen">AI</span>`; offerSchedule(); }
-      else toast("Your picture is ready — reopen the post to see it.", 6000);
-      if (img.watermark && img.watermark.removed) toast("Picture made — a watermark was found and removed.");
+      else toast("Your picture is ready, reopen the post to see it.", 6000);
+      if (img.ai_label && img.ai_label.labelled) {
+        toast("Picture made, and labelled \u201cAI generated\u201d in the corner. "
+              + "Indian law has required that on AI pictures since February 2026, "
+              + "so it goes on every one of them.", 7000);
+      }
       if (useRef && !img.had_reference) {
         toast("No photo on this product, so it was invented rather than re-shot. " +
               "Add a photo in Product Studio for a picture of the real item.", 7000);
@@ -9508,8 +9552,9 @@ function openSocialEditor(post) {
     btns.forEach((x) => x.disabled = false);
   };
   // The seller's own photograph, straight onto the post — the answer when no
-  // image AI is connected, and often the better picture anyway. Not run
-  // through the watermark remover: it is their photo, not a generated one.
+  // image AI is connected, and often the better picture anyway. Deliberately NOT
+  // labelled: it is a real photograph of a real product, and stamping "AI
+  // generated" on it would be a false claim about their own goods.
   if ($("smUpImg")) $("smUpImg").onclick = () => pickImage(async (url) => {
     try {
       await api("/api/social/attach-image", { method: "POST", json: { post_id: post.id, url } });
@@ -9613,11 +9658,11 @@ function openSocialEditor(post) {
   if ($("smSkip")) $("smSkip").onclick = async () => {
     await decidePost(post.id, "cancelled");
     closeModal();
-    toast("Cancelled — it will not go out.");
+    toast("Cancelled, it will not go out.");
   };
   $("smSave").onclick = () => saveEditor({ schedule: "if-ready" });
 
-  /* WHY PLAIN "SAVE" ALSO SCHEDULES.
+  /* WHY PLAIN "SAVE"ALSO SCHEDULES.
      A seller approves a reel, comes here, uploads the clip, fixes the caption
      and presses Save — and reasonably believes the post is now going out. It
      was not: Save only patched the fields, the post stayed `approved`, and the
@@ -9820,7 +9865,7 @@ async function openSocialSetup() {
     <p class="sm-hint" id="soCadWhy">${esc(((d.cadence || {})[s.cadence] || {}).why || "")}</p>
 
     <div class="ap-setup">
-      <label class="ap-toggle"><input type="checkbox" id="apOn" ${s.auto_plan !== false ? "checked" : ""} />
+      <label class="ap-toggle"><input type="checkbox" id="apOn"${s.auto_plan !== false ? "checked" : ""} />
         <b>Plan next week automatically</b></label>
       <div class="ap-setup-row">
         <label class="fld"><span>Every</span>
@@ -10168,12 +10213,12 @@ function poItemOptions(selectedId, supplierName) {
   const mine = supplierName
     ? inv.filter((x) => _norm(x.supplier_name) === _norm(supplierName)) : [];
   const rest = inv.filter((x) => !mine.includes(x));
-  const opt = (x) => `<option value="${esc(x.id)}" ${x.id === selectedId ? "selected" : ""}>`
+  const opt = (x) => `<option value="${esc(x.id)}"${x.id === selectedId ? "selected" : ""}>`
     + `${esc(x.name)}${x.unit_label ? ` (${esc(x.unit_label)})` : ""}</option>`;
   return `<option value="">— pick an item —</option>`
     + (mine.length ? `<optgroup label="From this supplier">${mine.map(opt).join("")}</optgroup>` : "")
     + (rest.length ? `<optgroup label="${mine.length ? "Everything else" : "Your inventory"}">${rest.map(opt).join("")}</optgroup>` : "")
-    + `<option value="__other" ${selectedId === "__other" ? "selected" : ""}>Something not in my inventory…</option>`;
+    + `<option value="__other"${selectedId === "__other" ? "selected" : ""}>Something not in my inventory…</option>`;
 }
 
 function _norm(x) { return String(x || "").trim().toLowerCase(); }
@@ -10305,7 +10350,7 @@ function openManualPo(suppliers) {
     if (!lines.length) return toast("Pick an item and a quantity.");
     if (!sup.value.trim()) return toast("Who are you ordering from?");
     if (send && !$("poSupEmail").value.trim())
-      return toast("Add the supplier's email to send it — or save it as a draft.", 6000);
+      return toast("Add the supplier's email to send it, or save it as a draft.", 6000);
     try {
       const r = await withBusy(send ? "Sending the purchase order…" : "Saving the purchase order…",
         send ? "The PO goes to the supplier as a PDF attachment." : "It will wait in your Approval panel.",
@@ -10317,7 +10362,7 @@ function openManualPo(suppliers) {
       closeModal();
       if (r.supply) _supAfter(r.supply);
       const s = r.send || {};
-      if (!send) toast(`${r.po_number} saved as a draft — approve it when you are ready.`, 6000);
+      if (!send) toast(`${r.po_number} saved as a draft, approve it when you are ready.`, 6000);
       else if (s.sent) toast(`${r.po_number} emailed to ${s.to}, PDF attached.`, 7000);
       else { toast(`${r.po_number} created, but not emailed: ${s.reason || "email is not set up."}`, 9000); openPoActions(r); }
     } catch (e) { toast(e.message, 7000); }
@@ -10365,7 +10410,7 @@ function openPoActions(po) {
       closeModal();
       const wa = (r.links || {}).shopper_wa;
       if (wa) window.open(wa, "_blank", "noopener");
-      toast("Nothing is cancelled yet — talk to them, then approve it in Orders.");
+      toast("Nothing is cancelled yet, talk to them, then approve it in Orders.");
     } catch (e) { toast(e.message); }
   };
 }

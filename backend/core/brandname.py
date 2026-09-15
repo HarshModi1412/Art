@@ -96,7 +96,7 @@ def require(email: str) -> str:
     r = resolve(email)
     if not r["ready"]:
         raise ValueError(
-            "Add your shop name before sending anything to customers — "
+            "Add your shop name before sending anything to customers, "
             "otherwise the message goes out unsigned. You can set it in "
             "Product Studio (Brand) or in Site Management, and it takes a moment.")
     return r["name"]

@@ -28,37 +28,37 @@ OPENERS_W = [
     "{name}, we've been keeping a seat warm for you these past {days} days.",
     "Miss us, {name}? Because it's officially been {days} days.",
     "{name}, the {item} machine keeps asking where you went.",
-    "It's been {days} days, {name} — long enough that we genuinely noticed.",
+    "It's been {days} days, {name}, long enough that we genuinely noticed.",
 ]
 BODIES_W = [
     "Your usual {item} is still our best-seller, and honestly, it's been waiting for you.",
-    "We remember you're a {item} person through and through — that title hasn't expired.",
+    "We remember you're a {item} person through and through, that title hasn't expired.",
     "Nobody's touched your spot at the {item} counter. We checked. Twice.",
-    "Bring back the {item} energy, {name} — the crew's been asking about you.",
+    "Bring back the {item} energy, {name}, the crew's been asking about you.",
     "One {item}, coming right up, the moment you decide to walk back in.",
 ]
 CTAS_W = [
-    "Use code {coupon} for {discount}% off your next visit — no strings attached.",
+    "Use code {coupon} for {discount}% off your next visit, no strings attached.",
     "Show this message for {discount}% off with code {coupon}. See you soon!",
 ]
 WINBACK_TEMPLATES = [f"{o} {b} {c}" for o, b, c in itertools.product(OPENERS_W, BODIES_W, CTAS_W)]
 
 OPENERS_F = [
     "Hey {name}, it's been a while!",
-    "{name}, we haven't seen you in some time — hope all's well!",
+    "{name}, we haven't seen you in some time, hope all's well!",
     "Long time no see, {name}!",
     "{name}, we've genuinely missed having you around.",
     "It's a little quieter around here without you, {name}.",
 ]
 BODIES_F = [
     "We've refreshed a few things since your last visit, and we think you'd like where we've taken it.",
-    "No pressure, no pitch — just an open invitation to come see what's new.",
-    "Sometimes the best reason to come back is simply that you were missed — consider this that reason.",
+    "No pressure, no pitch, just an open invitation to come see what's new.",
+    "Sometimes the best reason to come back is simply that you were missed, consider this that reason.",
     "We can't promise it'll be exactly like you remember, but we can promise it'll be worth the visit.",
-    "A little birdie told us you deserve a treat this week — we happen to agree.",
+    "A little birdie told us you deserve a treat this week, we happen to agree.",
 ]
 CTAS_F = [
-    "Use code {coupon} for {discount}% off — just because.",
+    "Use code {coupon} for {discount}% off, just because.",
     "Here's {discount}% off with code {coupon}, whenever you're ready to swing by.",
 ]
 FALLBACK_TEMPLATES = [f"{o} {b} {c}" for o, b, c in itertools.product(OPENERS_F, BODIES_F, CTAS_F)]
@@ -67,9 +67,9 @@ assert len(WINBACK_TEMPLATES) == 50
 assert len(FALLBACK_TEMPLATES) == 50
 
 _CROSS_SELL_HINTS = [
-    "Psst — {cross_sell} pairs perfectly with it, if you're feeling adventurous.",
+    "Psst, {cross_sell} pairs perfectly with it, if you're feeling adventurous.",
     "Bonus tip: a lot of people order {cross_sell} right alongside it these days.",
-    "While you're at it, {cross_sell} has been a surprise favorite lately — might be worth a try.",
+    "While you're at it, {cross_sell} has been a surprise favorite lately, might be worth a try.",
 ]
 
 _DISCOUNT_BY_TIER = {"premium": 20, "mid-range": 15, "value": 10}
@@ -101,7 +101,7 @@ def pick_winback_message(profile: dict) -> str:
     days = profile.get("recency_days", 0)
     coupon, discount = generate_coupon(profile.get("customer_id", ""), profile.get("price_tier"))
 
-    has_strong_signal = profile.get("signal_strength") == "strong" and profile.get("favorite_item") not in (None, "—")
+    has_strong_signal = profile.get("signal_strength") == "strong" and profile.get("favorite_item") not in (None, "-")
 
     if has_strong_signal:
         template = random.choice(WINBACK_TEMPLATES)

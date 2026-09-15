@@ -59,11 +59,29 @@ check("a fresh hash needs no rehash", not auth.needs_rehash(h))
 check("salted: same password hashes differently",
       auth.hash_password("abc") != auth.hash_password("abc"))
 
-# The cost really is what the string claims.
+# The cost really is what the string claims, and is not just a number written
+# into the prefix.
+#
+# WHY THIS IS NOT A WALL-CLOCK THRESHOLD ANY MORE: it used to assert that a
+# verify took more than 120ms, which is true on an idle machine and false on a
+# busy one. It failed once in a full-suite run and passed eleven times alone,
+# which is the worst kind of test: it teaches you to re-run rather than to look.
+#
+# The cost is now measured RELATIVELY, against a hash of a tenth the iterations
+# computed on the same machine at the same moment. That ratio does not care how
+# fast or how loaded the machine is.
+import hashlib as _hashlib                                          # noqa: E402
+
+_salt = b"x" * 16
+t0 = time.perf_counter()
+_hashlib.pbkdf2_hmac("sha256", b"pw", _salt, 60_000)
+cheap = time.perf_counter() - t0
 t0 = time.perf_counter()
 auth.verify_password("correct horse battery staple", h)
 dt = time.perf_counter() - t0
-check("600k iterations actually run (>=120ms here)", dt > 0.12, f"{dt*1000:.0f}ms")
+check(f"600k iterations really run, not just claimed "
+      f"({dt * 1000:.0f}ms vs {cheap * 1000:.0f}ms for 60k)",
+      dt > cheap * 4, f"ratio {dt / max(cheap, 1e-9):.1f}x, expected about 10x")
 
 section("Old password rows still work")
 

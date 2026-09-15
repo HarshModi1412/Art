@@ -516,7 +516,7 @@ Write in {lang}.
 Structure, in this exact order:
 1. A hook line of at most 125 characters. Instagram truncates there, so this line
    must carry the product and a reason to care. No greeting, no throat-clearing.
-2. Two or three lines of SPECIFIC, factual detail — fabric, weight, karat, notes,
+2. Two or three lines of SPECIFIC, factual detail: fabric, weight, karat, notes,
    sizing, care, how many pieces exist. Concrete beats evocative.
 3. One question that invites a COMMENT, not a like.
 4. One line telling them how to order.
@@ -527,6 +527,9 @@ Hard rules:
 - Include the product category as plain words in the hook, because Instagram now
   ranks on caption keywords rather than hashtags.
 - No emoji spam. At most two, and only if they aid scanning.
+- Never use an em dash or an en dash. A comma, a colon or a full stop instead.
+  An em dash in a caption is the clearest single tell that a machine wrote it,
+  and the seller posts this under their own name.
 - Never invent a discount, a price, a delivery time or a material that you were
   not given.
 
@@ -1488,23 +1491,6 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
     # every post still lands inside the week being planned.
     best_weekdays = [2, 3, 0, 4, 1, 5]
     best_hours = [18, 12, 19, 9, 20, 18]
-    window_end = start + timedelta(days=6)
-
-    if replace:
-        keep = []
-        for p in rows:
-            if p.get("state") not in ("draft", "ready"):
-                keep.append(p)                       # published, scheduled, skipped
-                continue
-            when = (p.get("scheduled_at") or "")[:10]
-            try:
-                on = date.fromisoformat(when) if when else None
-            except ValueError:
-                on = None
-            if on and start <= on <= window_end:
-                continue                             # superseded by this replan
-            keep.append(p)
-        rows = keep
 
     # The week runs on ONE theme, not N unrelated posts. The theme is the
     # product the arc is about, and every beat refers back to it -- that single
@@ -1535,11 +1521,6 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
     # because that is the one people are shopping for.
     hero = _pick_product(pool, week_no, lead_occasion, len(shape))
     theme = week_theme(hero, lead_occasion)
-    # Worked out for the whole week up front, because balancing the product mix
-    # and the format mix needs to see every slot at once — decided slot by slot
-    # it degenerates into one product taking all the carousels.
-    slot_products = assign_products(shape, pool, hero, lead_occasion, already=rows)
-
     # The slate is an ARC, so it has to run in calendar order: the tease must
     # go out before the reveal, and the reveal before the proof. The weekday
     # table is ranked by REACH, not by date — slot 0 wants Wednesday and slot 2
@@ -1565,6 +1546,45 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
             when += timedelta(days=1)
         times.append(when)
     times.sort()
+
+    # ---- replace the week, using the days the week ACTUALLY occupies --------
+    #
+    # THE BUG THIS FIXES. The old code cleared `start` to `start + 6 days` and
+    # was written before the "born overdue" nudge above existed. The nudge can
+    # push a slot to `start + 7` — which is outside that window, so the old post
+    # survived the replan, the new plan created another at the same hour, and the
+    # seller was looking at two different posts scheduled for the same minute of
+    # the same day. Exactly the duplicate-slot bug this module already fixed once.
+    #
+    # The window is now DERIVED from `times` rather than assumed, so the two can
+    # never drift apart again: whatever the placement rules do, the clear covers
+    # it. Only untouched drafts go — anything published, scheduled by hand or
+    # deliberately skipped is the seller's decision and is left alone.
+    if replace:
+        planned_days = {t.date() for t in times}
+        low, high = min(planned_days), max(planned_days)
+        keep = []
+        for p in rows:
+            if p.get("state") not in ("draft", "ready"):
+                keep.append(p)                       # published, scheduled, skipped
+                continue
+            when_day = (p.get("scheduled_at") or "")[:10]
+            try:
+                on = date.fromisoformat(when_day) if when_day else None
+            except ValueError:
+                on = None
+            if on and low <= on <= high:
+                continue                             # superseded by this replan
+            keep.append(p)
+        rows = keep
+
+    # Worked out for the whole week up front, because balancing the product mix
+    # and the format mix needs to see every slot at once — decided slot by slot
+    # it degenerates into one product taking all the carousels.
+    #
+    # Deliberately AFTER the replace above: it must reason about the posts that
+    # are staying, not the ones this replan is about to drop.
+    slot_products = assign_products(shape, pool, hero, lead_occasion, already=rows)
 
     made = []
     prev = None                      # the beat before this one, for the callback
@@ -2000,7 +2020,7 @@ def attach_image(email: str, post_id: str, url: str, generated: bool = False,
 
 
 def attach_video(email: str, post_id: str, url: str, original_url: str | None = None,
-                 watermark: dict | None = None) -> dict:
+                 watermark: dict | None = None, ai_label: dict | None = None) -> dict:
     """Put the finished clip on a planned post.
 
     WHY THIS EXISTS: a reel slot could be planned, scripted and given a
@@ -2027,6 +2047,7 @@ def attach_video(email: str, post_id: str, url: str, original_url: str | None = 
             if not url:
                 p.pop("video_original_url", None)
                 p.pop("video_watermark", None)
+                p.pop("video_ai_label", None)
             else:
                 if original_url is not None:
                     p["video_original_url"] = str(original_url or "")
@@ -2034,6 +2055,16 @@ def attach_video(email: str, post_id: str, url: str, original_url: str | None = 
                     p["video_watermark"] = {k: watermark.get(k) for k in
                                             ("checked", "removed", "reason", "regions", "corner")
                                             if k in watermark}
+                # Whether the "AI generated" label went on, and its reference id.
+                # Kept on the post rather than only in the response so the editor
+                # can still say so when it is reopened a week later, and so a
+                # dispute about a particular picture can be traced to the
+                # generation that made it, which is what the rule's "unique
+                # identifier" is for.
+                if ai_label is not None:
+                    p["video_ai_label"] = {k: ai_label.get(k) for k in
+                                           ("labelled", "gen_id", "reason", "text")
+                                           if k in ai_label}
             _save_posts(email, rows)
             return p
     return {"error": "not found"}

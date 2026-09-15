@@ -156,7 +156,7 @@ def register(email: str, password: str, plan: str = "free") -> None:
 
     if db.SUPABASE_ENABLED:
         if db.fetch_one("users", {"email": email_clean}):
-            raise ValueError("An account with this email already exists — just log in from the app")
+            raise ValueError("An account with this email already exists. Just log in from the app.")
         db.insert("users", {
             "email": email_clean,
             "password_hash": hash_password(password_clean),
@@ -166,7 +166,7 @@ def register(email: str, password: str, plan: str = "free") -> None:
 
     df, users_file = _read_users_df()
     if email_clean in df["email"].astype(str).str.strip().str.lower().values:
-        raise ValueError("An account with this email already exists — just log in from the app")
+        raise ValueError("An account with this email already exists. Just log in from the app.")
     df = pd.concat([df, pd.DataFrame([{
         "email": email_clean, "password": hash_password(password_clean), "plan": plan
     }])], ignore_index=True)

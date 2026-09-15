@@ -11,6 +11,7 @@ What replaced what:
   st.secrets["OPENAI_..."]   -> OPENAI_API_KEY environment variable
   st.plotly_chart            -> JSON chart data rendered with Plotly.js
 """
+import datetime as _dt
 import hashlib
 import io
 import json
@@ -23,7 +24,7 @@ import pandas as pd
 import logging
 
 from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
-from fastapi.responses import Response, FileResponse, JSONResponse
+from fastapi.responses import Response, FileResponse, JSONResponse, RedirectResponse
 from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.gzip import GZipMiddleware
@@ -49,6 +50,8 @@ from backend.core import videotools
 from backend.core import errors
 from backend.core import health
 from backend.core import aicaps
+from backend.core import legal
+from backend.core import legal_html
 from backend.core import studio
 from backend.core import aiprovider
 from backend.core import gst, invoices, invoice_pdf
@@ -59,6 +62,8 @@ from backend.core import personas
 from backend.core import playbook
 from backend.core import autoplan
 from backend.core import watermark
+from backend.core import publicurl
+from backend.core import ailabel as ailabel_mod
 from backend.core import localtime
 from backend.core import seller_mail
 from backend.core import replenish
@@ -347,6 +352,16 @@ class RegisterBody(BaseModel):
     email: str
     password: str
     plan: str = "free"
+    # What the signup form says the person ticked, and when. Article 7(1) of the
+    # GDPR and the DPDP Act both come down to being able to DEMONSTRATE consent
+    # rather than assert it, and "they must have clicked something" is not a
+    # record. Stored as given, so what was agreed to and when is answerable
+    # later. Marketing is a separate field on purpose: bundling it into the same
+    # tick would make the consent to the terms worthless, which is exactly the
+    # pattern Rule 4(9) of the E-commerce Rules and the 2023 Dark Patterns
+    # Guidelines are about.
+    consent: dict | None = None
+    marketing_opt_in: bool = False
 
 class ForgotBody(BaseModel):
     email: str
@@ -529,9 +544,17 @@ class StudioImageOnlyBody(BaseModel):
 class SocialAttachBody(BaseModel):
     post_id: str
     url: str
-    # False attaches the clip exactly as uploaded — the app's fallback when
-    # the watermark pass could not run, so a clip is never lost to it.
+    # Kept for older clients. It used to mean "run the watermark remover", which
+    # is now switched off by law (see backend/core/ailabel.py), so it no longer
+    # changes a pixel and the report says why.
     clean: bool = True
+    # The seller's own declaration: was this clip made by an AI tool? True for
+    # anything that came out of Google Flow, Kling or Veo, which is most reels,
+    # because that is where our own shot-list sends them. False for a clip filmed
+    # on a phone. It decides whether we stamp the AI label on it, and both
+    # answers matter: labelling real footage as AI is as much a lie as leaving
+    # generated footage unlabelled, so we ask rather than guess.
+    ai_generated: bool | None = None
 
 
 class MappingBody(BaseModel):
@@ -572,14 +595,30 @@ def login(body: LoginBody, request: Request):
 
 @app.post("/api/register")
 def register(body: RegisterBody):
-    """Signup from the landing page — free trial, no card. Writes to user.csv with plan column."""
+    """Signup from the landing page. Free during launch, no card.
+
+    The consent the form collected is written to its own append-only record
+    BEFORE the account is reported back, so there is never an account whose
+    agreement to the terms cannot be evidenced. See legal.record_consent for why
+    a text file rather than a column: a regulator's question should be answerable
+    without this application running.
+    """
     try:
         auth.register(body.email, body.password, body.plan)
     except ValueError as e:
         raise HTTPException(400, str(e))
     token = auth.login(body.email, body.password)
     email = body.email.strip().lower()
-    return {"token": token, "email": email, "usage": _usage(email), "plan": billing.get_plan(email)}
+    consent = body.consent or {}
+    consent_rec = legal.record_consent(
+        email,
+        terms=bool(consent.get("terms", True)),
+        privacy=bool(consent.get("privacy", True)),
+        marketing=bool(body.marketing_opt_in),
+        source="signup")
+    return {"token": token, "email": email, "usage": _usage(email),
+            "plan": billing.get_plan(email),
+            "consent_recorded": bool(consent_rec.get("stored"))}
 
 
 class GoogleBody(BaseModel):
@@ -1016,7 +1055,7 @@ def download_report(lang: str = "en", x_session_id: str | None = Header(default=
     try:
         pdf_bytes = report_pdf.build_sales_report(data, rendered)
     except ImportError:
-        raise HTTPException(503, "PDF engine not installed on the server — run: pip install reportlab matplotlib")
+        raise HTTPException(503, "PDF engine not installed on the server, run: pip install reportlab matplotlib")
     return Response(content=pdf_bytes, media_type="application/pdf",
                     headers={"Content-Disposition": 'attachment; filename="cafex_sales_report.pdf"'})
 
@@ -1039,7 +1078,7 @@ async def complaints_pdf(product_type: str | None = None,
     except ValueError as e:
         raise HTTPException(400, str(e))
     except ImportError:
-        raise HTTPException(503, "PDF engine not installed — run: pip install reportlab matplotlib")
+        raise HTTPException(503, "PDF engine not installed, run: pip install reportlab matplotlib")
     return Response(content=pdf_bytes, media_type="application/pdf",
                     headers={"Content-Disposition": 'attachment; filename="cafex_complaint_report.pdf"'})
 
@@ -1064,7 +1103,7 @@ async def positioning_pdf(lang: str = "en", product_type: str | None = None,
     except ValueError as e:
         raise HTTPException(400, str(e))
     except ImportError:
-        raise HTTPException(503, "PDF engine not installed — run: pip install reportlab matplotlib")
+        raise HTTPException(503, "PDF engine not installed, run: pip install reportlab matplotlib")
     return Response(content=pdf_bytes, media_type="application/pdf",
                     headers={"Content-Disposition": 'attachment; filename="cafex_positioning_report.pdf"'})
 
@@ -1088,7 +1127,7 @@ async def analyze_complaints_endpoint(product_type: str | None = None,
     try:
         parsed = _read_any_table(f.filename or "reviews", content)
         if not parsed:
-            raise ValueError("Could not read the file — use CSV, Excel, TSV or JSON.")
+            raise ValueError("Could not read the file, use CSV, Excel, TSV or JSON.")
         _, df = parsed[0]
         # SHARED DATA: save reviews to the account so Smart mode sees them too.
         email = optional_user(authorization)
@@ -1154,7 +1193,7 @@ def instagram_oauth_start(request: Request,
     reply with the Facebook login URL to redirect the popup to."""
     email = require_user(authorization)
     if not instagram.oauth_configured():
-        raise HTTPException(400, "OAuth isn't configured on this server yet — the admin needs to set META_APP_ID and META_APP_SECRET.")
+        raise HTTPException(400, "OAuth isn't configured on this server yet, the admin needs to set META_APP_ID and META_APP_SECRET.")
     state = secrets.token_urlsafe(16)
     _ig_oauth_state[state] = {"email": email,
                               "created_at": pd.Timestamp.now().isoformat()}
@@ -1569,7 +1608,13 @@ class IGPostBody(BaseModel):
 
 
 def _public_base_url(request: Request) -> str:
-    return f"{request.url.scheme}://{request.url.netloc}"
+    """This app's real public address. See backend/core/publicurl.py.
+
+    It used to be the request's own scheme and host, which behind Render's TLS
+    terminator is always http, so every canonical tag, every og:url and every
+    media URL handed to Meta was on the wrong scheme.
+    """
+    return publicurl.from_request(request)
 
 
 @app.post("/api/instagram/post")
@@ -1613,7 +1658,7 @@ def content_suggestion_generate(insight_id: str,
     email = require_user(authorization)
     full = smart.get_or_generate_content(email, insight_id, force=False)
     if not full:
-        raise HTTPException(404, "That suggestion is no longer active — refresh the panel.")
+        raise HTTPException(404, "That suggestion is no longer active, refresh the panel.")
     return {"suggestion": full, "openai": content_gen.is_openai_available()}
 
 
@@ -1632,7 +1677,7 @@ def content_suggestion_edit(insight_id: str, body: ContentEditBody,
     email = require_user(authorization)
     updated = smart.save_content_suggestion(email, insight_id, body.dict(exclude_none=True))
     if not updated:
-        raise HTTPException(404, "That suggestion is no longer active — refresh the panel.")
+        raise HTTPException(404, "That suggestion is no longer active, refresh the panel.")
     return {"ok": True, "suggestion": updated}
 
 
@@ -1652,7 +1697,7 @@ async def content_upload_image(insight_id: str = "",
         raise HTTPException(400, "Use a PNG, JPG or WEBP image.")
     content = await f.read()
     if len(content) > 8 * 1024 * 1024:
-        raise HTTPException(400, "Image is over 8MB — please compress or use a smaller one.")
+        raise HTTPException(400, "Image is over 8MB, please compress or use a smaller one.")
     import uuid as _uuid
     saved = media.save(f"{_uuid.uuid4().hex}{ext}", content, email)
     public_url = saved["url"]
@@ -2042,7 +2087,7 @@ def confirm_mapping(body: MappingBody, x_session_id: str | None = Header(default
                     authorization: str | None = Header(default=None)):
     sess = bind_session(get_session(x_session_id), optional_user(authorization))
     if body.file_id not in sess.raw_dfs:
-        raise HTTPException(404, "File not found — upload it first")
+        raise HTTPException(404, "File not found, upload it first")
     try:
         sess.txns_df, diagnostics = mapper.build_transactions(sess.raw_dfs[body.file_id], body.mapping)
         sess.mapped_file_id = body.file_id
@@ -2097,7 +2142,7 @@ def _require_txns(sess: SessionData, authorization: str | None = None) -> pd.Dat
                 sess.txns_df = saved
                 sess.mapped_file_id = "shared_account_sales"
     if sess.txns_df is None:
-        raise HTTPException(400, "No sales data yet — upload a sales file and confirm the mapping first (in Classic or Smart — it's shared).")
+        raise HTTPException(400, "No sales data yet, upload a sales file and confirm the mapping first (in Classic or Smart, it's shared).")
     return sess.txns_df
 
 
@@ -2439,7 +2484,7 @@ def export_winback_edited(body: WinbackExportBody,
     rows, and manually added rows all come through here."""
     require_user(authorization)
     if not body.rows:
-        raise HTTPException(400, "Nothing to export — the list is empty.")
+        raise HTTPException(400, "Nothing to export, the list is empty.")
     df = _spreadsheet_safe_frame(pd.DataFrame(body.rows))
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
@@ -2558,7 +2603,7 @@ def verify_payment(body: VerifyBody, authorization: str | None = Header(default=
     granted = billing.verify_payment(email, body.razorpay_order_id, body.razorpay_payment_id,
                                      body.razorpay_signature, body.product)
     if not granted:
-        raise HTTPException(400, "Payment signature verification failed — contact support if an amount was deducted.")
+        raise HTTPException(400, "Payment signature verification failed, contact support if an amount was deducted.")
     return {"ok": True, "product": granted, "usage": _usage(email)}
 
 
@@ -2636,7 +2681,7 @@ async def ps_detect(lang: str = "en", files: list[UploadFile] = File(...),
     quadrant = (data.get("perceptual_map", {}).get("you", {}) or {}).get("quadrant")
     current_id = position_strategy.QUADRANT_TO_ID.get(quadrant)
     if not current_id:
-        raise HTTPException(400, "Couldn't map your reviews to a position — try a file with more reviews.")
+        raise HTTPException(400, "Couldn't map your reviews to a position, try a file with more reviews.")
 
     st = user_store.get_key(email, "position_strategy", {}) or {}
     # a fresh detection that lands in a different position invalidates an old
@@ -2928,7 +2973,7 @@ def smart_map(body: SmartMapBody, x_session_id: str | None = Header(default=None
         except ValueError as e:
             raise HTTPException(400, str(e))
         if diag["rows_after"] == 0:
-            raise HTTPException(400, "None of the rows had a readable date and amount — check your mapping.")
+            raise HTTPException(400, "None of the rows had a readable date and amount, check your mapping.")
         if is_supply:
             smart.save_supply_sales(email, txns,
                                     {"files": sess.file_names.get(pending_key, "Supply sales upload")},
@@ -3069,7 +3114,7 @@ def smart_schema(kind: str, authorization: str | None = Header(default=None)):
         raise HTTPException(400, "kind must be 'sales' or 'review'")
     df = smart.load_sales(email) if kind == "sales" else smart.load_review(email)
     if df is None or getattr(df, "empty", True):
-        raise HTTPException(400, "No saved data yet — upload a file first.")
+        raise HTTPException(400, "No saved data yet, upload a file first.")
     required = ["date", "amount"] if kind == "sales" else ["Review"]
     return {"kind": kind, "columns": _smart_columns(df),
             "required": [r for r in required if r in df.columns]}
@@ -3090,7 +3135,7 @@ def smart_records_add(body: SmartRecordsBody,
         raise HTTPException(400, "kind must be 'sales' or 'review'")
     saved = smart.load_sales(email) if body.kind == "sales" else smart.load_review(email)
     if saved is None or getattr(saved, "empty", True):
-        raise HTTPException(400, "No saved data yet — upload a file first.")
+        raise HTTPException(400, "No saved data yet, upload a file first.")
 
     cols = list(saved.columns)
     clean = []
@@ -3228,7 +3273,7 @@ def content_asset(insight_id: str, kind: str = "image", request: Request = None,
     email = require_user(authorization)
     sug = smart.get_or_generate_content(email, insight_id, force=False)
     if not sug:
-        raise HTTPException(404, "That suggestion is no longer active — refresh the panel.")
+        raise HTTPException(404, "That suggestion is no longer active, refresh the panel.")
     topic = (sug.get("topic") or "post").strip().replace(" ", "_")[:40] or "post"
     if kind == "text":
         tags = " ".join("#" + str(t).strip().lstrip("#") for t in (sug.get("hashtags") or []) if str(t).strip())
@@ -3242,7 +3287,7 @@ def content_asset(insight_id: str, kind: str = "image", request: Request = None,
     # image
     url = sug.get("image_url") or ""
     if not url:
-        raise HTTPException(400, "This post has no image yet — open the editor to generate or upload one.")
+        raise HTTPException(400, "This post has no image yet, open the editor to generate or upload one.")
     data = None
     ctype = "image/png"
     ext = "png"
@@ -3478,7 +3523,7 @@ def smart_insight_download(insight_id: str, authorization: str | None = Header(d
     email = require_user(authorization)
     result = smart.insight_excel(email, insight_id)
     if not result:
-        raise HTTPException(400, "Nothing to export for this insight — the data may have changed.")
+        raise HTTPException(400, "Nothing to export for this insight, the data may have changed.")
     filename, buf = result
     from fastapi.responses import StreamingResponse
     return StreamingResponse(
@@ -3758,7 +3803,7 @@ def supply_po_move(body: PoMoveBody, authorization: str | None = Header(default=
     allowed = supply.PO_NEXT.get(supply.po_status(po), [])
     if body.status not in allowed:
         raise HTTPException(400, f"A {supply.PO_STATUS_LABELS.get(supply.po_status(po), 'that')} "
-                                 f"order can only go to: {', '.join(allowed) or 'nowhere — it is finished'}.")
+                                 f"order can only go to: {', '.join(allowed) or 'nowhere, it is finished'}.")
     try:
         supply.set_po_status(email, body.po_number, body.status, body.note or "")
     except ValueError as e:
@@ -4331,17 +4376,32 @@ async def site_image(files: list[UploadFile] = File(...),
             break
         size += len(chunk)
         if size > cap:
-            raise HTTPException(400, f"That file is over {cap // (1024 * 1024)}MB — "
+            raise HTTPException(400, f"That file is over {cap // (1024 * 1024)}MB, "
                                      f"{'compress the clip (1080p, ~8 seconds is plenty)' if is_video else 'please compress it first'}.")
         parts.append(chunk)
     content = b"".join(parts)
     parts = []
     import uuid as _uuid
+
+    # A photo off a phone is about 4000px and several megabytes, and it used to
+    # be stored and served exactly as it arrived, to every shopper, on a mobile
+    # connection, for a card shown 400px wide. That is the largest single thing
+    # on a storefront's loading time. It is resized once here, on the way in.
+    # See media.compress_upload for the rules and for everything it refuses to
+    # touch (video, GIF, SVG, anything already small).
+    shrink = {}
+    if not is_video:
+        content, shrunk_name, shrink = media.compress_upload(content, f.filename or "")
+        ext = os.path.splitext(shrunk_name)[1].lower() or ext
+
     saved = media.save(f"{_uuid.uuid4().hex}{ext}", content, email)
     url = saved["url"]
     return {"ok": True, "image_url": url, "url": url,
             "kind": "video" if is_video else "image", "filename": f.filename,
-            "durable": saved["durable"], "warning": saved["warning"]}
+            "durable": saved["durable"], "warning": saved["warning"],
+            # Reported so the UI can say "13MB photo saved as 670KB" rather than
+            # leaving a seller wondering why their upload looks different.
+            "compression": shrink}
 
 
 @app.post("/api/products/listed")
@@ -4661,7 +4721,7 @@ def shop_order(handle: str, body: ShopOrderBody,
                                      storefront.cart_fingerprint(priced, pay), pay)
         if not paid:
             raise HTTPException(400, "We could not verify that payment. "
-                                     "Nothing has been charged twice — please try again.")
+                                     "Nothing has been charged twice, please try again.")
     try:
         order = storefront.place_order(seller, cust, body.lines or [], body.address or {},
                                        body.payment or "cod", body.note or "",
@@ -4710,7 +4770,7 @@ if os.path.isdir(STORE_DIR):
     app.mount("/store-static", StaticFiles(directory=STORE_DIR), name="store-static")
 
 
-def _meta_tags(meta: dict, url: str) -> str:
+def _meta_tags(meta: dict, url: str, indexable: bool = True) -> str:
     """The head a crawler and a WhatsApp link preview actually read.
 
     The storefront is a one-page app, so without this every page of every store
@@ -4737,6 +4797,12 @@ def _meta_tags(meta: dict, url: str) -> str:
         f'<meta name="twitter:card" content="{"summary_large_image" if img else "summary"}" />',
         f'<meta name="twitter:title" content="{esc(meta["title"])}" />',
         f'<meta name="twitter:description" content="{esc(meta["description"])}" />',
+        # Explicit, because a shop that is live wants to be found and a shop
+        # that is not must never be. The caller passes indexable=False for an
+        # owner preview of an unpublished site: that URL is reachable with a
+        # token, and a crawler that somehow followed it must not keep the page.
+        ('<meta name="robots" content="index, follow" />' if indexable else
+         '<meta name="robots" content="noindex, nofollow" />'),
     ]
     if img:
         tags.append(f'<meta property="og:image" content="{esc(img)}" />')
@@ -4760,11 +4826,46 @@ def _render_store(handle: str, request: Request, product_id: str = "") -> Respon
         product = next((p for p in products.storefront_payload(owner)
                         if p["id"] == product_id), None)
     meta = sitebuilder.seo_meta(handle, site, product)
-    url = f"{_public_base_url(request)}/s/{handle}" + (f"/p/{product_id}" if product else "")
+    base = _public_base_url(request)
+    # On a seller's own domain the shop is at the root, so every link the crawler
+    # follows has to be written from the path this request actually arrived on.
+    on_own_domain = not request.url.path.startswith("/s/")
+    store_path = "" if on_own_domain else f"/s/{handle}"
+    # The canonical is the readable form, always, whichever form was requested.
+    # Two URLs for one page is the thing a canonical tag exists to settle.
+    url = (base + (store_path or "")) + (
+        f"/p/{sitebuilder.product_slug(product)}" if product else "")
 
     with open(index, encoding="utf-8") as fh:
         html = fh.read()
-    html = html.replace("<title>Store</title>", _meta_tags(meta, url))
+    # An unpublished shop is still reachable by its owner with a preview token.
+    # That page must never be indexed: a half-built shop in a search result is
+    # a bad first impression that outlives the launch.
+    html = html.replace("<title>Store</title>",
+                        _meta_tags(meta, url, indexable=bool(site.get("published"))))
+
+    # Structured data and a plain-HTML copy of the page, both server-rendered.
+    # The storefront is a one-page app, so without these the first thing a
+    # crawler is handed is an empty div and a spinner, and every crawler that
+    # does not run JavaScript (WhatsApp's link preview, Facebook's, Bing's) sees
+    # nothing at all. See sitebuilder.storefront_jsonld for the full reasoning.
+    catalogue = products.storefront_payload(owner)
+    try:
+        ld = sitebuilder.storefront_jsonld(handle, site, catalogue, product,
+                                          base, store_path or f"/s/{handle}")
+        html = html.replace("</head>",
+                            f'<script type="application/ld+json">{ld}</script>\n</head>', 1)
+    except Exception as e:                                       # noqa: BLE001
+        errors.record(e, where=f"storefront schema for {handle}")
+
+    try:
+        fallback = sitebuilder.storefront_fallback_html(
+            handle, site, catalogue, product, store_path or f"/s/{handle}")
+        html = html.replace('<div id="app" hidden></div>',
+                            f'<div id="app" hidden></div>{fallback}', 1)
+    except Exception as e:                                       # noqa: BLE001
+        errors.record(e, where=f"storefront fallback for {handle}")
+
     # On the seller's own domain the path carries no handle, so the page says
     # which shop it is. Harmless under /s/<handle>, where it agrees.
     html = html.replace("</head>",
@@ -4781,8 +4882,87 @@ def storefront_page(handle: str, request: Request):
 
 @app.get("/s/{handle}/p/{product_id}")
 def storefront_product_page(handle: str, product_id: str, request: Request):
-    """A product's own address, so a shopper can share the thing, not the shop."""
-    return _render_store(handle, request, product_id)
+    """A product's own address, so a shopper can share the thing, not the shop.
+
+    Takes either form: the bare id, which is what every link shared before slugs
+    existed looks like, or `readable-name-<id>`. The id is the last piece either
+    way, so renaming a product never breaks a link somebody already sent.
+    """
+    return _render_store(handle, request,
+                         sitebuilder.product_id_from_slug(product_id))
+
+
+@app.get("/s/{handle}/legal/{slug}", response_class=Response)
+def storefront_legal(handle: str, slug: str, request: Request):
+    """A shop's privacy policy, terms of sale, and returns policy.
+
+    Server-rendered, not drawn by the storefront bundle. A policy that only
+    exists after JavaScript has run is not published in any sense a regulator or
+    a crawler would accept, and these are exactly the pages a shopper opens on a
+    bad connection when they are already unsure about buying.
+    """
+    owner = sitebuilder.resolve_handle(handle)
+    if not owner:
+        raise HTTPException(404, "No store at this address.")
+    site = sitebuilder.get_site(owner)
+    html = legal_html.seller_page(
+        shop_name=str(site.get("brand") or "") or handle,
+        handle=handle,
+        legal_details=sitebuilder.legal_details(site),
+        slug=slug,
+        base_url=_public_base_url(request),
+        store_path=f"/s/{handle}")
+    if not html:
+        raise HTTPException(404, "No such document.")
+    return Response(content=html, media_type="text/html")
+
+
+@app.get("/api/shop/{handle}/legal")
+def storefront_legal_config(handle: str):
+    """What the shop's footer needs: who runs it, and its policy links.
+
+    Consumer Protection (E-commerce) Rule 5(4) makes displaying the seller's
+    legal name, address and contact our duty as the platform, so the storefront
+    is given them rather than left to decide whether to show them.
+    """
+    owner = sitebuilder.resolve_handle(handle)
+    if not owner:
+        raise HTTPException(404, "No store at this address.")
+    site = sitebuilder.get_site(owner)
+    d = sitebuilder.legal_details(site)
+    return {
+        "shop": str(site.get("brand") or "") or handle,
+        "seller": {"legal_name": d["legal_name"], "address": d["address"],
+                   "email": d["email"], "phone": d["phone"],
+                   "grievance_name": d["grievance_name"],
+                   "gstin": d["gstin"]},
+        "refund": legal.refund_choice(d["refund_policy"]),
+        "documents": [
+            {"slug": "privacy", "title": "Privacy Policy",
+             "url": f"/s/{handle}/legal/privacy"},
+            {"slug": "terms", "title": "Terms of Sale",
+             "url": f"/s/{handle}/legal/terms"},
+            {"slug": "refunds", "title": "Returns and Refunds",
+             "url": f"/s/{handle}/legal/refunds"},
+        ],
+        "gaps": sitebuilder.legal_gaps(site),
+        "platform": {"name": legal.PRODUCT_NAME, "legal_url": "/legal"},
+    }
+
+
+@app.get("/api/site/legal-options")
+def site_legal_options(authorization: str | None = Header(default=None)):
+    """The refund policies a seller may choose between, and what is still blank.
+
+    A fixed list rather than a free-text box: a seller typing their own refund
+    policy is how a shop ends up publishing something unenforceable, or nothing.
+    """
+    email = require_user(authorization)
+    site = sitebuilder.get_site(email)
+    return {"choices": legal.REFUND_CHOICES,
+            "selected": sitebuilder.legal_details(site)["refund_policy"],
+            "gaps": sitebuilder.legal_gaps(site),
+            "required": [{"key": k, "label": l} for k, l in legal.SELLER_REQUIRED]}
 
 
 @app.get("/s/{handle}/sitemap.xml")
@@ -4791,7 +4971,14 @@ def storefront_sitemap(handle: str, request: Request):
     if not owner or not sitebuilder.get_site(owner).get("published"):
         raise HTTPException(404, "No store at this address.")
     base = f"{_public_base_url(request)}/s/{handle}"
-    urls = [base] + [f"{base}/p/{p['id']}" for p in products.storefront_payload(owner)]
+    urls = ([base]
+            + [f"{base}/p/{sitebuilder.product_slug(p)}"
+               for p in products.storefront_payload(owner)]
+            # The legal pages are real, indexable pages on the shop's own
+            # address, so they belong in its map. They are also the pages a
+            # shopper searches for by name when deciding whether to trust a shop
+            # they have not bought from before.
+            + [f"{base}/legal/{slug}" for slug in ("privacy", "terms", "refunds")])
     body = "".join(f"<url><loc>{u}</loc></url>" for u in urls)
     return Response(
         content=f'<?xml version="1.0" encoding="UTF-8"?>'
@@ -4799,10 +4986,284 @@ def storefront_sitemap(handle: str, request: Request):
         media_type="application/xml")
 
 
+# ---------------------------------------------------------------------------
+# Proving to Google that this site is ours
+# ---------------------------------------------------------------------------
+# Search Console will not show a single thing about a site until the site proves
+# it belongs to whoever is asking. There are two ways that do not need DNS:
+# upload a file at a path Google names, or put a meta tag in the home page's
+# head. Both are supported here, because which one is available depends on where
+# the domain is registered and how much of it the operator controls.
+#
+# The file route is the one that keeps working after a domain move, so it is
+# listed first in the launch checklist. Both read from the environment: nothing
+# about verification belongs in git, because the token identifies the account
+# that will receive the site's search data.
+@app.get("/google{token}.html")
+def google_site_verification(token: str):
+    """Serve the file Search Console asks for, when one is configured.
+
+    GOOGLE_SITE_VERIFICATION holds the value Google gives, with or without the
+    "google" prefix and the ".html" suffix, because both forms are what people
+    copy. Anything else 404s, so this cannot be used to probe what is set.
+    """
+    want = (os.getenv("GOOGLE_SITE_VERIFICATION") or "").strip()
+    want = want.removeprefix("google").removesuffix(".html")
+    if not want or token != want:
+        raise HTTPException(404, "Not found")
+    return Response(content=f"google-site-verification: google{want}.html",
+                    media_type="text/html")
+
+
+@app.get("/.well-known/security.txt")
+def security_txt_well_known(request: Request):
+    """The path RFC 9116 actually specifies."""
+    return _security_txt(request)
+
+
+@app.get("/security.txt")
+def security_txt_root(request: Request):
+    """The path people try first. Same answer, so neither 404s."""
+    return _security_txt(request)
+
+
+def _security_txt(request: Request):
+    """Where to report a security problem.
+
+    RFC 9116. Not a legal requirement, and it is the cheapest possible way for
+    somebody who finds a hole to tell the operator instead of telling everybody
+    else. It reads the same support address the legal pages use, so there is one
+    place to change it.
+    """
+    from backend.core import legal as _legal
+    email = (_legal.business().get("support_email") or "").strip()
+    if not email:
+        raise HTTPException(404, "Not configured")
+    import datetime as _d
+    expires = (_d.datetime.now(_d.timezone.utc)
+               + _d.timedelta(days=365)).replace(microsecond=0).isoformat()
+    base = _public_base_url(request)
+    return Response(
+        content=(f"Contact: mailto:{email}\n"
+                 f"Expires: {expires}\n"
+                 f"Preferred-Languages: en, hi\n"
+                 f"Canonical: {base}/.well-known/security.txt\n"),
+        media_type="text/plain")
+
+
 @app.get("/robots.txt")
 def robots(request: Request):
-    return Response(content=f"User-agent: *\nAllow: /\nSitemap: {_public_base_url(request)}/sitemap.xml\n",
-                    media_type="text/plain")
+    """What a crawler may read, and where the map is.
+
+    THE BUG THIS FIXES: this already advertised /sitemap.xml, and /sitemap.xml
+    did not exist. Only /s/<handle>/sitemap.xml did. So every crawler that
+    followed the Sitemap line got a 404, which is a worse signal than having no
+    Sitemap line at all, and it is one of the reasons Google had nothing to
+    show. The sitemap below now exists.
+
+    The app itself is disallowed. /smart and /app are behind a login and hold one
+    seller's private figures; there is nothing there for a crawler and no reason
+    to let it try.
+    """
+    base = _public_base_url(request)
+    return Response(
+        content=("User-agent: *\n"
+                 "Allow: /\n"
+                 "Disallow: /smart\n"
+                 "Disallow: /app\n"
+                 "Disallow: /api/\n"
+                 "Disallow: /reset\n"
+                 f"\nSitemap: {base}/sitemap.xml\n"),
+        media_type="text/plain")
+
+
+# Pages a crawler should know about. Deliberately short and hand-kept: this is a
+# marketing site plus a legal hub, not a catalogue, and a sitemap listing URLs
+# that do not exist is worse than a small one that is true. Each seller shop has
+# its own sitemap at /s/<handle>/sitemap.xml.
+PUBLIC_PAGES = [
+    ("/", "1.0", "weekly"),
+    ("/legal", "0.5", "monthly"),
+    ("/legal/privacy", "0.4", "monthly"),
+    ("/legal/terms", "0.4", "monthly"),
+    ("/legal/refunds", "0.4", "monthly"),
+    ("/legal/cookies", "0.3", "monthly"),
+    ("/legal/acceptable-use", "0.3", "monthly"),
+    ("/legal/grievance", "0.4", "monthly"),
+]
+
+
+@app.get("/sitemap.xml")
+def sitemap(request: Request):
+    base = _public_base_url(request).rstrip("/")
+    today = _dt.date.today().isoformat()
+    body = "".join(
+        f"<url><loc>{base}{path}</loc><lastmod>{today}</lastmod>"
+        f"<changefreq>{freq}</changefreq><priority>{pri}</priority></url>"
+        for path, pri, freq in PUBLIC_PAGES)
+    return Response(
+        content=('<?xml version="1.0" encoding="UTF-8"?>'
+                 '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+                 f"{body}</urlset>"),
+        media_type="application/xml")
+
+
+# An inline SVG favicon. No binary asset to lose, scales to every size a browser
+# asks for, and it is one request that cannot 404. A missing favicon is a real
+# signal to a person deciding whether a site is finished.
+_FAVICON = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+    '<rect width="64" height="64" rx="14" fill="#2f3a57"/>'
+    '<path d="M20 40V24h6l6 9 6-9h6v16h-5V32l-5 7h-4l-5-7v8z" fill="#fff"/>'
+    '</svg>')
+
+
+# The social card. Drawn as SVG rather than shipped as a photograph, for three
+# reasons that all matter here: there is no image to licence and no photograph of
+# a person who did not agree to appear in it; it is under 3KB, so the card renders
+# before a slow phone has finished the page; and it shows the product's actual
+# output rather than a stock desk with a laptop on it, which is what a seller
+# needs to see to know what this is. 1200x630 is the size every platform crops
+# from, so nothing important goes near the edges.
+_OG_IMAGE = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" '
+    'role="img" aria-label="One Tap Manager: three cards telling a seller what to do today">'
+    '<rect width="1200" height="630" fill="#F7F5EF"/>'
+    '<rect x="0" y="0" width="1200" height="8" fill="#1E3A8A"/>'
+    '<g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif">'
+    '<rect x="72" y="66" width="46" height="46" rx="11" fill="#1E3A8A"/>'
+    '<text x="82" y="97" font-size="19" font-weight="700" fill="#ffffff">1T</text>'
+    '<text x="132" y="98" font-size="25" font-weight="700" fill="#101828">One Tap Manager</text>'
+    '<text x="72" y="184" font-size="52" font-weight="800" fill="#101828">Run your shop the way a</text>'
+    '<text x="72" y="244" font-size="52" font-weight="800" fill="#101828">big brand runs theirs.</text>'
+    '<text x="72" y="300" font-size="24" fill="#475467">It reads your sales and tells you the three things</text>'
+    '<text x="72" y="334" font-size="24" fill="#475467">worth doing this morning.</text>'
+    # Three cards, the same three the hero shows, so the card and the page agree.
+    '<g>'
+    '<rect x="72" y="396" width="330" height="150" rx="12" fill="#111827"/>'
+    '<text x="96" y="428" font-size="13" font-weight="700" fill="#F5A623" letter-spacing="1.4">STOCK</text>'
+    '<text x="96" y="462" font-size="20" font-weight="700" fill="#E5E7EB">4 things are about</text>'
+    '<text x="96" y="488" font-size="20" font-weight="700" fill="#E5E7EB">to run out</text>'
+    '<text x="96" y="521" font-size="14" fill="#34D399">order form already written</text>'
+    '</g><g>'
+    '<rect x="432" y="396" width="330" height="150" rx="12" fill="#111827"/>'
+    '<text x="456" y="428" font-size="13" font-weight="700" fill="#F5A623" letter-spacing="1.4">CUSTOMERS</text>'
+    '<text x="456" y="462" font-size="20" font-weight="700" fill="#E5E7EB">38 buyers have not</text>'
+    '<text x="456" y="488" font-size="20" font-weight="700" fill="#E5E7EB">come back</text>'
+    '<text x="456" y="521" font-size="14" fill="#34D399">the message is written</text>'
+    '</g><g>'
+    '<rect x="792" y="396" width="330" height="150" rx="12" fill="#111827"/>'
+    '<text x="816" y="428" font-size="13" font-weight="700" fill="#F5A623" letter-spacing="1.4">REVIEWS</text>'
+    '<text x="816" y="462" font-size="20" font-weight="700" fill="#E5E7EB">Sizing runs small is</text>'
+    '<text x="816" y="488" font-size="20" font-weight="700" fill="#E5E7EB">your top complaint</text>'
+    '<text x="816" y="521" font-size="14" fill="#34D399">3 pages to edit</text>'
+    '</g>'
+    '<text x="72" y="590" font-size="15" fill="#6b7280">Worked examples. Not customer results.</text>'
+    '</g></svg>')
+
+
+# WhatsApp, Twitter/X and LinkedIn all refuse an SVG og:image: the preview simply
+# does not render, which is worse than having no card at all. So the same card is
+# also drawn as a PNG with Pillow, which is already a dependency, and the PNG is
+# what the meta tag points at. Built once on first request and held in memory,
+# because it never changes between deploys and a scraper asks for it per share.
+_OG_PNG_CACHE: dict[str, bytes] = {}
+
+
+def _og_png() -> bytes:
+    if "png" in _OG_PNG_CACHE:
+        return _OG_PNG_CACHE["png"]
+    from PIL import Image, ImageDraw
+    from backend.core import ailabel
+    W, H = 1200, 630
+    im = Image.new("RGB", (W, H), (247, 245, 239))
+    d = ImageDraw.Draw(im)
+    f = ailabel._font           # same font resolution, so no new font dependency
+
+    d.rectangle([0, 0, W, 8], fill=(30, 58, 138))
+    d.rounded_rectangle([72, 66, 118, 112], radius=11, fill=(30, 58, 138))
+    d.text((83, 79), "1T", font=f(19), fill=(255, 255, 255))
+    d.text((132, 78), "One Tap Manager", font=f(25), fill=(16, 24, 40))
+
+    d.text((72, 140), "Run your shop the way a", font=f(50), fill=(16, 24, 40))
+    d.text((72, 200), "big brand runs theirs.", font=f(50), fill=(16, 24, 40))
+    d.text((72, 278), "It reads your sales and tells you the three things",
+           font=f(23), fill=(71, 84, 103))
+    d.text((72, 312), "worth doing this morning.", font=f(23), fill=(71, 84, 103))
+
+    cards = [
+        ("STOCK", "4 things are about", "to run out", "order form already written"),
+        ("CUSTOMERS", "38 buyers have not", "come back", "the message is written"),
+        ("REVIEWS", "Sizing runs small is", "your top complaint", "3 pages to edit"),
+    ]
+    for i, (tag, l1, l2, metric) in enumerate(cards):
+        x = 72 + i * 360
+        d.rounded_rectangle([x, 396, x + 330, 546], radius=12, fill=(17, 24, 39))
+        d.text((x + 24, 416), tag, font=f(13), fill=(245, 166, 35))
+        d.text((x + 24, 444), l1, font=f(19), fill=(229, 231, 235))
+        d.text((x + 24, 470), l2, font=f(19), fill=(229, 231, 235))
+        d.text((x + 24, 508), metric, font=f(14), fill=(52, 211, 153))
+
+    # Said on the card itself, not only on the page, because the card is what
+    # gets forwarded and the page is what does not.
+    d.text((72, 574), "Worked examples. Not customer results.",
+           font=f(15), fill=(107, 114, 128))
+
+    buf = io.BytesIO()
+    im.save(buf, format="PNG", optimize=True)
+    _OG_PNG_CACHE["png"] = buf.getvalue()
+    return _OG_PNG_CACHE["png"]
+
+
+@app.get("/og-image.png")
+def og_image_png():
+    try:
+        body = _og_png()
+    except Exception as e:  # noqa: BLE001 - a missing card must not 500 the route
+        errors.record(e, where="GET /og-image.png")
+        return Response(content=_OG_IMAGE, media_type="image/svg+xml")
+    return Response(content=body, media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/og-image.svg")
+def og_image():
+    """The card a pasted link shows. Cached hard, because it never changes
+    between deploys and a social scraper will ask for it once per share."""
+    return Response(content=_OG_IMAGE, media_type="image/svg+xml",
+                    headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/consent.js")
+def consent_script():
+    """The consent gate, served to every surface from one file.
+
+    A route rather than three copies under three static mounts, because three
+    copies is how one of them ends up a version behind and quietly loading a
+    tracker somebody rejected.
+    """
+    path = os.path.join(STORE_DIR, "consent.js")
+    if not os.path.exists(path):
+        return Response(content="/* consent script missing */",
+                        media_type="application/javascript")
+    with open(path, encoding="utf-8") as fh:
+        body = fh.read()
+    return Response(content=body, media_type="application/javascript",
+                    headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/favicon.svg")
+def favicon_svg():
+    return Response(content=_FAVICON, media_type="image/svg+xml",
+                    headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/favicon.ico")
+def favicon_ico():
+    """Browsers still ask for this by name. Answer with the SVG rather than a
+    404, because a 404 here shows up in the console of every page load."""
+    return Response(content=_FAVICON, media_type="image/svg+xml",
+                    headers={"Cache-Control": "public, max-age=604800"})
 
 
 @app.get("/smart")
@@ -4841,6 +5302,29 @@ _APP_PATHS = ("/api/", "/smart", "/smart-static/", "/static/", "/generated_image
 
 
 @app.middleware("http")
+async def _force_https(request, call_next):
+    """Bounce a plain-http request to https, and say so in a header.
+
+    Only when a proxy has explicitly reported the original request as http. See
+    publicurl.should_redirect_to_https for why that narrowness matters: behind a
+    TLS terminator every request looks like http from inside this process, and a
+    redirect based on that is an infinite loop that takes the whole site down,
+    every shop on it included.
+    """
+    if publicurl.should_redirect_to_https(request.url.hostname or "", request.headers):
+        target = str(request.url.replace(scheme="https"))
+        return RedirectResponse(target, status_code=301)
+    response = await call_next(request)
+    # HSTS, so a browser that has been here once never tries http again. Two
+    # years is the usual value; no preload and no includeSubDomains, because a
+    # seller's custom domain is a subdomain we do not control and should not be
+    # making promises about.
+    if not publicurl.is_local(request.url.hostname or ""):
+        response.headers.setdefault("Strict-Transport-Security", "max-age=63072000")
+    return response
+
+
+@app.middleware("http")
 async def _custom_domain(request, call_next):
     """A request that arrived on korastudio.com renders that seller's shop.
 
@@ -4861,15 +5345,38 @@ async def _custom_domain(request, call_next):
     if path in ("/", ""):
         return _render_store(handle, request)
     if path.startswith("/p/"):
-        return _render_store(handle, request, path[len("/p/"):].split("/")[0])
+        return _render_store(handle, request, sitebuilder.product_id_from_slug(
+            path[len("/p/"):].split("/")[0]))
     if path == "/sitemap.xml":
         return storefront_sitemap(handle, request)
     return await call_next(request)
 
 
+# The landing page holds __BASE_URL__ wherever it needs its own absolute address:
+# the canonical tag, og:url, og:image and the three schema.org @id values. It is
+# filled in per request rather than hardcoded so that connecting a custom domain
+# is one environment variable (PUBLIC_BASE_URL) and not a search and replace
+# across the file, and so a canonical tag can never point at the old host after
+# a move, which is the classic way a site disappears from search the week it gets
+# its real domain.
+_LANDING_CACHE: dict[str, str] = {}
+
+
 @app.get("/")
-def landing():
-    return FileResponse(os.path.join(STATIC_DIR, "landing.html"))
+def landing(request: Request):
+    base = _public_base_url(request)
+    cached = _LANDING_CACHE.get(base)
+    if cached is None:
+        with open(os.path.join(STATIC_DIR, "landing.html"), encoding="utf-8") as fh:
+            cached = fh.read().replace("__BASE_URL__", base)
+        # One entry per host, so a seller domain and the app's own host do not
+        # keep evicting each other. Bounded, because this is a public endpoint
+        # and Host is attacker-controlled.
+        if len(_LANDING_CACHE) > 8:
+            _LANDING_CACHE.clear()
+        _LANDING_CACHE[base] = cached
+    return Response(content=cached, media_type="text/html",
+                    headers={"Cache-Control": "public, max-age=300"})
 
 
 @app.get("/app")
@@ -4877,9 +5384,74 @@ def app_page():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
 
+# ---------------------------------------------------------------------------
+# Legal
+# ---------------------------------------------------------------------------
+# Rule 3(1)(a) of the IT Rules 2021 requires an intermediary to publish its
+# rules and regulations, its privacy policy AND its user agreement. Hosting
+# seller shops makes this app an intermediary, so all three are mandatory and
+# all three are served from here rather than from a static file, because they
+# have to name the operator and that comes from configuration. See
+# backend/core/legal.py for which rule each document answers.
+@app.get("/legal", response_class=Response)
+def legal_hub(request: Request):
+    return Response(content=legal_html.hub(_public_base_url(request)),
+                    media_type="text/html")
+
+
+@app.get("/legal/{slug}", response_class=Response)
+def legal_page(slug: str, request: Request):
+    html = legal_html.page(slug, _public_base_url(request))
+    if not html:
+        raise HTTPException(404, "No such document.")
+    return Response(content=html, media_type="text/html")
+
+
+# The old single privacy page kept its URL, because it may already be linked
+# from somewhere we do not control. A permanent redirect is the honest way to
+# move a published legal page.
 @app.get("/privacy")
 def privacy_page():
-    return FileResponse(os.path.join(STATIC_DIR, "privacy.html"))
+    return RedirectResponse("/legal/privacy", status_code=301)
+
+
+@app.get("/terms")
+def terms_redirect():
+    return RedirectResponse("/legal/terms", status_code=301)
+
+
+@app.get("/refunds")
+def refunds_redirect():
+    return RedirectResponse("/legal/refunds", status_code=301)
+
+
+@app.get("/cookies")
+def cookies_redirect():
+    return RedirectResponse("/legal/cookies", status_code=301)
+
+
+@app.get("/api/legal/config")
+def legal_config():
+    """What the footer and the consent banner need, in one call.
+
+    Public on purpose: it carries only what is already printed on the legal
+    pages, and the frontend needs it before anybody signs in.
+    """
+    ix = legal.index()
+    return {
+        "product": ix["product"],
+        "identity": ix["identity"],
+        "documents": ix["documents"],
+        "complete": ix["complete"],
+        "reviewed_on": ix["reviewed_on"],
+        "grievance": {"ack_hours": legal.ACK_HOURS,
+                      "resolve_days": legal.RESOLVE_DAYS},
+        # The banner appears only when there is actually a tracker to consent
+        # to. See legal.consent_required() for why that is the correct test
+        # rather than showing one unconditionally.
+        "consent": {"required": legal.consent_required(),
+                    "analytics_id": legal.analytics_id()},
+    }
 
 
 # =========================================================================
@@ -5216,7 +5788,7 @@ def social_week(body: SocialWeekBody, authorization: str | None = Header(default
     email = require_user(authorization)
     cat = _social_catalogue(email)
     if not cat:
-        raise HTTPException(400, "Add a product first — there is nothing to post about.")
+        raise HTTPException(400, "Add a product first, there is nothing to post about.")
     # Replaces this window's undecided drafts rather than appending to them.
     # Without that, pressing Plan my week twice produced two posts at the same
     # day and time and the week doubled on every press.
@@ -5391,7 +5963,7 @@ def ai_site_copy(body: AiSiteCopyBody, authorization: str | None = Header(defaul
     is saved here — the builder shows it first and the seller picks what to use."""
     email = require_user(authorization)
     if len((body.brief or "").strip()) < 8:
-        raise HTTPException(400, "Tell us a little about your shop first — a sentence is enough.")
+        raise HTTPException(400, "Tell us a little about your shop first, a sentence is enough.")
     res = writer.site_copy(email, body.brief)
     return {**res, "meta": _ai_meta()}
 
@@ -5681,7 +6253,8 @@ class AutoplanWeekBody(BaseModel):
 def social_autoplan(authorization: str | None = Header(default=None)):
     email = require_user(authorization)
     return {**autoplan.status(email), "day_names": autoplan.DAY_NAMES,
-            "watermark": watermark.capabilities()}
+            "watermark": watermark.capabilities(),
+            "ai_label": ailabel_mod.compliance_state()}
 
 
 @app.post("/api/social/autoplan/settings")
@@ -5829,19 +6402,25 @@ def social_attach_video(body: SocialAttachBody,
     email = require_user(authorization)
     if not social.get_post(email, body.post_id):
         raise HTTPException(404, "not found")
-    url, report = body.url, None
-    if url and not body.clean:
-        report = {"checked": False, "removed": False,
-                  "reason": "attached as uploaded — the watermark remover was skipped"}
-    if url and body.clean:
-        # A reel clip is almost always generated somewhere else — Google Flow,
-        # Kling — and comes back with that tool's mark in a corner. It goes
-        # through the watermark remover on the way in; the clean copy is saved
-        # under a new name and the original upload is kept.
+    url, report, label = body.url, None, None
+    # A reel clip is almost always generated somewhere else: Google Flow, Kling,
+    # Veo. What happens to it on the way in changed on 15 September 2026. It used
+    # to have the other tool's mark rubbed out, which the IT Rules as amended on
+    # 20 February 2026 forbid a platform like this one from enabling. Now, if the
+    # seller says the clip was AI made, we put OUR label on it, which is what the
+    # same rule requires. If they say it was filmed, it is stored untouched.
+    if url and body.ai_generated:
+        from backend.core import ailabel
+        done = ailabel.label_media_url(url, email, engine="uploaded",
+                                      kind_hint="video")
+        url, label = done["url"], done["report"]
+    if url and body.clean and not body.ai_generated:
+        # Older clients still send clean=True. The gate reports honestly rather
+        # than pretending something was removed.
         cleaned = watermark.clean_media_url(url, email)
         url, report = cleaned["url"], cleaned["report"]
     p = social.attach_video(email, body.post_id, url, original_url=body.url or "",
-                            watermark=report or {})
+                            watermark=report or {}, ai_label=label or {})
     if p.get("error"):
         raise HTTPException(404, p["error"])
     # Everything below is bookkeeping. The clip is on the post by now, and a
@@ -5864,7 +6443,8 @@ def social_attach_video(body: SocialAttachBody,
         tasks = smart.get_tasks(email)
     except Exception:  # noqa: BLE001
         tasks = None
-    return {**p, "watermark": report, **({"tasks": tasks} if tasks is not None else {})}
+    return {**p, "watermark": report, "ai_label": label,
+            **({"tasks": tasks} if tasks is not None else {})}
 
 
 class SocialRecleanBody(BaseModel):
@@ -5880,6 +6460,20 @@ def social_reclean_video(body: SocialRecleanBody,
     fainter or smaller mark, and one on a shot that barely moves, which it
     will not risk guessing at on its own."""
     email = require_user(authorization)
+    from backend.core import ailabel
+    if not ailabel.removal_enabled():
+        # A button that reports success and changes nothing is worse than a
+        # button that is gone. This tells the seller the lawful way to get the
+        # clean frame they are asking for.
+        raise HTTPException(400,
+            "We cannot take another tool's watermark off a clip. Indian law "
+            "(IT Rules 2021, as amended on 20 February 2026) requires a platform "
+            "that offers AI generation to make sure an AI label cannot be "
+            "removed. Do it at the source instead: in Google Flow open Settings "
+            "and switch Media Watermark off, then generate the clip again. Free "
+            "accounts have that setting. Kling's free tier does not, so use Flow "
+            "for clips you want unmarked. Our own AI label still goes on, "
+            "because that one is required.")
     if body.corner not in watermark.CORNER_NAMES:
         raise HTTPException(400, "Pick a corner: " + ", ".join(watermark.CORNER_NAMES))
     post = social.get_post(email, body.post_id)
@@ -5887,7 +6481,7 @@ def social_reclean_video(body: SocialRecleanBody,
         raise HTTPException(404, "That post no longer exists.")
     src = post.get("video_original_url") or post.get("video_url") or ""
     if not src:
-        raise HTTPException(400, "This post has no clip yet — upload one first.")
+        raise HTTPException(400, "This post has no clip yet, upload one first.")
     cleaned = watermark.clean_media_url(src, email, corner=body.corner)
     report = {**(cleaned.get("report") or {}), "corner": body.corner}
     if report.get("removed"):
@@ -5978,7 +6572,7 @@ def social_campaign_start(body: FestivalCampaignBody,
     email = require_user(authorization)
     cat = _social_catalogue(email)
     if not cat:
-        raise HTTPException(400, "Add a product first — there is nothing to post about.")
+        raise HTTPException(400, "Add a product first, there is nothing to post about.")
     res = social.start_campaign(email, body.festival, cat)
     if res.get("error"):
         raise HTTPException(400, res["error"])
