@@ -5736,6 +5736,31 @@ def _social_catalogue(email: str) -> list[dict]:
     return out
 
 
+@app.get("/api/social/performance")
+def social_performance(days: int = 28, refresh: int = 0,
+                       authorization: str | None = Header(default=None)):
+    """What the seller's Instagram posts actually did, joined to the choices
+    the planner made.
+
+    A refusal from Instagram is a 200 with a `refused` block, not an error
+    status. That is deliberate: for most accounts, most of the time, a refusal
+    IS the answer (an app can only read insights for accounts on its tester
+    list until Meta has reviewed it), and a screen that has to distinguish
+    "your numbers are here" from "Instagram will not give them to us yet" needs
+    both shapes to arrive the same way.
+    """
+    email = require_user(authorization)
+    if refresh:
+        from backend.core import iginsights
+        iginsights.clear_cache(email)
+    try:
+        data = social.performance(email, days=max(1, min(int(days or 28), 90)))
+    except Exception as e:                                       # noqa: BLE001
+        errors.record(e, where="GET /api/social/performance", email=email)
+        raise HTTPException(500, "Could not read the Instagram numbers just now.")
+    return {**data, "readiness": social.performance_readiness(email)}
+
+
 @app.get("/api/social")
 def social_home(authorization: str | None = Header(default=None)):
     email = require_user(authorization)

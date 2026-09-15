@@ -2449,3 +2449,248 @@ def clone_winner(email: str, post_id: str, catalogue: list[dict]) -> dict:
     rows.append(post)
     _save_posts(email, rows)
     return post
+
+
+# ===========================================================================
+# What actually worked
+# ===========================================================================
+# THE GAP THIS CLOSES. The planner chooses a pillar, a format and a product for
+# every slot, and it chooses them from research: the published effect sizes that
+# say a detail post outsells a lifestyle one, that a reel out-reaches a carousel
+# below 50k followers. That is the right way to start and the wrong way to
+# continue, because it is somebody else's average and this seller is not the
+# average.
+#
+# Every post this app publishes already carries its `media_id`. So the loop can
+# be closed: take the real numbers back off Instagram, attach them to the choice
+# that produced them, and let the seller see which of their own choices worked.
+#
+# What this deliberately does NOT do is change the plan automatically. A seller
+# with nine published posts has nine data points, and a planner that lurched
+# toward whichever one happened to do best would be reading noise and would look
+# erratic. MIN_FOR_A_VERDICT is the line, and below it the screen says plainly
+# that it is too early rather than showing a ranking nobody should act on.
+MIN_FOR_A_VERDICT = 6           # posts in a bucket before it is worth a sentence
+MIN_BUCKETS = 2                 # and at least two buckets to compare it against
+
+
+def published_with_ids(email: str, limit: int = 60) -> list[dict]:
+    """Posts this app actually published, newest first, that Instagram can
+    still be asked about. A post with no media_id went out some other way, or
+    failed, and there is nothing to look up."""
+    rows = [p for p in _posts(email)
+            if p.get("state") == "published" and p.get("media_id")]
+    rows.sort(key=lambda p: str(p.get("published_at") or ""), reverse=True)
+    return rows[:limit]
+
+
+def _headline(row: dict) -> int:
+    """The one number a post is judged by.
+
+    Views, because it is the only metric Instagram reports for every media type
+    after impressions was removed, and because reach on a small account is
+    mostly a function of followers rather than of the post. Falls back down the
+    chain rather than treating a missing metric as a zero.
+    """
+    for k in ("views", "reach", "total_interactions", "likes"):
+        v = row.get(k)
+        if isinstance(v, (int, float)):
+            return int(v)
+    return 0
+
+
+def performance(email: str, days: int = 28) -> dict:
+    """The seller's own numbers, joined to the choices that produced them.
+
+    Shape: {account, posts, by_pillar, by_format, by_product, verdicts, refused}.
+    Never raises. When Instagram declines, the refusal travels intact so the
+    screen can explain it in the same words everywhere.
+    """
+    from backend.core import iginsights
+
+    account = iginsights.account_insights(email, days=days)
+    posts = published_with_ids(email)
+    by_id = {p["media_id"]: p for p in posts}
+    got = iginsights.media_insights(email, list(by_id.keys()))
+
+    joined, settling = [], 0
+    for mid, numbers in (got.get("posts") or {}).items():
+        plan = by_id.get(mid) or {}
+        if numbers.get("settling"):
+            settling += 1
+            continue                      # inside the 48 hour delay: not yet real
+        joined.append({
+            "media_id": mid,
+            "permalink": numbers.get("permalink") or plan.get("permalink") or "",
+            "posted_at": numbers.get("posted_at") or plan.get("published_at") or "",
+            "caption_hook": ((plan.get("caption") or {}).get("hook") or "")[:90],
+            # The choices the planner made, carried through so they can be judged.
+            "pillar": plan.get("pillar") or "",
+            "pillar_name": (PILLAR_BY_ID.get(plan.get("pillar") or "") or {}).get("name", ""),
+            "format": plan.get("format") or "",
+            "product_id": plan.get("product_id") or "",
+            "product_name": plan.get("product_name") or "",
+            "occasion": plan.get("occasion") or "",
+            "views": numbers.get("views"),
+            "reach": numbers.get("reach"),
+            "likes": numbers.get("likes"),
+            "comments": numbers.get("comments"),
+            "saved": numbers.get("saved"),
+            "shares": numbers.get("shares"),
+            "score": _headline(numbers),
+        })
+    joined.sort(key=lambda r: r["score"], reverse=True)
+
+    return {
+        "account": account,
+        "days": days,
+        "posts": joined,
+        "settling": settling,
+        "published_total": len(posts),
+        "measured": len(joined),
+        "by_pillar": _group(joined, "pillar", "pillar_name"),
+        "by_format": _group(joined, "format", "format"),
+        "by_product": _group(joined, "product_id", "product_name"),
+        "verdicts": _verdicts(joined),
+        # When there is no verdict, say what is missing rather than "too early".
+        "why_not_yet": _why_no_verdict(joined),
+        "refused": got.get("refused") or account.get("refused"),
+        "cached": bool(got.get("cached") or account.get("cached")),
+    }
+
+
+def _group(rows: list[dict], key: str, label_key: str) -> list[dict]:
+    """Average score per bucket, biggest first.
+
+    The AVERAGE, not the total, and this is the whole reason the function
+    exists. A total rewards whichever choice was made most often, which is the
+    one the planner already favours, so a total would confirm the plan no matter
+    what the posts did. An average asks the actual question: when you do post
+    this kind of thing, does it work.
+    """
+    buckets: dict[str, dict] = {}
+    for r in rows:
+        k = str(r.get(key) or "").strip()
+        if not k:
+            continue
+        b = buckets.setdefault(k, {"key": k, "label": r.get(label_key) or k,
+                                   "posts": 0, "total": 0})
+        b["posts"] += 1
+        b["total"] += r["score"]
+    out = []
+    for b in buckets.values():
+        b["average"] = round(b["total"] / b["posts"]) if b["posts"] else 0
+        b["enough"] = b["posts"] >= MIN_FOR_A_VERDICT
+        out.append(b)
+    out.sort(key=lambda b: b["average"], reverse=True)
+    return out
+
+
+def _verdicts(rows: list[dict]) -> list[dict]:
+    """The sentences worth saying, and nothing else.
+
+    Each verdict has to clear two bars before it is produced: enough posts in
+    the bucket to not be noise, and something to compare it against. A verdict
+    that says "reels do best" off two reels is worse than saying nothing,
+    because the seller will act on it.
+    """
+    out = []
+    for field, label_field, what in (("by_pillar", "label", "kind of post"),
+                                     ("by_format", "label", "format"),
+                                     ("by_product", "label", "product")):
+        groups = _group(rows, {"by_pillar": "pillar", "by_format": "format",
+                               "by_product": "product_id"}[field],
+                        {"by_pillar": "pillar_name", "by_format": "format",
+                         "by_product": "product_name"}[field])
+        solid = [g for g in groups if g["enough"]]
+        if len(solid) < MIN_BUCKETS:
+            continue
+        best, worst = solid[0], solid[-1]
+        if best["average"] <= 0 or best["average"] < worst["average"] * 1.25:
+            # Less than a quarter apart is not a difference a seller should
+            # rearrange their week around.
+            continue
+        out.append({
+            "about": what,
+            "winner": best["label"],
+            "loser": worst["label"],
+            "times": round(best["average"] / max(worst["average"], 1), 1),
+            "sentence": (f"Your {best['label']} posts get about "
+                         f"{best['average']:,} views each. Your "
+                         f"{worst['label']} posts get {worst['average']:,}. "
+                         f"That is {round(best['average'] / max(worst['average'], 1), 1)}"
+                         f" times the reach for the same effort."),
+            "sample": best["posts"] + worst["posts"],
+        })
+    return out
+
+
+def _why_no_verdict(rows: list[dict]) -> dict:
+    """What is actually missing before a comparison means anything.
+
+    THE PROBLEM THIS FIXES: the screen said "too early, it takes about 6 of a
+    kind" to a seller looking at sixteen counted posts. Both halves were true
+    and together they read as a contradiction, because the seller counts posts
+    and the rule counts posts OF A KIND. Sixteen posts split four, four and
+    eight is one kind with enough behind it and nothing to compare it against.
+
+    So this says the specific thing: which kind is already there, which is
+    closest to joining it, and how many more of those it needs. A seller can act
+    on that. "Too early" is something they can only wait out.
+    """
+    groups = _group(rows, "pillar", "pillar_name")
+    ready = [g for g in groups if g["enough"]]
+    nearly = [g for g in groups if not g["enough"]]
+    nearly.sort(key=lambda g: g["posts"], reverse=True)
+
+    if not groups:
+        return {"state": "nothing",
+                "sentence": "Nothing has been counted yet."}
+    if not ready:
+        best = nearly[0]
+        short = MIN_FOR_A_VERDICT - best["posts"]
+        return {"state": "thin",
+                "sentence": (
+                    f"No kind of post has enough behind it yet. Your "
+                    f"{best['label']} posts are closest at {best['posts']}; "
+                    f"{short} more and that one can be judged.")}
+    if len(ready) < MIN_BUCKETS:
+        have = ready[0]
+        if nearly:
+            near = nearly[0]
+            short = MIN_FOR_A_VERDICT - near["posts"]
+            return {"state": "one_sided",
+                    "sentence": (
+                        f"Your {have['label']} posts ({have['posts']}) are enough "
+                        f"to judge, but there is nothing to judge them against "
+                        f"yet. {near['label']} is next closest at {near['posts']}: "
+                        f"{short} more of those and this page can tell you which "
+                        f"works better for you.")}
+        return {"state": "one_sided",
+                "sentence": (
+                    f"Only one kind of post has enough behind it "
+                    f"({have['label']}, {have['posts']}). A comparison needs two.")}
+    return {"state": "close",
+            "sentence": (
+                "There is enough to compare, but the kinds are running close "
+                "enough together that the difference is not worth acting on. "
+                "Keep posting and this page will say so if that changes.")}
+
+
+def performance_readiness(email: str) -> dict:
+    """Whether there is anything to show yet, and what is missing if not.
+
+    Separated from performance() because the answer to "why is this screen
+    empty" is different from the answer to "what do the numbers say", and a
+    screen that conflates them tells a seller who has published nothing that
+    Instagram refused, which is untrue and would send them chasing a permission
+    problem that does not exist.
+    """
+    posts = published_with_ids(email)
+    from backend.core import instagram
+    return {
+        "connected": instagram.is_connected(email),
+        "published": len(posts),
+        "needed": MIN_FOR_A_VERDICT,
+        "enough_to_compare": len(posts) >= MIN_FOR_A_VERDICT * MIN_BUCKETS,
+    }

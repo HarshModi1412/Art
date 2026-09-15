@@ -8654,6 +8654,193 @@ async function openSocial() {
    The calendar shows a time, Instagram says connected, and the reason is one of
    eight conditions none of which are visible. This puts the answer on the
    screen, per post, in a sentence. */
+/* ===========================================================================
+   How it did
+   ===========================================================================
+   The planner chooses a kind of post, a format and a product for every slot,
+   and it chooses from published research: detail posts outsell lifestyle ones,
+   reels out-reach carousels below 50k followers. That is the right way to
+   start and the wrong way to continue, because it is somebody else's average.
+
+   This screen closes the loop. Every post the app publishes carries its
+   Instagram media id, so the real numbers can be fetched and attached to the
+   choice that produced them.
+
+   Two things it refuses to do, and both matter more than what it does:
+
+   1. It never shows a zero it is not sure of. Instagram's own figures lag by
+      up to 48 hours, so a post inside that window is held back rather than
+      reported as nobody having seen it. A seller who thinks a good post failed
+      will stop making that kind of post.
+   2. It never ranks on a handful of posts. Six in a bucket and two buckets to
+      compare, or it says plainly that it is too early. A ranking off two reels
+      is worse than no ranking, because the seller will rearrange their week
+      around it. */
+async function openSocialPerformance(days) {
+  const window = days || 28;
+  let d;
+  try {
+    // Instagram is slow and this is a per-post round trip, so the seller is
+    // told it is working and told they can walk away, rather than watching a
+    // frozen screen and pressing the button again.
+    d = await withBusy("Reading your Instagram numbers",
+                       "Instagram takes a few seconds. You can go and do "
+                       + "something else, this keeps going.",
+                       () => api(`/api/social/performance?days=${window}`));
+  } catch (e) {
+    return toast(e.message, 7000);
+  }
+
+  const R = d.readiness || {};
+  const acct = d.account || {};
+  const refused = d.refused;
+
+  // Why the screen might be empty, in the order a seller would ask it. Each of
+  // these is a different problem with a different fix, and collapsing them into
+  // one "no data" message sends people chasing the wrong one.
+  let blocker = "";
+  if (!R.connected) {
+    blocker = `<div class="perf-note">
+      <b>Instagram is not connected.</b>
+      <p>Connect the account and its numbers appear here within a day.</p>
+      <button class="btn primary sm" id="perfConnect">${sic("instagram")}Connect Instagram</button>
+    </div>`;
+  } else if (refused) {
+    blocker = `<div class="perf-note${refused.reason === "not_a_tester" ? " perf-rule" : ""}">
+      <b>${refused.reason === "not_a_tester"
+            ? "Instagram will not share these numbers with us yet"
+            : "Instagram did not send the numbers"}</b>
+      <p>${esc(refused.message || "")}</p>
+      ${refused.reason === "token_expired"
+        ? `<button class="btn primary sm" id="perfConnect">${sic("refresh")}Reconnect</button>` : ""}
+    </div>`;
+  } else if (!R.published) {
+    blocker = `<div class="perf-note">
+      <b>Nothing has gone out yet.</b>
+      <p>Once posts start publishing from here, this page fills in by itself.
+      Instagram counts them within two days.</p>
+    </div>`;
+  }
+
+  const n = (v) => (typeof v === "number" ? v.toLocaleString("en-IN") : "—");
+  const m = acct.metrics || {};
+  const cards = [
+    ["Times seen", m.views, "How many times your posts appeared on a screen."],
+    ["People reached", m.reach, "Separate people, not repeat views."],
+    ["People who did something", m.accounts_engaged, "Liked, saved, shared, commented or replied."],
+    ["Taps on your link", m.profile_links_taps, "The one that turns into a sale."],
+    ["New followers", m.followers_gained, "Over the same period."],
+  ].filter((c) => typeof c[1] === "number");
+
+  const statBlock = cards.length ? `
+    <div class="perf-stats">
+      ${cards.map(([label, value, why]) => `
+        <div class="perf-stat">
+          <div class="perf-num">${n(value)}</div>
+          <div class="perf-lbl">${esc(label)}</div>
+          <div class="perf-why">${esc(why)}</div>
+        </div>`).join("")}
+    </div>` : "";
+
+  // The verdicts are the point of the page, so they go above the tables.
+  const verdicts = (d.verdicts || []).length ? `
+    <h4 class="perf-h">What your own posts say</h4>
+    ${(d.verdicts || []).map((v) => `
+      <div class="perf-verdict">
+        <div class="perf-v-text">${esc(v.sentence)}</div>
+        <div class="muted tiny">Worked out from ${v.sample} posts. Instagram's
+        own numbers, not an estimate.</div>
+      </div>`).join("")}`
+    : (d.measured >= 1 ? `
+    <h4 class="perf-h">What your own posts say</h4>
+    <div class="perf-note perf-soft">
+      <b>Not enough to call it yet.</b>
+      <p>${esc((d.why_not_yet || {}).sentence || "")}</p>
+      <p class="muted tiny">${d.measured} post${d.measured === 1 ? "" : "s"} counted.
+      The bar is ${R.needed} of a kind, twice over, because a ranking off two or
+      three posts is luck wearing a number, and you would rearrange your week
+      around it.</p>
+    </div>` : "");
+
+  const table = (rows, title, unit) => (rows || []).length ? `
+    <h4 class="perf-h">${esc(title)}</h4>
+    <div class="table-scroll"><table class="perf-table">
+      <thead><tr><th>${esc(unit)}</th><th>Posts</th><th>Average times seen</th></tr></thead>
+      <tbody>${rows.map((r) => `
+        <tr class="${r.enough ? "" : "perf-thin"}">
+          <td>${esc(r.label || r.key)}</td>
+          <td>${r.posts}</td>
+          <td><b>${n(r.average)}</b>${r.enough ? "" :
+            ` <span class="muted tiny">too few to compare</span>`}</td>
+        </tr>`).join("")}</tbody>
+    </table></div>` : "";
+
+  const posts = (d.posts || []).length ? `
+    <h4 class="perf-h">Every post, best first</h4>
+    <div class="table-scroll"><table class="perf-table">
+      <thead><tr><th>Post</th><th>Kind</th><th>Seen</th><th>Reached</th><th>Saved</th><th>Shared</th></tr></thead>
+      <tbody>${(d.posts || []).map((p) => `
+        <tr>
+          <td>${p.permalink
+                ? `<a href="${esc(p.permalink)}" target="_blank" rel="noopener">${esc(p.caption_hook || p.product_name || "View")}</a>`
+                : esc(p.caption_hook || p.product_name || "—")}
+              <div class="muted tiny">${esc((p.posted_at || "").slice(0, 10))}${p.product_name ? " · " + esc(p.product_name) : ""}</div></td>
+          <td class="muted tiny">${esc(p.pillar_name || p.format || "—")}</td>
+          <td><b>${n(p.views)}</b></td>
+          <td>${n(p.reach)}</td>
+          <td>${n(p.saved)}</td>
+          <td>${n(p.shares)}</td>
+        </tr>`).join("")}</tbody>
+    </table></div>` : "";
+
+  const settling = d.settling ? `
+    <p class="muted tiny perf-settle">${sic("clock")}${d.settling} recent
+    post${d.settling === 1 ? " is" : "s are"} not counted above. Instagram takes
+    up to two days to report, and showing a zero in the meantime would read as a
+    post that failed.</p>` : "";
+
+  openModal(`How your posts did${acct.username ? " · @" + esc(acct.username) : ""}`, `
+    <p class="muted tiny perf-intro">
+      The last ${window} days, straight from Instagram.
+      ${typeof acct.followers === "number" ? `${n(acct.followers)} followers.` : ""}
+      ${d.cached ? "Refreshed at most an hour ago." : ""}
+    </p>
+    ${blocker}
+    ${statBlock}
+    ${verdicts}
+    ${table(d.by_pillar, "By kind of post", "Kind")}
+    ${table(d.by_format, "By format", "Format")}
+    ${table(d.by_product, "By product", "Product")}
+    ${posts}
+    ${settling}
+    <div class="modal-actions">
+      <button class="btn ghost sm" data-perfdays="7">Last 7 days</button>
+      <button class="btn ghost sm" data-perfdays="28">Last 28 days</button>
+      <button class="btn ghost sm" data-perfdays="90">Last 90 days</button>
+      <button class="btn ghost sm" id="perfRefresh">${sic("refresh")}Fetch again</button>
+      <button class="btn" id="perfClose">Close</button>
+    </div>`);
+
+  $("perfClose").onclick = closeModal;
+  const conn = $("perfConnect");
+  if (conn) conn.onclick = () => { closeModal(); openModule("instagram"); };
+  document.querySelectorAll("[data-perfdays]").forEach((b) => {
+    b.onclick = () => { closeModal(); openSocialPerformance(Number(b.dataset.perfdays)); };
+  });
+  $("perfRefresh").onclick = async () => {
+    // "Fetch again" has to actually go back to Instagram, or the button is a
+    // lie. The server drops this account's cached copy before re-reading.
+    closeModal();
+    try {
+      await withBusy("Asking Instagram again",
+                     "Dropping what we had and re-reading. A few seconds.",
+                     () => api(`/api/social/performance?days=${window}&refresh=1`));
+    } catch (e) { /* the reopen below reports it */ }
+    openSocialPerformance(window);
+  };
+}
+
+
 async function openPostQueue() {
   let q;
   try { q = await api("/api/social/queue"); } catch (e) { return toast(e.message, 6000); }
@@ -8792,6 +8979,7 @@ async function renderSocial() {
         <button class="btn ghost sm" id="smShoot">${sic("camera")}Shoot list</button>
         <button class="btn ghost sm" id="smSettings">${sic("settings")}Setup</button>
         <button class="btn ghost sm" id="smQueue" title="Why a post has or has not gone out">${sic("clock")}What is going out</button>
+        <button class="btn ghost sm" id="smPerf" title="What your published posts actually did, from Instagram">${sic("trend")}How it did</button>
         ${d.instagram && d.instagram.connected
           ? `<button class="btn ghost sm" id="smInsta" title="Instagram connection">${sic("instagram")}@${esc(d.instagram.account_username || "connected")}</button>`
           : ""}<!-- not connected? the strip below asks, and asking twice on one
@@ -8914,6 +9102,8 @@ async function renderSocial() {
   $("smSettings").onclick = openSocialSetup;
   const sq = $("smQueue");
   if (sq) sq.onclick = openPostQueue;
+  const sp = $("smPerf");
+  if (sp) sp.onclick = () => openSocialPerformance(28);
   const igBtn = $("smInsta");
   if (igBtn) igBtn.onclick = () => openModule("instagram");
   const igHere = $("igConnectHere");

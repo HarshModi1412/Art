@@ -3328,3 +3328,58 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .dom-dns { width: 100%; font-size: 12px; }
 .dom-dns code { font-size: 11.5px; }
 .good-t { color: var(--green); }
+
+/* ---------------------------------------------------------------------------
+   How it did (Instagram performance)
+   ---------------------------------------------------------------------------
+   Deliberately plain. This screen is read, not operated, and its job is to make
+   one sentence land: which kind of post works for THIS seller. So the verdict
+   gets the weight and the tables stay quiet underneath it.
+
+   The "too few to compare" rows are dimmed rather than hidden, because hiding
+   them would make a thin bucket look like it does not exist, and a seller would
+   conclude they had never tried that kind of post.
+   --------------------------------------------------------------------------- */
+.perf-intro { margin: 0 0 14px; }
+.perf-h { font-size: 14px; margin: 22px 0 8px; color: var(--text); }
+.perf-h:first-of-type { margin-top: 6px; }
+
+.perf-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px; margin-bottom: 4px;
+}
+.perf-stat {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px); padding: 12px 14px;
+}
+.perf-num { font-size: 22px; font-weight: 700; line-height: 1.1;
+  font-variant-numeric: tabular-nums; }
+.perf-lbl { font-size: 12.5px; font-weight: 600; margin-top: 3px; }
+.perf-why { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.45; }
+
+/* The verdict is the product. Everything else on the screen supports it. */
+.perf-verdict {
+  border-left: 3px solid var(--primary); background: var(--primary-soft);
+  padding: 12px 14px; border-radius: 0 var(--radius-sm, 8px) var(--radius-sm, 8px) 0;
+  margin-bottom: 10px;
+}
+.perf-v-text { font-size: 15px; font-weight: 600; line-height: 1.45; margin-bottom: 4px; }
+
+.perf-note {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px); padding: 14px 16px; margin-bottom: 16px;
+}
+.perf-note b { display: block; margin-bottom: 5px; font-size: 14.5px; }
+.perf-note p { margin: 0 0 10px; color: var(--text-2); font-size: 13.5px; line-height: 1.55; }
+.perf-note p:last-child { margin-bottom: 0; }
+.perf-note .btn { margin-top: 2px; }
+/* A Meta rule is not our failure, so it does not get an error colour. It gets
+   the colour of a note, and the words carry the meaning. */
+.perf-rule { border-left: 3px solid var(--amber); }
+.perf-soft { background: transparent; border-style: dashed; }
+
+.perf-table td, .perf-table th { padding: 8px 10px 8px 0; }
+.perf-table td b { font-variant-numeric: tabular-nums; }
+.perf-thin td { color: var(--muted); }
+.perf-settle { margin-top: 14px; display: flex; align-items: flex-start; gap: 6px; }
+.perf-settle svg { flex: none; margin-top: 2px; }
