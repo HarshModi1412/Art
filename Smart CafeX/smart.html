@@ -18,7 +18,7 @@
     document.documentElement.setAttribute("data-theme", saved || (prefersDark ? "dark" : "light"));
   })();
 </script>
-<link rel="stylesheet" href="/smart-static/smart.css?v=64" />
+<link rel="stylesheet" href="/smart-static/smart.css?v=65" />
 <!-- Plotly is NOT loaded here.
      It is ~3.5 MB of JavaScript, and it used to sit in this <head> with no
      `defer`, which means every single page view — including the login screen,
@@ -86,6 +86,7 @@
         <button type="button" data-theme-set="dark" aria-pressed="false"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><span class="tlabel"> Dark</span></button>
       </div>
       <span class="tb-user" id="tbUser"></span>
+      <button class="btn ghost sm" id="accountBtn" title="Account: where you sell, currency, email, Instagram, payments and keys"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg><span class="tlabel"> Account</span></button>
       <button class="btn ghost sm" id="logoutBtn">Log out</button>
     </div>
   </header>
@@ -222,6 +223,6 @@
     <div class="err" id="addErr" hidden></div>
   </div>
 </div>
-<script src="/smart-static/smart.js?v=64"></script>
+<script src="/smart-static/smart.js?v=65"></script>
 </body>
 </html>

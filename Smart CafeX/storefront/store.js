@@ -41,7 +41,22 @@ const S = {
 const el = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const money = (n) => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+/* Every price on the storefront goes through here, so the shop reads in the
+   ONE currency the seller chose. Symbol and grouping both follow it: a US shop
+   shows $1,200.00, a UK shop reads in pounds, a euro shop in euros, an Indian
+   shop ₹1,20,000. The currency is read live from the loaded site, so there is
+   no second place to keep in step. */
+const CCY_SYM = { INR: "₹", USD: "$", GBP: "£", EUR: "€" };
+const CCY_LOCALE = { INR: "en-IN", USD: "en-US", GBP: "en-GB", EUR: "en-IE" };
+function ccyCode() {
+  try { return (S.site && S.site.commerce && S.site.commerce.currency) || "INR"; }
+  catch (e) { return "INR"; }
+}
+const money = (n) => {
+  const c = ccyCode();
+  return (CCY_SYM[c] || "₹")
+    + Number(n || 0).toLocaleString(CCY_LOCALE[c] || "en-IN", { maximumFractionDigits: 2 });
+};
 const initials = (s) => (s || "S").trim().replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "S";
 
 /** Inline SVG from the shared icon set. Stroke-based, inherits colour. */

@@ -3558,3 +3558,27 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
     height: 44px; transform: translateY(-50%);
   }
 }
+
+/* ============================================================
+   Account tab (openAccount) — one screen for every setup setting.
+   Sections stack; forms are one field per row (a stated preference).
+   ============================================================ */
+.acc-wrap { display: flex; flex-direction: column; gap: 18px; }
+.acc-sec { border: 1px solid var(--border, #d7dae1); border-radius: 12px; padding: 16px; background: var(--surface, #fff); }
+.acc-sec > h4 { margin: 0 0 6px; font-size: 0.95rem; }
+.acc-sec .fld { display: block; margin: 0 0 10px; }
+.acc-sec .fld > span { display: block; margin: 0 0 4px; font-size: 0.82rem; color: var(--text-2, #4b5162); }
+.acc-sec select, .acc-sec input { width: 100%; }
+.acc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
+.acc-dot.on { background: var(--green, #3d785f); }
+.acc-dot.off { background: var(--border-strong, #838a9d); }
+.acc-prov { border: 1px solid var(--border, #d7dae1); border-radius: 10px; padding: 12px; margin: 10px 0 0; }
+.acc-prov.active { border-color: var(--green, #3d785f); }
+.acc-prov-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.acc-prov-h > b { display: flex; align-items: center; }
+.acc-prov-h .muted { margin-left: auto; }
+.acc-badge { font-size: 0.72rem; font-weight: 600; color: var(--green, #3d785f); border: 1px solid var(--green, #3d785f); border-radius: 6px; padding: 1px 7px; }
+.acc-prov-form { margin-top: 10px; }
+.acc-ai { border-top: 1px solid var(--border, #d7dae1); padding-top: 12px; margin-top: 12px; }
+.acc-ai:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+.acc-ai-acts { display: flex; gap: 8px; }

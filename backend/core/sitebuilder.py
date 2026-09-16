@@ -31,6 +31,18 @@ from backend.core import auth, db, products, user_store
 SITE_KEY = "site_config"
 T_SITE = "sites"
 
+
+def _ccy_code(site: dict) -> str:
+    from backend.core import currency
+    return currency.normalize((site.get("commerce") or {}).get("currency"))
+
+
+def _price_str(site: dict, amount) -> str:
+    """A price for SEO/announcement text, in the store's own currency, e.g.
+    '$1,200' or '₹1,200'. Used where a rupee sign was hardcoded before."""
+    from backend.core import currency
+    return currency.fmt(amount, _ccy_code(site))
+
 _INDEX_PATH = os.path.join(auth.BASE_DIR, "site_index.json")
 _lock = threading.Lock()
 
@@ -894,7 +906,11 @@ def save_site(email: str, patch: dict) -> dict:
     c["online_enabled"] = _b(c.get("online_enabled"), False)
     c["cod_advance"] = max(0.0, round(_f(c.get("cod_advance"), 0), 2))
     c["gst_inclusive"] = _b(c.get("gst_inclusive"), True)
-    c["currency"] = "INR"
+    # The store is priced in ONE currency the seller chose (INR/USD/GBP/EUR).
+    # This used to be forced to INR, which is why a US or UK seller could set a
+    # dollar price and still be shown a rupee sign — the save quietly rewrote it.
+    from backend.core import currency as _ccy
+    c["currency"] = _ccy.normalize(c.get("currency"))
     c["order_note"] = str(c.get("order_note") or "").strip()[:200]
 
     # ---- link previews ----
@@ -1212,7 +1228,7 @@ def seed_from_catalogue(email: str, force: bool = False) -> dict:
         c = site.get("commerce") or {}
         above = _f(c.get("free_shipping_above"))
         if above:
-            patch["announcement"] = f"Free shipping over ₹{above:,.0f} · Dispatched within 24 hours"
+            patch["announcement"] = f"Free shipping over {_price_str(site, above)} · Dispatched within 24 hours"
 
     # a pairing that matches the theme beats three empty font dropdowns
     style = dict(site.get("style") or {})
@@ -1243,7 +1259,7 @@ def seo_meta(handle: str, site: dict, product: dict | None = None) -> dict:
         title = f"{product.get('name')} | {brand}"
         desc = (product.get("description") or "").strip() or \
             (f"{product.get('name')} from {brand}." +
-             (f" ₹{float(product['price']):,.0f}." if product.get("price") else ""))
+             (f" {_price_str(site, product['price'])}." if product.get("price") else ""))
         image = product.get("image_url") or seo.get("og_image") or hero.get("image_url") or ""
     else:
         title = (seo.get("title") or "").strip() or \
@@ -1349,7 +1365,7 @@ def storefront_jsonld(handle: str, site: dict, catalogue: list[dict],
         return {
             "@type": "Offer",
             "price": f"{price:.2f}",
-            "priceCurrency": "INR",
+            "priceCurrency": _ccy_code(site),
             "availability": ("https://schema.org/InStock" if p.get("in_stock")
                              else "https://schema.org/OutOfStock"),
             "url": _abs(base_url, f"{store_path}/p/{product_slug(p)}"),
@@ -1426,7 +1442,7 @@ def storefront_fallback_html(handle: str, site: dict, catalogue: list[dict],
         parts.append(f"<h1>{esc(product.get('name'))}</h1>")
         if product.get("price") not in (None, ""):
             try:
-                parts.append(f"<p>Rs {float(product['price']):,.0f}</p>")
+                parts.append(f"<p>{esc(_price_str(site, float(product['price'])))}</p>")
             except (TypeError, ValueError):
                 pass
         if product.get("description"):
@@ -1442,7 +1458,7 @@ def storefront_fallback_html(handle: str, site: dict, catalogue: list[dict],
                 price = ""
                 if p.get("price") not in (None, ""):
                     try:
-                        price = f" Rs {float(p['price']):,.0f}"
+                        price = " " + _price_str(site, float(p['price']))
                     except (TypeError, ValueError):
                         price = ""
                 rows.append(

@@ -48,6 +48,155 @@ except ImportError:                # the SDK is optional until a seller connects
 
 
 # ---------------------------------------------------------------------------
+# Which gateways a seller can connect, and what each one takes.
+#
+# One seller, one active gateway at a time (the storefront checkout can only run
+# one flow). A US or UK seller connects Stripe or PayPal; an Indian seller keeps
+# Razorpay. Money always lands in the SELLER's own account on their own keys —
+# we never hold it — so this is not us becoming a payment aggregator.
+#
+# The credentials live in secrets_store (Fernet-encrypted), keyed per connector.
+# The active choice is a plain per-account flag.
+# ---------------------------------------------------------------------------
+PROVIDER_META = {
+    "razorpay": {
+        "id": "razorpay", "label": "Razorpay", "connector": "razorpay_store",
+        "currencies": ["INR"],
+        "fields": [
+            {"key": "key_id", "label": "Key ID", "secret": False, "hint": "starts with rzp_"},
+            {"key": "key_secret", "label": "Key Secret", "secret": True, "hint": ""},
+        ],
+        "help": "For India. dashboard.razorpay.com -> Settings -> API Keys.",
+    },
+    "stripe": {
+        "id": "stripe", "label": "Stripe", "connector": "stripe_store",
+        "currencies": ["USD", "GBP", "EUR", "INR"],
+        "fields": [
+            {"key": "secret_key", "label": "Secret key", "secret": True, "hint": "starts with sk_"},
+            {"key": "publishable_key", "label": "Publishable key", "secret": False, "hint": "starts with pk_"},
+        ],
+        "help": "For the US, UK and Europe. dashboard.stripe.com -> Developers -> API keys.",
+    },
+    "paypal": {
+        "id": "paypal", "label": "PayPal", "connector": "paypal_store",
+        "currencies": ["USD", "GBP", "EUR"],
+        "fields": [
+            {"key": "client_id", "label": "Client ID", "secret": False, "hint": ""},
+            {"key": "client_secret", "label": "Secret", "secret": True, "hint": ""},
+        ],
+        "help": "Worldwide. developer.paypal.com -> Apps & Credentials -> your app.",
+    },
+}
+_PROVIDER_KEY = "store_payment_provider"
+
+
+def provider(seller: str) -> str:
+    """The gateway the storefront checkout uses for this seller.
+
+    The seller's explicit choice if they made one and it is connected; else the
+    one gateway that IS connected; else Razorpay, the historical default."""
+    chosen = str(user_store.get_key(seller, _PROVIDER_KEY, "") or "").lower()
+    if chosen in PROVIDER_META and _provider_connected(seller, chosen):
+        return chosen
+    for pid in PROVIDER_META:
+        if _provider_connected(seller, pid):
+            return pid
+    return "razorpay"
+
+
+def set_provider(seller: str, pid: str) -> dict:
+    pid = str(pid or "").lower()
+    if pid not in PROVIDER_META:
+        raise ValueError("Pick a payment gateway from the list.")
+    user_store.set_key(seller, _PROVIDER_KEY, pid)
+    return provider_status(seller)
+
+
+def _provider_connected(seller: str, pid: str) -> bool:
+    meta = PROVIDER_META.get(pid)
+    if not meta:
+        return False
+    creds = secrets_store.get_credentials(seller, meta["connector"]) or {}
+    return all(creds.get(f["key"]) for f in meta["fields"])
+
+
+def _last4(s: str) -> str:
+    s = str(s or "")
+    return s[-4:] if len(s) >= 4 else s
+
+
+def save_stripe_keys(seller: str, secret_key: str, publishable_key: str) -> dict:
+    sk = (secret_key or "").strip()
+    pk = (publishable_key or "").strip()
+    if not sk or not pk:
+        raise ValueError("Both the secret key and the publishable key are needed.")
+    if not sk.startswith("sk_"):
+        raise ValueError("A Stripe secret key starts with sk_test_ or sk_live_.")
+    if not pk.startswith("pk_"):
+        raise ValueError("A Stripe publishable key starts with pk_test_ or pk_live_.")
+    secrets_store.save_connection(
+        seller, PROVIDER_META["stripe"]["connector"],
+        {"secret_key": sk, "publishable_key": pk},
+        meta={"last4": _last4(pk), "mode": "live" if "_live_" in sk else "test"})
+    user_store.set_key(seller, _PROVIDER_KEY, "stripe")
+    return provider_status(seller)
+
+
+def save_paypal_keys(seller: str, client_id: str, client_secret: str) -> dict:
+    cid = (client_id or "").strip()
+    csec = (client_secret or "").strip()
+    if not cid or not csec:
+        raise ValueError("Both the Client ID and the Secret are needed.")
+    if len(cid) < 20:
+        raise ValueError("That Client ID looks too short — copy the whole value from PayPal.")
+    secrets_store.save_connection(
+        seller, PROVIDER_META["paypal"]["connector"],
+        {"client_id": cid, "client_secret": csec},
+        meta={"last4": _last4(cid)})
+    user_store.set_key(seller, _PROVIDER_KEY, "paypal")
+    return provider_status(seller)
+
+
+def disconnect_provider(seller: str, pid: str) -> dict:
+    pid = str(pid or "").lower()
+    meta = PROVIDER_META.get(pid)
+    if meta:
+        secrets_store.delete_connection(seller, meta["connector"])
+        if str(user_store.get_key(seller, _PROVIDER_KEY, "") or "") == pid:
+            user_store.set_key(seller, _PROVIDER_KEY, "")
+    return provider_status(seller)
+
+
+def provider_status(seller: str) -> dict:
+    """Everything the Account tab needs to show the payment section: each
+    gateway's connected state and last-four, the active one, and the currencies
+    each supports. Never a secret."""
+    active = provider(seller)
+    out = {}
+    for pid, meta in PROVIDER_META.items():
+        m = secrets_store.connection_meta(seller, meta["connector"]) or {}
+        out[pid] = {
+            "id": pid, "label": meta["label"],
+            "connected": _provider_connected(seller, pid),
+            "mode": m.get("mode", ""),
+            "last4": m.get("last4", ""),
+            "currencies": meta["currencies"],
+            "fields": meta["fields"],
+            "help": meta["help"],
+        }
+    return {
+        "active": active,
+        "active_label": PROVIDER_META[active]["label"],
+        "providers": out,
+        "sdk": {"razorpay": razorpay is not None},
+        # The live card capture for Stripe and PayPal is wired separately and
+        # must be tested with the seller's own test keys before go-live; the
+        # Account tab surfaces this so nobody assumes an untested charge path.
+        "charge_ready": {"razorpay": True, "stripe": False, "paypal": False},
+    }
+
+
+# ---------------------------------------------------------------------------
 # the seller's gateway
 # ---------------------------------------------------------------------------
 def get_keys(seller: str) -> dict | None:

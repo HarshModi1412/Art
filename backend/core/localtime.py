@@ -77,31 +77,98 @@ def _tzinfo(name: str):
         return None
 
 
+def _saved(email: str) -> dict:
+    if not email:
+        return {}
+    try:
+        return user_store.get_key(email, KEY, {}) or {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def get(email: str = "") -> dict:
-    """The account's country and zone, falling back to the server default."""
-    saved = {}
-    if email:
-        try:
-            saved = user_store.get_key(email, KEY, {}) or {}
-        except Exception:  # noqa: BLE001
-            saved = {}
+    """The account's country, zone, selling country and currency.
+
+    `country` is where the SELLER is (drives the clock and, for India, GST).
+    `selling_country` is the market they sell to (drives the default currency).
+    `currency` is the one base currency the whole shop is priced in. All three
+    fall back sensibly: an unset selling country follows the seller's country,
+    and an unset currency follows the selling country (India->INR, US->USD,
+    UK->GBP, eurozone->EUR, otherwise USD)."""
+    from backend.core import currency  # local import avoids an import cycle
+    saved = _saved(email)
     code = str(saved.get("country") or "").upper()
     if code in BY_CODE:
         c = BY_CODE[code]
-        return {"country": c["code"], "country_name": c["name"], "tz": c["tz"],
+        base = {"country": c["code"], "country_name": c["name"], "tz": c["tz"],
                 "note": c.get("note", ""), "set": True}
-    env_tz = (os.environ.get("AUTOPLAN_TZ") or "").strip()
-    c = BY_CODE.get(DEFAULT_COUNTRY, COUNTRIES[0])
-    return {"country": c["code"], "country_name": c["name"], "tz": env_tz or c["tz"],
-            "note": c.get("note", ""), "set": False}
+    else:
+        env_tz = (os.environ.get("AUTOPLAN_TZ") or "").strip()
+        c = BY_CODE.get(DEFAULT_COUNTRY, COUNTRIES[0])
+        base = {"country": c["code"], "country_name": c["name"],
+                "tz": env_tz or c["tz"], "note": c.get("note", ""), "set": False}
+
+    selling = str(saved.get("selling_country") or "").upper()
+    if selling not in BY_CODE:
+        selling = base["country"]           # sell where you are, unless told otherwise
+    ccy = currency.normalize(saved.get("currency") or currency.for_country(selling))
+    base["selling_country"] = selling
+    base["selling_country_name"] = BY_CODE.get(selling, {}).get("name", selling)
+    base["currency"] = ccy
+    base["currency_symbol"] = currency.symbol(ccy)
+    base["charges_tax"] = base["country"] == "IN"   # GST is India-only, by policy
+    return base
+
+
+def _write(email: str, patch: dict) -> None:
+    cur = _saved(email)
+    cur.update({k: v for k, v in patch.items() if v is not None})
+    user_store.set_key(email, KEY, cur)
 
 
 def set_country(email: str, code: str) -> dict:
     code = str(code or "").upper()
     if code not in BY_CODE:
         raise ValueError("Pick a country from the list.")
-    user_store.set_key(email, KEY, {"country": code, "tz": BY_CODE[code]["tz"]})
+    _write(email, {"country": code, "tz": BY_CODE[code]["tz"]})
     return get(email)
+
+
+def set_settings(email: str, country: str | None = None,
+                 selling_country: str | None = None,
+                 currency_code: str | None = None) -> dict:
+    """Save any of the account's market settings. Each is optional so the
+    Account tab can change one without disturbing the others."""
+    from backend.core import currency
+    patch: dict = {}
+    if country is not None:
+        c = str(country).upper()
+        if c not in BY_CODE:
+            raise ValueError("Pick a country from the list.")
+        patch["country"] = c
+        patch["tz"] = BY_CODE[c]["tz"]
+    if selling_country is not None:
+        s = str(selling_country).upper()
+        if s not in BY_CODE:
+            raise ValueError("Pick a selling country from the list.")
+        patch["selling_country"] = s
+    if currency_code is not None:
+        if not currency.is_valid(currency_code):
+            raise ValueError("Pick a currency from the list.")
+        patch["currency"] = currency.normalize(currency_code)
+    _write(email, patch)
+    return get(email)
+
+
+def currency_code(email: str = "") -> str:
+    """The one base currency this account is priced in."""
+    return get(email)["currency"]
+
+
+def charges_tax(email: str = "") -> bool:
+    """Whether an order or invoice for this seller carries tax. GST for India;
+    nothing outside it, by product policy, until proper VAT/sales-tax exists."""
+    return get(email)["country"] == "IN"
 
 
 def tz(email: str = ""):

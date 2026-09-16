@@ -171,10 +171,20 @@ def _openai_image(product_type: str, topic: str, email: str | None = None) -> st
     limit at all. Checked before the call, counted only after it succeeds. When
     no email is passed (a context with no account) the allowance is not touched."""
     from openai import OpenAI
+    # The seller's own OpenAI key, if they set one in the Account tab. On their
+    # own key the bill is theirs, so the monthly allowance does not apply; on the
+    # shared key it does.
+    own_key = None
     if email:
+        try:
+            from backend.core import account
+            own_key = account.ai_key(email, "openai")
+        except Exception:  # noqa: BLE001
+            own_key = None
+    if email and not own_key:
         from backend.core import aicaps
         aicaps.check_image_month(email)   # raises MonthlyImageCapReached at the cap
-    client = OpenAI()
+    client = OpenAI(api_key=own_key) if own_key else OpenAI()
     style = {
         "jewellery": "clean minimal studio photograph, soft warm lighting, marble backdrop",
         "clothes":   "flat-lay lifestyle photograph, natural sunlight, neutral linen backdrop",
@@ -202,7 +212,8 @@ def _openai_image(product_type: str, topic: str, email: str | None = None) -> st
     url = media.save(fname, content).get("url")
     # Count it against the month's allowance, now that a picture actually came
     # back — same rule as the Studio path: a picture spent is a picture seen.
-    if email and url:
+    # Not counted when the seller is on their own key: it did not cost us.
+    if email and url and not own_key:
         from backend.core import aicaps
         aicaps.consume_image_month(email)
     return url

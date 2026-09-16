@@ -3724,6 +3724,77 @@ def locale_set(body: LocaleBody, authorization: str | None = Header(default=None
             "options": localtime.options()}
 
 
+# =========================================================================
+# The Account tab — every setup setting in one place
+# =========================================================================
+class AccountSettingsBody(BaseModel):
+    country: str | None = None
+    selling_country: str | None = None
+    currency: str | None = None
+
+
+class AiKeyBody(BaseModel):
+    provider: str            # "openai" | "gemini"
+    api_key: str | None = ""
+
+
+@app.get("/api/account")
+def account_get(authorization: str | None = Header(default=None)):
+    """One payload for the whole Account tab: where the seller is, where and in
+    what currency they sell, their sender email, Instagram, payment gateway and
+    any own AI keys — each as a connected/not-connected state, never a secret."""
+    from backend.core import account
+    return account.summary(require_user(authorization))
+
+
+@app.post("/api/account/settings")
+def account_settings(body: AccountSettingsBody,
+                     authorization: str | None = Header(default=None)):
+    """Save the market settings. Changing the currency also re-prices the
+    seller's own storefront in it, and moving out of India clears any GST line
+    (no tax outside India, by policy) so the two can never disagree."""
+    from backend.core import account, currency as _ccy
+    email = require_user(authorization)
+    try:
+        loc = localtime.set_settings(email, country=body.country,
+                                     selling_country=body.selling_country,
+                                     currency_code=body.currency)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    # Keep the storefront's own currency and tax in step with the account.
+    try:
+        site = sitebuilder.get_site(email)
+        c = dict(site.get("commerce") or {})
+        changed = False
+        if c.get("currency") != loc["currency"]:
+            c["currency"] = loc["currency"]; changed = True
+        if not loc["charges_tax"] and float(c.get("gst_percent") or 0) != 0:
+            c["gst_percent"] = 0.0; changed = True     # no tax line outside India
+        if changed:
+            sitebuilder.save_site(email, {"commerce": c})
+    except Exception:  # noqa: BLE001 — a seller with no storefront yet is fine
+        pass
+    cache.clear(email)
+    return account.summary(email)
+
+
+@app.post("/api/account/ai-key")
+def account_ai_key(body: AiKeyBody, authorization: str | None = Header(default=None)):
+    from backend.core import account
+    email = require_user(authorization)
+    try:
+        return {"ok": True, "ai_keys": account.save_ai_key(email, body.provider, body.api_key or "")}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/account/ai-key/{provider}")
+def account_ai_key_delete(provider: str, authorization: str | None = Header(default=None)):
+    from backend.core import account
+    email = require_user(authorization)
+    return {"ok": True, "ai_keys": account.remove_ai_key(email, provider)}
+
+
 class SignatureBody(BaseModel):
     url: str = ""
 
@@ -4231,23 +4302,82 @@ def site_state(authorization: str | None = Header(default=None)):
 
 @app.get("/api/site/gateway")
 def site_gateway(authorization: str | None = Header(default=None)):
-    """Whether this seller has connected their own Razorpay. Never returns the
-    secret — only whether one is stored and its last four characters."""
-    return store_payments.status(require_user(authorization))
+    """Every gateway this seller can connect (Razorpay, Stripe, PayPal), which
+    one is active, and each one's connected state and last four. Never a secret.
+    The old flat Razorpay shape is kept under `razorpay` for any older caller."""
+    email = require_user(authorization)
+    ps = store_payments.provider_status(email)
+    # Back-compat: keep the pre-multi-gateway keys the Razorpay-only UI read.
+    return {**ps, **store_payments.status(email)}
 
 
 @app.post("/api/site/gateway")
 def site_gateway_save(body: StoreGatewayBody, authorization: str | None = Header(default=None)):
+    """Save Razorpay keys (kept for the existing India flow)."""
     email = require_user(authorization)
     try:
-        return store_payments.save_keys(email, body.key_id, body.key_secret)
+        store_payments.save_keys(email, body.key_id, body.key_secret)
+        store_payments.set_provider(email, "razorpay")
+        return store_payments.provider_status(email)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class StripeGatewayBody(BaseModel):
+    secret_key: str
+    publishable_key: str
+
+
+class PaypalGatewayBody(BaseModel):
+    client_id: str
+    client_secret: str
+
+
+class GatewayProviderBody(BaseModel):
+    provider: str            # razorpay | stripe | paypal
+
+
+@app.post("/api/site/gateway/stripe")
+def site_gateway_stripe(body: StripeGatewayBody,
+                        authorization: str | None = Header(default=None)):
+    """Save the seller's own Stripe keys — for US, UK and Europe. Money settles
+    into their Stripe account; we never hold it."""
+    email = require_user(authorization)
+    try:
+        return store_payments.save_stripe_keys(email, body.secret_key, body.publishable_key)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/site/gateway/paypal")
+def site_gateway_paypal(body: PaypalGatewayBody,
+                        authorization: str | None = Header(default=None)):
+    """Save the seller's own PayPal app credentials."""
+    email = require_user(authorization)
+    try:
+        return store_payments.save_paypal_keys(email, body.client_id, body.client_secret)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/site/gateway/provider")
+def site_gateway_provider(body: GatewayProviderBody,
+                          authorization: str | None = Header(default=None)):
+    """Choose which connected gateway the storefront checkout uses."""
+    email = require_user(authorization)
+    try:
+        return store_payments.set_provider(email, body.provider)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
 
 @app.post("/api/site/gateway/disconnect")
-def site_gateway_disconnect(authorization: str | None = Header(default=None)):
-    return store_payments.disconnect(require_user(authorization))
+def site_gateway_disconnect(provider: str = "razorpay",
+                            authorization: str | None = Header(default=None)):
+    """Disconnect one gateway. Defaults to Razorpay so the old no-argument call
+    (from the Razorpay-only UI) still does what it always did."""
+    email = require_user(authorization)
+    return store_payments.disconnect_provider(email, provider)
 
 
 @app.get("/api/site/pairings")

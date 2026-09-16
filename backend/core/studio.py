@@ -1132,7 +1132,8 @@ def _reference_shot(email: str, product: dict, material: dict) -> tuple[bytes, s
     return None
 
 
-def _openai_image(prompt: str, reference: tuple[bytes, str] | None) -> tuple[bytes, bool]:
+def _openai_image(prompt: str, reference: tuple[bytes, str] | None,
+                  api_key: str | None = None) -> tuple[bytes, bool]:
     """The OpenAI/ChatGPT image call. Returns (bytes, from_reference).
 
     Two different endpoints, and the difference matters more than anything
@@ -1148,7 +1149,9 @@ def _openai_image(prompt: str, reference: tuple[bytes, str] | None) -> tuple[byt
     prevent."""
     import base64
     from openai import OpenAI
-    client = OpenAI()
+    # The seller's own key when they gave one, otherwise the platform's shared
+    # key from the environment (OpenAI() reads OPENAI_API_KEY on its own).
+    client = OpenAI(api_key=api_key) if api_key else OpenAI()
     model = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1")
     if reference:
         ref_bytes, ref_mime = reference
@@ -1193,15 +1196,34 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     comment on the dispatch below for why.
     """
     from backend.core import aiprovider, aicaps
-    # Two ceilings, both checked before anything is called and both counted only
-    # after it succeeds. See backend/core/aicaps.py.
-    #   * the monthly picture allowance (30 by default) — the product limit the
-    #     seller watches, checked first because it is the one they meet, and the
-    #     one that sends them to "upload your own photo" rather than "tomorrow";
-    #   * the daily spend guard — the blunt ceiling on our own money.
-    # Both sit underneath billing and apply on every plan, launch mode included.
-    aicaps.check_image_month(email)
-    aicaps.check(email, "image")
+    # The engine is resolved first so the money rules below can see it. It only
+    # needs the seller's choice and whether this is a re-shoot, not the prompt.
+    eng = image_engine(engine, for_reshoot=bool(reference))   # raises if unusable
+    if not eng["engine"]:
+        raise RuntimeError("No image engine is connected on this server, so "
+                           "images cannot be generated. Your own photos still work.")
+
+    # Whose money is this? If the seller pasted their OWN OpenAI key in the
+    # Account tab and this generation runs on OpenAI, the bill is theirs, so our
+    # monthly picture allowance and daily spend guard do not apply — "their
+    # usage, their bill, their own limits", as the Account tab promises. On the
+    # shared keys, both ceilings apply. See backend/core/aicaps.py.
+    own_openai = None
+    try:
+        from backend.core import account
+        own_openai = account.ai_key(email, "openai")
+    except Exception:  # noqa: BLE001 — a missing account module must not block a draw
+        own_openai = None
+    on_own_key = bool(own_openai and eng["engine"] == "openai")
+
+    if not on_own_key:
+        #   * the monthly picture allowance (30 by default) — the product limit
+        #     the seller watches, the one that sends them to "upload your own
+        #     photo" rather than "tomorrow";
+        #   * the daily spend guard — the blunt ceiling on our own money.
+        # Both apply on every plan, launch mode included.
+        aicaps.check_image_month(email)
+        aicaps.check(email, "image")
     # Make sure the brand's essay has been compressed for the camera before we
     # build the prompt. Cached against the essay, so this is one call the first
     # time after a re-read and free afterwards.
@@ -1211,10 +1233,6 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
         except Exception as e:  # noqa: BLE001 — never block a generation on this
             log.warning("could not distil the aesthetic: %s", e)
     prompt = image_prompt(brief, guidance, has_reference=bool(reference))
-    eng = image_engine(engine, for_reshoot=bool(reference))   # raises if unusable
-    if not eng["engine"]:
-        raise RuntimeError("No image engine is connected on this server, so "
-                           "images cannot be generated. Your own photos still work.")
 
     # ONE dispatch, one engine. This used to be a chain that quietly tried a
     # different vendor when the first failed — which was fine while the server
@@ -1226,7 +1244,7 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     eid = eng["engine"]
     try:
         if eid == "openai":
-            content, from_ref = _openai_image(prompt, reference)
+            content, from_ref = _openai_image(prompt, reference, api_key=own_openai)
         elif eid == "gemini":
             content = aiprovider.gemini_image(
                 prompt, reference[0] if reference else None,
@@ -1250,14 +1268,13 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
             f"just now. This is usually that account's allowance being spent, "
             f"try another engine from the list, or again later.")
 
-    # The corner tag is for INVENTED pictures only. A re-shoot starts from the
-    # seller's own photograph, so the product already carries its real brand
-    # marking and the prompt above now preserves it — stamping a second name
-    # into the corner would show the brand twice, once real and once pasted on.
-    aicaps.consume(email, "image")
-    # Count it against the month's picture allowance too, only now that it
-    # actually came back — a picture the seller sees is a picture spent.
-    aicaps.consume_image_month(email)
+    # Count the picture against both allowances, only now that it actually came
+    # back — a picture the seller sees is a picture spent. Skipped entirely when
+    # the seller is on their own OpenAI key: it did not cost us anything, so it
+    # must not eat into a ceiling that exists to bound our spend.
+    if not on_own_key:
+        aicaps.consume(email, "image")
+        aicaps.consume_image_month(email)
 
     # Every generated picture goes through the watermark remover BEFORE the
     # brand tag is added — the other order would have the remover looking at

@@ -649,6 +649,8 @@ $("forgotLink").onclick = async (e) => {
   } catch (e2) { err.textContent = e2.message; err.hidden = false; }
 };
 
+if ($("accountBtn")) $("accountBtn").onclick = () => openAccount();
+
 $("logoutBtn").onclick = async () => {
   try { await api("/api/logout", { method: "POST" }); } catch {}
   state.token = null; state.email = null;
@@ -5782,6 +5784,186 @@ async function openMailAccount() {
       toast(`Connected. Check ${r.address}, a test message is waiting there.`, 8000);
     } catch (e) { toast(e.message, 9000); }
   };
+}
+
+/* ============================================================================
+   The Account tab. Everything the app asks a seller to set up once, in one
+   place: where they are, where and in what currency they sell, the address
+   their mail goes out from, their Instagram, their storefront payment gateway,
+   and (optionally) their own AI keys. One fetch, one screen. No secret is ever
+   shown back — only whether a thing is connected and its last four characters.
+   ============================================================================ */
+let _account = null;
+async function openAccount() {
+  let d;
+  try { d = await withBusy("Opening your account…", "", () => api("/api/account")); }
+  catch (e) { return toast(e.message); }
+  _account = d;
+  const m = d.market || {};
+  const opt = (list, val, labeler) => (list || []).map((x) =>
+    `<option value="${esc(labeler(x).v)}"${labeler(x).v === val ? " selected" : ""}>${esc(labeler(x).t)}</option>`).join("");
+  const countryOpts = (val) => opt(d.countries, val, (c) => ({ v: c.code, t: c.name }));
+  const ccyOpts = (val) => opt(d.currencies, val, (c) => ({ v: c.code, t: `${c.symbol}  ${c.name} (${c.code})` }));
+
+  const email = d.sender_email || {};
+  const ig = d.instagram || {};
+  const pay = d.payments || {};
+  const ai = d.ai_keys || {};
+
+  const dot = (on) => `<span class="acc-dot ${on ? "on" : "off"}"></span>`;
+
+  // one payment-gateway card
+  const provCard = (p) => {
+    const active = pay.active === p.id;
+    const ready = (pay.charge_ready || {})[p.id];
+    return `
+    <div class="acc-prov ${active ? "active" : ""}" data-prov="${esc(p.id)}">
+      <div class="acc-prov-h">
+        <b>${dot(p.connected)}${esc(p.label)}</b>
+        <span class="muted tiny">${esc((p.currencies || []).join(", "))}</span>
+        ${active ? `<span class="acc-badge">In use</span>`
+          : (p.connected ? `<button class="btn ghost tiny" data-use="${esc(p.id)}">Use for checkout</button>` : "")}
+      </div>
+      ${p.connected
+        ? `<div class="muted tiny">Connected${p.mode ? ` (${esc(p.mode)})` : ""}${p.last4 ? ` · ends ${esc(p.last4)}` : ""}.
+             ${ready ? "" : "Card capture for this gateway needs a test with your own keys before you rely on it."}
+             <button class="btn ghost tiny danger" data-disc="${esc(p.id)}">Disconnect</button></div>`
+        : `<div class="acc-prov-form">
+             ${(p.fields || []).map((f) => `<label class="fld">
+               <span>${esc(f.label)}${f.hint ? ` <span class="muted tiny">${esc(f.hint)}</span>` : ""}</span>
+               <input data-pf="${esc(p.id)}:${esc(f.key)}" type="${f.secret ? "password" : "text"}"
+                 autocomplete="off" placeholder="${esc(f.hint || "")}" /></label>`).join("")}
+             <button class="btn primary sm" data-save="${esc(p.id)}">${sic("check")}Connect ${esc(p.label)}</button>
+             <p class="muted tiny" style="margin:6px 0 0;">${esc(p.help || "")} Money settles into your own ${esc(p.label)} account — we never hold it.</p>
+           </div>`}
+    </div>`;
+  };
+  const providersHtml = ["razorpay", "stripe", "paypal"]
+    .map((id) => pay.providers && pay.providers[id] ? provCard(pay.providers[id]) : "").join("");
+
+  const aiRow = (id, label, hint) => {
+    const st = ai[id] || {};
+    return `<div class="acc-ai" data-ai="${esc(id)}">
+      <label class="fld"><span>${dot(st.connected)}${esc(label)} key <span class="muted tiny">${esc(hint)}</span></span>
+        <input data-aikey="${esc(id)}" type="password" autocomplete="off"
+          placeholder="${st.connected ? `saved — ends ${esc(st.last4 || "")}, type a new one to replace` : "optional — leave blank to use ours"}" /></label>
+      <div class="acc-ai-acts">
+        <button class="btn ghost sm" data-aisave="${esc(id)}">Save key</button>
+        ${st.connected ? `<button class="btn ghost sm danger" data-airemove="${esc(id)}">Remove</button>` : ""}
+      </div></div>`;
+  };
+
+  openModal("Account", `
+    <div class="acc-wrap">
+      <section class="acc-sec">
+        <h4>Where you sell</h4>
+        <p class="muted tiny" style="margin-top:0;">Sets your clock, your prices, and whether tax is added. ${esc(m.tz_label || "")}.</p>
+        <label class="fld"><span>Your country</span><select id="accCountry">${countryOpts(m.country)}</select></label>
+        <label class="fld"><span>Selling to</span><select id="accSelling">${countryOpts(m.selling_country)}</select></label>
+        <label class="fld"><span>Currency</span><select id="accCcy">${ccyOpts(m.currency)}</select></label>
+        <p class="muted tiny">${m.charges_tax
+          ? "GST applies on your store, as it does for a business in India."
+          : "No tax is added on your store — tax outside India is not handled yet, so prices are shown as you set them."}</p>
+        <button class="btn primary sm" id="accSaveMarket">${sic("check")}Save</button>
+      </section>
+
+      <section class="acc-sec">
+        <h4>${dot(email.connected)}Email you send from</h4>
+        <p class="muted tiny" style="margin-top:0;">${email.connected
+          ? `Orders and messages go out from <b>${esc(email.address)}</b>.`
+          : "Not set up. Purchase orders and messages go from a shared address until you connect your own."}</p>
+        <button class="btn ghost sm" id="accMail">${sic("mail")}${email.connected ? "Change" : "Set up sending email"}</button>
+      </section>
+
+      <section class="acc-sec">
+        <h4>${dot(ig.connected)}Instagram</h4>
+        <p class="muted tiny" style="margin-top:0;">${ig.connected
+          ? `Connected as <b>@${esc(ig.username || "your account")}</b> — posts can publish straight from here.`
+          : (ig.oauth_available ? "Connect Instagram to publish posts straight from the app."
+             : "Instagram publishing is not configured on this server yet.")}</p>
+        <button class="btn ghost sm" id="accIg">${sic("instagram")}${ig.connected ? "Manage" : "Connect Instagram"}</button>
+      </section>
+
+      <section class="acc-sec">
+        <h4>Payments on your storefront</h4>
+        <p class="muted tiny" style="margin-top:0;">Connect the gateway you already use. Razorpay for India, Stripe or PayPal for the US, UK and Europe. You pick one for checkout.</p>
+        ${providersHtml}
+      </section>
+
+      <section class="acc-sec">
+        <h4>Your own AI keys <span class="muted tiny">optional</span></h4>
+        <p class="muted tiny" style="margin-top:0;">Leave these blank to use ours (subject to the monthly picture limit). Add your own and captions and pictures run on your key and your bill, with no monthly limit from us.</p>
+        ${aiRow("openai", "OpenAI", "for captions and pictures, starts with sk-")}
+        ${aiRow("gemini", "Google Gemini", "for brand-aware pictures")}
+      </section>
+    </div>
+    <div class="modal-actions"><button class="btn ghost" data-accx>Close</button></div>`, { wide: true });
+
+  document.querySelector("[data-accx]").onclick = closeModal;
+
+  // when the selling country changes and the seller has not overridden the
+  // currency, follow it — the same rule the server uses.
+  const CCY_BY_COUNTRY = { IN: "INR", US: "USD", GB: "GBP",
+    DE: "EUR", FR: "EUR", ES: "EUR", IT: "EUR", NL: "EUR", IE: "EUR", PT: "EUR",
+    AT: "EUR", BE: "EUR", FI: "EUR", GR: "EUR" };
+  $("accSelling").onchange = () => {
+    const c = CCY_BY_COUNTRY[$("accSelling").value] || "USD";
+    if ($("accCcy")) $("accCcy").value = c;
+  };
+
+  $("accSaveMarket").onclick = async () => {
+    try {
+      _account = await withBusy("Saving…", "", () => api("/api/account/settings", { method: "POST", json: {
+        country: $("accCountry").value, selling_country: $("accSelling").value,
+        currency: $("accCcy").value } }));
+      toast("Saved. Your prices now show in " + ($("accCcy").value) + ".");
+      closeModal(); openAccount();
+    } catch (e) { toast(e.message, 7000); }
+  };
+  $("accMail").onclick = () => { closeModal(); openMailAccount(); };
+  if ($("accIg")) $("accIg").onclick = () => { closeModal(); openModule("instagram"); };
+
+  // payment gateways
+  document.querySelectorAll("[data-save]").forEach((b) => b.onclick = async () => {
+    const pid = b.dataset.save;
+    const vals = {};
+    document.querySelectorAll(`[data-pf^="${pid}:"]`).forEach((i) => {
+      vals[i.dataset.pf.split(":")[1]] = i.value.trim();
+    });
+    const route = pid === "razorpay" ? "/api/site/gateway"
+      : pid === "stripe" ? "/api/site/gateway/stripe" : "/api/site/gateway/paypal";
+    const json = pid === "razorpay" ? { key_id: vals.key_id, key_secret: vals.key_secret }
+      : pid === "stripe" ? { secret_key: vals.secret_key, publishable_key: vals.publishable_key }
+      : { client_id: vals.client_id, client_secret: vals.client_secret };
+    try {
+      await api(route, { method: "POST", json });
+      toast(`${pid[0].toUpperCase() + pid.slice(1)} connected.`);
+      closeModal(); openAccount();
+    } catch (e) { toast(e.message, 7000); }
+  });
+  document.querySelectorAll("[data-use]").forEach((b) => b.onclick = async () => {
+    try { await api("/api/site/gateway/provider", { method: "POST", json: { provider: b.dataset.use } });
+      closeModal(); openAccount(); } catch (e) { toast(e.message); }
+  });
+  document.querySelectorAll("[data-disc]").forEach((b) => b.onclick = async () => {
+    if (!confirm("Disconnect this gateway? Your storefront stops taking online payment through it.")) return;
+    try { await api(`/api/site/gateway/disconnect?provider=${encodeURIComponent(b.dataset.disc)}`, { method: "POST" });
+      closeModal(); openAccount(); } catch (e) { toast(e.message); }
+  });
+
+  // AI keys
+  document.querySelectorAll("[data-aisave]").forEach((b) => b.onclick = async () => {
+    const id = b.dataset.aisave;
+    const key = (document.querySelector(`[data-aikey="${id}"]`) || {}).value || "";
+    if (!key.trim()) return toast("Paste a key first, or leave it blank to use ours.");
+    try { await api("/api/account/ai-key", { method: "POST", json: { provider: id, api_key: key.trim() } });
+      toast("Saved. That AI now runs on your key."); closeModal(); openAccount(); }
+    catch (e) { toast(e.message, 7000); }
+  });
+  document.querySelectorAll("[data-airemove]").forEach((b) => b.onclick = async () => {
+    try { await api(`/api/account/ai-key/${encodeURIComponent(b.dataset.airemove)}`, { method: "DELETE" });
+      toast("Removed. Back to ours."); closeModal(); openAccount(); } catch (e) { toast(e.message); }
+  });
 }
 
 /* The signature that goes on every PO. Optional — without one the PO still
