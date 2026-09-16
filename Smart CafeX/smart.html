@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- viewport-fit=cover lets the app fill a notched screen. Without it the
+     browser letterboxes the page and env(safe-area-inset-*) is always 0,
+     which is why the CSS below can lean on those insets safely. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>One Tap Manager: Smart</title>
 
 <meta name="color-scheme" content="light dark" />
@@ -15,7 +18,7 @@
     document.documentElement.setAttribute("data-theme", saved || (prefersDark ? "dark" : "light"));
   })();
 </script>
-<link rel="stylesheet" href="/smart-static/smart.css?v=62" />
+<link rel="stylesheet" href="/smart-static/smart.css?v=63" />
 <!-- Plotly is NOT loaded here.
      It is ~3.5 MB of JavaScript, and it used to sit in this <head> with no
      `defer`, which means every single page view — including the login screen,
@@ -106,7 +109,7 @@
 
 <!-- MAPPING MODAL -->
 <div class="modal-back" id="mapModal" hidden>
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mapTitle">
     <div class="modal-head"><b id="mapTitle">Map your columns</b><button class="btn ghost tiny" id="mapClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
     <p class="muted tiny" id="mapHint"></p>
     <div id="mapGrid" class="map-grid"></div>
@@ -128,8 +131,8 @@
 
 <!-- PRODUCT TYPE PICKER -->
 <div class="modal-back" id="ptModal" hidden>
-  <div class="modal">
-    <div class="modal-head"><b>What do you sell?</b><button class="btn ghost tiny" id="ptClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ptTitle">
+    <div class="modal-head"><b id="ptTitle">What do you sell?</b><button class="btn ghost tiny" id="ptClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
     <p class="muted tiny">We use this to track the right keywords in your reviews and complaints.</p>
     <div class="pt-grid" id="ptGrid"></div>
   </div>
@@ -137,8 +140,8 @@
 
 <!-- WIN-BACK EDITABLE POPUP -->
 <div class="modal-back" id="wbModal" hidden>
-  <div class="modal wide">
-    <div class="modal-head"><b><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="m3.6 7 8.4 6 8.4-6"/></svg> Win-back list: edit before you export</b><button class="btn ghost tiny" id="wbClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+  <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="wbTitle">
+    <div class="modal-head"><b id="wbTitle"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="m3.6 7 8.4 6 8.4-6"/></svg> Win-back list: edit before you export</b><button class="btn ghost tiny" id="wbClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
     <p class="muted tiny">Edit any field, remove a row, or add your own. Then export to Excel.</p>
     <div class="wb-table-wrap"><div class="table-scroll" id="wbTable"></div></div>
     <div class="modal-actions">
@@ -152,15 +155,15 @@
 
 <!-- CONTENT CREATOR: editor popup -->
 <div class="modal-back" id="ccModal" hidden>
-  <div class="modal wide">
-    <div class="modal-head"><b><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6.3 6.3l3.2 3.2M14.5 14.5l3.2 3.2M17.7 6.3l-3.2 3.2M9.5 14.5l-3.2 3.2"/></svg> Suggested post: edit before you post</b><button class="btn ghost tiny" id="ccClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+  <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="ccTitle">
+    <div class="modal-head"><b id="ccTitle"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6.3 6.3l3.2 3.2M14.5 14.5l3.2 3.2M17.7 6.3l-3.2 3.2M9.5 14.5l-3.2 3.2"/></svg> Suggested post: edit before you post</b><button class="btn ghost tiny" id="ccClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
     <div id="ccBody"></div>
   </div>
 </div>
 
 <!-- STORE CONNECT MODAL (Shopify / Amazon) -->
 <div class="modal-back" id="coModal" hidden>
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="coTitle">
     <div class="modal-head"><b id="coTitle">Connect store</b><button class="btn ghost tiny" id="coClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
     <p class="muted tiny" id="coHelp"></p>
     <div id="coGrid" class="map-grid"></div>
@@ -175,7 +178,7 @@
 
 <!-- CHART MAXIMIZE MODAL -->
 <div class="chart-modal" id="chartModal">
-  <div class="chart-modal-inner">
+  <div class="chart-modal-inner" role="dialog" aria-modal="true" aria-labelledby="chartModalTitle">
     <div class="chart-modal-head">
       <b id="chartModalTitle">Chart</b>
       <div class="chart-modal-tools">
@@ -192,9 +195,9 @@
 
 <!-- HISTORY DRAWER -->
 <div class="drawer-back" id="drawerBack" hidden></div>
-<aside class="drawer" id="historyDrawer" hidden>
+<aside class="drawer" id="historyDrawer" role="dialog" aria-modal="true" aria-labelledby="historyTitle" hidden>
   <div class="drawer-head">
-    <h3><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4.2l2.8 1.8"/></svg> Approval history</h3>
+    <h3 id="historyTitle"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4.2l2.8 1.8"/></svg> Approval history</h3>
     <button class="btn ghost tiny" id="historyClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
   </div>
   <div class="hist-tabs" role="tablist">
@@ -204,10 +207,10 @@
   <div class="hist-list" id="historyList"></div>
 </aside>
 
-<div class="toast" id="toast" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <div class="modal-back" id="addModal" hidden>
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="addTitle">
     <div class="modal-head"><b id="addTitle">Add records</b><button class="btn ghost tiny" id="addClose" aria-label="Close"><svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
     <p class="muted tiny" id="addHint">Type new rows below. They will be added to your saved data.</p>
     <div class="table-scroll" id="addGridWrap"><table id="addGrid"></table></div>
@@ -219,6 +222,6 @@
     <div class="err" id="addErr" hidden></div>
   </div>
 </div>
-<script src="/smart-static/smart.js?v=62"></script>
+<script src="/smart-static/smart.js?v=63"></script>
 </body>
 </html>

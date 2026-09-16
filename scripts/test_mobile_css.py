@@ -106,9 +106,19 @@ for name, css in (("app", APP), ("storefront", STORE)):
          "never zooms back. It reads as the layout breaking.")
 
 # ------------------------------------------------------------ readable type
-must("font-size: 11.5px !important" in APP,
-     "nothing readable is left below 11px on a phone",
-     "Chips and helper text measured 9.5-10.5px, unreadable outdoors.")
+# This used to look for the literal "font-size: 11.5px !important", which was
+# the phone-only patch that lifted a handful of chips off the floor. The floor
+# is now enforced at the source instead: every font-size in the app is a rem,
+# and none of them is below 11pt, on any width. Checking the old string would
+# now pass only by accident, so check the thing that is actually true.
+_sizes = [float(v) for v in re.findall(r"font-size:\s*([\d.]+)rem", APP)]
+must(_sizes and not [v for v in _sizes if v * 16 < 11],
+     "nothing readable is left below 11px, on a phone or anywhere else",
+     "Chips and helper text measured 8.5-10.5px, unreadable outdoors. "
+     f"Smallest now: {min(_sizes) * 16:.1f}px" if _sizes else "no rem sizes found")
+must(re.findall(r"font-size:\s*([\d.]+)px", APP) == ["16"],
+     "and sizes are in rem, so the browser's own text-size setting works",
+     "The only px left should be the 16px that stops iOS zooming inputs.")
 
 # ------------------------------------------------- the five-column step rail
 must(re.search(r"\.wz-rail\s*\{\s*grid-template-columns:\s*repeat\(2", APP),

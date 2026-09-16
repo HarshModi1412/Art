@@ -1240,9 +1240,10 @@ function openModal(title, bodyHtml, opts = {}) {
      another, and a handler that looks up ".modal-actions" finds whichever
      popup is open now, not the one it came from. The stamp lets a late
      arrival check that it is still writing into its own popup. */
-  wrap.innerHTML = `<div class="modal${opts.wide ? " wide" : ""}"${
+  const _mid = "mtitle-" + Math.random().toString(36).slice(2, 9);
+  wrap.innerHTML = `<div class="modal${opts.wide ? " wide" : ""}" role="dialog" aria-modal="true" aria-labelledby="${_mid}"${
       opts.owner ? ` data-post="${esc(String(opts.owner))}"` : ""}>
-      <div class="modal-head"><b>${esc(title)}</b>
+      <div class="modal-head"><b id="${_mid}">${esc(title)}</b>
         <button class="btn ghost tiny" data-mclose title="Close" aria-label="Close this popup">${sic("close")}</button></div>
       <div class="modal-body">${bodyHtml}</div>
     </div>`;
@@ -10885,3 +10886,193 @@ function warmOnIntent() {
     el.addEventListener("touchstart", warm, { once: true, passive: true });
   });
 }
+
+/* ===========================================================================
+   HIG CONFORMANCE: dialog behaviour
+   Rules: MOD-5 (an obvious way out), MOD-6 (confirm before losing work),
+   MOD-8 (one modal at a time), A11Y-9 / A11Y-21 (VoiceOver and keyboard).
+   Reference: docs/apple-design-rules.md
+
+   WHAT WAS WRONG
+   --------------
+   Every popup in this app was a plain <div> that got `hidden = false`. To a
+   screen reader that is not a dialog, it is just more page: there is no
+   announcement, no boundary, and the rest of the app stays reachable behind
+   it. To a keyboard user it is worse. Focus stays wherever it was when the
+   popup opened, Tab walks straight out of the popup into the page underneath,
+   and when the popup closes focus has been lost entirely, which on a long
+   screen means being dumped back at the top of the document.
+
+   Three of the popups (the win-back editor, the add-records grid and the
+   content editor) hold typed work. Escape threw it away with no warning in
+   two of them and did nothing at all in the rest.
+
+   WHAT THIS DOES
+   --------------
+   One observer, rather than twenty call sites. The popups are still opened
+   the way they always were (`hidden = false`, or display:flex for the chart);
+   this watches for that and adds the behaviour around it:
+
+     * remembers what had focus, moves focus into the dialog, and puts it back
+       on close, even if the thing that opened it has since been re-rendered,
+       in which case focus goes somewhere sensible rather than to <body>
+     * marks the app shell inert so Tab, VoiceOver and the pointer all stop at
+       the dialog edge
+     * wraps Tab at the first and last control inside the dialog
+     * Escape closes the popups that had no Escape. The chart modal, the
+       history drawer and the runtime-built modals already had their own and
+       are left alone, so nothing fires twice.
+     * if a field inside the dialog has been edited, Escape asks first. The
+       explicit Cancel button is left alone: choosing Cancel IS the intent to
+       discard, and asking again would be the "are you sure you are sure" the
+       guidelines specifically warn against.
+     * opening a second dialog closes the first, rather than stacking two
+   ========================================================================= */
+(function higDialogs() {
+  "use strict";
+
+  /* Popups that use the hidden attribute and had no Escape of their own. */
+  const NEEDS_ESC = ["mapModal", "ptModal", "wbModal", "ccModal", "coModal", "addModal"];
+  /* Everything that should behave like a dialog, however it is toggled. */
+  const HIDDEN_DIALOGS = NEEDS_ESC.concat(["historyDrawer"]);
+
+  const FOCUSABLE = [
+    "a[href]", "button:not([disabled])", "input:not([disabled]):not([type=hidden])",
+    "select:not([disabled])", "textarea:not([disabled])", "[tabindex]:not([tabindex='-1'])",
+  ].join(",");
+
+  let openEl = null;        // the outer element (backdrop or drawer)
+  let returnTo = null;      // what had focus before it opened
+  let dirtySnapshot = null; // field values at open, for the work-loss guard
+
+  const panelOf = (el) => el.querySelector('[role="dialog"]') || el;
+
+  const isOpen = (el) => {
+    if (!el || !el.isConnected) return false;
+    if (el.id === "chartModal") return getComputedStyle(el).display !== "none";
+    return !el.hidden;
+  };
+
+  const fields = (el) =>
+    Array.from(el.querySelectorAll("input, textarea, select"))
+         .filter((f) => f.type !== "hidden");
+
+  const snapshot = (el) => JSON.stringify(fields(el).map(
+    (f) => (f.type === "checkbox" || f.type === "radio" ? f.checked : f.value)));
+
+  const isDirty = (el) => dirtySnapshot !== null && snapshot(el) !== dirtySnapshot;
+
+  const closerFor = (el) =>
+    el.querySelector("[data-mclose]") ||
+    el.querySelector('[aria-label^="Close"], [aria-label^="close"]') ||
+    el.querySelector(".modal-head .btn.ghost");
+
+  function shellParts() {
+    return ["appShell", "loginView"].map((id) => document.getElementById(id)).filter(Boolean);
+  }
+
+  function lockBackground(on) {
+    shellParts().forEach((n) => {
+      if (on) { n.setAttribute("inert", ""); n.setAttribute("aria-hidden", "true"); }
+      else    { n.removeAttribute("inert"); n.removeAttribute("aria-hidden"); }
+    });
+  }
+
+  function focusInto(el) {
+    const panel = panelOf(el);
+    const auto = panel.querySelector("[autofocus]");
+    const all = Array.from(panel.querySelectorAll(FOCUSABLE)).filter((n) => n.offsetParent !== null);
+    /* The close button is first in the DOM but it is the one thing nobody
+       opened the popup in order to press, so it is the last resort here, not
+       the first. */
+    const preferred = auto
+      || all.find((n) => !/close/i.test(n.getAttribute("aria-label") || ""))
+      || all[0];
+    if (preferred) { preferred.focus(); return; }
+    if (!panel.hasAttribute("tabindex")) panel.setAttribute("tabindex", "-1");
+    panel.focus();
+  }
+
+  function restoreFocus() {
+    const t = returnTo;
+    returnTo = null;
+    if (t && t !== document.body && t.isConnected && typeof t.focus === "function") { t.focus(); return; }
+    /* Whatever opened the dialog has been re-rendered. Land inside the view
+       rather than at the top of the document. */
+    const main = document.getElementById("view");
+    if (main) {
+      if (!main.hasAttribute("tabindex")) main.setAttribute("tabindex", "-1");
+      main.focus();
+    }
+  }
+
+  function handleOpen(el) {
+    if (openEl === el) return;
+    if (openEl && isOpen(openEl)) {
+      const c = closerFor(openEl);           // MOD-8: never two at once
+      if (c) c.click();
+    }
+    returnTo = document.activeElement;
+    openEl = el;
+    dirtySnapshot = snapshot(el);
+    lockBackground(true);
+    /* rAF, because the popup's contents are usually written in the same tick
+       that unhides it, and focusing before that finds an empty box. */
+    requestAnimationFrame(() => { if (openEl === el) focusInto(el); });
+  }
+
+  function handleClose(el) {
+    if (openEl !== el) return;
+    openEl = null;
+    dirtySnapshot = null;
+    lockBackground(false);
+    restoreFocus();
+  }
+
+  function watch(el) {
+    if (!el) return;
+    const sync = () => (isOpen(el) ? handleOpen(el) : handleClose(el));
+    new MutationObserver(sync).observe(el, {
+      attributes: true, attributeFilter: ["hidden", "style", "class"],
+    });
+    sync();
+  }
+
+  HIDDEN_DIALOGS.forEach((id) => watch(document.getElementById(id)));
+  watch(document.getElementById("chartModal"));
+
+  /* Modals built at runtime are appended to <body> and removed again. */
+  new MutationObserver((muts) => {
+    muts.forEach((m) => {
+      m.addedNodes.forEach((n) => {
+        if (n.nodeType === 1 && n.classList && n.classList.contains("modal-back") && !n.id) handleOpen(n);
+      });
+      m.removedNodes.forEach((n) => {
+        if (n.nodeType === 1 && n === openEl) handleClose(n);
+      });
+    });
+  }).observe(document.body, { childList: true });
+
+  /* Tab stays inside the open dialog (A11Y-21). */
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || !openEl || !isOpen(openEl)) return;
+    const panel = panelOf(openEl);
+    const all = Array.from(panel.querySelectorAll(FOCUSABLE)).filter((n) => n.offsetParent !== null);
+    if (!all.length) return;
+    const first = all[0], last = all[all.length - 1];
+    if (e.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  });
+
+  /* Escape for the popups that had none, with the work-loss guard (MOD-6). */
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !openEl || !openEl.id || NEEDS_ESC.indexOf(openEl.id) < 0) return;
+    if (isDirty(openEl) &&
+        !window.confirm("Close this and lose what you have typed here?")) return;
+    const c = closerFor(openEl);
+    if (c) { e.preventDefault(); c.click(); }
+  });
+})();

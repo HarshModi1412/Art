@@ -309,16 +309,17 @@ ok('e.target.closest(".ap-head-actions")' in JS,
 ok('window.matchMedia("(max-width: 900px)")' in JS,
    "and the header is only announced as a button where it is one")
 
-ok(re.search(r"\.btn\.tiny,\s*\.btn\.xs\s*\{[^}]*min-height:\s*40px", CSS),
+ok(re.search(r"\.btn\.tiny,\s*\.btn\.xs\s*\{[^}]*min-height:\s*44px", CSS),
    "no touch target is left at 36px",
    ".btn.tiny is the most common control a seller touches — Edit, Details, "
    "Approve & send, Download — and 36px is under the threshold where a thumb "
-   "starts missing.")
+   "starts missing. This asked for 40px, which cleared Apple's 28pt absolute "
+   "minimum but not its 44pt default; it now asks for the default.")
 
 for cls in (".today-eyebrow", ".sm-occ", ".ord-lbl", ".sup-badge", ".po-st",
             ".cmp-weight", ".pair-lbl", ".pair-rec", ".cal-dow span",
             ".gal-add span"):
-    ok(cls in CSS.split("font-size: 11.5px !important")[0].rsplit("@media", 1)[-1]
+    ok(cls in CSS.split("font-size: 0.71875rem !important")[0].rsplit("@media", 1)[-1]
        or f"{cls}," in CSS or f"{cls} {{" in CSS,
        f"{cls} is readable at arm's length")
 
