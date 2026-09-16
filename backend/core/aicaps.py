@@ -38,6 +38,13 @@ from datetime import datetime, timedelta, timezone
 from backend.core import user_store
 
 KEY = "ai_daily_usage"
+# The monthly image allowance is a SEPARATE product limit that sits on top of the
+# daily spend guard above. The daily cap answers "is one account spending a
+# runaway amount of our money today"; this answers "how many pictures does a
+# plan include this month". A seller meets this one long before the daily cap —
+# 30 a month is about one a day — so it is the number the UI tracks, and the one
+# whose message points at uploading a photo rather than at coming back tomorrow.
+MONTH_KEY = "image_monthly_usage"
 IST = timezone(timedelta(hours=5, minutes=30))
 
 # What one call of each kind costs us, in rupees, roughly, as of September 2026.
@@ -65,6 +72,23 @@ def _cap(kind: str) -> int:
 
 def _today() -> str:
     return datetime.now(IST).strftime("%Y-%m-%d")
+
+
+def _month() -> str:
+    # Calendar month in IST, so "resets on the 1st" means the same thing to a
+    # seller in Surat as the counter does on the server. A rolling 30 days would
+    # be a fairer budget and a worse promise: nobody can say when it lifts.
+    return datetime.now(IST).strftime("%Y-%m")
+
+
+def _month_cap() -> int:
+    """Pictures one account may generate in a calendar month. 30 by default —
+    about one a day — overridable per deployment with AI_IMAGES_PER_MONTH. 0
+    turns the monthly limit off entirely (the daily spend guard still applies)."""
+    try:
+        return max(0, int(os.environ.get("AI_IMAGES_PER_MONTH") or 30))
+    except ValueError:
+        return 30
 
 
 def _load(email: str) -> dict:
@@ -95,11 +119,62 @@ def status(email: str) -> dict:
                       "left": max(0, _cap(k) - int(counts.get(k) or 0))}
                   for k in ("image", "video", "text", "vision")},
         "resets": "tomorrow morning",
+        # The monthly image allowance, carried alongside the daily counts so the
+        # one /api/studio/ai-usage call the UI already makes gets both at once.
+        "month": image_month_status(email),
+    }
+
+
+# ---------------------------------------------------------------------------
+# The monthly image allowance (the product limit the seller actually watches)
+# ---------------------------------------------------------------------------
+def _load_month(email: str) -> dict:
+    raw = user_store.get_key(email, MONTH_KEY, {}) or {}
+    if not isinstance(raw, dict) or raw.get("month") != _month():
+        # A new month starts the count at zero. Like the daily guard this is a
+        # budget, not a history, so last month is not carried forward.
+        return {"month": _month(), "used": 0}
+    raw.setdefault("used", 0)
+    return raw
+
+
+def image_month_used(email: str) -> int:
+    return int(_load_month(email).get("used") or 0)
+
+
+def image_month_left(email: str) -> int:
+    cap = _month_cap()
+    return max(0, cap - image_month_used(email)) if cap else 0
+
+
+def image_month_status(email: str) -> dict:
+    """What the Social Media Manager's picture tracker shows: how many of the
+    month's images are used, how many remain, and when it resets."""
+    cap = _month_cap()
+    used_now = image_month_used(email)
+    return {
+        "month": _month(),
+        "used": used_now,
+        "cap": cap,
+        "left": max(0, cap - used_now) if cap else 0,
+        # A calendar-month reset, said the way a person would.
+        "resets": "on the 1st",
+        # No cap configured means no monthly limit — the UI hides the tracker.
+        "enabled": bool(cap),
     }
 
 
 class CapReached(RuntimeError):
     """Not a paywall. The seller has done nothing wrong."""
+
+
+class MonthlyImageCapReached(CapReached):
+    """The month's picture allowance is used up.
+
+    A subclass of CapReached on purpose: every place that already handles the
+    daily cap — the 429 handler, and the routes that turn a cap into an "upload
+    your own photo" task — catches it unchanged. Callers that want to tell the
+    two apart (a different message, a different HTTP code) check the type."""
 
 
 def _message(kind: str, cap: int) -> str:
@@ -122,6 +197,38 @@ def check(email: str, kind: str) -> None:
     cap = _cap(kind)
     if cap and used(email, kind) >= cap:
         raise CapReached(_message(kind, cap))
+
+
+def _month_message(cap: int) -> str:
+    return (f"That is all {cap} AI pictures for this month — the monthly picture "
+            f"allowance. It resets on the 1st. Until then you can add your own "
+            f"photo to a post (a real photo of the real product usually looks "
+            f"better anyway), and we will still write the caption. Approving a "
+            f"post now puts it on your task list with the shot we would have made, "
+            f"so you know what to take a picture of.")
+
+
+def check_image_month(email: str) -> None:
+    """Raise MonthlyImageCapReached if this account has used its month's pictures.
+
+    Call BEFORE spending, alongside check(email, "image"). Kept separate from the
+    daily guard because the two mean different things to the seller and read
+    differently: one lifts tomorrow, the other on the 1st, and only this one
+    sends them to the upload route instead."""
+    cap = _month_cap()
+    if cap and image_month_used(email) >= cap:
+        raise MonthlyImageCapReached(_month_message(cap))
+
+
+def consume_image_month(email: str, n: int = 1) -> dict:
+    """Record pictures that were actually generated this month.
+
+    Called AFTER the image succeeds, for the same reason the daily counter is:
+    a failed generation cost the seller's allowance nothing."""
+    st = _load_month(email)
+    st["used"] = int(st.get("used") or 0) + max(1, n)
+    user_store.set_key(email, MONTH_KEY, st)
+    return image_month_status(email)
 
 
 def consume(email: str, kind: str, n: int = 1) -> dict:

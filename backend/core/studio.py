@@ -1193,10 +1193,14 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     comment on the dispatch below for why.
     """
     from backend.core import aiprovider, aicaps
-    # A ceiling on our own spend, checked before anything is called and counted
-    # only after it succeeds. See backend/core/aicaps.py — this sits underneath
-    # billing and applies on every plan, including in launch mode, because the
-    # cost here is real money per call rather than a feature flag.
+    # Two ceilings, both checked before anything is called and both counted only
+    # after it succeeds. See backend/core/aicaps.py.
+    #   * the monthly picture allowance (30 by default) — the product limit the
+    #     seller watches, checked first because it is the one they meet, and the
+    #     one that sends them to "upload your own photo" rather than "tomorrow";
+    #   * the daily spend guard — the blunt ceiling on our own money.
+    # Both sit underneath billing and apply on every plan, launch mode included.
+    aicaps.check_image_month(email)
     aicaps.check(email, "image")
     # Make sure the brand's essay has been compressed for the camera before we
     # build the prompt. Cached against the essay, so this is one call the first
@@ -1251,6 +1255,9 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     # marking and the prompt above now preserves it — stamping a second name
     # into the corner would show the brand twice, once real and once pasted on.
     aicaps.consume(email, "image")
+    # Count it against the month's picture allowance too, only now that it
+    # actually came back — a picture the seller sees is a picture spent.
+    aicaps.consume_image_month(email)
 
     # Every generated picture goes through the watermark remover BEFORE the
     # brand tag is added — the other order would have the remover looking at

@@ -327,6 +327,10 @@ async function api(path, opts = {}, attempt = 0) {
     // like an expired session and threw the seller back to the login screen.
     err.status = res.status;
     err.detail = d;
+    // The machine-readable reason, when the server sends one (e.g.
+    // "monthly_image_cap" vs "daily_cap" on a 429), so a caller can react
+    // without string-matching the human message.
+    err.code = data.code || "";
     throw err;
   }
   // Any successful write can change what several modules would show — adding a
@@ -2537,7 +2541,16 @@ async function openVideoTask(taskId, postHint) {
   let post;
   try { post = await api(`/api/social/post/${encodeURIComponent(task.post_id)}`); }
   catch (e) { toast(e.message); return; }
-  if (task.kind === "photo" || post.format !== "reel") { openSocialEditor(post); return; }
+  // A photo task created because the month's pictures ran out carries the shot
+  // to take (ai_prompt) and its own upload walkthrough — open that, the twin of
+  // this reel one. A plain photo task (no engine, say) has no shot to copy, so
+  // the post editor is the right place for it, as before.
+  if (post.format !== "reel") {
+    if ((task.ai_prompt || "").trim()) { openPhotoTask(post, task); }
+    else { openSocialEditor(post); }
+    return;
+  }
+  if (task.kind === "photo") { openSocialEditor(post); return; }
 
   if (!_vidTools) { try { _vidTools = await api("/api/studio/video-tools"); } catch (e) { _vidTools = null; } }
   const flow = ((_vidTools || {}).primary) || {};
@@ -2715,6 +2728,164 @@ async function openVideoTask(taskId, postHint) {
   };
 }
 
+/* Open the "add your own photo" flow for a post whose picture could not be made
+   because the month's AI pictures are used up. Prefers the real task the server
+   put on the list (it holds the shot prompt and remembers progress); if there
+   is not one yet, it fetches the shot itself so the modal still has something to
+   show. Called from the editor's generate button and after a monthly-cap 429. */
+async function openPhotoUploadForPost(post) {
+  let task = null, prompt = "";
+  // An empty "add" is a no-op that just returns the current task list, so this
+  // pulls the freshly-created upload task without a side effect.
+  try {
+    const r = await api("/api/smart/tasks", { method: "POST", json: { action: "add", text: "" } });
+    if (r && r.tasks) {
+      refreshTaskList(r.tasks);
+      task = r.tasks.find((t) => t.post_id === post.id && !t.done && t.kind !== "video");
+    }
+  } catch (_) { /* fall back to a prompt-only modal below */ }
+  prompt = (task && task.ai_prompt) || "";
+  if (!prompt) {
+    try {
+      const d = await api("/api/studio/prompt-preview", { method: "POST", json: {
+        product_id: post.product_id, pillar: post.pillar || "", format: post.format || "",
+        post_id: post.id, use_reference: true, shot_type: post.shot_type || "" } });
+      prompt = (d && d.prompt) || "";
+    } catch (_) { prompt = ""; }
+  }
+  openPhotoTask(post, task || { post_id: post.id, kind: "photo", ai_prompt: prompt, steps_done: [] });
+}
+
+/* The photo-upload task, the twin of the reel one: copy the shot we would have
+   drawn → take or make a photo → upload it here → save & schedule. It exists so
+   that running out of the month's pictures is not a dead end — the seller still
+   ships the post, with a real photo, and knows exactly what to shoot. Progress
+   is saved on the task when it is a real one, so it reopens where they left
+   off, on their phone too. */
+async function openPhotoTask(post, task) {
+  const prompt = ((task && task.ai_prompt) || "").trim();
+  const done = new Set((task && task.steps_done) || []);
+  // A photo already on the post means the earlier steps happened.
+  if (post.image_url) ["copy", "shoot", "upload"].forEach((x) => done.add(x));
+  const realTask = !!(task && task.id && (((state.lastState || {}).tasks) || [])
+    .some((t) => t.id === task.id));
+
+  let chain = Promise.resolve();
+  const mark = (step) => {
+    if (done.has(step)) return chain;
+    done.add(step); paintSteps();
+    if (realTask) chain = chain.then(async () => {
+      try {
+        const r = await api("/api/smart/tasks", { method: "POST",
+          json: { action: "progress", task_id: task.id, step } });
+        refreshTaskList(r.tasks);
+      } catch (e) { /* the popup still works; progress just is not saved */ }
+    });
+    return chain;
+  };
+  const copyShot = async () => {
+    try { await navigator.clipboard.writeText(prompt); return true; }
+    catch (e) {
+      const rg = document.createRange(); rg.selectNodeContents($("ptxPrompt"));
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+      return false;
+    }
+  };
+
+  openModal(`Add your own photo — ${post.product_name || "your post"}`, `
+    <p class="sm-hint" style="margin-top:0;">You have used this month's AI pictures, so
+      this one is a photo of your own — which for a real product usually looks better anyway.
+      Goes out <b>${esc(shortWhen(post.scheduled_at))}</b>${post.occasion ? ` · ${esc(post.occasion)}` : ""}.
+      Four steps; each ticks itself off as you go.</p>
+    <ol class="vt-steps2" id="ptxSteps">
+      <li data-step="copy">
+        <div class="vs-h"><i></i><b>Copy the shot idea</b></div>
+        <div class="vs-b">
+          <p class="muted tiny" style="margin:0 0 8px;">This is the picture we would have
+            made. Shoot something close to it, or paste it into any image tool you already use.</p>
+          <pre class="sm-prompt-body" id="ptxPrompt">${esc(prompt || "A clean, well-lit photo of the product on a plain, uncluttered background.")}</pre>
+          <button class="btn primary sm" id="ptxCopy">${sic("layers")}Copy shot idea</button>
+        </div>
+      </li>
+      <li data-step="shoot">
+        <div class="vs-h"><i></i><b>Take or make the photo</b></div>
+        <div class="vs-b">
+          <p class="muted tiny" style="margin:0;">Use your phone, natural light, a plain
+            background. One clear photo of the real product is all this needs.</p>
+          <button class="btn ghost sm" id="ptxShot" style="margin-top:8px;">${sic("check")}I have a photo</button>
+        </div>
+      </li>
+      <li data-step="upload" class="${post.image_url ? "open" : ""}">
+        <div class="vs-h"><i></i><b>Upload the photo here</b></div>
+        <div class="vs-b">
+          <div class="sm-vid-slot" id="ptxSlot">${post.image_url
+            ? `<img src="${esc(post.image_url)}" alt="" style="max-width:100%;border-radius:8px;" />`
+            : `<div class="sm-vid-empty">${sic("image")}<b>No photo yet</b><span>PNG or JPG.</span></div>`}</div>
+          <button class="btn ${post.image_url ? "ghost" : "primary"} sm" id="ptxPick">${sic("arrow-up-right")}${post.image_url ? "Replace photo" : "Choose a photo"}</button>
+        </div>
+      </li>
+      <li data-step="schedule">
+        <div class="vs-h"><i></i><b>Save &amp; schedule</b></div>
+        <div class="vs-b">
+          <label class="fld" style="margin:0 0 8px;"><span>Goes out</span>
+            <input id="ptxWhen" type="datetime-local" value="${esc(post.scheduled_at || "")}" /></label>
+          <button class="btn approve" id="ptxSchedule">Save &amp; schedule</button>
+        </div>
+      </li>
+    </ol>
+    <div class="modal-actions">
+      <button class="btn ghost" data-ptxclose>Later</button>
+      <button class="btn ghost" id="ptxEditor">Open the post</button>
+    </div>`, { wide: true });
+
+  function paintSteps() {
+    const order = ["copy", "shoot", "upload", "schedule"];
+    const firstOpen = order.find((x) => !done.has(x));
+    document.querySelectorAll("#ptxSteps [data-step]").forEach((li) => {
+      li.classList.toggle("done", done.has(li.dataset.step));
+      li.classList.toggle("current", li.dataset.step === firstOpen);
+    });
+    const sch = $("ptxSchedule");
+    if (sch) sch.disabled = !done.has("upload");
+  }
+  paintSteps();
+  document.querySelectorAll("#ptxSteps .vs-h").forEach((h) => h.onclick = () =>
+    h.parentElement.classList.toggle("open"));
+
+  document.querySelector("[data-ptxclose]").onclick = closeModal;
+  $("ptxEditor").onclick = () => { closeModal(); openSocialEditor(post); };
+  $("ptxCopy").onclick = async () => {
+    const ok = await copyShot();
+    $("ptxCopy").innerHTML = sic("check") + (ok ? "Copied" : "Selected — press Ctrl+C");
+    mark("copy");
+  };
+  $("ptxShot").onclick = () => mark("shoot");
+  $("ptxPick").onclick = () => pickImage(async (url) => {
+    try {
+      await api("/api/social/attach-image", { method: "POST", json: { post_id: post.id, url } });
+      post.image_url = url;
+      const slot = $("ptxSlot");
+      if (slot) slot.innerHTML = `<img src="${esc(url)}" alt="" style="max-width:100%;border-radius:8px;" />`;
+      const pick = $("ptxPick");
+      if (pick) { pick.innerHTML = sic("arrow-up-right") + "Replace photo"; pick.className = "btn ghost sm"; }
+      ["copy", "shoot"].forEach((x) => done.add(x));
+      done.add("upload");
+      paintSteps();
+    } catch (e) { toast(e.message, 6000); }
+  });
+  $("ptxSchedule").onclick = async () => {
+    try {
+      await chain;
+      const r = await api("/api/social/schedule-ready", { method: "POST",
+        json: { post_id: post.id, scheduled_at: ($("ptxWhen") || {}).value || "" } });
+      if (r.tasks) refreshTaskList(r.tasks);
+      closeModal();
+      await afterPostChange();
+      toast("Photo added and post scheduled. Task done.");
+    } catch (e) { toast(e.message, 6000); }
+  };
+}
+
 /* What the planner found for one week, and what it did about it. */
 async function openWeekBrief(card) {
   let b;
@@ -2873,11 +3044,67 @@ async function showAiLeft(force) {
   if (!box) return;
   try {
     if (!_aiLeft || force) _aiLeft = await api("/api/studio/ai-usage");
+    // The monthly allowance is the one a seller actually meets (about one a day
+    // against 30), so it is what we show here. The daily figure is a spend guard
+    // they rarely touch, so it stays out of the way unless it is the tighter of
+    // the two right now.
+    const mon = _aiLeft.month || {};
     const img = (_aiLeft.kinds || {}).image || {};
-    if (!img.cap) return;
-    const tail = ` · ${img.left} of ${img.cap} pictures left today`;
-    if (!box.textContent.includes("left today")) box.textContent += tail;
+    let tail = "";
+    if (mon.enabled) tail = ` · ${mon.left} of ${mon.cap} pictures left this month`;
+    else if (img.cap) tail = ` · ${img.left} of ${img.cap} pictures left today`;
+    if (tail && !box.textContent.includes("pictures left")) box.textContent += tail;
   } catch (e) { /* a missing count is not worth an error */ }
+}
+
+/* The monthly picture allowance from the last /api/social load, so the warning
+   before a generation and the "used up" check can read it without a round trip.
+   Refreshed whenever Social is rendered and after every generation. */
+function _imgQuota() {
+  return (_socialData && _socialData.image_quota) || (_aiLeft && _aiLeft.month) || null;
+}
+
+const IMG_LOW_LEFT = 5;    // "you may run out" starts here
+
+/* The live tracker at the top of the Social Media Manager: how many of the
+   month's AI pictures are used, out of the cap, with a bar and a plain line
+   about what happens when they run out (posts ask for your own photo). Hidden
+   when no monthly limit is configured. No pills, no emoji — a labelled bar. */
+function imageQuotaTracker(q) {
+  if (!q || !q.enabled) return "";
+  const cap = q.cap || 0;
+  const used = q.used || 0;
+  const left = q.left != null ? q.left : Math.max(0, cap - used);
+  const pct = cap ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+  const spent = left <= 0, low = !spent && left <= IMG_LOW_LEFT;
+  const fill = spent || low ? "var(--amber,#8b672b)" : "var(--green,#3d785f)";
+  const line = spent
+    ? `All ${cap} used. New posts now ask you to add your own photo — resets ${esc(q.resets || "on the 1st")}.`
+    : low
+      ? `${left} left. When they run out, posts ask you to upload your own photo instead.`
+      : `Resets ${esc(q.resets || "on the 1st")}.`;
+  return `
+    <div class="muted tiny" id="smImgQuota" style="margin-top:8px;max-width:320px;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        ${sic("image")}<b>Pictures this month</b>
+        <span class="${spent || low ? "sm-warn2" : ""}" style="margin-left:auto;">${used} of ${cap} used</span>
+      </div>
+      <div style="height:6px;border-radius:3px;background:var(--border,#d7dae1);overflow:hidden;margin:5px 0 3px;">
+        <div style="height:100%;width:${pct}%;background:${fill};transition:width .3s ease;"></div>
+      </div>
+      <div>${line}</div>
+    </div>`;
+}
+
+/* Repaint just the tracker in place after a generation, so the count moves
+   without waiting for the whole screen to re-render. */
+function refreshImgQuota(q) {
+  if (q && _socialData) _socialData.image_quota = q;
+  const el = document.getElementById("smImgQuota");
+  if (el) {
+    const html = imageQuotaTracker(_imgQuota());
+    if (html) el.outerHTML = html;
+  }
 }
 
 let _vidTools = null;
@@ -8973,6 +9200,7 @@ async function renderSocial() {
     <div class="sm-head">
       <div>${aiLine}
         ${undecided.length ? `<div class="muted tiny sm-pending-note">${sic("bell")}${undecided.length} post${undecided.length === 1 ? "" : "s"} still need a decision — the next 7 days' worth are in the Approval panel; open any post below to decide it directly.</div>` : ""}
+        ${imageQuotaTracker(d.image_quota)}
       </div>
       <div class="sm-head-actions">
         <button class="btn primary" id="smBuild">${sic("spark")}Plan this week</button>
@@ -9115,8 +9343,29 @@ async function renderSocial() {
     // Same destructive-action pattern as productDelete(): a native confirm()
     // up front, since wiping every planned post has no undo-toast-sized
     // amount of state to hold onto (unlike a single deleted product).
-    if (!confirm("Delete every planned and scheduled post, and the current "
-      + "campaign? This can't be undone.")) return;
+    //
+    // The extra line about the picture allowance is here because clearing and
+    // re-planning is the fastest way to burn through it: every post whose
+    // picture you regenerate on the new plan spends one of the month's images,
+    // and if the allowance runs out mid-replan the rest of the week falls back
+    // to you uploading your own photos. A seller who is already low should know
+    // that before they wipe a plan they have pictures on.
+    const q = _imgQuota();
+    let warn = "Delete every planned and scheduled post, and the current "
+      + "campaign? This can't be undone.";
+    if (q && q.enabled) {
+      warn += q.left <= 0
+        ? "\n\nYou have used all " + q.cap + " AI pictures this month, so any new "
+          + "plan's photos will be your own uploads until it resets " + (q.resets || "on the 1st") + "."
+        : q.left <= IMG_LOW_LEFT
+          ? "\n\nHeads up: only " + q.left + " of " + q.cap + " AI pictures are left this "
+            + "month. Re-planning and regenerating photos uses them up, and after that "
+            + "you'll be uploading your own photos for the rest of the month."
+          : "\n\nRe-planning regenerates photos, which uses your monthly picture "
+            + "allowance (" + q.left + " of " + q.cap + " left). If it runs out you'll "
+            + "add your own photos for the rest of the month.";
+    }
+    if (!confirm(warn)) return;
     try {
       await api("/api/social/clear", { method: "POST" });
       toast("Plan cleared.");
@@ -9703,6 +9952,25 @@ function openSocialEditor(post) {
   };
 
   const gen = async (useRef) => {
+    // Before spending a picture, tell the seller where they stand — a limit you
+    // can see coming is a budget, one you hit by surprise feels like a fault.
+    // Spent: skip the call entirely and go straight to uploading their own
+    // photo (with the shot we would have drawn). Low: confirm the spend. The
+    // count is read from the last /api/social load, refreshed after each draw.
+    const q = _imgQuota();
+    if (q && q.enabled) {
+      if (q.left <= 0) {
+        toast("That is all " + q.cap + " AI pictures for this month. Add your own "
+          + "photo instead — resets " + (q.resets || "on the 1st") + ".", 8000);
+        openPhotoUploadForPost(post);
+        return;
+      }
+      if (q.left <= IMG_LOW_LEFT) {
+        if (!confirm("You have " + q.left + " of " + q.cap + " AI pictures left this "
+          + "month, and this uses one. When they run out, posts ask you to upload your "
+          + "own photo. Generate this one now?")) return;
+      }
+    }
     const btns = [$("smGenRef"), $("smGenNew")].filter(Boolean);
     btns.forEach((b) => b.disabled = true);
     const b = useRef ? $("smGenRef") : $("smGenNew");
@@ -9739,7 +10007,20 @@ function openSocialEditor(post) {
               "Add a photo in Product Studio for a picture of the real item.", 7000);
       }
       _socialData = await api("/api/social");
-    } catch (e) { toast(e.message, 6000); b.innerHTML = was; }
+      refreshImgQuota();          // move the header tracker without a full repaint
+    } catch (e) {
+      // Hitting the monthly allowance mid-draw is not an error to shrug at: the
+      // server has put an upload task on this post, so open that flow rather
+      // than leaving a red toast the seller cannot act on.
+      if (e.status === 429 && e.code === "monthly_image_cap") {
+        toast(e.message, 8000);
+        try { _socialData = await api("/api/social"); refreshImgQuota(); } catch (_) {}
+        openPhotoUploadForPost(post);
+      } else {
+        toast(e.message, 6000);
+      }
+      b.innerHTML = was;
+    }
     btns.forEach((x) => x.disabled = false);
   };
   // The seller's own photograph, straight onto the post — the answer when no

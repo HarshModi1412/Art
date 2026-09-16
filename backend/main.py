@@ -714,11 +714,19 @@ async def _cap_reached(request: Request, exc: aicaps.CapReached):
     """429, and worded as a ceiling rather than a paywall.
 
     The seller has done nothing wrong: they have used a lot of an expensive thing
-    today and it resets tomorrow. Routing this through one handler means every
-    generation endpoint says the same thing in the same words, and none of them
-    can accidentally turn it into a 500.
+    and it resets. Routing this through one handler means every generation
+    endpoint says the same thing in the same words, and none of them can
+    accidentally turn it into a 500.
+
+    The monthly picture allowance carries a different `code` so the browser can
+    respond differently: the daily cap says "come back tomorrow", the monthly one
+    sends the seller to upload their own photo (and the routes above have already
+    put the shot on their task list).
     """
-    return JSONResponse(status_code=429, content={"detail": str(exc), "code": "daily_cap"})
+    monthly = isinstance(exc, aicaps.MonthlyImageCapReached)
+    return JSONResponse(status_code=429,
+                        content={"detail": str(exc),
+                                 "code": "monthly_image_cap" if monthly else "daily_cap"})
 
 
 def _require_admin(x_admin_token: str | None) -> None:
@@ -1717,7 +1725,12 @@ def content_regenerate_image(insight_id: str,
         raise HTTPException(404, "That suggestion is no longer active.")
     try:
         new_url = content_gen._openai_image(stored.get("product_type", "generic"),
-                                            stored.get("topic", ""))
+                                            stored.get("topic", ""), email)
+    except aicaps.CapReached:
+        # The month's (or day's) picture allowance is spent. Let it through to
+        # the 429 handler so this button says the same thing as every other
+        # generate button, rather than a generic "failed".
+        raise
     except Exception as e:
         raise HTTPException(400, f"Image generation failed: {e}")
     if not new_url:
@@ -5770,6 +5783,9 @@ def social_home(authorization: str | None = Header(default=None)):
         "cadence": social.CADENCE,
         "formats": social.FORMATS,
         "languages": social.LANGUAGES,
+        # How many of the month's AI pictures are used, for the tracker in the
+        # header. Carried here so the Social screen needs no second round trip.
+        "image_quota": aicaps.image_month_status(email),
         "week": social.week(email),
         "radar": social.radar(email),
         "working": social.whats_working(email),
@@ -6092,7 +6108,26 @@ def studio_image_only(body: StudioImageOnlyBody,
                                          occasion_key=occasion_key,
                                          shot_type=shot_type,
                                          engine=body.engine or "")
-    except aicaps.CapReached:
+    except aicaps.CapReached as e:
+        # When the picture is for a planned post, the cap is not a dead end: put
+        # the post's own upload task on the list (carrying the shot we would have
+        # made) so the seller can add their own photo, then let the 429 through
+        # so the button shows the same allowance message everywhere.
+        if body.post_id:
+            post = social.get_post(email, body.post_id)
+            if post:
+                shot = ""
+                try:
+                    shot = studio.preview_prompt(
+                        email, body.product_id, body.pillar or "", body.format or "",
+                        body.angle or "", use_reference=body.use_reference,
+                        occasion_key=occasion_key, shot_type=shot_type).get("prompt", "")
+                except Exception:  # noqa: BLE001
+                    shot = ""
+                smart.ensure_post_task(
+                    email, post,
+                    "video" if post.get("format") == "reel" else "photo",
+                    reason=str(e), prompt=shot)
         raise            # 429 via the handler, not a 400
     except (RuntimeError, ValueError) as e:
         raise HTTPException(400, str(e))
@@ -6173,6 +6208,7 @@ def _approve_post_ready(email: str, post_id: str, generate: bool = True,
 
     is_reel = post.get("format") == "reel"
     made, media_error, script, task = None, "", None, None
+    img_prompt = ""     # the shot we would have made, for the upload task on a cap
 
     if is_reel:
         script = post.get("script") or None
@@ -6201,6 +6237,20 @@ def _approve_post_ready(email: str, post_id: str, generate: bool = True,
                                 made.get("prompt", ""))
         except aicaps.CapReached as e:
             media_error = str(e)
+            # The picture could not be made because the allowance is spent, so
+            # the seller is going to add their own. Work out the shot we WOULD
+            # have generated (no cost — it is just the text prompt) and hand it
+            # to the task, so "add your own photo" comes with the picture to
+            # take rather than a blank instruction.
+            try:
+                img_prompt = studio.preview_prompt(
+                    email, post.get("product_id") or "",
+                    post.get("pillar") or "", post.get("format") or "",
+                    use_reference=True,
+                    occasion_key=post.get("occasion_key") or "",
+                    shot_type=post.get("shot_type") or "").get("prompt", "")
+            except Exception:  # noqa: BLE001 — a missing prompt must not block approval
+                img_prompt = ""
         except (RuntimeError, ValueError) as e:
             media_error = str(e)
 
@@ -6210,7 +6260,7 @@ def _approve_post_ready(email: str, post_id: str, generate: bool = True,
     else:
         p = social.set_state(email, post_id, "approved")
         task = smart.ensure_post_task(email, fresh, "video" if is_reel else "photo",
-                                      reason=media_error)
+                                      reason=media_error, prompt=img_prompt)
     if p.get("error"):
         raise HTTPException(400, p["error"])
     cache.clear(email)

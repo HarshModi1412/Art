@@ -625,6 +625,17 @@ PHOTO_STEPS = [
     {"id": "picture", "label": "Add a picture (generate one or upload your own)"},
     {"id": "schedule", "label": "Save & schedule"},
 ]
+# The out-of-images fallback, deliberately shaped like the reel task so the two
+# feel like one thing. It carries the shot we WOULD have generated as a prompt
+# to copy — so a seller who has used the month's 30 pictures knows exactly what
+# photo to take (or paste into another tool), instead of being told "add a
+# picture" with no idea what picture.
+PHOTO_UPLOAD_STEPS = [
+    {"id": "copy", "label": "Copy the shot idea"},
+    {"id": "shoot", "label": "Take or make a photo of the product"},
+    {"id": "upload", "label": "Upload the photo here"},
+    {"id": "schedule", "label": "Save & schedule"},
+]
 
 
 def post_tasks(email: str) -> list[dict]:
@@ -632,13 +643,27 @@ def post_tasks(email: str) -> list[dict]:
 
 
 def ensure_post_task(email: str, post: dict, kind: str = "video",
-                     reason: str = "") -> dict:
+                     reason: str = "", prompt: str = "") -> dict:
     """The open task for this post, creating it if there is none. New post
-    tasks go to the TOP of the list — they are the ones with a date on them."""
+    tasks go to the TOP of the list — they are the ones with a date on them.
+
+    `prompt` is the shot the app would have generated. It is passed only on the
+    out-of-images fallback: when it is present the task becomes the "upload your
+    own photo" walkthrough (copy the shot idea, take the photo, upload, schedule)
+    that mirrors the reel task, rather than the bare "add a picture" one. An
+    existing open task for the post is returned untouched, but if it has no
+    prompt yet and one is now available, the prompt is filled in — so a photo
+    post that first failed for another reason still gets the shot idea the moment
+    the cap is what is blocking it."""
     tasks = get_tasks(email)
     pid = post.get("id") or ""
     for t in tasks:
         if t.get("post_id") == pid and not t.get("done"):
+            if prompt and not t.get("ai_prompt"):
+                t["ai_prompt"] = str(prompt)[:2000]
+                if kind != "video":
+                    t["steps"] = PHOTO_UPLOAD_STEPS
+                user_store.set_key(email, "smart_tasks", tasks)
             return t
     name = post.get("product_name") or "your post"
     when = post.get("scheduled_at") or ""
@@ -646,13 +671,21 @@ def ensure_post_task(email: str, post: dict, kind: str = "video",
         label = pd.Timestamp(when).strftime("%a %d %b, %I:%M %p").replace(" 0", " ")
     except Exception:  # noqa: BLE001
         label = when
-    text = (f"Make the reel for {name}" if kind == "video"
-            else f"Add a picture to the {name} post") + (f" — goes out {label}" if label else "")
+    if kind == "video":
+        head = f"Make the reel for {name}"
+    elif prompt:
+        head = f"Add your own photo to the {name} post"
+    else:
+        head = f"Add a picture to the {name} post"
+    text = head + (f" — goes out {label}" if label else "")
+    steps = (VIDEO_STEPS if kind == "video"
+             else PHOTO_UPLOAD_STEPS if prompt else PHOTO_STEPS)
     t = {"id": hashlib.md5(f"{pid}{kind}{pd.Timestamp.now().isoformat()}".encode()).hexdigest()[:10],
          "text": text[:280], "done": False, "kind": kind, "post_id": pid,
          "product_name": name, "due": when, "format": post.get("format") or "",
          "reason": (reason or "")[:300],
-         "steps": VIDEO_STEPS if kind == "video" else PHOTO_STEPS,
+         "ai_prompt": (prompt or "")[:2000],
+         "steps": steps,
          "steps_done": [],
          "created_at": pd.Timestamp.now().isoformat(timespec="seconds")}
     tasks.insert(0, t)

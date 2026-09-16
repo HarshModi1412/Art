@@ -107,8 +107,11 @@ def generate_suggestion(email: str, product_type: str | None = None,
         image_url = None
         if with_image and os.environ.get("OPENAI_API_KEY"):
             try:
-                image_url = _openai_image(pt, topic)
+                image_url = _openai_image(pt, topic, email)
             except Exception:  # noqa: BLE001
+                # Includes the monthly cap: a suggestion still arrives with its
+                # copy and no picture, and the seller adds their own — which is
+                # exactly what the cap message tells them to do.
                 image_url = None
     else:
         copy = _template_copy(pt, topic)
@@ -157,10 +160,20 @@ def _openai_copy(product_type: str, topic: str) -> dict:
     }
 
 
-def _openai_image(product_type: str, topic: str) -> str | None:
+def _openai_image(product_type: str, topic: str, email: str | None = None) -> str | None:
     """Generate an image with OpenAI and save it locally so it survives past
-    the temporary URL Meta would otherwise fail to fetch."""
+    the temporary URL Meta would otherwise fail to fetch.
+
+    `email` opts this into the same monthly picture allowance the Social Media
+    Manager uses (backend/core/aicaps.py). It matters because this is the SECOND
+    place the app can spend money on a picture — the Approval-panel suggestion —
+    and a per-account limit with a second door that does not count would not be a
+    limit at all. Checked before the call, counted only after it succeeds. When
+    no email is passed (a context with no account) the allowance is not touched."""
     from openai import OpenAI
+    if email:
+        from backend.core import aicaps
+        aicaps.check_image_month(email)   # raises MonthlyImageCapReached at the cap
     client = OpenAI()
     style = {
         "jewellery": "clean minimal studio photograph, soft warm lighting, marble backdrop",
@@ -186,7 +199,13 @@ def _openai_image(product_type: str, topic: str) -> str | None:
     # Generated images must use the same durable store as every seller upload.
     # Writing straight into the checkout repository made an unviewed image
     # vanish on the next deploy before media.py could backfill it.
-    return media.save(fname, content).get("url")
+    url = media.save(fname, content).get("url")
+    # Count it against the month's allowance, now that a picture actually came
+    # back — same rule as the Studio path: a picture spent is a picture seen.
+    if email and url:
+        from backend.core import aicaps
+        aicaps.consume_image_month(email)
+    return url
 
 
 # ---------------------------------------------------------
