@@ -3,16 +3,23 @@ Pricing catalog — single source of truth for the One Tap Manager offer.
 
 TWO WAYS TO PAY, offered side by side
 -------------------------------------
-1. SUBSCRIPTION — three tiers, flat monthly, per outlet:
+1. SUBSCRIPTION — two tiers, flat monthly, per outlet:
 
-       Free      ₹0      the numbers, forever
-       Semi Pro  ₹499    the actions: campaigns, reports, digest, your own domain-less site without our badge
-       Pro       ₹999    the operations: supply, purchase orders, unlimited AI, custom domain, multi-outlet
+       Free  ₹0      the numbers AND the actions, forever: analytics, campaigns,
+                      reports, digest, your own site with no badge, 250 products
+       Max   ₹999    the operations: supply, purchase orders, unlimited AI,
+                      custom domain, multi-outlet
+
+   The old middle "Semi Pro" tier (₹499) is gone — everything it used to
+   unlock is now part of Free, permanently, not just during launch. "pro" is
+   kept as the internal id for the paid tier (stored plan values, gating
+   ranks) so nothing has to migrate; only its display name changed to Max.
 
 2. USAGE — no monthly commitment. Buy a pack of credits, spend them on the
-   heavy actions only, and they never expire. Deliberately NOT a percentage of
-   sales and NOT priced per order: sellers already pay that tax to their app
-   stack, and it is the thing they complain about loudest.
+   handful of things still gated behind Max, and they never expire.
+   Deliberately NOT a percentage of sales and NOT priced per order: sellers
+   already pay that tax to their app stack, and it is the thing they complain
+   about loudest.
 
 Everything a seller has already paid for stays theirs — downgrading never
 deletes data, it only stops new gated actions.
@@ -20,7 +27,7 @@ deletes data, it only stops new gated actions.
 LAUNCH MODE
 -----------
 While LAUNCH_MODE is on (default) NOTHING is gated: every account behaves as
-Pro and the UI labels paid rows "Free during launch". The permanent free tier
+Max and the UI labels paid rows "Free during launch". The permanent free tier
 below is already written down, so flipping LAUNCH_MODE=false later is a
 non-event rather than a surprise bill — a seller on Free keeps everything
 marked free_forever.
@@ -30,7 +37,7 @@ import os
 # ---------------------------------------------------------------------------
 # tiers
 # ---------------------------------------------------------------------------
-PLAN_ORDER = ["free", "semipro", "pro"]
+PLAN_ORDER = ["free", "pro"]
 
 PLANS: dict[str, dict] = {
     "free": {
@@ -38,28 +45,7 @@ PLANS: dict[str, dict] = {
         "name": "Free",
         "price_inr": 0,
         "period": "forever",
-        "tagline": "Every number about your business, permanently free.",
-        "limits": {
-            "ai_per_day": 5,
-            "products": 25,
-            "outlets": 1,
-            "site_badge": True,          # storefront carries a small One Tap Manager line
-            "custom_domain": False,
-        },
-        "includes": [
-            "Sales analytics, category and sub-category trends",
-            "RFM segments and the at-risk customer list",
-            "Your own selling website + orders (with our badge in the footer)",
-            "Product catalogue up to 25 products",
-            "5 AI Analyst or Chatbot uses a day",
-        ],
-    },
-    "semipro": {
-        "id": "semipro",
-        "name": "Semi Pro",
-        "price_inr": 499,
-        "period": "month",
-        "tagline": "The actions, not just the numbers.",
+        "tagline": "The numbers and the actions — permanently free.",
         "limits": {
             "ai_per_day": 50,
             "products": 250,
@@ -68,18 +54,20 @@ PLANS: dict[str, dict] = {
             "custom_domain": False,
         },
         "includes": [
-            "Everything in Free",
+            "Sales analytics, category and sub-category trends",
+            "RFM segments and the at-risk customer list",
+            "Your own selling website + orders, no badge",
             "Win-back campaigns — unlimited, messages and Excel included",
             "Complaint analysis and the fix-first plan",
             "Market position and reputation reports",
             "The daily digest by email (and WhatsApp when you connect it)",
-            "Catalogue up to 250 products · badge removed from your site",
-            "50 AI uses a day",
+            "Product catalogue up to 250 products",
+            "50 AI Analyst or Chatbot uses a day",
         ],
     },
     "pro": {
         "id": "pro",
-        "name": "Pro",
+        "name": "Max",
         "price_inr": 999,
         "period": "month",
         "tagline": "Runs the shop, not just the reporting.",
@@ -91,7 +79,7 @@ PLANS: dict[str, dict] = {
             "custom_domain": True,
         },
         "includes": [
-            "Everything in Semi Pro",
+            "Everything in Free",
             "Supply Management — reorder points, EOQ, safety stock, waste log",
             "PDF purchase orders sent to your suppliers",
             "Position Strategy checklists",
@@ -102,7 +90,15 @@ PLANS: dict[str, dict] = {
 }
 
 # Legacy plan names that existing rows in user.csv may still carry.
-PLAN_ALIASES = {"chain": "pro", "pro_monthly": "pro", "chain_monthly": "pro", "paid": "pro"}
+# "semipro" is the retired middle tier: its feature set now lives in "free",
+# so any account still stamped semipro normalizes straight there. "max" is
+# the new public name for "pro", aliased forward in case anything ever sends
+# the display name instead of the internal id.
+PLAN_ALIASES = {
+    "chain": "pro", "pro_monthly": "pro", "chain_monthly": "pro", "paid": "pro",
+    "max": "pro",
+    "semipro": "free", "semi_pro": "free", "semipro_monthly": "free",
+}
 
 # ---------------------------------------------------------------------------
 # feature gating
@@ -120,13 +116,13 @@ FEATURE_MIN_PLAN: dict[str, str] = {
     "products": "free",
     "content": "free",
 
-    "winback_campaign": "semipro",
-    # the free tier gets 5 AI runs a day; more of them is a paid thing, but a
-    # credit buys one outright so a burst of work never needs a subscription
-    "ai_use": "semipro",
-    "complaints": "semipro",
-    "positioning": "semipro",
-    "digest": "semipro",
+    "winback_campaign": "free",
+    # the free tier gets 50 AI runs a day; more of them is still a thing a
+    # credit can buy outright, so a burst of work never needs Max
+    "ai_use": "free",
+    "complaints": "free",
+    "positioning": "free",
+    "digest": "free",
 
     "supply": "pro",
     "purchase_orders": "pro",
@@ -138,11 +134,13 @@ FEATURE_MIN_PLAN: dict[str, str] = {
 FREE_FOREVER = [f for f, p in FEATURE_MIN_PLAN.items() if p == "free"]
 
 # Gated features a credit can buy outright, for sellers on the usage plan.
-# feature -> credits it costs.
+# feature -> credits it costs. Win-back campaigns, positioning reports and
+# complaint analysis moved to FEATURE_MIN_PLAN's "free" tier above, so they
+# are free-forever now and no longer need a credit price. Only the two
+# things still gated behind Max keep one: extra AI runs past the free daily
+# quota, and purchase orders (the rest of Max's supply-chain feature is not
+# a one-off action, so it isn't credit-buyable).
 CREDIT_COST: dict[str, int] = {
-    "winback_campaign": 10,
-    "positioning": 15,
-    "complaints": 12,
     "ai_use": 1,
     "purchase_orders": 5,
 }
@@ -265,7 +263,7 @@ def public_catalog() -> dict:
         "products": [
             {"id": p["id"], "name": p["name"], "price_inr": p["price_inr"],
              "kind": "subscription", "description": p["tagline"]}
-            for p in (PLANS["semipro"], PLANS["pro"])
+            for p in (PLANS["pro"],)
         ] + [
             {"id": c["id"], "name": c["name"], "price_inr": c["price_inr"],
              "kind": "one_time", "credits": c["credits"], "description": c["description"]}

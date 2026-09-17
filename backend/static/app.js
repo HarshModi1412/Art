@@ -511,10 +511,19 @@ if ($("authToggle")) $("authToggle").onclick = (e) => { e.preventDefault(); setA
 
 function openLogin() {
   const m = $("loginModal");
-  m.hidden = false; m.style.display = "grid";
+  m.hidden = false; m.style.display = "flex";
   setAuthMode("login");
   $("loginEmail").focus();
 }
+// On a phone, the keyboard covers whichever field is focused unless we pull
+// it into view ourselves — scrollIntoView after a short delay so it runs
+// once the keyboard has finished animating in, not before.
+["loginEmail", "loginPassword", "loginPassword2"].forEach((id) => {
+  const el = $(id);
+  if (el) el.addEventListener("focus", () => {
+    setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 300);
+  });
+});
 function closeLogin() {
   const m = $("loginModal");
   m.hidden = true; m.style.display = "none";
@@ -566,9 +575,8 @@ function refreshUserUI(usage, plan) {
   if (state.email) {
     $("userLabel").textContent = state.email;
     $("userHint").textContent =
-      state.plan === "pro" || state.plan === "chain" ? "Pro — unlimited" :
-      state.plan === "semipro" ? "Semi Pro — campaigns and reports included" :
-      state.launchMode ? "Launch access — everything free" : "Free plan · 5 AI uses/day";
+      state.plan === "pro" || state.plan === "chain" ? "Max — unlimited" :
+      state.launchMode ? "Launch access — everything free" : "Free plan · 50 AI uses/day";
     $("logoutBtn").hidden = false;
   } else {
     $("userLabel").textContent = "Guest";
@@ -1648,7 +1656,7 @@ on("chartDownloadBtn", downloadModalChart);
 // Plans first, then the credit packs — the same two ways to pay the landing
 // page offers, so nobody meets a third pricing model inside the app.
 const PRODUCT_ICONS = {
-  semipro: "▲", pro: "◆",
+  pro: "◆",
   credits_100: "•", credits_300: "••", credits_1000: "•••",
 };
 
@@ -1673,8 +1681,7 @@ async function openPricing(highlightProduct, message) {
     const div = document.createElement("div");
     div.className = "price-item" + (prod.id === highlightProduct ? " highlight" : "");
     const per = prod.kind === "subscription" ? "/month" : "";
-    const owned = (prod.kind === "subscription" && prod.id === state.plan)
-      || (prod.id === "semipro" && state.plan === "pro");
+    const owned = prod.kind === "subscription" && prod.id === state.plan;
     div.innerHTML = `
       <div class="price-item-head">
         <span>${PRODUCT_ICONS[prod.id] || "•"} <b>${prod.name}</b></span>
@@ -1708,7 +1715,7 @@ async function openPricing(highlightProduct, message) {
     div.appendChild(fb);
     list.appendChild(div);
   });
-  m.hidden = false; m.style.display = "grid";
+  m.hidden = false; m.style.display = "flex";
 }
 function closePricing() { const m = $("pricingModal"); m.hidden = true; m.style.display = "none"; }
 on("pricingClose", closePricing);

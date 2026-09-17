@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
 <title>One Tap Manager: run your shop the way a big brand runs theirs</title>
 <meta name="description" content="One Tap Manager reads the sales you already make on Amazon, Shopify, Instagram or your own counter, then tells you what to restock, who to win back and what to fix. Analytics free forever. One flat monthly price that replaces four to six separate apps, and never a cut of your sales." />
 <meta name="robots" content="index, follow" />
@@ -63,10 +63,8 @@
       "publisher": { "@id": "__BASE_URL__/#org" },
       "offers": [
         { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "INR",
-          "description": "Sales analytics, customer segments and your own selling website." },
-        { "@type": "Offer", "name": "Semi Pro", "price": "499", "priceCurrency": "INR",
-          "description": "Adds win-back campaigns, complaint analysis and the morning digest." },
-        { "@type": "Offer", "name": "Pro", "price": "999", "priceCurrency": "INR",
+          "description": "Sales analytics, customer segments, win-back campaigns, complaint analysis, the morning digest and your own selling website." },
+        { "@type": "Offer", "name": "Max", "price": "999", "priceCurrency": "INR",
           "description": "Adds stock and supplier ordering, purchase orders and a custom domain." }
       ]
     }
@@ -653,74 +651,64 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
           <tr><td>Reviews &amp; reputation</td><td>₹1,200</td></tr>
           <tr><td>Order management</td><td>₹800</td></tr>
           <tr class="stack-sum"><td>Four to six apps, every month</td><td>₹7,600</td></tr>
-          <tr class="stack-ours"><td>One Tap Manager Pro: all of it, plus your own selling website</td><td>₹999</td></tr>
+          <tr class="stack-ours"><td>One Tap Manager Max: all of it, plus your own selling website</td><td>₹999</td></tr>
         </tbody>
       </table>
       <p class="stack-note">Your storefront is included at every tier. We are not going to charge you
       for the website and then charge you again to understand it.</p>
     </div>
 
-    <div class="plans plans-3">
+    <div class="plans">
       <div class="plan">
         <h3>Free</h3>
         <div class="price">₹0 <span>forever</span></div>
-        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Every number about your business.</div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">The numbers and the actions, forever.</div>
         <ul>
           <li>Sales analytics, category and sub-category trends</li>
           <li>Who your best customers are, and who has gone quiet</li>
-          <li><b>Your own selling website and orders</b>, with our small line in the footer</li>
-          <li>Up to 25 products</li>
-          <li>5 AI Analyst or Chatbot uses a day</li>
+          <li><b>Your own selling website and orders</b>, no badge</li>
+          <li><b>Win-back campaigns, unlimited.</b> Messages, coupons and Excel, as often as you like</li>
+          <li>Complaint analysis and the fix-first plan</li>
+          <li>Market position and reputation reports</li>
+          <li>The morning digest, by email and WhatsApp</li>
+          <li>Up to 250 products</li>
+          <li>50 AI Analyst or Chatbot uses a day</li>
         </ul>
         <button class="btn btn-ghost" onclick="openSignup('free')">Start free</button>
       </div>
       <div class="plan pro">
         <div class="badge">FREE DURING LAUNCH</div>
-        <h3>Semi Pro</h3>
-        <div class="price">₹499 <span>/ month</span></div>
-        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">The actions, not just the numbers.</div>
-        <ul>
-          <li>Everything in Free</li>
-          <li><b>Win-back campaigns, unlimited.</b> Messages, coupons and Excel, as often as you like</li>
-          <li>Complaint analysis and the fix-first plan</li>
-          <li>Market position and reputation reports</li>
-          <li>The morning digest, by email and WhatsApp</li>
-          <li>250 products · our footer line removed</li>
-          <li>50 AI uses a day</li>
-        </ul>
-        <button class="btn btn-primary" onclick="openSignup('free')">Try it free now</button>
-      </div>
-      <div class="plan">
-        <h3>Pro</h3>
+        <h3>Max</h3>
         <div class="price">₹999 <span>/ month</span></div>
         <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Runs the shop, not just the reporting.</div>
         <ul>
-          <li>Everything in Semi Pro</li>
+          <li>Everything in Free</li>
           <li><b>Stock and suppliers:</b> when to buy again, how much, and the order form ready to send</li>
           <li>PDF purchase orders, sent to your suppliers</li>
           <li>Position Strategy checklists</li>
           <li>Unlimited AI, unlimited products, unlimited outlets</li>
           <li>Your own custom domain</li>
         </ul>
-        <button class="btn btn-ghost" onclick="openSignup('free')">Start free, upgrade in-app</button>
+        <button class="btn btn-primary" onclick="openSignup('free')">Try it free now</button>
       </div>
     </div>
 
     <!-- Usage plan. Offered as a real alternative, not a downsell. -->
     <div class="usage-plan">
       <div>
-        <span class="eyebrow">Or don't subscribe at all</span>
+        <span class="eyebrow">Or don't subscribe to Max at all</span>
         <h3>Buy credits. Spend them only on the heavy things.</h3>
-        <p>Some sellers work in bursts, a season or a launch or a festival, and a monthly bill in the
-        quiet months is money for nothing. So there is a second way to pay: a pack of credits that
-        <b>never expires</b>. A win-back campaign is 10, a positioning report 15, a complaint
-        analysis 12, an AI run 1. Analytics, your website and your orders stay free either way.</p>
+        <p>Analytics, win-back campaigns, complaint analysis, position reports, the daily digest,
+        your website and your orders are free on every plan, no credits needed. Some sellers only
+        need Max's supply side occasionally — a season, a launch, a festival — so there is a second
+        way to pay for just that: a pack of credits that <b>never expires</b>. A purchase order sent
+        to your supplier is 5 credits, an AI run once your free 50 a day are used is 1.</p>
         <p class="stack-note">Deliberately not priced per order and never a percentage of your
         sales. You already pay that tax to your app stack; it is the thing sellers complain about
         loudest, and we are not going to be another one.</p>
       </div>
       <div class="credit-packs">
-        <div class="credit-pack"><b>100 credits</b><span>₹299</span><i>≈ 10 campaigns</i></div>
+        <div class="credit-pack"><b>100 credits</b><span>₹299</span><i>≈ 20 purchase orders</i></div>
         <div class="credit-pack best"><b>300 credits</b><span>₹749</span><i>17% cheaper each</i></div>
         <div class="credit-pack"><b>1000 credits</b><span>₹1,999</span><i>for a busy season</i></div>
       </div>
@@ -814,8 +802,12 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
 </div>
 
 <style>
-.su-backdrop { position: fixed; inset: 0; background: rgba(16,24,40,.55); backdrop-filter: blur(3px); display: grid; place-items: center; z-index: 50; padding: 20px; }
-.su-card { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 30px 32px; width: 100%; max-width: 420px; box-shadow: 0 32px 64px -24px rgba(16,24,40,.4); }
+/* A scrollable flex column with auto vertical margins on the card: it
+   centers itself when there's room and, once content (or a phone keyboard
+   shrinking the viewport) makes it taller than the screen, the backdrop
+   scrolls instead of clipping the top of the card with no way back to it. */
+.su-backdrop { position: fixed; inset: 0; background: rgba(16,24,40,.55); backdrop-filter: blur(3px); z-index: 50; display: flex; flex-direction: column; align-items: center; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 20px; box-sizing: border-box; }
+.su-card { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 30px 32px; width: 100%; max-width: 420px; box-shadow: 0 32px 64px -24px rgba(16,24,40,.4); margin: auto 0; flex: none; }
 .su-card h3 { font-size: 22px; margin: 8px 0 6px; }
 .su-sub { font-size: 14px; color: var(--ink-soft); margin: 0 0 18px; }
 .su-card label { display: block; font-size: 13.5px; font-weight: 600; margin: 12px 0 0; }
@@ -842,12 +834,20 @@ function openSignup(plan) {
   document.getElementById("suEyebrow").textContent = "FREE DURING LAUNCH · NO CARD NEEDED";
   document.getElementById("suTitle").textContent = "Create your free account";
   document.getElementById("suError").style.display = "none";
-  document.getElementById("signupModal").style.display = "grid";
+  document.getElementById("signupModal").style.display = "flex";
   document.getElementById("suEmail").focus();
 }
 function closeSignup() { document.getElementById("signupModal").style.display = "none"; }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSignup(); });
 document.getElementById("signupModal").addEventListener("click", (e) => { if (e.target.id === "signupModal") closeSignup(); });
+// On a phone, the keyboard covers whichever field is focused unless we pull
+// it into view ourselves — scrollIntoView after a short delay so it runs
+// once the keyboard has finished animating in, not before.
+document.querySelectorAll("#suForm input").forEach((inp) => {
+  inp.addEventListener("focus", () => {
+    setTimeout(() => inp.scrollIntoView({ block: "center", behavior: "smooth" }), 300);
+  });
+});
 // One submit handler on the form, so Enter works from every field rather than
 // from the two it happened to be wired to.
 document.getElementById("suForm").addEventListener("submit", (e) => {

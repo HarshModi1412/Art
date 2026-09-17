@@ -173,8 +173,11 @@ def register(email: str, password: str, plan: str = "free") -> None:
     df.to_csv(users_file, index=False)
 
 
-# Plan ids that may live in the users table. "pro"/"chain" are legacy rows that
-# backend.core.pricing normalises to the Pro tier.
+# Plan ids that may live in the users table. "chain" is a legacy row that
+# backend.core.pricing normalises to the Max ("pro") tier; "semipro" is the
+# retired middle tier, kept here only so an old stored row still reads back
+# instead of being coerced to "free" a step earlier than pricing.normalize_plan
+# already does it.
 _KNOWN_PLANS = ("free", "semipro", "pro", "chain")
 
 

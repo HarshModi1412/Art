@@ -313,23 +313,26 @@ r = c.post("/api/site/image", headers=H,
            files={"files": ("bad.exe", _io.BytesIO(b"MZ" + b"0" * 100), "application/octet-stream")})
 must(r.status_code == 400, "anything that isn't an image or a clip is refused")
 
-print("\n== 17. pricing: three tiers + a usage plan ==")
+print("\n== 17. pricing: two tiers + a usage plan ==")
 r = c.get("/api/pricing")
 pc = r.json()
-must([p["id"] for p in pc["plans"]] == ["free", "semipro", "pro"], "Free / Semi Pro / Pro")
-must(pc["plans"][1]["price_inr"] == 499 and pc["plans"][2]["price_inr"] == 999, "tier prices")
+must([p["id"] for p in pc["plans"]] == ["free", "pro"], "Free / Max")
+must(pc["plans"][1]["name"] == "Max", "the paid tier is displayed as Max")
+must(pc["plans"][0]["price_inr"] == 0 and pc["plans"][1]["price_inr"] == 999, "tier prices")
 must(len(pc["credit_packs"]) == 3, "credit packs offered alongside the tiers")
 must(pc["stack"]["saving_inr"] > 0, "the Shopify app-stack comparison computes")
-must(pc["stack"]["ours_inr"] == 999, "compared against Pro")
+must(pc["stack"]["ours_inr"] == 999, "compared against Max")
 from backend.core import pricing as _pr
 must(_pr.plan_allows("free", "analytics"), "analytics is free forever")
 _lm = _pr.launch_mode
 _pr.launch_mode = lambda: False
 try:
     must(not _pr.plan_allows("free", "supply"), "Supply is gated on Free once launch ends")
-    must(_pr.plan_allows("pro", "supply"), "Pro includes Supply")
-    must(_pr.plan_allows("semipro", "winback_campaign"), "Semi Pro includes campaigns")
-    must(_pr.credits_for("winback_campaign") == 10, "a campaign also costs credits")
+    must(_pr.plan_allows("pro", "supply"), "Max includes Supply")
+    must(_pr.plan_allows("free", "winback_campaign"), "Free includes campaigns (the old Semi Pro tier)")
+    must(_pr.normalize_plan("semipro") == "free", "a legacy semipro account normalises to free")
+    must(_pr.credits_for("winback_campaign") == 0, "campaigns are free forever, no credits needed")
+    must(_pr.credits_for("purchase_orders") == 5, "purchase orders still cost credits on the usage plan")
     must(_pr.upgrade_target("supply")["id"] == "pro", "the paywall names the right tier")
 finally:
     _pr.launch_mode = _lm

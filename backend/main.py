@@ -1121,9 +1121,9 @@ async def analyze_complaints_endpoint(product_type: str | None = None,
                                       files: list[UploadFile] = File(...),
                                       x_session_id: str | None = Header(default=None),
                                       authorization: str | None = Header(default=None)):
-    """Complaint Trends Report (premium): raw reviews in -> prescriptive
-    fix-first actions, monthly complaint trends, severity quadrant, deep table.
-    Free during launch; included in Semi Pro and Pro, or 12 credits, after."""
+    """Complaint Trends Report: raw reviews in -> prescriptive fix-first
+    actions, monthly complaint trends, severity quadrant, deep table.
+    Free during launch and free forever after — part of the Free plan."""
     sess = get_session(x_session_id)
     if not pricing.launch_mode():
         email = require_user(authorization)
@@ -2263,8 +2263,8 @@ async def analyze_positioning(lang: str = "en", product_type: str | None = None,
                               x_session_id: str | None = Header(default=None),
                               authorization: str | None = Header(default=None)):
     """Upload a café's own reviews file -> brand positioning vs the benchmark cafés.
-    GTM gate: free for everyone during launch; afterwards it is included in
-    Semi Pro and Pro, or costs 15 credits on the usage plan."""
+    Free for everyone during launch, and free forever after — part of the
+    Free plan."""
     get_session(x_session_id)
     if not pricing.launch_mode():
         email = require_user(authorization)
@@ -2326,9 +2326,9 @@ def generate_winback(x_session_id: str | None = Header(default=None),
     if not customers:
         return {"customers": [], "usage": _usage(email)}
 
-    # The at-risk LIST is free forever. Generating the ready-to-send campaign is
-    # included from Semi Pro upwards — deliberately NOT charged per campaign,
-    # because charging per campaign taxes the exact behaviour that proves the
+    # The at-risk LIST and the ready-to-send campaign are both free forever,
+    # part of the Free plan — deliberately NOT charged per campaign, because
+    # charging per campaign taxes the exact behaviour that proves the
     # product works and creates the habit worth renewing.
     if not billing.check_and_consume(email, "winback_campaign"):
         raise _paywall("winback_campaign")
@@ -2532,8 +2532,8 @@ def _consume_ai_use(email: str, feature: str) -> None:
     quota = pricing.ai_quota(billing.get_plan(email))
     raise _paywall(
         "ai_use",
-        f"You've used today's {quota} free AI runs. Semi Pro raises it to 50 a day and Pro "
-        f"removes the limit — or spend credits, which never expire.",
+        f"You've used today's {quota} free AI runs. Max removes the daily limit "
+        f"— or spend credits, which never expire.",
     )
 
 
@@ -2584,7 +2584,7 @@ def chat_history(x_session_id: str | None = Header(default=None),
 # Billing / Payments (Razorpay)
 # ---------------------------------------------------------
 class OrderBody(BaseModel):
-    product: str  # a plan id (semipro | pro) or a credit pack (credits_100 | ...)
+    product: str  # a plan id ("pro", billed as Max) or a credit pack (credits_100 | ...)
 
 
 class VerifyBody(BaseModel):
@@ -2600,8 +2600,6 @@ def create_order(body: OrderBody, authorization: str | None = Header(default=Non
     current = billing.get_plan(email)
     if body.product == current:
         raise HTTPException(400, f"You are already on {pricing.get_plan(current)['name']}.")
-    if body.product == "semipro" and current == "pro":
-        raise HTTPException(400, "Pro already includes everything in Semi Pro.")
     try:
         return billing.create_order(email, body.product)
     except ValueError as e:

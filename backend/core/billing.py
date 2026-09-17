@@ -56,7 +56,9 @@ def _save_pending(email: str, rows: dict) -> None:
 
 # ---------------- plans ----------------
 def get_plan(email: str) -> str:
-    """'free' | 'semipro' | 'pro'. Legacy 'chain'/'pro' rows normalise to pro."""
+    """'free' | 'pro' (displayed as Max). Legacy 'chain' rows normalise to pro;
+    legacy 'semipro' rows normalise to free — that tier's feature set now
+    lives in Free permanently."""
     return pricing.normalize_plan(auth.get_plan(email))
 
 
