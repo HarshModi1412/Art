@@ -245,11 +245,18 @@ def gateway_configured() -> bool:
 
 
 def create_order(email: str, product_id: str) -> dict:
-    """Create a Razorpay order for any catalog product."""
+    """Create a Razorpay order for any catalog product.
+
+    Credit packs are a real, paid top-up and always go through Razorpay — even
+    during launch. Launch mode keeps the FEATURES free, not the credits a seller
+    chooses to stockpile, so a pack purchase never short-circuits to "free".
+    Subscriptions (the Max tier) stay free while launch mode is on, because the
+    tier's features are already unlocked for everyone then."""
     product = pricing.get_product(product_id)
     if not product:
         raise ValueError("Unknown product")
-    if pricing.launch_mode():
+    is_pack = product_id in pricing.CREDIT_PACKS
+    if pricing.launch_mode() and not is_pack:
         return {"launch_free": True, "product": product_id}
     if not gateway_configured():
         raise RuntimeError(

@@ -6057,8 +6057,8 @@ function openBuyCredits(cr) {
 
   openModal("Buy credits", `
     <p class="muted tiny" style="margin-top:0;">Credits never expire and stack on top of your monthly allowance.
-      A picture costs ${cst.image ?? 10}, a video ${cst.video ?? 280}, a caption or an image read ${cst.text ?? 1}.${
-      cr.launch_mode ? " Everything is free during launch — you don't need these yet." : ""}</p>
+      A picture costs ${cst.image ?? 10}, a video ${cst.video ?? 280}, a caption or an image read ${cst.text ?? 1}.
+      Paid securely through Razorpay.</p>
     ${rows}
     <div class="modal-actions"><button class="btn ghost" data-mclose2>Close</button></div>`, { wide: true });
   const x = document.querySelector("[data-mclose2]"); if (x) x.onclick = closeModal;
