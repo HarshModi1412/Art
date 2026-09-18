@@ -344,3 +344,42 @@ def delete_df(email: str, key: str) -> None:
             os.remove(path)
     except Exception:
         pass
+
+
+def purge(email: str) -> None:
+    """Erase every scrap of this account's saved state and all its stored
+    DataFrames. Used by BOTH the Account tab's Reset (login kept) and Delete
+    (login also removed) — this only removes the per-account state/data this
+    module owns, never the login row or the purchase ledger.
+
+    Supabase mode: drop every DataFrame blob this account tracks, then the
+    user_state row. Local mode: remove the whole per-account directory, which
+    is state.json plus every df_*.pkl in one go."""
+    email_n = _norm_email(email)
+    # forget any in-memory copies first, so a later read in the same process
+    # rebuilds from the now-empty store rather than serving a stale dict/frame.
+    for k in [key for key in _DF_CACHE if key[0] == email or key[0] == email_n]:
+        _DF_CACHE.pop(k, None)
+    box = _scope.get()
+    if box is not None:
+        box.pop(email_n, None)
+
+    if db.SUPABASE_ENABLED:
+        for key in list(get_key(email, _DATASET_KEYS, []) or []):
+            try:
+                db.remove_blob(_blob_path(email, key))
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            db.delete("user_state", {"email": email_n})
+        except Exception:  # noqa: BLE001
+            pass
+        return
+
+    import shutil
+    d = os.path.join(_ROOT, _safe(email))
+    try:
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+    except OSError:
+        pass

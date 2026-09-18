@@ -389,3 +389,37 @@ def get_remaining_usage(email: str, feature: str) -> int:
     _init_usage_file()
     df = pd.read_csv(USAGE_FILE)
     return MAX_USAGE - len(_recent_logs(df, email, feature))
+
+
+# ---------- account deletion ----------
+def delete_account(email: str) -> None:
+    """Remove the login itself, every session it owns, and its usage-log rows.
+    The last step of Account → Delete; after this the account cannot log in and
+    any live token is dead. The seller's saved data and purchase ledger are
+    cleared separately by user_store.purge / billing.purge_account."""
+    email = (email or "").strip().lower()
+    if db.SUPABASE_ENABLED:
+        for table in ("sessions", "usage_logs", "users"):
+            try:
+                db.delete(table, {"email": email})
+            except Exception:  # noqa: BLE001 — best effort
+                pass
+        return
+
+    # local/fallback mode
+    for token in [t for t, e in list(_sessions.items()) if e == email]:
+        _sessions.pop(token, None)
+    try:
+        if os.path.exists(USAGE_FILE):
+            df = pd.read_csv(USAGE_FILE)
+            if "email" in df.columns:
+                df = df[df["email"].astype(str).str.strip().str.lower() != email]
+                df.to_csv(USAGE_FILE, index=False)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        df, users_file = _read_users_df()
+        df = df[df["email"].astype(str).str.strip().str.lower() != email]
+        df.to_csv(users_file, index=False)
+    except Exception:  # noqa: BLE001
+        pass

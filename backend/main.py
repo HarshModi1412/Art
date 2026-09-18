@@ -3793,6 +3793,26 @@ def account_ai_key_delete(provider: str, authorization: str | None = Header(defa
     return {"ok": True, "ai_keys": account.remove_ai_key(email, provider)}
 
 
+@app.post("/api/account/reset")
+def account_reset(authorization: str | None = Header(default=None)):
+    """Start over: wipe settings, storefront, products, tasks and uploaded data.
+    The login and any purchased credits are kept, so the seller stays signed in
+    on an empty workspace. Irreversible — the UI confirms before calling this."""
+    from backend.core import account
+    email = require_user(authorization)
+    return account.reset(email)
+
+
+@app.delete("/api/account/delete")
+def account_delete(authorization: str | None = Header(default=None)):
+    """Permanently remove the account and everything belonging to it, including
+    the login. Irreversible — the UI requires a typed confirmation, and signs the
+    seller out afterwards because their session no longer exists."""
+    from backend.core import account
+    email = require_user(authorization)
+    return account.delete(email)
+
+
 class SignatureBody(BaseModel):
     url: str = ""
 
@@ -6121,6 +6141,8 @@ def ai_write(body: AiWriteBody, authorization: str | None = Header(default=None)
     try:
         if res.get("ai"):
             aicaps.consume(email, "text")
+            from backend.core import credits
+            credits.spend(email, "text")
     except Exception:  # noqa: BLE001
         pass
     return {**res, **{"meta": _ai_meta()}}

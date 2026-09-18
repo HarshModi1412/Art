@@ -98,4 +98,75 @@ def summary(email: str) -> dict:
         "payments": store_payments.provider_status(email),
         # their own AI keys, optional
         "ai_keys": ai_status(email),
+        # the credit balance they watch and can top up: this month's grant plus
+        # any packs they bought, and what each generation spends.
+        "credits": _credits_status(email),
     }
+
+
+def _credits_status(email: str) -> dict:
+    """The Credits card payload. Imported lazily so the Account tab still
+    renders if the billing stack is misconfigured on a given deployment."""
+    try:
+        from backend.core import credits
+        return credits.status(email)
+    except Exception:  # noqa: BLE001 — a missing meter must not blank the tab
+        return {"enabled": False}
+
+
+# ---------------------------------------------------------------------------
+# Reset and delete — the two irreversible actions at the bottom of the tab.
+# ---------------------------------------------------------------------------
+# Per-account rows keyed by email that live in their own tables (Supabase mode).
+# In local/JSON mode all of these live inside user_store's per-account state and
+# are cleared when it is purged, so this sweep is a no-op there.
+_PER_EMAIL_TABLES = ["feedback", "inventory", "product_inventory_map",
+                     "inventory_waste", "purchase_orders", "products",
+                     "product_aliases", "sites"]
+
+
+def _sweep_tables(email: str, tables) -> None:
+    from backend.core import db
+    if not db.SUPABASE_ENABLED:
+        return
+    for t in tables:
+        try:
+            db.delete(t, {"email": email})
+        except Exception:  # noqa: BLE001 — best effort, keep going
+            pass
+
+
+def reset(email: str) -> dict:
+    """Start over: wipe settings, storefront, products, tasks and every uploaded
+    file — but keep the login and any purchased credits. The seller stays signed
+    in and lands on an empty workspace."""
+    from backend.core import cache
+    _sweep_tables(email, _PER_EMAIL_TABLES)
+    user_store.purge(email)          # per-account state + all stored DataFrames
+    try:
+        cache.clear(email)
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True, "reset": True}
+
+
+def delete(email: str) -> dict:
+    """Remove the account and everything belonging to it — settings, storefront,
+    products, data, purchase ledger, sessions and the login itself. Irreversible;
+    the caller signs the seller out afterwards because the session is now gone."""
+    from backend.core import auth, billing, cache
+    _sweep_tables(email, _PER_EMAIL_TABLES)
+    try:
+        billing.purge_account(email)     # the purchase / credit ledger
+    except Exception:  # noqa: BLE001
+        pass
+    user_store.purge(email)
+    try:
+        auth.delete_account(email)       # users + sessions + usage logs
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        cache.clear(email)
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True, "deleted": True}

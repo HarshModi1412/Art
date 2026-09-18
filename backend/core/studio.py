@@ -438,6 +438,11 @@ def read_aesthetic(email: str) -> dict:
     # One read is one charge against the vision budget however many references it
     # looked at — the seller asked for one thing.
     aicaps.consume(email, "vision")
+    try:
+        from backend.core import credits
+        credits.spend(email, "vision")
+    except Exception:  # noqa: BLE001
+        pass
     return {"ok": True, "aesthetic": b["aesthetic"], "shots": shots,
             "reads": b["aesthetic_reads"],
             "shot_labels": {k: SHOT_TYPES[k]["label"] for k in shots
@@ -1275,6 +1280,14 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     if not on_own_key:
         aicaps.consume(email, "image")
         aicaps.consume_image_month(email)
+        # Deduct the picture from the seller's credit balance too — the human
+        # meter they watch and can top up. Same rule as the ceilings above: only
+        # on a picture they actually got, and never on their own key.
+        try:
+            from backend.core import credits
+            credits.spend(email, "image")
+        except Exception:  # noqa: BLE001 — a meter must not fail a finished draw
+            pass
 
     # Every generated picture goes through the watermark remover BEFORE the
     # brand tag is added — the other order would have the remover looking at
@@ -1493,6 +1506,13 @@ def generate_video(email: str, product_id: str, prompt: str = "",
     if not data:
         raise RuntimeError(fail)
     aicaps.consume(email, "video")
+    # A clip is by far the most expensive generation, so it takes the biggest
+    # bite out of the credit balance — deducted only now that it came back.
+    try:
+        from backend.core import credits
+        credits.spend(email, "video")
+    except Exception:  # noqa: BLE001
+        pass
     # Same rule as stills: a generated clip is cleaned of any visible corner
     # mark before it is stored against the seller's post.
     from backend.core import watermark, ailabel

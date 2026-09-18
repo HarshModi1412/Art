@@ -5809,6 +5809,8 @@ async function openAccount() {
   const ig = d.instagram || {};
   const pay = d.payments || {};
   const ai = d.ai_keys || {};
+  const cr = d.credits || {};
+  const cst = cr.costs || {};
 
   const dot = (on) => `<span class="acc-dot ${on ? "on" : "off"}"></span>`;
 
@@ -5853,6 +5855,38 @@ async function openAccount() {
       </div></div>`;
   };
 
+  // ---- Credits: a monthly allowance + purchased packs, spent by real usage ----
+  const pct = cr.monthly_grant
+    ? Math.max(0, Math.min(100, Math.round(100 * (cr.monthly_left || 0) / cr.monthly_grant)))
+    : 0;
+  const creditsHtml = (cr.enabled === false) ? "" : `
+      <section class="acc-sec">
+        <h4>Credits</h4>
+        <p class="muted tiny" style="margin-top:0;">A monthly allowance you can top up. Every generation spends what it actually costs —
+          a picture ${cst.image ?? 10}, a video ${cst.video ?? 280}, a caption or an image read ${cst.text ?? 1}.${
+          cr.launch_mode ? " Everything is free during launch; this is the meter for later." : ""}</p>
+        <div style="display:flex; justify-content:space-between; font-size:13px;"><span class="muted">This month</span><b>${cr.monthly_left ?? 0} of ${cr.monthly_grant ?? 0} left</b></div>
+        <div style="height:8px; border-radius:6px; background:rgba(127,127,127,.18); overflow:hidden; margin:6px 0 3px;"><div style="height:100%; width:${pct}%; background:var(--accent,#4f46e5);"></div></div>
+        <div class="muted tiny" style="margin:0 0 10px;">Resets ${esc(cr.resets || "on the 1st")}.</div>
+        <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px;"><span class="muted">Purchased credits <span class="tiny">(never expire)</span></span><b>${cr.purchased ?? 0}</b></div>
+        <div style="display:flex; justify-content:space-between; font-size:13px; border-top:1px solid rgba(127,127,127,.18); padding-top:6px;"><span>Available to spend</span><b>${cr.balance ?? 0}</b></div>
+        <button class="btn primary sm" id="accBuyCredits" style="margin-top:12px;">Buy more credits</button>
+      </section>`;
+
+  // ---- Danger zone: reset (keep login) and delete (remove everything) ----
+  const dangerHtml = `
+      <section class="acc-sec">
+        <h4 style="color:var(--danger,#dc2626);">Danger zone</h4>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid rgba(127,127,127,.15);">
+          <div><b>Reset account</b><p class="muted tiny" style="margin:2px 0 0;">Clears your settings, storefront, products, tasks and uploaded data. Your login and purchased credits stay.</p></div>
+          <button class="btn ghost sm danger" id="accReset" style="flex:none;">Reset</button>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0;">
+          <div><b>Delete account</b><p class="muted tiny" style="margin:2px 0 0;">Permanently removes your account and everything in it. This cannot be undone.</p></div>
+          <button class="btn ghost sm danger" id="accDelete" style="flex:none;">Delete</button>
+        </div>
+      </section>`;
+
   openModal("Account", `
     <div class="acc-wrap">
       <section class="acc-sec">
@@ -5896,6 +5930,8 @@ async function openAccount() {
         ${aiRow("openai", "OpenAI", "for captions and pictures, starts with sk-")}
         ${aiRow("gemini", "Google Gemini", "for brand-aware pictures")}
       </section>
+${creditsHtml}
+${dangerHtml}
     </div>
     <div class="modal-actions"><button class="btn ghost" data-accx>Close</button></div>`, { wide: true });
 
@@ -5963,6 +5999,143 @@ async function openAccount() {
   document.querySelectorAll("[data-airemove]").forEach((b) => b.onclick = async () => {
     try { await api(`/api/account/ai-key/${encodeURIComponent(b.dataset.airemove)}`, { method: "DELETE" });
       toast("Removed. Back to ours."); closeModal(); openAccount(); } catch (e) { toast(e.message); }
+  });
+
+  // credits + danger zone
+  if ($("accBuyCredits")) $("accBuyCredits").onclick = () => openBuyCredits(cr);
+  if ($("accReset")) $("accReset").onclick = () => confirmReset();
+  if ($("accDelete")) $("accDelete").onclick = () => confirmDelete();
+}
+
+/* ============================================================================
+   Buy credits — the packs from the pricing catalog, paid with Razorpay, the
+   same two-call flow the storefront uses (create-order → gateway → verify).
+   ========================================================================== */
+function loadRazorpayScript() {
+  return new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve();
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("Could not load the payment window — check your connection."));
+    document.head.appendChild(s);
+  });
+}
+
+function openBuyCredits(cr) {
+  cr = cr || {};
+  const packs = cr.packs || [];
+  const cst = cr.costs || {};
+  const rows = packs.length ? packs.map((p) => `
+    <div class="acc-sec" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+      <div>
+        <b>${esc(p.name)}</b> <span class="muted tiny">₹${p.price_inr}</span>
+        <p class="muted tiny" style="margin:2px 0 0;">${esc(p.description || (p.credits + " credits"))}</p>
+      </div>
+      <button class="btn primary sm" data-pack="${esc(p.id)}" style="flex:none;">Buy — ₹${p.price_inr}</button>
+    </div>`).join("") : `<p class="muted">No credit packs are configured on this server yet.</p>`;
+
+  openModal("Buy credits", `
+    <p class="muted tiny" style="margin-top:0;">Credits never expire and stack on top of your monthly allowance.
+      A picture costs ${cst.image ?? 10}, a video ${cst.video ?? 280}, a caption or an image read ${cst.text ?? 1}.${
+      cr.launch_mode ? " Everything is free during launch — you don't need these yet." : ""}</p>
+    ${rows}
+    <div class="modal-actions"><button class="btn ghost" data-mclose2>Close</button></div>`, { wide: true });
+  const x = document.querySelector("[data-mclose2]"); if (x) x.onclick = closeModal;
+  document.querySelectorAll("[data-pack]").forEach((b) => b.onclick = () => buyCredits(b.dataset.pack));
+}
+
+async function buyCredits(productId) {
+  if (!state.token) { closeModal(); return toast("Log in first."); }
+  try {
+    const order = await api("/api/pay/create-order", { method: "POST", json: { product: productId } });
+    if (order.launch_free) { toast("It's free during launch — nothing to buy yet."); return; }
+    await loadRazorpayScript();
+    const rzp = new Razorpay({
+      key: order.key_id,
+      order_id: order.order_id,
+      amount: order.amount,
+      currency: order.currency,
+      name: order.name,
+      description: order.description,
+      prefill: { email: state.email || "" },
+      handler: async (resp) => {
+        try {
+          await api("/api/pay/verify", { method: "POST", json: {
+            razorpay_order_id: resp.razorpay_order_id,
+            razorpay_payment_id: resp.razorpay_payment_id,
+            razorpay_signature: resp.razorpay_signature,
+            product: productId,
+          }});
+          closeModal();
+          toast("Payment successful — credits added.", 5000);
+          openAccount();
+        } catch (e) { toast(e.message, 6000); }
+      },
+    });
+    rzp.open();
+  } catch (e) { toast(e.message, 6000); }
+}
+
+/* A typed-confirmation popup for the two irreversible actions, so neither can
+   fire on a stray click. `word` is what the seller must type to arm the button. */
+function confirmDanger({ title, body, word, danger, run }) {
+  openModal(title, `
+    ${body}
+    <label class="fld" style="margin-top:10px;"><span>Type <b>${esc(word)}</b> to confirm</span>
+      <input id="dangerType" autocomplete="off" placeholder="${esc(word)}" /></label>
+    <div class="modal-actions">
+      <button class="btn ghost" data-dcancel>Cancel</button>
+      <button class="btn ${danger ? "danger" : "primary"}" id="dangerGo" disabled>${esc(title)}</button>
+    </div>`, {});
+  const input = $("dangerType"), go = $("dangerGo");
+  const cancel = document.querySelector("[data-dcancel]");
+  if (cancel) cancel.onclick = closeModal;
+  input.oninput = () => { go.disabled = input.value.trim().toUpperCase() !== word.toUpperCase(); };
+  go.onclick = async () => {
+    go.disabled = true;
+    try { await run(); }
+    catch (e) { toast(e.message, 7000); go.disabled = false; }
+  };
+  setTimeout(() => input.focus(), 50);
+}
+
+function confirmReset() {
+  confirmDanger({
+    title: "Reset account",
+    word: "RESET",
+    danger: false,
+    body: `<p class="muted">This clears your settings, storefront, products, tasks and every uploaded file, and drops you back to an empty workspace. Your login and any purchased credits stay. This cannot be undone.</p>`,
+    run: async () => {
+      await withBusy("Resetting your account…", "", () => api("/api/account/reset", { method: "POST" }));
+      warmClear(); warmModClearAll();
+      closeModal();
+      toast("Your account has been reset — starting fresh.", 5000);
+      await goHome();
+    },
+  });
+}
+
+function confirmDelete() {
+  confirmDanger({
+    title: "Delete account",
+    word: "DELETE",
+    danger: true,
+    body: `<p class="muted">This permanently removes your account and everything in it — settings, storefront, products, data and your login. It cannot be undone, and you'll be signed out.</p>`,
+    run: async () => {
+      await withBusy("Deleting your account…", "", () => api("/api/account/delete", { method: "DELETE" }));
+      // The session no longer exists on the server; clear the client the same
+      // way logout does and drop the seller back at the login screen.
+      state.token = null; state.email = null;
+      try { localStorage.removeItem("cx_token"); localStorage.removeItem("cx_email"); } catch (e) {}
+      warmClear(); warmModClearAll();
+      closeModal();
+      if ($("appShell")) $("appShell").hidden = true;
+      if ($("loginView")) $("loginView").hidden = false;
+      try { if (window.google && google.accounts) google.accounts.id.disableAutoSelect(); } catch (e) {}
+      try { setupGoogleSignIn(); } catch (e) {}
+      toast("Your account has been deleted.", 5000);
+    },
   });
 }
 

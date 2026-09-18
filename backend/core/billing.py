@@ -319,3 +319,21 @@ def verify_payment(email: str, order_id: str, payment_id: str, signature: str,
             set_plan(email, product_id)
         record_purchase(email, product_id, order_id, payment_id)
         return product_id
+
+
+def purge_account(email: str) -> None:
+    """Delete this account's whole purchase ledger — every pack and every
+    credit balance it holds. Only for account deletion; Reset deliberately does
+    NOT call this, so purchased credits survive a reset."""
+    if db.SUPABASE_ENABLED:
+        try:
+            db.delete("purchases", {"email": email})
+        except Exception:  # noqa: BLE001
+            pass
+        return
+    df = _read_ledger()
+    if df.empty:
+        return
+    keep = df[df["email"].astype(str).str.strip().str.lower()
+              != (email or "").strip().lower()]
+    _write_ledger(keep)
