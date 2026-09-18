@@ -3631,7 +3631,11 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
                    transform var(--pol-fast) var(--ease-ios); }
 .btn:hover:not(:disabled) { transform: translateY(-1px); }
 .btn:active:not(:disabled) { transform: translateY(0) scale(.97); }
-.btn.primary:hover:not(:disabled) { box-shadow: 0 7px 20px -8px var(--primary, #6a74ff); }
+/* A soft dark elevation on hover, NOT a coloured glow. In dark mode --primary
+   is a light lavender, so the old `var(--primary)` shadow read as a washed-out
+   white halo. A neutral, mostly-transparent dark shadow lifts the button on
+   both themes without any glow. */
+.btn.primary:hover:not(:disabled) { box-shadow: 0 6px 16px -10px rgba(0,0,0,.5); }
 
 /* Cards & tiles: a soft, consistent lift on hover — the iOS "tappable" cue —
    with a smooth shadow rather than a hard border flip. */

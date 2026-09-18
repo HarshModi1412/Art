@@ -844,7 +844,7 @@ h3 .uic, h4 .uic { width: 17px; height: 17px; vertical-align: -3px; margin-right
 }
 .primary-btn:hover:not(:disabled), .ghost-btn:hover:not(:disabled) { transform: translateY(-1px); }
 .primary-btn:active:not(:disabled), .ghost-btn:active:not(:disabled) { transform: translateY(0) scale(.97); }
-.primary-btn:hover:not(:disabled) { box-shadow: 0 7px 20px -8px var(--accent, #5c6790); }
+.primary-btn:hover:not(:disabled) { box-shadow: 0 6px 16px -10px rgba(0,0,0,.5); }
 .card { transition: transform var(--pol-mid) var(--ease-ios),
                     box-shadow var(--pol-mid) var(--ease-soft),
                     border-color var(--pol-mid) var(--ease-soft); }
