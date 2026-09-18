@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account layout preview</title>
+<style>
+  :root{
+    --surface:#202226; --surface-2:#26292e; --text:#e6e8ec; --text-2:#a2a7b0;
+    --border:#34383f; --accent:#6a74ff; --danger:#f0616d; --radius-lg:16px;
+    --shadow-pop:0 24px 60px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#141518;color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;display:grid;place-items:center;min-height:100vh;padding:24px}
+  .modal{background:var(--surface);border-radius:var(--radius-lg);width:min(1000px,96vw);max-height:90vh;overflow:auto;padding:20px 22px;box-shadow:var(--shadow-pop)}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .modal-head b{font-size:16px}
+  .x{background:none;border:none;color:var(--text-2);font-size:20px;cursor:pointer}
+  .muted{color:var(--text-2)} .tiny{font-size:12px}
+  .fld{display:block;margin:0 0 10px}
+  .fld>span{display:block;margin:0 0 4px;font-size:.82rem;color:var(--text-2)}
+  select,input{width:100%;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 10px}
+  .acc-sec{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface-2);margin-bottom:14px}
+  .acc-sec>h4{margin:0 0 6px;font-size:.98rem}
+  .acc-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:1px}
+  .acc-dot.on{background:#39c07a}.acc-dot.off{background:#6b7280}
+  .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);border-radius:9px;padding:8px 14px;font-size:13.5px;cursor:pointer}
+  .btn.sm{padding:6px 12px;font-size:13px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.ghost{background:none}
+  .btn.danger{color:var(--danger);border-color:var(--danger)}
+  .modal-actions{display:flex;justify-content:flex-end;margin-top:6px}
+
+  /* the new settings layout */
+  .acc2{display:flex;gap:0;min-height:440px}
+  .acc2-nav{flex:0 0 178px;display:flex;flex-direction:column;gap:2px;border-right:1px solid rgba(128,128,128,.18);padding-right:10px}
+  .acc2-nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;color:var(--text);padding:9px 11px;border-radius:8px;cursor:pointer;font-size:14px;line-height:1.2}
+  .acc2-nav button svg{width:17px;height:17px;flex:none;opacity:.75}
+  .acc2-nav button:hover{background:rgba(128,128,128,.12)}
+  .acc2-nav button.active{background:rgba(128,128,128,.18);font-weight:600}
+  .acc2-nav button.active svg{opacity:1}
+  .acc2-body{flex:1 1 auto;min-width:0;padding:0 2px 4px 20px;max-height:64vh;overflow:auto}
+  .acc2-pane{display:none;max-width:600px}
+  .acc2-pane.active{display:block}
+  @media (max-width:640px){
+    .acc2{flex-direction:column}
+    .acc2-nav{flex:none;flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid rgba(128,128,128,.18);padding:0 0 8px;margin-bottom:8px}
+    .acc2-nav button{width:auto;white-space:nowrap}
+    .acc2-body{padding:0;max-height:none}
+  }
+  .bar{height:8px;border-radius:6px;background:rgba(128,128,128,.18);overflow:hidden;margin:6px 0 3px}
+  .bar>span{display:block;height:100%;background:var(--accent)}
+  .row{display:flex;justify-content:space-between;font-size:13px}
+</style>
+</head>
+<body>
+<div class="modal">
+  <div class="modal-head"><b>Account</b><button class="x">&times;</button></div>
+  <div class="acc2">
+    <nav class="acc2-nav">
+      <button data-nav="store" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16l-1 5H5L4 4Z"/><path d="M6 9v10h12V9"/><path d="M10 19v-5h4v5"/></svg><span>Store</span></button>
+      <button data-nav="billing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg><span>Plan &amp; Billing</span></button>
+      <button data-nav="payments"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="16.5" cy="12" r="1.2"/><path d="M3 9h13"/></svg><span>Payments</span></button>
+      <button data-nav="email"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg><span>Email</span></button>
+      <button data-nav="instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="4.5"/><circle cx="12" cy="12" r="3.6"/><circle cx="17" cy="7" r="1"/></svg><span>Instagram</span></button>
+      <button data-nav="api"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="3.4"/><path d="M11.2 12H20l-2.2 2.2M20 12l-2.2-2.2"/></svg><span>API keys</span></button>
+      <button data-nav="danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg><span>Account</span></button>
+    </nav>
+    <div class="acc2-body">
+      <div class="acc2-pane active" data-pane="store">
+        <div class="acc-sec">
+          <h4 style="margin-top:0">Store</h4>
+          <p class="muted tiny" style="margin-top:0">Sets your clock, your prices, and whether tax is added. India · IST.</p>
+          <label class="fld"><span>Your country</span><select><option>India</option></select></label>
+          <label class="fld"><span>Selling to</span><select><option>India</option></select></label>
+          <label class="fld"><span>Currency</span><select><option>₹ Indian Rupee (INR)</option></select></label>
+          <p class="muted tiny">GST applies on your store, as it does for a business in India.</p>
+          <button class="btn primary sm">Save</button>
+        </div>
+      </div>
+      <div class="acc2-pane" data-pane="billing">
+        <div class="acc-sec" style="border:1px solid var(--accent);border-radius:12px">
+          <h4 style="margin-top:0">Upgrade to Max</h4>
+          <p class="muted tiny" style="margin-top:0">You're on <b>Free</b>. Runs the shop, not just the reporting.</p>
+          <ul style="margin:8px 0 12px;padding-left:18px;font-size:13px;line-height:1.6">
+            <li>Supply Management — reorder points, EOQ, safety stock</li>
+            <li>PDF purchase orders to your suppliers</li>
+            <li>Unlimited AI, unlimited products, unlimited outlets</li>
+            <li>Your own custom domain</li>
+          </ul>
+          <button class="btn primary">Upgrade to Max — ₹999/month</button>
+        </div>
+        <div class="acc-sec">
+          <h4 style="margin-top:0">Credits</h4>
+          <p class="muted tiny" style="margin-top:0">A monthly allowance you can top up. Every generation spends what it actually costs — a picture 10, a video 280, a caption 1.</p>
+          <div class="row"><span class="muted">This month</span><b>210 of 300 left</b></div>
+          <div class="bar"><span style="width:70%"></span></div>
+          <div class="muted tiny" style="margin:0 0 10px">Resets on the 1st.</div>
+          <div class="row" style="margin-bottom:4px"><span class="muted">Purchased credits <span class="tiny">(never expire)</span></span><b>100</b></div>
+          <div class="row" style="border-top:1px solid rgba(128,128,128,.18);padding-top:6px"><span>Available to spend</span><b>310</b></div>
+          <button class="btn primary sm" style="margin-top:12px">Buy more credits</button>
+        </div>
+      </div>
+      <div class="acc2-pane" data-pane="payments">
+        <div class="acc-sec">
+          <h4 style="margin-top:0">Payments on your storefront</h4>
+          <p class="muted tiny" style="margin-top:0">Connect the gateway you already use. Razorpay for India, Stripe or PayPal for the US, UK and Europe.</p>
+          <div class="acc-sec" style="margin:8px 0 0"><b><span class="acc-dot on"></span>Razorpay</b> <span class="muted tiny">INR</span><div class="muted tiny">Connected (test) · ends QuH.</div></div>
+          <div class="acc-sec" style="margin:8px 0 0"><b><span class="acc-dot off"></span>Stripe</b> <span class="muted tiny">USD, GBP, EUR</span></div>
+        </div>
+      </div>
+      <div class="acc2-pane" data-pane="email">
+        <div class="acc-sec">
+          <h4 style="margin-top:0"><span class="acc-dot off"></span>Email you send from</h4>
+          <p class="muted tiny" style="margin-top:0">Not set up. Purchase orders and messages go from a shared address until you connect your own.</p>
+          <button class="btn ghost sm">Set up sending email</button>
+        </div>
+      </div>
+      <div class="acc2-pane" data-pane="instagram">
+        <div class="acc-sec">
+          <h4 style="margin-top:0"><span class="acc-dot off"></span>Instagram</h4>
+          <p class="muted tiny" style="margin-top:0">Connect Instagram to publish posts straight from the app.</p>
+          <button class="btn ghost sm">Connect Instagram</button>
+        </div>
+      </div>
+      <div class="acc2-pane" data-pane="api">
+        <div class="acc-sec">
+          <h4 style="margin-top:0">Your own AI keys <span class="muted tiny">optional</span></h4>
+          <p class="muted tiny" style="margin-top:0">Leave these blank to use ours. Add your own and captions and pictures run on your key and your bill.</p>
+          <label class="fld"><span><span class="acc-dot off"></span>OpenAI key <span class="muted tiny">starts with sk-</span></span><input placeholder="optional — leave blank to use ours"></label>
+          <button class="btn ghost sm">Save key</button>
+        </div>
+      </div>
+      <div class="acc2-pane" data-pane="danger">
+        <div class="acc-sec">
+          <h4 style="margin-top:0;color:var(--danger)">Danger zone</h4>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid rgba(128,128,128,.15)">
+            <div><b>Reset account</b><p class="muted tiny" style="margin:2px 0 0">Clears your settings, storefront, products, tasks and uploaded data. Your login and purchased credits stay.</p></div>
+            <button class="btn ghost sm danger" style="flex:none">Reset</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0">
+            <div><b>Delete account</b><p class="muted tiny" style="margin:2px 0 0">Permanently removes your account and everything in it. This cannot be undone.</p></div>
+            <button class="btn ghost sm danger" style="flex:none">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-actions"><button class="btn ghost">Close</button></div>
+</div>
+<script>
+  const navs=[...document.querySelectorAll('.acc2-nav [data-nav]')],panes=[...document.querySelectorAll('.acc2-pane')],body=document.querySelector('.acc2-body');
+  navs.forEach(b=>b.onclick=()=>{navs.forEach(n=>n.classList.toggle('active',n===b));panes.forEach(p=>p.classList.toggle('active',p.dataset.pane===b.dataset.nav));body.scrollTop=0;});
+</script>
+</body>
+</html>

@@ -5905,10 +5905,10 @@ async function openAccount() {
         </div>
       </section>`;
 
-  openModal("Account", `
-    <div class="acc-wrap">
+  // ---- each settings area as its own pane ----
+  const marketHtml = `
       <section class="acc-sec">
-        <h4>Where you sell</h4>
+        <h4 style="margin-top:0;">Store</h4>
         <p class="muted tiny" style="margin-top:0;">Sets your clock, your prices, and whether tax is added. ${esc(m.tz_label || "")}.</p>
         <label class="fld"><span>Your country</span><select id="accCountry">${countryOpts(m.country)}</select></label>
         <label class="fld"><span>Selling to</span><select id="accSelling">${countryOpts(m.selling_country)}</select></label>
@@ -5917,42 +5917,101 @@ async function openAccount() {
           ? "GST applies on your store, as it does for a business in India."
           : "No tax is added on your store — tax outside India is not handled yet, so prices are shown as you set them."}</p>
         <button class="btn primary sm" id="accSaveMarket">${sic("check")}Save</button>
-      </section>
+      </section>`;
 
+  const emailHtml = `
       <section class="acc-sec">
-        <h4>${dot(email.connected)}Email you send from</h4>
+        <h4 style="margin-top:0;">${dot(email.connected)}Email you send from</h4>
         <p class="muted tiny" style="margin-top:0;">${email.connected
           ? `Orders and messages go out from <b>${esc(email.address)}</b>.`
           : "Not set up. Purchase orders and messages go from a shared address until you connect your own."}</p>
         <button class="btn ghost sm" id="accMail">${sic("mail")}${email.connected ? "Change" : "Set up sending email"}</button>
-      </section>
+      </section>`;
 
+  const igHtml = `
       <section class="acc-sec">
-        <h4>${dot(ig.connected)}Instagram</h4>
+        <h4 style="margin-top:0;">${dot(ig.connected)}Instagram</h4>
         <p class="muted tiny" style="margin-top:0;">${ig.connected
           ? `Connected as <b>@${esc(ig.username || "your account")}</b> — posts can publish straight from here.`
           : (ig.oauth_available ? "Connect Instagram to publish posts straight from the app."
              : "Instagram publishing is not configured on this server yet.")}</p>
         <button class="btn ghost sm" id="accIg">${sic("instagram")}${ig.connected ? "Manage" : "Connect Instagram"}</button>
-      </section>
+      </section>`;
 
+  const paymentsHtml = `
       <section class="acc-sec">
-        <h4>Payments on your storefront</h4>
+        <h4 style="margin-top:0;">Payments on your storefront</h4>
         <p class="muted tiny" style="margin-top:0;">Connect the gateway you already use. Razorpay for India, Stripe or PayPal for the US, UK and Europe. You pick one for checkout.</p>
         ${providersHtml}
-      </section>
+      </section>`;
 
+  const apiHtml = `
       <section class="acc-sec">
-        <h4>Your own AI keys <span class="muted tiny">optional</span></h4>
+        <h4 style="margin-top:0;">Your own AI keys <span class="muted tiny">optional</span></h4>
         <p class="muted tiny" style="margin-top:0;">Leave these blank to use ours (subject to the monthly picture limit). Add your own and captions and pictures run on your key and your bill, with no monthly limit from us.</p>
         ${aiRow("openai", "OpenAI", "for captions and pictures, starts with sk-")}
         ${aiRow("gemini", "Google Gemini", "for brand-aware pictures")}
-      </section>
-${planHtml}
-${creditsHtml}
-${dangerHtml}
+      </section>`;
+
+  // ---- left-hand nav: one row per settings area, with an inline icon ----
+  const NAV = [
+    ["store",     "Store",          '<path d="M4 4h16l-1 5H5L4 4Z"/><path d="M6 9v10h12V9"/><path d="M10 19v-5h4v5"/>'],
+    ["billing",   "Plan & Billing", '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>'],
+    ["payments",  "Payments",       '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="16.5" cy="12" r="1.2"/><path d="M3 9h13"/>'],
+    ["email",     "Email",          '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>'],
+    ["instagram", "Instagram",      '<rect x="4" y="4" width="16" height="16" rx="4.5"/><circle cx="12" cy="12" r="3.6"/><circle cx="17" cy="7" r="1"/>'],
+    ["api",       "API keys",       '<circle cx="8" cy="12" r="3.4"/><path d="M11.2 12H20l-2.2 2.2M20 12l-2.2-2.2"/>'],
+    ["danger",    "Account",        '<circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/>'],
+  ];
+  const navHtml = NAV.map(([id, label, icon], i) =>
+    `<button type="button" data-nav="${id}"${i === 0 ? ' class="active"' : ""}>
+       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>
+       <span>${label}</span></button>`).join("");
+
+  openModal("Account", `
+    <style>
+      .acc2{display:flex;gap:0;min-height:440px}
+      .acc2-nav{flex:0 0 178px;display:flex;flex-direction:column;gap:2px;border-right:1px solid rgba(128,128,128,.18);padding-right:10px}
+      .acc2-nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;color:var(--text,#e5e7eb);padding:9px 11px;border-radius:8px;cursor:pointer;font-size:14px;line-height:1.2}
+      .acc2-nav button svg{width:17px;height:17px;flex:none;opacity:.75}
+      .acc2-nav button:hover{background:rgba(128,128,128,.12)}
+      .acc2-nav button.active{background:rgba(128,128,128,.18);font-weight:600}
+      .acc2-nav button.active svg{opacity:1}
+      .acc2-body{flex:1 1 auto;min-width:0;padding:0 2px 4px 20px;max-height:64vh;overflow:auto}
+      .acc2-pane{display:none;max-width:600px}
+      .acc2-pane.active{display:block}
+      @media (max-width:640px){
+        .acc2{flex-direction:column}
+        .acc2-nav{flex:none;flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid rgba(128,128,128,.18);padding:0 0 8px;margin-bottom:8px}
+        .acc2-nav button{width:auto;white-space:nowrap}
+        .acc2-body{padding:0;max-height:none}
+      }
+    </style>
+    <div class="acc2">
+      <nav class="acc2-nav">${navHtml}</nav>
+      <div class="acc2-body">
+        <div class="acc2-pane active" data-pane="store">${marketHtml}</div>
+        <div class="acc2-pane" data-pane="billing">${planHtml}${creditsHtml}</div>
+        <div class="acc2-pane" data-pane="payments">${paymentsHtml}</div>
+        <div class="acc2-pane" data-pane="email">${emailHtml}</div>
+        <div class="acc2-pane" data-pane="instagram">${igHtml}</div>
+        <div class="acc2-pane" data-pane="api">${apiHtml}</div>
+        <div class="acc2-pane" data-pane="danger">${dangerHtml}</div>
+      </div>
     </div>
     <div class="modal-actions"><button class="btn ghost" data-accx>Close</button></div>`, { wide: true });
+
+  // settings-style nav: show one pane at a time
+  (function () {
+    const navs = Array.from(document.querySelectorAll(".acc2-nav [data-nav]"));
+    const panes = Array.from(document.querySelectorAll(".acc2-pane"));
+    const body = document.querySelector(".acc2-body");
+    navs.forEach((b) => b.onclick = () => {
+      navs.forEach((n) => n.classList.toggle("active", n === b));
+      panes.forEach((p) => p.classList.toggle("active", p.dataset.pane === b.dataset.nav));
+      if (body) body.scrollTop = 0;
+    });
+  })();
 
   document.querySelector("[data-accx]").onclick = closeModal;
 
