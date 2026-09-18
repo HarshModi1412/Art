@@ -329,6 +329,20 @@ footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.
   .nav-links a:not(.btn) { display: none; }
 }
 @media (min-width: 901px) and (max-width: 1100px) { .stories { columns: 2; } }
+
+/* ============================================================================
+   POLISH LAYER — refined, restrained scroll motion for the marketing page.
+   The .pol-reveal class is ONLY added by JavaScript, and only to sections that
+   are off-screen when the page loads, so with no JS (or reduced motion) every
+   section is fully visible and nothing here can ever hide content.
+   ============================================================================ */
+.pol-reveal { opacity: 0; transform: translateY(20px);
+  transition: opacity .7s cubic-bezier(.22,1,.36,1), transform .7s cubic-bezier(.32,.72,0,1);
+  will-change: opacity, transform; }
+.pol-reveal.pol-in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pol-reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+}
 </style>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <script src="/consent.js" defer></script>
@@ -913,6 +927,39 @@ async function submitSignup() {
     fail(e.message);
   }
 }
+</script>
+
+<script>
+/* Refined scroll reveals — progressive enhancement, failsafe, motion-safe.
+   Only sections below the fold at load are animated; anything already on screen
+   is left untouched (no flash). If IntersectionObserver is missing, motion is
+   reduced, or anything goes wrong, every section simply stays visible. */
+(function () {
+  try {
+    var mq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
+    if ((mq && mq.matches) || !('IntersectionObserver' in window)) return;
+    var targets = [].slice.call(document.querySelectorAll('section, header.hero'));
+    var revealed = [];
+    targets.forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.top < window.innerHeight * 0.9) return;   // already in/near view — leave it
+      el.classList.add('pol-reveal');
+      revealed.push(el);
+    });
+    if (!revealed.length) return;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('pol-in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    revealed.forEach(function (el) { io.observe(el); });
+    // Belt-and-suspenders: never leave anything hidden.
+    setTimeout(function () { revealed.forEach(function (el) { el.classList.add('pol-in'); }); }, 1800);
+  } catch (err) {
+    // On any failure, make sure nothing is left hidden.
+    [].slice.call(document.querySelectorAll('.pol-reveal')).forEach(function (el) { el.classList.add('pol-in'); });
+  }
+})();
 </script>
 
 </body>

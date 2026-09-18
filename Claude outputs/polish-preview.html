@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motion polish preview</title>
+<style>
+  :root{
+    --surface:#202226;--surface-2:#2a2d33;--text:#e6e8ec;--text-2:#a2a7b0;--muted:#9aa0aa;
+    --border:#34383f;--primary:#6a74ff;--radius-lg:16px;
+    --ease-ios:cubic-bezier(.32,.72,0,1);--ease-soft:cubic-bezier(.22,1,.36,1);
+    --pol-fast:.16s;--pol-mid:.26s;--pol-slow:.42s;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#141518;color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  .wrap{max-width:760px;margin:0 auto;padding:40px 20px 120px}
+  h1{font-size:26px;margin:0 0 4px}.sub{color:var(--muted);margin:0 0 28px}
+  h2{font-size:16px;margin:36px 0 12px;color:var(--text-2)}
+  .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);border-radius:9px;padding:9px 15px;font-weight:600;font-size:14px;cursor:pointer;
+    transition:background var(--pol-fast) var(--ease-soft),border-color var(--pol-fast) var(--ease-soft),box-shadow var(--pol-mid) var(--ease-soft),transform var(--pol-fast) var(--ease-ios)}
+  .btn:hover{transform:translateY(-1px)}
+  .btn:active{transform:translateY(0) scale(.97)}
+  .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+  .btn.primary:hover{box-shadow:0 7px 20px -8px var(--primary)}
+  .card{border:1px solid var(--border);background:var(--surface-2);border-radius:14px;padding:18px;margin:12px 0;
+    transition:transform var(--pol-mid) var(--ease-ios),box-shadow var(--pol-mid) var(--ease-soft)}
+  .tile{border:1px solid var(--border);background:var(--surface-2);border-radius:14px;padding:22px;text-align:center;cursor:pointer;
+    transition:transform var(--pol-mid) var(--ease-ios),box-shadow var(--pol-mid) var(--ease-soft)}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .tile:hover{transform:translateY(-2px);box-shadow:0 14px 34px -16px rgba(0,0,0,.55)}
+  .muted{color:var(--muted)}
+
+  /* modal + iOS sheet entrance + polished close */
+  .modal-back{position:fixed;inset:0;background:rgba(9,12,20,.55);backdrop-filter:blur(7px) saturate(1.05);
+    display:grid;place-items:center;z-index:50;padding:20px;animation:polBackIn var(--pol-mid) var(--ease-soft) both}
+  .modal-back[hidden]{display:none}
+  .modal{background:var(--surface);border-radius:var(--radius-lg);width:min(460px,96vw);padding:20px 22px;box-shadow:0 24px 60px rgba(0,0,0,.5);
+    animation:polSheetIn var(--pol-slow) var(--ease-ios) both}
+  @keyframes polBackIn{from{opacity:0}to{opacity:1}}
+  @keyframes polSheetIn{from{opacity:0;transform:translateY(10px) scale(.988)}to{opacity:1;transform:none}}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .modal-head b{font-size:16px}
+  .mclose{border:none;background:transparent;color:var(--muted);width:36px;height:36px;padding:0;border-radius:999px;
+    display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s,transform .12s}
+  .mclose:hover{background:var(--surface-2);color:var(--text)}
+  .mclose:active{transform:scale(.9)}
+  .mclose svg{width:18px;height:18px}
+  .compare{display:flex;gap:10px;align-items:center;margin:6px 0 2px}
+  .oldx{border:1px solid var(--border);background:var(--surface-2);color:var(--muted);border-radius:9px;padding:5px 9px;font-size:13px}
+
+  /* scroll reveal demo */
+  .reveal{opacity:0;transform:translateY(20px);transition:opacity .7s var(--ease-soft),transform .7s var(--ease-ios)}
+  .reveal.in{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}.modal,.modal-back{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Motion polish — refined &amp; iOS-flavoured</h1>
+  <p class="sub">Hover the buttons and tiles, open the sheet, and scroll down. This is the same language now applied across the app, classic app, storefront and landing page.</p>
+
+  <h2>The close button (before → after)</h2>
+  <div class="compare">
+    <span class="oldx">✕ boxed</span><span class="muted">→</span>
+    <button class="mclose" title="clean icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
+    <span class="muted">borderless, soft circular hover, 36px target</span>
+  </div>
+
+  <h2>Buttons — hover lift, crisp press</h2>
+  <p><button class="btn primary">Primary action</button> &nbsp; <button class="btn">Secondary</button> &nbsp; <button class="btn" id="open">Open a sheet ↑</button></p>
+
+  <h2>Tiles &amp; cards — soft tappable lift</h2>
+  <div class="tiles">
+    <div class="tile"><b>Store</b><div class="muted">hover me</div></div>
+    <div class="tile"><b>Billing</b><div class="muted">hover me</div></div>
+    <div class="tile"><b>Payments</b><div class="muted">hover me</div></div>
+  </div>
+
+  <h2 class="reveal">Scroll reveals (marketing page)</h2>
+  <div class="card reveal"><b>Section one</b><p class="muted" style="margin:4px 0 0">Sections below the fold rise and fade in gently as they enter view — restrained, never bouncy. Anything already on screen at load is left alone, and with reduced-motion everything is simply visible.</p></div>
+  <div class="card reveal"><b>Section two</b><p class="muted" style="margin:4px 0 0">A failsafe reveals everything after a moment, so content can never get stuck hidden.</p></div>
+  <div class="card reveal"><b>Section three</b><p class="muted" style="margin:4px 0 0">Same easing curve as the buttons and the sheet, so the whole site feels like one system.</p></div>
+  <div style="height:40vh"></div>
+  <div class="card reveal"><b>Keep scrolling…</b><p class="muted" style="margin:4px 0 0">Each one animates once, then stays put.</p></div>
+</div>
+
+<div class="modal-back" id="mb" hidden>
+  <div class="modal">
+    <div class="modal-head"><b>iOS-style sheet</b>
+      <button class="mclose" id="mx" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6 18 18M18 6 6 18"/></svg></button></div>
+    <p class="muted" style="margin-top:0">It fades the backdrop, blurs what's behind it, and springs up with a soft scale — the same entrance every popup now uses. Close is the clean icon, top-right.</p>
+    <p><button class="btn primary" id="mdone">Looks good</button></p>
+  </div>
+</div>
+<script>
+  const mb=document.getElementById('mb');
+  const open=()=>{mb.hidden=false};const close=()=>{mb.hidden=true};
+  document.getElementById('open').onclick=open;
+  document.getElementById('mx').onclick=close;
+  document.getElementById('mdone').onclick=close;
+  mb.onclick=e=>{if(e.target===mb)close()};
+  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.15});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>

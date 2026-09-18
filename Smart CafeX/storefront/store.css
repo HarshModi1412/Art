@@ -1133,3 +1133,19 @@ html.editing .announce:hover > .edit-tag { transform: translateY(-50%); }
 #seoFallback ul { padding-left: 20px; }
 #seoFallback li { margin-bottom: 6px; }
 #seoFallback nav { margin-top: 28px; display: flex; gap: 14px; flex-wrap: wrap; }
+
+/* ============================================================================
+   POLISH LAYER (storefront) — deliberately light. The store already has its own
+   refined motion (the modal "pop", the .b hover, focus rings), so this only adds
+   the shared iOS tap-scale and the reduced-motion guard. It redefines none of
+   the existing animations, so nothing here can regress the current design.
+   ============================================================================ */
+.b, button, .card-quick { transition: transform .14s cubic-bezier(.32,.72,0,1),
+                                       background .2s, color .2s, border-color .2s; }
+.b:active:not(:disabled), button:active:not(:disabled) { transform: scale(.97); }
+@media (prefers-reduced-motion: reduce) {
+  .b, button, .card-quick { transition: background .2s, color .2s, border-color .2s; }
+  .b:active:not(:disabled), button:active:not(:disabled) { transform: none; }
+  .card:hover .card-img::before { transform: none; }
+  .modal { animation: none; }
+}

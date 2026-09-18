@@ -818,3 +818,45 @@ h3 .uic, h4 .uic { width: 17px; height: 17px; vertical-align: -3px; margin-right
 .pro-pill .uic { width: 12px; height: 12px; margin: 0; vertical-align: -1.5px; }
 .hamburger .uic { width: 20px; height: 20px; margin: 0; }
 [aria-label="Close"] .uic { margin-right: 0; }
+
+/* ============================================================================
+   POLISH LAYER — the same refined, iOS-flavoured motion used across every
+   surface (see Smart CafeX/smart.css for the full note). Additive only: no rule
+   hides content, moves layout or needs JavaScript, and all of it is switched
+   off under prefers-reduced-motion.
+   ============================================================================ */
+:root{
+  --ease-ios: cubic-bezier(.32,.72,0,1);
+  --ease-soft: cubic-bezier(.22,1,.36,1);
+  --pol-fast:.16s; --pol-mid:.26s; --pol-slow:.42s;
+}
+@keyframes polBackIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes polSheetIn { from { opacity: 0; transform: translateY(10px) scale(.988) } to { opacity: 1; transform: none } }
+.modal-backdrop { animation: polBackIn var(--pol-mid) var(--ease-soft) both;
+  backdrop-filter: blur(7px) saturate(1.05); -webkit-backdrop-filter: blur(7px) saturate(1.05); }
+.modal { animation: polSheetIn var(--pol-slow) var(--ease-ios) both; }
+.primary-btn, .ghost-btn {
+  transition: background var(--pol-fast) var(--ease-soft),
+              border-color var(--pol-fast) var(--ease-soft),
+              color var(--pol-fast) var(--ease-soft),
+              box-shadow var(--pol-mid) var(--ease-soft),
+              transform var(--pol-fast) var(--ease-ios);
+}
+.primary-btn:hover:not(:disabled), .ghost-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.primary-btn:active:not(:disabled), .ghost-btn:active:not(:disabled) { transform: translateY(0) scale(.97); }
+.primary-btn:hover:not(:disabled) { box-shadow: 0 7px 20px -8px var(--accent, #5c6790); }
+.card { transition: transform var(--pol-mid) var(--ease-ios),
+                    box-shadow var(--pol-mid) var(--ease-soft),
+                    border-color var(--pol-mid) var(--ease-soft); }
+.modal input:focus, .modal select:focus, .modal textarea:focus {
+  outline: none; border-color: var(--accent, #5c6790);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #5c6790) 20%, transparent);
+}
+.primary-btn:focus-visible, .ghost-btn:focus-visible, a:focus-visible {
+  outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #5c6790) 30%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop, .modal { animation: none; }
+  .primary-btn, .ghost-btn, .card { transition: none; }
+  .primary-btn:hover, .ghost-btn:hover { transform: none; }
+}

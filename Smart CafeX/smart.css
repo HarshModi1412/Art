@@ -872,6 +872,23 @@ td { color: var(--text-2); }
 .modal-body { overflow-x: clip; }
 .modal-head, .modal-actions { position: relative; z-index: 1; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+/* The top-right close is an ICON, not a boxed button. `.btn.ghost` gave it a
+   permanent border + fill, so a bare "×" read as a little grey box. Here it is
+   borderless with a soft circular hover, sized as a proper 36px touch target,
+   and the icon is centred. Specificity (element + attribute) beats .btn.ghost
+   so this wins regardless of source order. */
+.modal-head button[data-mclose] {
+  border: none; background: transparent; color: var(--muted);
+  width: 36px; height: 36px; min-width: 0; padding: 0; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: none; transition: background .15s, color .15s, transform .12s;
+}
+.modal-head button[data-mclose]:hover {
+  background: var(--surface-2); border: none; color: var(--text);
+}
+.modal-head button[data-mclose]:active { transform: scale(.9); }
+.modal-head button[data-mclose] svg,
+.modal-head button[data-mclose] .uic { width: 18px; height: 18px; margin: 0; }
 .map-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 11px; margin: 14px 0; }
 .map-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; color: var(--muted); font-weight: 600; }
 /* WHY flex-wrap MATTERS MORE THAN IT LOOKS.
@@ -3582,3 +3599,61 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .acc-ai { border-top: 1px solid var(--border, #d7dae1); padding-top: 12px; margin-top: 12px; }
 .acc-ai:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
 .acc-ai-acts { display: flex; gap: 8px; }
+
+/* ============================================================================
+   POLISH LAYER — refined, restrained, iOS-flavoured motion.
+   Rules of the layer, so it can never break a screen:
+     · additive only — nothing here hides content, changes layout position, or
+       depends on JavaScript. A failure degrades to "less animation", not "gone".
+     · one shared motion language (the tokens below) so every surface feels the
+       same: soft spring easing, short durations, a gentle lift on tappables.
+     · everything is switched off under prefers-reduced-motion.
+   ============================================================================ */
+:root{
+  --ease-ios: cubic-bezier(.32,.72,0,1);
+  --ease-soft: cubic-bezier(.22,1,.36,1);
+  --pol-fast: .16s; --pol-mid: .26s; --pol-slow: .42s;
+}
+
+/* iOS-style sheet entrance for every popup. Enter-only, on a transient element,
+   so closeModal() is untouched and nothing has to animate on the way out. */
+@keyframes polBackIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes polSheetIn { from { opacity: 0; transform: translateY(10px) scale(.988) } to { opacity: 1; transform: none } }
+.modal-back { animation: polBackIn var(--pol-mid) var(--ease-soft) both;
+  backdrop-filter: blur(7px) saturate(1.05); -webkit-backdrop-filter: blur(7px) saturate(1.05); }
+.modal { animation: polSheetIn var(--pol-slow) var(--ease-ios) both; }
+
+/* Buttons: unified easing, a restrained 1px hover lift, a crisper press. */
+.btn { transition: background var(--pol-fast) var(--ease-soft),
+                   border-color var(--pol-fast) var(--ease-soft),
+                   color var(--pol-fast) var(--ease-soft),
+                   box-shadow var(--pol-mid) var(--ease-soft),
+                   transform var(--pol-fast) var(--ease-ios); }
+.btn:hover:not(:disabled) { transform: translateY(-1px); }
+.btn:active:not(:disabled) { transform: translateY(0) scale(.97); }
+.btn.primary:hover:not(:disabled) { box-shadow: 0 7px 20px -8px var(--primary, #6a74ff); }
+
+/* Cards & tiles: a soft, consistent lift on hover — the iOS "tappable" cue —
+   with a smooth shadow rather than a hard border flip. */
+.app-tile, .acc-sec, .card, .ins-card, .today-row, .cal-post {
+  transition: transform var(--pol-mid) var(--ease-ios),
+              box-shadow var(--pol-mid) var(--ease-soft),
+              border-color var(--pol-mid) var(--ease-soft);
+}
+.app-tile:hover { transform: translateY(-2px); box-shadow: 0 14px 34px -16px rgba(0,0,0,.38); }
+
+/* Inputs: a calm focus ring instead of a hard outline. */
+.modal input:focus, .modal select:focus, .modal textarea:focus {
+  outline: none; border-color: var(--primary, #6a74ff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary, #6a74ff) 22%, transparent);
+}
+/* A tidy keyboard focus ring app-wide; mouse users are unaffected. */
+.btn:focus-visible, a:focus-visible, [tabindex]:focus-visible {
+  outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary, #6a74ff) 30%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-back, .modal { animation: none; }
+  .btn, .app-tile, .acc-sec, .card, .ins-card, .today-row, .cal-post { transition: none; }
+  .btn:hover:not(:disabled), .app-tile:hover { transform: none; }
+}
