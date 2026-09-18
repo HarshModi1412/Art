@@ -101,7 +101,35 @@ def summary(email: str) -> dict:
         # the credit balance they watch and can top up: this month's grant plus
         # any packs they bought, and what each generation spends.
         "credits": _credits_status(email),
+        # their subscription tier + what upgrading to Max (premium) unlocks.
+        "plan": _plan_status(email),
     }
+
+
+def _plan_status(email: str) -> dict:
+    """Current tier and the upgrade offer, so the Account tab can show either
+    'you're on Max' or an 'Upgrade to Max' card without a second call."""
+    try:
+        from backend.core import billing, pricing
+        pid = billing.get_plan(email)
+        max_plan = pricing.get_plan("pro")
+        return {
+            "id": pid,
+            "name": pricing.get_plan(pid)["name"],
+            "is_pro": pid == "pro",
+            "launch_mode": pricing.launch_mode(),
+            # what buying premium gets them — the product id the pay flow expects
+            "upgrade": {
+                "product": "pro",
+                "name": max_plan["name"],
+                "price_inr": max_plan["price_inr"],
+                "period": max_plan["period"],
+                "tagline": max_plan["tagline"],
+                "includes": max_plan["includes"],
+            },
+        }
+    except Exception:  # noqa: BLE001 — the tab must render even if pricing is off
+        return {"id": "free", "name": "Free", "is_pro": False}
 
 
 def _credits_status(email: str) -> dict:

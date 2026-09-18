@@ -5811,6 +5811,7 @@ async function openAccount() {
   const ai = d.ai_keys || {};
   const cr = d.credits || {};
   const cst = cr.costs || {};
+  const pl = d.plan || {};
 
   const dot = (on) => `<span class="acc-dot ${on ? "on" : "off"}"></span>`;
 
@@ -5854,6 +5855,23 @@ async function openAccount() {
         ${st.connected ? `<button class="btn ghost sm danger" data-airemove="${esc(id)}">Remove</button>` : ""}
       </div></div>`;
   };
+
+  // ---- Plan: current tier, and the Upgrade to Max (premium) offer ----
+  const up = pl.upgrade || {};
+  const planHtml = pl.is_pro ? `
+      <section class="acc-sec">
+        <h4>Plan</h4>
+        <p style="margin-top:0;"><b>${esc(pl.name || "Max")}</b> — you're on premium. Everything is unlocked: unlimited AI, supply management, purchase orders, custom domain and multi-outlet.</p>
+      </section>` : `
+      <section class="acc-sec" style="border:1px solid var(--accent,#4f46e5); border-radius:12px; padding:14px;">
+        <h4 style="margin-top:0;">Upgrade to ${esc(up.name || "Max")}</h4>
+        <p class="muted tiny" style="margin-top:0;">You're on <b>${esc(pl.name || "Free")}</b>. ${esc(up.tagline || "Runs the shop, not just the reporting.")}${
+          pl.launch_mode ? " Everything is free during launch — upgrade now and you keep these when pricing starts." : ""}</p>
+        <ul style="margin:8px 0 12px; padding-left:18px; font-size:13px; line-height:1.6;">
+          ${(up.includes || []).map((x) => `<li>${esc(x)}</li>`).join("")}
+        </ul>
+        <button class="btn primary" id="accUpgrade">Upgrade to ${esc(up.name || "Max")} — ₹${up.price_inr ?? 999}/${esc(up.period || "month")}</button>
+      </section>`;
 
   // ---- Credits: a monthly allowance + purchased packs, spent by real usage ----
   const pct = cr.monthly_grant
@@ -5930,6 +5948,7 @@ async function openAccount() {
         ${aiRow("openai", "OpenAI", "for captions and pictures, starts with sk-")}
         ${aiRow("gemini", "Google Gemini", "for brand-aware pictures")}
       </section>
+${planHtml}
 ${creditsHtml}
 ${dangerHtml}
     </div>
@@ -6001,7 +6020,8 @@ ${dangerHtml}
       toast("Removed. Back to ours."); closeModal(); openAccount(); } catch (e) { toast(e.message); }
   });
 
-  // credits + danger zone
+  // plan + credits + danger zone
+  if ($("accUpgrade")) $("accUpgrade").onclick = () => upgradeToMax((pl.upgrade || {}).product || "pro");
   if ($("accBuyCredits")) $("accBuyCredits").onclick = () => openBuyCredits(cr);
   if ($("accReset")) $("accReset").onclick = () => confirmReset();
   if ($("accDelete")) $("accDelete").onclick = () => confirmDelete();
@@ -6045,11 +6065,22 @@ function openBuyCredits(cr) {
   document.querySelectorAll("[data-pack]").forEach((b) => b.onclick = () => buyCredits(b.dataset.pack));
 }
 
-async function buyCredits(productId) {
+function buyCredits(productId) { return startCheckout(productId, "Payment successful — credits added.", "It's free during launch — nothing to buy yet."); }
+
+/* Upgrade to Max (premium). Same pay flow as a credit pack; the server grants
+   the tier on a verified signature, so all this does is start the checkout. */
+function upgradeToMax(productId) {
+  return startCheckout(productId || "pro", "You're on Max now — everything's unlocked.",
+    "Everything is free during launch — you're already getting Max features.");
+}
+
+/* One Razorpay round-trip, shared by credit packs and the plan upgrade:
+   create-order → gateway → verify, then refresh the Account tab. */
+async function startCheckout(productId, successMsg, launchMsg) {
   if (!state.token) { closeModal(); return toast("Log in first."); }
   try {
     const order = await api("/api/pay/create-order", { method: "POST", json: { product: productId } });
-    if (order.launch_free) { toast("It's free during launch — nothing to buy yet."); return; }
+    if (order.launch_free) { toast(launchMsg || "It's free during launch."); return; }
     await loadRazorpayScript();
     const rzp = new Razorpay({
       key: order.key_id,
@@ -6068,7 +6099,7 @@ async function buyCredits(productId) {
             product: productId,
           }});
           closeModal();
-          toast("Payment successful — credits added.", 5000);
+          toast(successMsg || "Payment successful.", 5000);
           openAccount();
         } catch (e) { toast(e.message, 6000); }
       },
