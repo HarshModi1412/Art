@@ -240,8 +240,23 @@ def paywall(feature: str) -> dict:
 
 
 # ---------------- razorpay ----------------
+def _rzp_creds() -> tuple[str, str]:
+    """The platform Razorpay key id + secret from the environment, cleaned of
+    the stray whitespace or surrounding quotes a dashboard paste sometimes
+    leaves behind. Either of those is invisible in the Render UI but makes the
+    key wrong on the wire, and Razorpay answers 'Authentication failed' — the
+    same 401 as a genuinely mismatched pair, so we rule this one out here."""
+    def clean(v: str | None) -> str:
+        v = (v or "").strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
+            v = v[1:-1].strip()
+        return v
+    return clean(os.environ.get("RAZORPAY_KEY_ID")), clean(os.environ.get("RAZORPAY_KEY_SECRET"))
+
+
 def gateway_configured() -> bool:
-    return bool(os.environ.get("RAZORPAY_KEY_ID") and os.environ.get("RAZORPAY_KEY_SECRET"))
+    kid, ksec = _rzp_creds()
+    return bool(kid and ksec)
 
 
 def create_order(email: str, product_id: str) -> dict:
@@ -273,8 +288,8 @@ def create_order(email: str, product_id: str) -> dict:
     # is where verification reads it back.
     tag = "".join(ch for ch in f"{product_id}{email}" if ch.isalnum())
     receipt = ("otm" + tag)[:40]
-    client = razorpay.Client(auth=(os.environ["RAZORPAY_KEY_ID"].strip(),
-                                   os.environ["RAZORPAY_KEY_SECRET"].strip()))
+    key_id, key_secret = _rzp_creds()
+    client = razorpay.Client(auth=(key_id, key_secret))
     try:
         order = client.order.create({
             "amount": amount_paise,
@@ -312,7 +327,7 @@ def create_order(email: str, product_id: str) -> dict:
         pending = dict(keep)
     _save_pending(email, pending)
     return {
-        "key_id": os.environ["RAZORPAY_KEY_ID"],
+        "key_id": key_id,
         "order_id": order["id"],
         "amount": amount_paise,
         "currency": "INR",
