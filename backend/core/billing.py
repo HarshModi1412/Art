@@ -266,14 +266,41 @@ def create_order(email: str, product_id: str) -> dict:
     if razorpay is None:
         raise RuntimeError("razorpay package not installed. Run: pip install razorpay")
 
-    amount_paise = product["price_inr"] * 100
-    client = razorpay.Client(auth=(os.environ["RAZORPAY_KEY_ID"], os.environ["RAZORPAY_KEY_SECRET"]))
-    order = client.order.create({
-        "amount": amount_paise,
-        "currency": "INR",
-        "receipt": f"otm_{product_id[:12]}_{email[:20]}",
-        "notes": {"email": email, "product": product_id},
-    })
+    amount_paise = max(100, int(round(float(product["price_inr"]) * 100)))
+    # Razorpay receipts cap at 40 characters and validate most reliably as plain
+    # alphanumerics — the raw email (with @ and .) is neither and can trip a 400,
+    # so build a short, safe reference. The email still travels in `notes`, which
+    # is where verification reads it back.
+    tag = "".join(ch for ch in f"{product_id}{email}" if ch.isalnum())
+    receipt = ("otm" + tag)[:40]
+    client = razorpay.Client(auth=(os.environ["RAZORPAY_KEY_ID"].strip(),
+                                   os.environ["RAZORPAY_KEY_SECRET"].strip()))
+    try:
+        order = client.order.create({
+            "amount": amount_paise,
+            "currency": "INR",
+            "receipt": receipt,
+            "notes": {"email": email, "product": product_id},
+        })
+    except Exception as e:  # noqa: BLE001 — surface Razorpay's own reason, not a 500
+        try:
+            from backend.core import errors
+            errors.record(e, where="razorpay order.create")
+        except Exception:  # noqa: BLE001
+            pass
+        detail = ""
+        # razorpay errors carry the API description; dig it out when present.
+        for attr in ("error", "args"):
+            val = getattr(e, attr, None)
+            if val:
+                detail = str(val)
+                break
+        raise RuntimeError(
+            "The payment gateway rejected the order"
+            + (f": {detail or e}" if (detail or str(e)) else ".")
+            + " Check that the Razorpay keys on the server are valid and the "
+              "account can accept payments."
+        ) from e
     pending = _pending_for(email)
     pending[order["id"]] = {
         "product": product_id,
