@@ -141,7 +141,7 @@ have seen it.
 - `/` — marketing landing page (MSME positioning, multilingual sample-story wall, pricing)
 - `/s/<handle>` — a seller's own storefront (Website Builder)
 - `www.theirshop.com` — the same storefront on the seller's own domain
-- `/app` — the analytics application
+- `/smart` — the workspace (`/app`, the retired Classic interface, redirects here)
 
 ## Their own domain
 
@@ -1672,8 +1672,7 @@ data is still cached; it is just not drawn.
 
 Remaining, in order of what is left to gain: brotli instead of gzip on
 `smart.js` (141 KB → about 100 KB — needs `brotli` in requirements and
-precompressed files, deliberately not shipped untested); the same lazy-load for
-Plotly in the Classic app at `/app`; and splitting `smart.js` itself, which is
+precompressed files, deliberately not shipped untested); and splitting `smart.js` itself, which is
 the only thing that reduces parse and compile time rather than transfer time.
 
 ## Server-side performance
@@ -1845,11 +1844,10 @@ Set `OPENAI_API_KEY` in the environment settings.
 
 ## What's new (v16.1)
 
-**Mobile & tablet friendly.** The classic app (`/app`) now uses an off-canvas
-drawer + top bar below 900px instead of cramming the sidebar into a strip, and
-tables/charts/KPIs reflow down to phone widths.
+**Mobile & tablet friendly.** The workspace (`/smart`) uses a bottom tab bar and
+sheet-style dialogs below 900px, and tables/charts/KPIs reflow down to phone widths.
 
-**Position Strategy** (`/app` → "🧭 Position Strategy", login required). Detects
+**Position Strategy** (`/smart` → "Position Strategy", login required). Detects
 the café's current position from its reviews (reuses the Positioning engine),
 shows pros/cons of the current vs a chosen target position, lists what stays the
 same ("keep these"), and generates a phased checklist to move A→B. The position
@@ -1929,3 +1927,18 @@ In Smart CafeX, once Sales/Review data is saved, the data card shows
 **➕ Add records** alongside **↻ Update**. Re-uploading asks whether to *add*
 the new rows to what's saved or *replace* everything; the choice is sent to
 `POST /api/smart/map` as `mode: "append" | "replace"`.
+
+
+## Interface: iOS design language
+
+The whole workspace was rebuilt on an iOS-style system and **Classic mode was removed**.
+There is one interface at `/smart`; `/app` permanently redirects to it.
+
+- `Smart CafeX/ios.css` loads after `smart.css` and owns every theme token (colour, radius,
+  shadow, font), so all modules share one palette. Light is a grouped-grey ground with white
+  cards; dark is near-black with `#1c1c1e` cards. Contrast targets are unchanged and are
+  asserted by `scripts/test_gate1_and_ux.py`.
+- Translucent navigation bar, large titles, app-icon module tiles, inset-grouped cards.
+- Dialogs are sheets: they rise from the bottom on a phone. A three-tab bar (Home, Approvals,
+  Account) replaces the crowded header on phones.
+- Motion is short and springy, and collapses to a plain fade under `prefers-reduced-motion`.

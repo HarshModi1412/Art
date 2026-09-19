@@ -57,7 +57,6 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 LANDING = (ROOT / "backend/static/landing.html").read_text(encoding="utf-8")
 STORE_HTML = (ROOT / "Smart CafeX/storefront/store.html").read_text(encoding="utf-8")
 SMART_HTML = (ROOT / "Smart CafeX/smart.html").read_text(encoding="utf-8")
-INDEX_HTML = (ROOT / "backend/static/index.html").read_text(encoding="utf-8")
 CONSENT_JS = (ROOT / "Smart CafeX/storefront/consent.js").read_text(encoding="utf-8")
 
 # =========================================================================
@@ -224,7 +223,7 @@ check("and which id to use once permission is given",
 check("analytics is injected by the consent script and nowhere else",
       "googletagmanager.com/gtag/js" in CONSENT_JS)
 for name, page in (("landing", LANDING), ("app shell", SMART_HTML),
-                   ("classic app", INDEX_HTML), ("storefront", STORE_HTML)):
+                   ("storefront", STORE_HTML)):
     check(f"{name} does not load a tracker directly",
           "googletagmanager" not in page and "gtag/js" not in page)
     check(f"{name} loads the consent gate", "/consent.js" in page)
@@ -255,7 +254,7 @@ check("the banner is a labelled dialog for a screen reader",
 print("\n== Google Fonts: removed, not merely mentioned ==")
 # =========================================================================
 for name, page in (("landing", LANDING), ("app shell", SMART_HTML),
-                   ("classic app", INDEX_HTML), ("storefront", STORE_HTML)):
+                   ("storefront", STORE_HTML)):
     check(f"{name} makes no request to a font CDN",
           "fonts.googleapis.com" not in page and "fonts.gstatic.com" not in page)
 check("the landing page uses a system stack instead",
@@ -290,7 +289,7 @@ check("a favicon exists at both names browsers ask for",
 check("it is an svg, so one file covers every size",
       c.get("/favicon.svg").headers["content-type"].startswith("image/svg"))
 for name, page in (("landing", LANDING), ("app shell", SMART_HTML),
-                   ("classic app", INDEX_HTML), ("storefront", STORE_HTML)):
+                   ("storefront", STORE_HTML)):
     check(f"{name} declares the favicon", "favicon.svg" in page)
 
 check("a legal page is indexable and canonical",

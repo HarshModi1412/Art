@@ -2,8 +2,7 @@
    Pivoted from café analytics to a small social-media product seller. */
 
 const state = {
-  // SHARED LOGIN + SESSION with the Classic app (both use the cx_* keys in
-  // localStorage) — log in once, you're logged in everywhere; data too.
+  // Login + session live in localStorage under the cx_* keys.
   sessionId: localStorage.getItem("cx_session") || (crypto.randomUUID ? crypto.randomUUID() : String(Math.random())),
   token: localStorage.getItem("cx_token") || null,
   email: localStorage.getItem("cx_email") || null,
@@ -29,7 +28,7 @@ const relTime = (iso) => {
   return new Date(iso).toLocaleDateString();
 };
 
-// ---------- theme (shared with classic app via localStorage["cx_theme"]) ----------
+// ---------- theme (persisted in localStorage["cx_theme"]) ----------
 function currentTheme() { return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light"; }
 function setTheme(mode) {
   document.documentElement.setAttribute("data-theme", mode);
@@ -696,7 +695,13 @@ window.addEventListener("popstate", _syncRoute);
 window.addEventListener("hashchange", _syncRoute);
 
 // ---------- view helpers ----------
-function setView(html) { $("view").innerHTML = html; }
+function setView(html) {
+  const v = $("view");
+  v.innerHTML = html;
+  // Screen change: restart the short rise-in so navigation reads as movement
+  // rather than a swap. Skipped when the seller asked for less motion.
+  v.classList.remove("enter"); void v.offsetWidth; v.classList.add("enter");
+}
 function setCrumb(t) { $("crumb").textContent = t || ""; }
 
 /* ---------- tables that survive a phone ----------
@@ -796,7 +801,7 @@ function showRail(on) { document.querySelector(".shell-body").classList.toggle("
 // ---------- charts: image-like inline, interactive when maximized ----------
 // Inline charts render STATIC (like an image). A ⤢ button on each opens it
 // full-screen where you can zoom / pan / reset / download — the same
-// "expand to analyse" mechanism the Classic app uses.
+// "expand to analyse" pattern.
 const _charts = {};
 function cssVar(name, fb) { const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return v || fb; }
 
@@ -853,7 +858,16 @@ function ensurePlotly() {
     s.src = "https://cdn.plot.ly/plotly-2.35.2.min.js";
     s.async = true;
     s.onload = () => resolve(true);
-    s.onerror = () => { _plotlyPromise = null; resolve(false); };  // retry next time
+    // One outage of the primary CDN must not lose every chart: try a second
+    // host, and only if that fails too forget the promise so a later chart retries.
+    s.onerror = () => {
+      const alt = document.createElement("script");
+      alt.src = "https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js";
+      alt.async = true;
+      alt.onload = () => resolve(true);
+      alt.onerror = () => { _plotlyPromise = null; resolve(false); };
+      document.head.appendChild(alt);
+    };
     document.head.appendChild(s);
   });
   return _plotlyPromise;
@@ -2171,6 +2185,7 @@ function paintApprovalCount(n) {
   if (!panel || !chip) return;
   chip.textContent = n ? `${n} waiting` : "all clear";
   chip.hidden = false;
+  const tb = $("tabBadge"); if (tb) tb.textContent = n ? String(n > 99 ? "99+" : n) : "";
   if (_apShut === null) _apShut = true;      // first paint of the session
   panel.classList.toggle("shut", _apShut);
   const head = $("apHead");
@@ -11801,4 +11816,54 @@ function warmOnIntent() {
     const c = closerFor(openEl);
     if (c) { e.preventDefault(); c.click(); }
   });
+})();
+
+
+/* ---------- tab bar (phone) ----------
+   Three places a seller goes from any screen: Home, the approvals waiting on
+   them, and their Account. The tab bar is hidden by CSS above 900px, where the
+   approval panel is a column beside the workspace and Account is in the top bar. */
+(function wireTabbar() {
+  const bar = $("tabbar"); if (!bar) return;
+  const mark = (name) => bar.querySelectorAll("button").forEach((b) =>
+    name === b.dataset.tab ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
+  bar.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-tab]"); if (!b) return;
+    const tab = b.dataset.tab;
+    if (tab === "home") { mark("home"); window.scrollTo({ top: 0, behavior: "smooth" }); goHome(); }
+    else if (tab === "account") { openAccount(); }
+    else if (tab === "approvals") {
+      mark("approvals");
+      const panel = $("approvalPanel");
+      _apShut = false; panel.classList.remove("shut");
+      const head = $("apHead"); if (head) head.setAttribute("aria-expanded", "true");
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+  // Any move to a module or back home resets the highlighted tab.
+  window.addEventListener("hashchange", () => mark("home"));
+})();
+
+/* ---------- pointer-tracking glow on app tiles ----------
+   Writes the cursor position into --mx/--my on whichever tile is under the
+   pointer, which the ::before radial gradient in ios.css reads. Delegated and
+   attached once, so it keeps working across every Home re-render. Passive, and
+   it only touches a style property, so it never blocks a scroll. Skipped
+   entirely when the visitor has asked for reduced motion. */
+(function tileGlow() {
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  let raf = 0, tile = null, x = 0, y = 0;
+  document.addEventListener("pointermove", (e) => {
+    const t = e.target.closest && e.target.closest(".app-tile");
+    if (!t) return;
+    tile = t; x = e.clientX; y = e.clientY;
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      if (!tile) return;
+      const r = tile.getBoundingClientRect();
+      tile.style.setProperty("--mx", ((x - r.left) / r.width * 100).toFixed(1) + "%");
+      tile.style.setProperty("--my", ((y - r.top) / r.height * 100).toFixed(1) + "%");
+    });
+  }, { passive: true });
 })();

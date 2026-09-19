@@ -2143,9 +2143,9 @@ def confirm_mapping(body: MappingBody, x_session_id: str | None = Header(default
 
 def _require_txns(sess: SessionData, authorization: str | None = None) -> pd.DataFrame:
     """Return this session's mapped transactions. SHARED DATA: if the browser
-    session has none but the logged-in account has saved sales (uploaded in
-    Smart mode, or another device), hydrate from the account so Classic and
-    Smart always see the same data — upload once, use everywhere."""
+    session has none but the logged-in account has saved sales (uploaded on
+    another device), hydrate from the account so every device sees the same
+    data — upload once, use everywhere."""
     email = optional_user(authorization)
     bind_session(sess, email)
     if sess.txns_df is None:
@@ -2155,7 +2155,7 @@ def _require_txns(sess: SessionData, authorization: str | None = None) -> pd.Dat
                 sess.txns_df = saved
                 sess.mapped_file_id = "shared_account_sales"
     if sess.txns_df is None:
-        raise HTTPException(400, "No sales data yet, upload a sales file and confirm the mapping first (in Classic or Smart, it's shared).")
+        raise HTTPException(400, "No sales data yet, upload a sales file and confirm the mapping first.")
     return sess.txns_df
 
 
@@ -2173,9 +2173,8 @@ def load_demo(x_session_id: str | None = Header(default=None),
     to find a CSV on this laptop before they can see what the app does.
 
     Loads into BOTH stores: the guest session (which is what the landing page
-    and Classic mode read) and, when someone is signed in, their Smart account
-    store — otherwise "See it with sample data" appears to do nothing in the
-    mode most people are actually using.
+    reads) and, when someone is signed in, their account store — otherwise
+    "See it with sample data" appears to do nothing for a signed-in seller.
     """
     sess = get_session(x_session_id)
     if not os.path.exists(SAMPLE_FILE):
@@ -5542,7 +5541,9 @@ def landing(request: Request):
 
 @app.get("/app")
 def app_page():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    # The old "Classic" interface is gone; one workspace lives at /smart.
+    # Kept as a permanent redirect so bookmarks and old links still land.
+    return RedirectResponse("/smart", status_code=301)
 
 
 # ---------------------------------------------------------------------------

@@ -724,8 +724,6 @@ must("err.status = res.status" in _js, "api() reports the HTTP status to callers
 must("e.status === 401" in _js, "the boot handler only signs you out on a 401")
 _boot = _js[_js.index("async function init()"):]
 must("catch { state.token = null" not in _boot, "no bare catch wipes the token any more")
-_app = _pl.Path("backend/static/app.js").read_text(encoding="utf-8")
-must("e.status === 401" in _app, "the classic app follows the same rule")
 
 # refresh without reloading
 must("/api/cache/clear" in _js, "Refresh clears this account's cache first")

@@ -51,7 +51,8 @@ def check(label, cond, extra=""):
 c = TestClient(app)
 JS = pathlib.Path("Smart CafeX/smart.js").read_text(encoding="utf-8")
 CSS = pathlib.Path("Smart CafeX/smart.css").read_text(encoding="utf-8")
-CLASSIC_CSS = pathlib.Path("backend/static/styles.css").read_text(encoding="utf-8")
+# Theme tokens live in ios.css (loaded after smart.css); component rules stay in smart.css.
+TOKENS = pathlib.Path("Smart CafeX/ios.css").read_text(encoding="utf-8")
 LANDING = pathlib.Path("backend/static/landing.html").read_text(encoding="utf-8")
 
 # =========================================================================
@@ -351,10 +352,10 @@ def _token(css, name, block='[data-theme="dark"] {'):
     return m.group(1).strip().split()[0] if m else ""
 
 
-for css, label in ((CSS, "Smart"), (CLASSIC_CSS, "Classic")):
+for css, label in ((TOKENS, "Smart"),):
     bg = _token(css, "bg")
     check(f"{label}: the dark ground is a dark grey, not pure black",
-          bg.lower() == "#12151c", bg)
+          bg.lower() == "#0c0c0f", bg)
     for name, floor in (("text", 13.0), ("text-2", 7.0), ("muted", 4.5)):
         got = _token(css, name)
         r = _ratio(got, bg) if got.startswith("#") else 0
@@ -383,10 +384,10 @@ for css, label in ((CSS, "Smart"), (CLASSIC_CSS, "Classic")):
               got.startswith("#") and _ratio(got, bg) >= 4.5, got)
 
 check("the accent is split into a text colour and a fill colour",
-      "--primary-fill:" in CSS and "--accent-fill:" in CLASSIC_CSS)
+      "--primary-fill:" in TOKENS)
 check("because one value cannot be both readable text and a button behind white",
-      _ratio("#ffffff", _token(CSS, "primary-fill")) >= 4.5,
-      f'{_ratio("#ffffff", _token(CSS, "primary-fill")):.2f}:1')
+      _ratio("#ffffff", _token(TOKENS, "primary-fill")) >= 4.5,
+      f'{_ratio("#ffffff", _token(TOKENS, "primary-fill")):.2f}:1')
 check("buttons use the fill", ".btn.primary { background: var(--primary-fill)" in CSS)
 check("every focusable thing gets a ring", ":focus-visible" in CSS)
 check("charts read their series from the theme rather than hard-coded hexes",
@@ -394,7 +395,7 @@ check("charts read their series from the theme rather than hard-coded hexes",
 check("and the old light-mode chart hexes are gone from the dark path",
       '"#0ea5e9"' not in JS and '"#10b981"' not in JS)
 check("light mode defines the same tokens, so nothing is undefined there",
-      "--chart-1:" in CSS.split('[data-theme="dark"]')[0])
+      "--chart-1:" in TOKENS.split('[data-theme="dark"]')[0])
 
 # =========================================================================
 print("\n== brand aesthetics actually reach the image ==")

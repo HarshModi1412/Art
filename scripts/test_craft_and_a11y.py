@@ -60,17 +60,15 @@ c = TestClient(app)
 SURFACES = {
     "landing page": ROOT / "backend/static/landing.html",
     "Smart shell": ROOT / "Smart CafeX/smart.html",
-    "Classic shell": ROOT / "backend/static/index.html",
     "storefront shell": ROOT / "Smart CafeX/storefront/store.html",
 }
 BUNDLES = {
     "Smart bundle": ROOT / "Smart CafeX/smart.js",
-    "Classic bundle": ROOT / "backend/static/app.js",
     "storefront bundle": ROOT / "Smart CafeX/storefront/store.js",
 }
 STYLES = {
     "Smart stylesheet": ROOT / "Smart CafeX/smart.css",
-    "Classic stylesheet": ROOT / "backend/static/styles.css",
+    "iOS stylesheet": ROOT / "Smart CafeX/ios.css",
     "storefront stylesheet": ROOT / "Smart CafeX/storefront/store.css",
 }
 LANDING = SURFACES["landing page"].read_text(encoding="utf-8")
@@ -102,9 +100,7 @@ check("drawn on one grid, so they cannot look mismatched",
 check("and every icon is a stroke path, not a filled blob",
       all("<" in v for v in sitebuilder.ICONS.values()))
 _smart_html = SURFACES["Smart shell"].read_text(encoding="utf-8")
-_classic_html = SURFACES["Classic shell"].read_text(encoding="utf-8")
 check("the Smart shell draws its icons from it", _smart_html.count('class="uic"') >= 20)
-check("the Classic shell too", _classic_html.count('class="uic"') >= 25)
 check("every inline icon is hidden from a screen reader, since the label is beside it",
       _smart_html.count('class="uic"') == _smart_html.count('aria-hidden="true"'))
 
@@ -384,13 +380,13 @@ for name, path in SURFACES.items():
 # it makes no request to a third party at all. That is both the privacy point
 # (an IP reaching plot.ly on the login screen) and the Core Web Vitals point
 # (roughly 3.5MB before first paint).
-for name in ("Smart shell", "Classic shell"):
+for name in ("Smart shell",):
     body = re.sub(r"<!--.*?-->", "", SURFACES[name].read_text(encoding="utf-8"), flags=re.S)
     check(f"{name} does not block the first paint on the chart library",
           not re.search(r"<script[^>]+plot(?:\.|)ly", body))
     check(f"{name} only preconnects to it", "preconnect" in body)
-_appjs = BUNDLES["Classic bundle"].read_text(encoding="utf-8")
-check("Classic fetches it on first use, as Smart already did",
+_appjs = BUNDLES["Smart bundle"].read_text(encoding="utf-8")
+check("the app fetches it on first use",
       "function ensurePlotly" in _appjs and "warmPlotly()" in _appjs)
 check("with a fallback CDN, so one outage does not lose every chart",
       "cdnjs.cloudflare.com" in _appjs)

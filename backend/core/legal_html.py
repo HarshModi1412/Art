@@ -33,14 +33,17 @@ def esc(v) -> str:
 # Dark mode included, because the app has one and a legal page that flashes
 # white at midnight is the kind of small jarring thing people remember.
 _CSS = """
-:root{--bg:#fbfaf8;--surface:#fff;--ink:#16181d;--ink-2:#454a55;--ink-3:#6b7280;
---line:#e4e2dc;--accent:#3f4a6b;--warn-bg:#fdf4e3;--warn:#7a5a1c}
-@media(prefers-color-scheme:dark){:root{--bg:#12151c;--surface:#191d26;--ink:#e8eaef;
---ink-2:#adb6c4;--ink-3:#909bad;--line:#242a36;--accent:#9ba6ee;--warn-bg:#2a2110;--warn:#f0b429}}
+:root{--bg:#f5f5f7;--surface:#fff;--ink:#1d1d1f;--ink-2:#48484a;--ink-3:#626268;
+--line:#e0e0e5;--accent:#0062c9;--warn-bg:#fff4e0;--warn:#8a4b00}
+@media(prefers-color-scheme:dark){:root{--bg:#0c0c0f;--surface:#1c1c1e;--ink:#e5e5ea;
+--ink-2:#c9c9ce;--ink-3:#a0a0a8;--line:#2a2a2d;--accent:#6cb3ff;--warn-bg:#2a2110;--warn:#f0b429}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
 font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
 .wrap{max-width:760px;margin:0 auto;padding:40px 22px 80px}
+h1{font-size:34px;letter-spacing:-.035em}
+header.top{position:sticky;top:0;background:color-mix(in srgb,var(--bg) 78%,transparent);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+.gap{border-radius:16px}
 a{color:var(--accent)}
 a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .skip{position:absolute;left:-9999px}
