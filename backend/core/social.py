@@ -738,7 +738,8 @@ def _fallback_caption(product: dict, pillar: dict, settings: dict,
             "generated_by": "template"}
 
 
-def week_theme(product: dict, occasion: dict | None = None) -> dict:
+def week_theme(product: dict, occasion: dict | None = None,
+               story: dict | None = None) -> dict:
     """The one thing this week is about.
 
     Brands whose grids look designed run a NAMED unit -- a drop, a series, a
@@ -746,16 +747,29 @@ def week_theme(product: dict, occasion: dict | None = None) -> dict:
     has a launch to hang a week on, so one is manufactured from what they do
     have: the piece the week is built around, and the occasion if one is live.
     The name is repeated in every caption, which is most of what makes seven
-    posts read as one story."""
+    posts read as one story.
+
+    `story` is the Story Engine's pick for the week (see story_engine.py). When
+    present, its narrative frame is appended to the note, so the SAME through-
+    line reaches every caption, reel script and the paste-ready video prompt
+    (they all read theme['note']) -- which is how a Problem->Solution week reads
+    different from a Social-Proof week even though the arc underneath is the
+    same. When absent, the note is exactly what it always was."""
     name = (product.get("name") or "this piece").strip()
     if occasion:
-        return {"name": f"{name} for {occasion['name']}",
-                "product": name, "occasion": occasion.get("name", ""),
-                "note": f"Every post this week is about {name}, building towards "
-                        f"{occasion['name']}."}
-    return {"name": name, "product": name, "occasion": "",
-            "note": f"Every post this week is about {name}, from first look to "
-                    f"someone actually using it."}
+        theme = {"name": f"{name} for {occasion['name']}",
+                 "product": name, "occasion": occasion.get("name", ""),
+                 "note": f"Every post this week is about {name}, building towards "
+                         f"{occasion['name']}."}
+    else:
+        theme = {"name": name, "product": name, "occasion": "",
+                 "note": f"Every post this week is about {name}, from first look to "
+                         f"someone actually using it."}
+    if story and story.get("frame"):
+        theme["story_id"] = story.get("id", "")
+        theme["story_name"] = story.get("name", "")
+        theme["note"] += f" The story this week: {story['name']}. {story['frame']}"
+    return theme
 
 
 def _story_context(theme: dict, slot: dict, prev: dict | None = None) -> str:
@@ -1520,7 +1534,13 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
     # Inside a festival window a product actually tagged for it still leads,
     # because that is the one people are shopping for.
     hero = _pick_product(pool, week_no, lead_occasion, len(shape))
-    theme = week_theme(hero, lead_occasion)
+    # The Story Engine names the week's story from the seller's context (a live
+    # festival makes it seasonal, otherwise it reads the category). It only
+    # enriches the theme note; the arc below is unchanged.
+    from backend.core import story_engine
+    week_story = story_engine.pick(category=s.get("category") or "", occasion=lead_occasion,
+                                   product_name=hero.get("name") or "")
+    theme = week_theme(hero, lead_occasion, week_story)
     # The slate is an ARC, so it has to run in calendar order: the tease must
     # go out before the reveal, and the reveal before the proof. The weekday
     # table is ranked by REACH, not by date — slot 0 wants Wednesday and slot 2
@@ -1625,6 +1645,11 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
             "earns": slot["earns"],
             "theme": theme["name"],
             "theme_note": theme["note"],
+            # Which story the week is telling, and the role this post plays in
+            # it (tension / demonstration / proof / product / resolution).
+            "story_id": week_story["id"],
+            "story_name": week_story["name"],
+            "story_role": story_engine.role_for_beat(slot["beat"]),
             "occasion": (occasion or {}).get("name", ""),
             "occasion_days": (occasion or {}).get("days_away"),
             # The festival's slug in playbook.FESTIVALS, e.g. "ganesh_chaturthi"

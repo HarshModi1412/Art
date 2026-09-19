@@ -728,8 +728,19 @@ def plan_week(email: str, week_start: date | None = None, trigger: str = "manual
     picks = assign_products(slots, catalogue, signals, existing, occasions)
     season_key, season = season_for(week_start + timedelta(days=3))
 
-    # The week's story is about whichever product opens it.
-    theme = social.week_theme(picks[0][0], lead_occ)
+    # The week's story is about whichever product opens it. The Story Engine
+    # picks a narrative archetype from the seller's context — a live festival
+    # makes the week seasonal, the sales signals say how much proof there is to
+    # show and how warm the audience is — and its through-line is folded into
+    # the theme note, which every caption, reel script and video prompt reads.
+    from backend.core import story_engine
+    week_story = story_engine.pick(category=category, occasion=lead_occ, signals=signals,
+                                   settings=s, product_name=picks[0][0].get("name") or "")
+    theme = social.week_theme(picks[0][0], lead_occ, week_story)
+    brief["story"] = {"id": week_story["id"], "name": week_story["name"],
+                      "why": week_story["why"], "inputs": week_story["inputs"],
+                      "alternates": week_story["alternates"],
+                      "roles": story_engine.roles_covered([sl["beat"] for sl in slots])}
     rows = social._posts(email)
     made = []
     prev = None
@@ -772,6 +783,8 @@ def plan_week(email: str, week_start: date | None = None, trigger: str = "manual
             "archetype": slot["archetype"], "archetype_label": slot["archetype_label"],
             "shot_type": slot["shot_type"], "earns": slot["earns"],
             "theme": theme["name"], "theme_note": theme["note"],
+            "story_id": week_story["id"], "story_name": week_story["name"],
+            "story_role": story_engine.role_for_beat(slot["beat"]),
             "occasion": (occ or {}).get("name", ""),
             "occasion_days": (occ or {}).get("days_away"),
             "occasion_key": (occ or {}).get("key", ""),
