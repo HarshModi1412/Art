@@ -373,6 +373,50 @@ def _canon(story_id: str) -> str:
     return _ALIASES.get(story_id, story_id)
 
 
+# --------------------------------------------------------------- 3b. story -> post kind
+#
+# "What kind of post for that story." Each story leans on particular KINDS of
+# photograph/clip — a Social-Proof week wants customer shots and reviews, a
+# Reveal week wants the hero and the half-open box, a How-it-works week wants the
+# process and the one detail. These are the arc's own archetypes (social.py's
+# ARCHETYPES), so the story can bias which archetype each beat becomes WITHOUT
+# inventing a parallel vocabulary. slate_shape treats this as a preference, not a
+# command: it still refuses two identical posts in a row, still keeps the week a
+# mix of reels and carousels, and still favours what the seller can actually
+# shoot — the story only breaks ties, so the KIND of post follows the story while
+# the proven balance rules hold. Each list is deliberately format-mixed (reels:
+# tease, unbox, in_use, process, festival; carousels/stills: hero, detail,
+# styling, proof, answer) so a story can never force an all-one-format week.
+PREFERRED_ARCHETYPES: dict[str, list[str]] = {
+    "PROBLEM_SOLUTION":       ["answer", "detail", "in_use", "proof"],
+    "DIDNT_KNOW_I_NEEDED":    ["in_use", "detail", "styling"],
+    "TRANSFORMATION":         ["in_use", "detail", "styling", "proof"],
+    "FOUNDER_JOURNEY":        ["process", "hero", "proof"],
+    "PRODUCT_REVEAL":         ["hero", "unbox", "detail"],
+    "SOCIAL_PROOF_STACK":     ["proof", "in_use", "styling"],
+    "OBJECTION_DESTROYER":    ["answer", "detail", "proof"],
+    "HOW_IT_WORKS":           ["process", "detail", "answer"],
+    "DAY_IN_THE_LIFE":        ["in_use", "styling", "hero"],
+    "THE_SWITCH":             ["answer", "in_use", "proof"],
+    "EDUCATION_TO_PRODUCT":   ["detail", "process", "answer"],
+    "MYSTERY_REVEAL":         ["tease", "hero", "unbox"],
+    "LIMITED_DROP":           ["unbox", "hero", "festival"],
+    "CUSTOMER_REACTION":      ["proof", "unbox", "in_use"],
+    "BEHIND_THE_PRODUCT":     ["process", "detail", "hero"],
+    "ONE_CUSTOMER_ONE_PROBLEM": ["proof", "answer", "in_use"],
+    "BELIEF_CHANGE":          ["answer", "detail", "process"],
+    "COMMUNITY":              ["proof", "in_use", "styling"],
+    "SEASONAL_OCCASION":      ["festival", "hero", "in_use", "styling"],
+    "PRODUCT_AS_IDENTITY":    ["hero", "in_use", "styling"],
+}
+
+
+def preferred_archetypes(story_id: str) -> list[str]:
+    """The arc archetypes this story leans on, best first. Empty for an unknown
+    story, which slate_shape reads as 'no preference'."""
+    return list(PREFERRED_ARCHETYPES.get(_canon(story_id), []))
+
+
 # --------------------------------------------------------------- 4. content taxonomy
 #
 # Reference only — the arc's FORMAT_FOR_ARCHETYPE still decides a post's actual
@@ -667,6 +711,9 @@ def pick(inputs: dict | None = None, *, category: str = "", occasion: dict | Non
         "roles": story["roles"],
         "proof_required": story["proof_required"],
         "cta": cta,
+        # The KINDS of post this story leans on — slate_shape uses this to steer
+        # each beat's archetype toward the story.
+        "prefer": preferred_archetypes(top),
         "why": _why(top, inp, occasion),
         "alternates": [{"id": sid, "name": STORIES[sid]["name"]} for sid in ranked[1:4]],
     }

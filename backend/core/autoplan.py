@@ -508,9 +508,13 @@ def pick_days(week_start: date, need: int, taken: set[date],
 
 
 def choose_beats(cadence: str, need: int, existing: list[dict], occasion: dict | None,
-                 rotation: int, shootable: list[str]) -> list[dict]:
-    """The arc slots still missing from the week, in arc order."""
-    shape = social.slate_shape(cadence, occasion, rotation=rotation, shootable=shootable)
+                 rotation: int, shootable: list[str],
+                 prefer: list[str] | None = None) -> list[dict]:
+    """The arc slots still missing from the week, in arc order. `prefer` is the
+    week's story's preferred post kinds, passed through to slate_shape so each
+    beat's archetype follows the story."""
+    shape = social.slate_shape(cadence, occasion, rotation=rotation,
+                               shootable=shootable, prefer=prefer)
     have = [p.get("beat") for p in existing if p.get("beat")]
     remaining = []
     for slot in shape:
@@ -806,20 +810,26 @@ def plan_week(email: str, week_start: date | None = None, trigger: str = "manual
         shootable = studio.shootable_shot_types(email)
     except Exception:  # noqa: BLE001
         shootable = []
+    # The Story Engine picks the week's narrative FIRST — a live festival makes
+    # it seasonal, the sales signals say how much proof there is and how warm the
+    # audience is — and its preferred post KINDS steer each beat's archetype
+    # (story -> post kind -> aesthetics -> plan). The seller's aesthetic is
+    # applied downstream, in the Studio image prompt and the video prompt.
+    from backend.core import story_engine
+    week_story = story_engine.pick(category=category, occasion=lead_occ,
+                                   signals=signals, settings=s)
     slots = choose_beats(cadence, need, existing, lead_occ,
-                         rotation=week_start.isocalendar()[1], shootable=shootable)
+                         rotation=week_start.isocalendar()[1], shootable=shootable,
+                         prefer=week_story.get("prefer"))
     occasions = [social.occasion_for(t.date(), category) for t in times]
     picks = assign_products(slots, catalogue, signals, existing, occasions)
     season_key, season = season_for(week_start + timedelta(days=3))
 
-    # The week's story is about whichever product opens it. The Story Engine
-    # picks a narrative archetype from the seller's context — a live festival
-    # makes the week seasonal, the sales signals say how much proof there is to
-    # show and how warm the audience is — and its through-line is folded into
-    # the theme note, which every caption, reel script and video prompt reads.
-    from backend.core import story_engine
-    week_story = story_engine.pick(category=category, occasion=lead_occ, signals=signals,
-                                   settings=s, product_name=picks[0][0].get("name") or "")
+    # Now the opening product is known, fill the story's through-line with its
+    # name and fold it into the theme note (read by every caption, reel script
+    # and the paste-ready video prompt).
+    week_story["frame"] = story_engine.narrative_frame(
+        week_story["id"], picks[0][0].get("name") or "", lead_occ)
     theme = social.week_theme(picks[0][0], lead_occ, week_story)
     brief["story"] = {"id": week_story["id"], "name": week_story["name"],
                       "why": week_story["why"], "inputs": week_story["inputs"],

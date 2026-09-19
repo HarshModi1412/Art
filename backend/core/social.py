@@ -374,7 +374,8 @@ FORMAT_FOR_ARCHETYPE = {
 
 
 def slate_shape(cadence: str, occasion: dict | None = None,
-                rotation: int = 0, shootable: list[str] | None = None) -> list[dict]:
+                rotation: int = 0, shootable: list[str] | None = None,
+                prefer: list[str] | None = None) -> list[dict]:
     """Which beat, archetype, pillar and format each slot in the week gets.
 
     The week is built as an ARC, not a rotation. Slot 1 teases, the middle
@@ -385,7 +386,14 @@ def slate_shape(cadence: str, occasion: dict | None = None,
     planned feed look automated.
 
     `occasion` steers the closing beat onto the festival when one is live,
-    which is how the week connects to what people are actually shopping for."""
+    which is how the week connects to what people are actually shopping for.
+
+    `prefer` is the week's story's preferred KINDS of post (story_engine's
+    archetype list): it is the FIRST tie-break when choosing a beat's archetype,
+    so the post kind follows the story — but only a tie-break, so the no-repeat,
+    shootable and reel/carousel-mix rules below still hold. Empty or omitted, the
+    selection is exactly what it was before the story engine existed."""
+    prefer = prefer or []
     n = CADENCE.get(cadence, CADENCE["standard"])["posts"]
     # Which arc beats this cadence can afford. Two posts a week still get a
     # beginning and an end; six get the full arc with the middle expanded.
@@ -425,13 +433,18 @@ def slate_shape(cadence: str, occasion: dict | None = None,
             # of, then rotate so repeated beats do not all pick the same thing.
             options = [a for a in options if a != used] or options
             k = seen_counts.get(beat, 0) + rotation
-            # Prefer a beat the seller has actually shown they can shoot. Their
-            # Product Studio references say which kinds of photograph they
-            # produce; asking for an unboxing beat from someone who has never
-            # photographed their packaging is a post that will not get made.
-            # A stretch is still allowed — it just goes last, and only when
-            # nothing they already shoot fits this beat.
+            # The story's preferred KIND comes first, so the post follows the
+            # week's story. Then: prefer a beat the seller has actually shown
+            # they can shoot (their Product Studio references say which kinds of
+            # photograph they produce; asking for an unboxing from someone who
+            # never photographs packaging is a post that will not get made — a
+            # stretch is allowed, it just goes last). Then rotate, then keep the
+            # reel/carousel mix. With no story preference, pref_rank is constant
+            # and the choice is exactly the original one.
+            def pref_rank(a, prefer=prefer):
+                return prefer.index(a) if a in prefer else len(prefer) + 1
             arch = min(options, key=lambda a, k=k: (
+                pref_rank(a),
                 0 if (not shootable or ARCHETYPES[a]["shot_type"] in shootable) else 1,
                 (options.index(a) - k) % len(options),
                 fmt_count[bucket(a)]))
@@ -1339,12 +1352,21 @@ def occasion_for(day: date, category: str = "") -> dict | None:
 
     Windows overlap — on 25 October a clothing seller is four days from Karva
     Chauth and fourteen from Diwali, and both run-ups are live. The NEAREST
-    festival wins, because that is the one the customer is thinking about and
-    the one where a late post is wasted.
+    UPCOMING festival wins, because that is the one the customer is shopping for
+    and the one where a late post is wasted.
 
-    Without this rule the answer depended on the order of the table, which made
-    a real behaviour depend on an editing accident."""
-    best, best_gap = None, 10 ** 6
+    A festival that has ALREADY PASSED only wins if nothing upcoming is live.
+    THE BUG THIS FIXES: a post going out on 23 September was tagged Ganesh
+    Chaturthi (14 Sept, whose ten-day span tail still covered the 23rd, gap 9)
+    over Navratri (11 Oct, run-up live since 20 Sept, gap 18) — purely because
+    the past festival's date was nearer in absolute days. So a seller who asked
+    for Navratri content got Ganesh, a festival already over. Ranking upcoming
+    before past, then by gap, points every future post at the festival people
+    are actually buying for.
+
+    Without this rule the answer also depended on the order of the table, which
+    made a real behaviour depend on an editing accident."""
+    best, best_key = None, None
     for f in FESTIVALS_2026:
         d = date.fromisoformat(f["date"])
         lead = f.get("lead", 7)
@@ -1356,9 +1378,11 @@ def occasion_for(day: date, category: str = "") -> dict | None:
         # a Navratri post, and that is when people are actually buying.
         if not (d - timedelta(days=lead) <= day <= d + timedelta(days=span)):
             continue
-        gap = abs((d - day).days)
-        if gap < best_gap:
-            best, best_gap = f, gap
+        # Upcoming (the day is on or before the festival) beats already-passed
+        # (in the span tail), then nearer beats further.
+        key = (day > d, abs((d - day).days))
+        if best_key is None or key < best_key:
+            best, best_key = f, key
     if not best:
         return None
     d = date.fromisoformat(best["date"])
@@ -1524,8 +1548,15 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
         shootable = studio.shootable_shot_types(email)
     except Exception:  # noqa: BLE001 — planning must never depend on Studio
         shootable = []
+    # Pick the week's STORY first, so the KIND of post each beat becomes follows
+    # it (story -> post kind -> aesthetics -> plan). A live festival makes the
+    # story seasonal; otherwise it reads the seller's category.
+    from backend.core import story_engine
+    week_story = story_engine.pick(category=s.get("category") or "",
+                                   occasion=lead_occasion)
     shape = slate_shape(s.get("cadence") or "standard", lead_occasion,
-                        rotation=week_no, shootable=shootable)
+                        rotation=week_no, shootable=shootable,
+                        prefer=week_story.get("prefer"))
     # A DIFFERENT piece leads each week. The hero owns the opening beats, so
     # pinning it to the same product meant that product collected every tease
     # and every reveal for the whole month while the rest of the catalogue got
@@ -1534,12 +1565,10 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
     # Inside a festival window a product actually tagged for it still leads,
     # because that is the one people are shopping for.
     hero = _pick_product(pool, week_no, lead_occasion, len(shape))
-    # The Story Engine names the week's story from the seller's context (a live
-    # festival makes it seasonal, otherwise it reads the category). It only
-    # enriches the theme note; the arc below is unchanged.
-    from backend.core import story_engine
-    week_story = story_engine.pick(category=s.get("category") or "", occasion=lead_occasion,
-                                   product_name=hero.get("name") or "")
+    # Now the hero is known, fill the story's through-line with its name so the
+    # theme note (and every caption/reel/video prompt that reads it) is specific.
+    week_story["frame"] = story_engine.narrative_frame(
+        week_story["id"], hero.get("name") or "", lead_occasion)
     theme = week_theme(hero, lead_occasion, week_story)
     # The slate is an ARC, so it has to run in calendar order: the tease must
     # go out before the reveal, and the reveal before the proof. The weekday
