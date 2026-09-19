@@ -1149,3 +1149,182 @@ html.editing .announce:hover > .edit-tag { transform: translateY(-50%); }
   .card:hover .card-img::before { transform: none; }
   .modal { animation: none; }
 }
+
+/* =========================================================================
+   THEME SIGNATURES  (v12)
+   Additive, genre-specific polish keyed on [data-theme-id]. Every rule here
+   builds on the resolved tokens (--accent, --ink, --fh…), degrades to a plain
+   usable page if a property is unsupported, and is stripped of movement by the
+   reduced-motion block at the end. Nothing above this section is changed.
+   ========================================================================= */
+
+/* ---- universal micro-refinements (every theme) ---- */
+.card-img { transition: transform .6s var(--ease-out), box-shadow .6s var(--ease-out); }
+.card:hover .card-img { box-shadow: 0 26px 48px -30px color-mix(in srgb, var(--ink) 55%, transparent); }
+[data-grid="list"] .card:hover .card-img { box-shadow: 0 16px 30px -24px color-mix(in srgb, var(--ink) 55%, transparent); }
+/* nav links draw their own underline instead of only changing colour */
+.nav a::after {
+  content: ""; position: absolute; left: 0; right: 100%; bottom: -5px; height: 1px;
+  background: currentColor; transition: right .38s var(--ease-out);
+}
+.nav a:hover::after, .nav a.on::after { right: 0; }
+/* the discount badge fills on card hover */
+.off { transition: background .3s var(--ease), color .3s var(--ease), border-color .3s var(--ease); }
+.card:hover .off { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+/* =========================================================================
+   MAISON — luxury / heritage.  Gold hairlines, unhurried serif, ornament.
+   ========================================================================= */
+[data-theme-id="luxury"] .hdr { border-top: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); }
+[data-theme-id="luxury"] .sec-head { border-bottom-color: color-mix(in srgb, var(--accent) 34%, var(--line)); }
+[data-theme-id="luxury"] .sec-head h2 { position: relative; }
+/* a small centred diamond below every section title */
+[data-theme-id="luxury"] .eyebrow::before { background: var(--accent); opacity: .8; height: 1px; }
+[data-theme-id="luxury"] .card-cat { color: color-mix(in srgb, var(--accent) 78%, var(--muted)); letter-spacing: .2em; }
+[data-theme-id="luxury"] .card-name { font-style: italic; }
+[data-theme-id="luxury"] .price { letter-spacing: .04em; }
+/* stat numerals in brushed gold — large text, stays legible if clip is unsupported */
+[data-theme-id="luxury"] .stat b, [data-theme-id="jewellery"] .stat b {
+  color: var(--accent);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--accent) 62%, var(--ink)), var(--accent) 40%, color-mix(in srgb, var(--accent) 55%, #fff) 55%, var(--accent));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+/* the brand mark gets a soft inner gleam */
+[data-theme-id="luxury"] .brand .mark, [data-theme-id="jewellery"] .brand .mark {
+  background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 78%, #fff), var(--accent));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 2px 10px -4px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+/* ornamental centred rule for a manifesto / story heading */
+[data-theme-id="luxury"] .manifesto p::after {
+  content: "◈"; display: block; font-size: .34em; color: var(--accent); margin: .7em auto 0; opacity: .7;
+}
+
+/* =========================================================================
+   LUSTRE — fine jewellery.  Vignette, gold ring on hover, a crossing sheen.
+   ========================================================================= */
+[data-theme-id="jewellery"] .card-img::before,
+[data-theme-id="jewellery"] .spot-media { box-shadow: inset 0 0 60px -20px color-mix(in srgb, var(--ink) 60%, transparent); }
+[data-theme-id="jewellery"] .card-img {
+  outline: 1px solid transparent; outline-offset: -1px;
+  transition: transform .6s var(--ease-out), box-shadow .6s var(--ease-out), outline-color .5s var(--ease);
+}
+[data-theme-id="jewellery"] .card:hover .card-img { outline-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+[data-theme-id="jewellery"] .eyebrow { letter-spacing: .28em; }
+[data-theme-id="jewellery"] .card-name { letter-spacing: .04em; }
+/* a slow gold gleam that travels along the brand mark */
+[data-theme-id="jewellery"] .brand .mark { position: relative; overflow: hidden; }
+[data-theme-id="jewellery"] .brand .mark::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.75) 50%, transparent 58%);
+  transform: translateX(-130%); animation: lustre-gleam 5.5s var(--ease) 1.5s infinite;
+}
+@keyframes lustre-gleam { 0% { transform: translateX(-130%); } 22%, 100% { transform: translateX(130%); } }
+
+/* =========================================================================
+   CHARGE — sport / supplements.  Ghost numerals, a green slash, kinetic CTAs.
+   ========================================================================= */
+[data-theme-id="fitness"] .sec-head { position: relative; }
+/* the section index becomes a huge outlined numeral pinned to the corner */
+[data-theme-id="fitness"] .sec-idx {
+  font-family: var(--fh); font-size: clamp(40px, 7vw, 96px); line-height: .8; font-weight: 700;
+  color: transparent; -webkit-text-stroke: 1.5px color-mix(in srgb, var(--accent) 55%, transparent);
+  letter-spacing: -.02em; align-self: start; opacity: .9;
+}
+[data-theme-id="fitness"] .eyebrow::before { height: 3px; width: 26px; background: var(--accent); opacity: 1; transform: skewX(-20deg); }
+[data-theme-id="fitness"] .card-name { letter-spacing: .01em; }
+/* a green bar snaps in under the product name on hover */
+[data-theme-id="fitness"] .card-name { display: inline-block; background-image: linear-gradient(var(--accent), var(--accent)); background-size: 0% 3px; background-position: 0 100%; background-repeat: no-repeat; transition: background-size .34s var(--ease-out); padding-bottom: 3px; }
+[data-theme-id="fitness"] .card:hover .card-name { background-size: 100% 3px; }
+[data-theme-id="fitness"] .price { font-style: italic; letter-spacing: -.01em; }
+[data-theme-id="fitness"] .b.p { position: relative; }
+/* the primary CTA leans and its fill sweeps faster — energy, not elegance */
+[data-theme-id="fitness"] .b { transition: color .22s var(--ease), border-color .22s var(--ease), transform .18s var(--ease); }
+[data-theme-id="fitness"] .b.p::before { transition: transform .3s var(--ease-out); }
+[data-theme-id="fitness"] .marquee { background: var(--accent); border-color: transparent; }
+[data-theme-id="fitness"] .marquee-t { color: var(--accent-ink); }
+[data-theme-id="fitness"] .marquee-t span::after { background: var(--accent-ink); }
+
+/* =========================================================================
+   ATELIER — apparel / lookbook.  Editorial index numerals, caption labels.
+   ========================================================================= */
+[data-theme-id="fashion"] .sec-idx {
+  font-family: var(--fh); font-size: clamp(26px, 3vw, 40px); font-weight: 300; opacity: .5;
+}
+[data-theme-id="fashion"] .card-cat { letter-spacing: .22em; font-size: 10px; }
+[data-theme-id="fashion"] .card-name { font-weight: 500; letter-spacing: .01em; }
+[data-theme-id="fashion"] .price { font-weight: 500; letter-spacing: .06em; }
+[data-theme-id="fashion"] .hero-art, [data-theme-id="fashion"] .story-art { outline: 1px solid var(--line); outline-offset: 10px; }
+/* a numbered caption slides in under each editorial card */
+[data-theme-id="fashion"][data-grid="editorial"] .card-body { position: relative; padding-left: 30px; }
+[data-theme-id="fashion"][data-grid="editorial"] .card-cat::before {
+  content: counter(fcard, decimal-leading-zero); counter-increment: fcard;
+  position: absolute; left: 0; top: 2px; font-family: var(--fh); font-weight: 300; opacity: .45; letter-spacing: 0;
+}
+[data-theme-id="fashion"][data-grid="editorial"] .grid { counter-reset: fcard; }
+
+/* =========================================================================
+   COUNTER — food & drink.  A menu-board dotted leader before every price.
+   ========================================================================= */
+[data-theme-id="cafe"] .price-row::before {
+  content: ""; flex: 1; align-self: flex-end; margin-bottom: 5px;
+  border-bottom: 2px dotted color-mix(in srgb, var(--ink) 32%, transparent); min-width: 24px;
+}
+[data-theme-id="cafe"] .price { color: var(--accent); }
+[data-theme-id="cafe"] .card-name { letter-spacing: 0; }
+[data-theme-id="cafe"] .eyebrow::before { background: var(--accent); opacity: 1; }
+[data-theme-id="cafe"] .chip.on, [data-theme-id="cafe"] .b.p { box-shadow: 0 8px 20px -12px color-mix(in srgb, var(--accent) 80%, transparent); }
+[data-theme-id="cafe"] .announce { background: var(--accent); color: var(--accent-ink); }
+
+/* =========================================================================
+   BLOOM — beauty / skincare.  Soft glow, blush hover wash, pill everything.
+   ========================================================================= */
+[data-theme-id="beauty"] .card-img { transition: transform .6s var(--ease-out), box-shadow .6s var(--ease-out); }
+[data-theme-id="beauty"] .card:hover .card-img { box-shadow: 0 34px 60px -34px color-mix(in srgb, var(--accent) 85%, transparent); }
+/* a blush aura blooms behind the card on hover */
+[data-theme-id="beauty"] .card { position: relative; }
+[data-theme-id="beauty"] .card::before {
+  content: ""; position: absolute; inset: -6% -6% 30%; z-index: -1; border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 30%, transparent), transparent);
+  opacity: 0; filter: blur(24px); transition: opacity .5s var(--ease);
+}
+[data-theme-id="beauty"] .card:hover::before { opacity: 1; }
+[data-theme-id="beauty"] .chip { border-radius: 99px; }
+[data-theme-id="beauty"] .off { border-radius: 99px; }
+[data-theme-id="beauty"] .card-name { letter-spacing: -.01em; }
+[data-theme-id="beauty"] .hl .i svg { filter: drop-shadow(0 4px 10px color-mix(in srgb, var(--accent) 60%, transparent)); }
+
+/* =========================================================================
+   OBSIDIAN — electronics.  A blueprint grid, tabular specs, an accent glow.
+   ========================================================================= */
+[data-theme-id="tech"] .hero { position: relative; }
+[data-theme-id="tech"] .hero::after {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: .5;
+  background-image: linear-gradient(color-mix(in srgb, var(--ink) 8%, transparent) 1px, transparent 1px),
+                    linear-gradient(90deg, color-mix(in srgb, var(--ink) 8%, transparent) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(120% 90% at 70% 0%, #000 30%, transparent 72%);
+          mask-image: radial-gradient(120% 90% at 70% 0%, #000 30%, transparent 72%);
+}
+[data-theme-id="tech"] .price, [data-theme-id="tech"] .stat b, [data-theme-id="tech"] .card-cat {
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; letter-spacing: .01em;
+}
+[data-theme-id="tech"] .card-cat { letter-spacing: .18em; }
+/* a technical corner bracket that squares up on hover */
+[data-theme-id="tech"] .card-img { transition: transform .6s var(--ease-out), box-shadow .5s var(--ease-out), outline-color .3s; outline: 1px solid transparent; outline-offset: -1px; }
+[data-theme-id="tech"] .card:hover .card-img { outline-color: color-mix(in srgb, var(--accent) 60%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent), 0 26px 48px -30px color-mix(in srgb, var(--ink) 55%, transparent); }
+[data-theme-id="tech"] .b.p { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent); transition: color .3s var(--ease), box-shadow .35s var(--ease); }
+[data-theme-id="tech"] .b.p:hover { box-shadow: 0 8px 30px -8px color-mix(in srgb, var(--accent) 70%, transparent); }
+[data-theme-id="tech"] .rail-nav button:hover, [data-theme-id="tech"] .icon-b:hover { box-shadow: 0 0 18px -4px color-mix(in srgb, var(--accent) 60%, transparent); }
+
+/* =========================================================================
+   STUDIO — universal.  Keep it quiet: one precise hover accent.
+   ========================================================================= */
+[data-theme-id="basic"] .card-name { background-image: linear-gradient(var(--accent), var(--accent)); background-size: 0% 1px; background-position: 0 100%; background-repeat: no-repeat; transition: background-size .34s var(--ease-out); }
+[data-theme-id="basic"] .card:hover .card-name { background-size: 100% 1px; }
+
+/* ---- reduced motion: drop the moving parts, keep the styling ---- */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme-id="jewellery"] .brand .mark::after { animation: none; display: none; }
+  .card:hover .card-img, [data-theme-id="beauty"] .card:hover .card-img,
+  [data-theme-id="tech"] .card:hover .card-img { box-shadow: none; }
+}
