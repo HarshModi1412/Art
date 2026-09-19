@@ -6806,6 +6806,17 @@ def social_campaign_start(body: FestivalCampaignBody,
     return res
 
 
+@app.post("/api/social/campaign/revert")
+def social_campaign_revert(body: FestivalCampaignBody,
+                           authorization: str | None = Header(default=None)):
+    """Undo a planned festival campaign. Removes its still-unposted posts and
+    forgets the campaign; anything already published is left untouched."""
+    email = require_user(authorization)
+    res = social.revert_campaign(email, body.festival)
+    cache.clear(email)
+    return res
+
+
 @app.get("/api/social/playbook")
 def social_playbook(festival: str, authorization: str | None = Header(default=None)):
     """The full content library entry — angles, taglines, cautions, what people

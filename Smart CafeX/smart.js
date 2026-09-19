@@ -11440,8 +11440,13 @@ async function renderCampaignRail() {
           <div class="cmp-run">
             <div class="cmp-run-h">
               <b>${esc(c.festival)} campaign</b>
-              <span class="muted tiny">${c.published} of ${c.total} posted${
-                c.waiting ? ` · ${c.waiting} waiting on you` : ""}</span>
+              <span class="cmp-run-r">
+                <span class="muted tiny">${c.published} of ${c.total} posted${
+                  c.waiting ? ` · ${c.waiting} waiting on you` : ""}</span>
+                <button class="btn ghost tiny" data-revert="${esc(c.key)}"
+                  title="Remove this campaign and its unposted drafts. Anything already posted stays.">
+                  ${sic("close")}Revert</button>
+              </span>
             </div>
             <div class="cmp-bar"><i style="width:${c.total ? (100 * c.published / c.total) : 0}%"></i></div>
             <div class="cmp-obj">${esc(c.objective || "")}</div>
@@ -11455,7 +11460,7 @@ async function renderCampaignRail() {
         <div class="cmp-cards">
           ${next.map((f) => `
             <button class="cmp-card${f.late ? " is-late" : ""}${f.running ? " is-running" : ""}"
-                    data-fest="${esc(f.key)}">
+                    data-fest="${esc(f.key)}" data-running="${f.running ? "1" : "0"}">
               <span class="cmp-when">${f.days_out === 0 ? "Today"
                 : f.days_out === 1 ? "Tomorrow" : `In ${f.days_out} days`}</span>
               <b>${esc(f.name)}</b>
@@ -11463,16 +11468,41 @@ async function renderCampaignRail() {
                 ${"●".repeat(Math.round(f.weight / 2))}<i>${"●".repeat(5 - Math.round(f.weight / 2))}</i></span>
               <span class="cmp-core">${esc((f.core || "").slice(0, 96))}…</span>
               <span class="cmp-go">${f.running ? "Running · view"
-                : f.late ? "Start now — already late" : "Plan it"}</span>
+                : f.late ? "Plan it now — already late" : "Plan it — one tap"}</span>
             </button>`).join("")}
         </div>
       </div>` : ""}`;
 
   box.querySelectorAll("[data-fest]").forEach((b) =>
-    b.onclick = () => openCampaign(b.dataset.fest));
+    b.onclick = () => openCampaign(b.dataset.fest, b.dataset.running === "1"));
+  box.querySelectorAll("[data-revert]").forEach((b) =>
+    b.onclick = () => revertCampaign(b.dataset.revert));
 }
 
-async function openCampaign(key) {
+/* Undo a planned campaign. Used by the Revert button on a running campaign and
+   by the Undo on the toast shown the moment one is planned. Silent when it is
+   the toast's own undo, which shows its own "Put back." confirmation. */
+async function revertCampaign(key, silent) {
+  try {
+    const r = await api("/api/social/campaign/revert", { method: "POST", json: { festival: key } });
+    _socialData = await api("/api/social");
+    if (_currentModule === "social") await renderSocial();
+    else await renderCampaignRail();
+    if (!silent) toast(r.reverted
+      ? `${r.festival} campaign reverted — ${r.reverted} unposted draft${r.reverted === 1 ? "" : "s"} removed.`
+      : `Nothing to revert — every ${r.festival} post had already gone out.`);
+    return r;
+  } catch (e) { if (!silent) toast(e.message, 6000); throw e; }
+}
+
+async function openCampaign(key, running) {
+  /* One tap plans the whole campaign. The seller no longer has to open a modal
+     and confirm — the calendar already knows the date and the beats, so the app
+     builds and SAVES the six posts straight away and offers Undo. An already
+     running campaign still opens its detail sheet so it can be read or reverted
+     rather than silently re-planned. */
+  if (!running) return planCampaign(key);
+
   let p;
   try { p = await api("/api/social/campaign?festival=" + encodeURIComponent(key)); }
   catch (e) { return toast(e.message); }
@@ -11544,29 +11574,51 @@ async function openCampaign(key) {
         seconds of reading.</p>
     </div>
 
+    <div class="cmp-run-note">${sic("check")}<span>This campaign is already planned and
+      saved. Its posts are in your plan below — edit any of them, or revert the
+      whole campaign to remove every post that has not gone out yet.</span></div>
+
     <div class="modal-actions">
-      <button class="btn ghost" data-cx>Not now</button>
-      <button class="btn primary" id="cmpGo">Plan these ${(p.beats || []).filter((b) => !b.past).length} posts</button>
+      <button class="btn ghost" data-cx>Close</button>
+      <button class="btn reject" id="cmpRevert">${sic("close")} Revert campaign</button>
     </div>`, { wide: true });
 
   document.querySelector("[data-cx]").onclick = closeModal;
-  $("cmpGo").onclick = async () => {
-    const b = $("cmpGo");
-    b.disabled = true; b.textContent = "Writing…";
-    try {
-      const r = await withBusy(
-        "Building the campaign…",
-        "Six beats, each with its own job, written and dated against the festival.",
-        () => api("/api/social/campaign", { method: "POST", json: { festival: key } }));
-      closeModal();
-      toast(`${r.created} posts planned for ${r.festival}.`);
-      _socialData = await api("/api/social");
-      if (_currentModule === "social") await renderSocial();
-    } catch (e) {
-      toast(e.message, 6000);
-      b.disabled = false; b.textContent = "Plan these posts";
-    }
+  $("cmpRevert").onclick = async () => {
+    const b = $("cmpRevert");
+    b.disabled = true; b.textContent = "Reverting…";
+    try { await revertCampaign(key); closeModal(); }
+    catch (e) { b.disabled = false; b.innerHTML = `${sic("close")} Revert campaign`; }
   };
+}
+
+/* Plan a festival campaign in one tap — no approval gate.
+   The calendar already knows the festival's date and its six beats, so there is
+   nothing for the seller to decide up front: the app writes the posts, SAVES
+   them as drafts against the festival, and refreshes the plan. The only thing it
+   asks of the seller is afterwards, and it is optional — an Undo on the toast,
+   and a Revert button on the running-campaign card, both of which remove every
+   post that has not yet gone out. Nothing is published by this; each post still
+   waits in the plan until the seller sends it. */
+async function planCampaign(key) {
+  let r;
+  try {
+    r = await withBusy(
+      "Building the campaign…",
+      "Six beats, each with its own job, written and dated against the festival — saved as you watch.",
+      () => api("/api/social/campaign", { method: "POST", json: { festival: key } }));
+  } catch (e) { return toast(e.message, 6000); }
+  if (r && r.error) return toast(r.error, 6000);
+
+  _socialData = await api("/api/social");
+  if (_currentModule === "social") await renderSocial();
+  else await renderCampaignRail();
+
+  const n = r.created || 0;
+  toastUndo(
+    `${r.festival} campaign planned — ${n} post${n === 1 ? "" : "s"} saved as drafts.`,
+    () => revertCampaign(key, true),
+    8000);
 }
 
 /* ---------------------------------------------------------------------

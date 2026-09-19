@@ -2262,6 +2262,32 @@ def _beat_pillar(beat_key: str) -> str:
     return _BEAT_PILLAR.get(beat_key, "detail")
 
 
+def revert_campaign(email: str, festival_key: str) -> dict:
+    """Undo a festival campaign the seller planned.
+
+    A campaign is planned without an approval gate now — one tap builds and
+    saves six dated posts — so the seller needs a clean way back out. This
+    removes every post from that campaign that has NOT gone out yet (draft or
+    ready) and forgets the campaign, leaving anything already published exactly
+    where it is: we never un-post something a customer may have seen. If any of
+    the campaign's posts were published, the campaign record is kept so its
+    history still reads correctly; otherwise it is dropped entirely."""
+    rows = _posts(email)
+    mine = [p for p in rows if p.get("campaign") == festival_key]
+    removed = [p for p in mine if p.get("state") in ("draft", "ready")]
+    published = [p for p in mine if p.get("state") not in ("draft", "ready")]
+    removed_ids = {p["id"] for p in removed}
+    _save_posts(email, [p for p in rows if p.get("id") not in removed_ids])
+
+    camps = _campaigns(email)
+    fest = next((c.get("festival") for c in camps if c.get("key") == festival_key),
+                festival_key)
+    if not published:
+        _save_campaigns(email, [c for c in camps if c.get("key") != festival_key])
+    return {"reverted": len(removed), "kept": len(published), "festival": fest,
+            "key": festival_key}
+
+
 def campaigns(email: str) -> list[dict]:
     """Running campaigns, with how far through each one is."""
     rows = _posts(email)
