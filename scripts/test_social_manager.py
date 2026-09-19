@@ -120,6 +120,9 @@ check("a slot due today at an hour already past is not born overdue",
 # is exactly what the old fixed offsets produced.
 _wed = f"sched{int(time.time()*1000)}@t.co"
 c.post("/api/register", json={"email": _wed, "password": "Test12345!"})
+# The no-Sunday property is a STANDARD-cadence guarantee; the default is now the
+# Daily cadence, which uses Sunday on purpose, so pin standard for this check.
+_social.save_settings(_wed, {"cadence": "standard"})
 _made = _social.build_week(_wed, [{"id": "p1", "name": "Silk Saree", "category": "Clothing"}],
                            start=_MONDAY + _dt.timedelta(days=2))   # a Wednesday
 _days = [_dt.datetime.fromisoformat(p["scheduled_at"]).weekday() for p in _made]

@@ -68,6 +68,25 @@ def catalog() -> list[dict]:
                     "enable read_orders + read_products, install it, then copy the Admin API access token.",
         },
         {
+            "id": "woocommerce", "label": "WooCommerce", "icon": "🟣",
+            "fields": [
+                {"key": "store_url", "label": "Store URL", "placeholder": "https://yourstore.com"},
+                {"key": "consumer_key", "label": "Consumer key", "placeholder": "ck_…", "secret": True},
+                {"key": "consumer_secret", "label": "Consumer secret", "placeholder": "cs_…", "secret": True},
+            ],
+            "help": "WordPress admin → WooCommerce → Settings → Advanced → REST API → Add key, "
+                    "give it Read access, then copy the Consumer key and Consumer secret.",
+        },
+        {
+            "id": "wix", "label": "Wix", "icon": "🟡",
+            "fields": [
+                {"key": "api_key", "label": "API key", "placeholder": "IST.…", "secret": True},
+                {"key": "site_id", "label": "Site ID", "placeholder": "xxxxxxxx-xxxx-xxxx-…"},
+            ],
+            "help": "Wix dashboard → Settings → Headless / API Keys → generate an API key with the "
+                    "Wix Stores (Orders) permission, then copy the key and your Site ID.",
+        },
+        {
             "id": "amazon", "label": "Amazon", "icon": "📦",
             "fields": [
                 {"key": "refresh_token", "label": "LWA refresh token", "placeholder": "Atzr|…", "secret": True},
@@ -243,11 +262,179 @@ def amazon_pull(creds: dict, start: datetime, end: datetime) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------
+# WooCommerce (WordPress REST API, consumer key + secret over HTTPS Basic auth)
+# ---------------------------------------------------------
+def _woo_base(url: str) -> str:
+    u = (url or "").strip().rstrip("/")
+    if not u:
+        raise CommerceError("Enter your WooCommerce store URL.")
+    if not u.startswith("http"):
+        u = "https://" + u
+    return u
+
+
+def woocommerce_test(creds: dict) -> dict:
+    _blank_needed(creds, ["store_url", "consumer_key", "consumer_secret"])
+    base = _woo_base(creds["store_url"])
+    r = requests.get(f"{base}/wp-json/wc/v3/orders",
+                     params={"per_page": 1},
+                     auth=(creds["consumer_key"], creds["consumer_secret"]), timeout=25)
+    if r.status_code in (401, 403):
+        raise CommerceError("WooCommerce rejected the keys — check the consumer key and secret "
+                            "(and that the key has Read access).")
+    if r.status_code == 404:
+        raise CommerceError("WooCommerce REST API not found — check the store URL and that WooCommerce is installed.")
+    if not r.ok:
+        raise CommerceError(f"WooCommerce error {r.status_code}: {r.text[:200]}")
+    return {"account": base.replace("https://", "").replace("http://", ""), "name": "WooCommerce store"}
+
+
+def woocommerce_pull(creds: dict, start: datetime, end: datetime) -> pd.DataFrame:
+    _blank_needed(creds, ["store_url", "consumer_key", "consumer_secret"])
+    base = _woo_base(creds["store_url"])
+    auth = (creds["consumer_key"], creds["consumer_secret"])
+    rows: list[dict] = []
+    page = 1
+    while page <= 40:  # safety cap: 40 * 100 = 4k orders
+        r = requests.get(f"{base}/wp-json/wc/v3/orders", auth=auth, timeout=30, params={
+            "per_page": 100, "page": page, "orderby": "date", "order": "desc",
+            "after": start.astimezone(timezone.utc).isoformat(),
+            "before": end.astimezone(timezone.utc).isoformat(),
+        })
+        if not r.ok:
+            raise CommerceError(f"WooCommerce error {r.status_code}: {r.text[:200]}")
+        orders = r.json() or []
+        if not orders:
+            break
+        for o in orders:
+            bill = o.get("billing") or {}
+            cname = " ".join(x for x in [bill.get("first_name"), bill.get("last_name")] if x)
+            for li in (o.get("line_items") or [{}]):
+                qty = li.get("quantity") or 1
+                rows.append({
+                    "date": o.get("date_created_gmt") or o.get("date_created"),
+                    "order_id": o.get("number") or o.get("id"),
+                    "customer_id": o.get("customer_id") or bill.get("email"),
+                    "customer_name": cname or (bill.get("email") or None),
+                    "product": li.get("name") or "WooCommerce order",
+                    "category": None,
+                    "subcategory": li.get("sku") or None,
+                    "quantity": qty,
+                    "amount": round(float(li.get("total") or 0) or (float(li.get("price") or 0) * qty), 2),
+                })
+        # WooCommerce reports the total pages in a response header.
+        try:
+            if page >= int(r.headers.get("X-WP-TotalPages") or page):
+                break
+        except (TypeError, ValueError):
+            pass
+        page += 1
+    if not rows:
+        raise CommerceError("No WooCommerce orders in that date range.")
+    return pd.DataFrame(rows)[CANONICAL]
+
+
+# ---------------------------------------------------------
+# Wix (eCommerce Orders API, API key + site id)
+# ---------------------------------------------------------
+def _wix_headers(creds: dict) -> dict:
+    return {"Authorization": creds["api_key"], "wix-site-id": creds["site_id"],
+            "Content-Type": "application/json"}
+
+
+def _wix_amount(node: dict) -> float:
+    """Wix money objects vary: {amount}, {value}, or a bare string."""
+    if not isinstance(node, dict):
+        try:
+            return float(node or 0)
+        except (TypeError, ValueError):
+            return 0.0
+    for k in ("amount", "value"):
+        if node.get(k) is not None:
+            try:
+                return float(node[k])
+            except (TypeError, ValueError):
+                return 0.0
+    return 0.0
+
+
+def wix_test(creds: dict) -> dict:
+    _blank_needed(creds, ["api_key", "site_id"])
+    r = requests.post("https://www.wixapis.com/ecom/v1/orders/search",
+                      headers=_wix_headers(creds),
+                      json={"search": {"cursorPaging": {"limit": 1}}}, timeout=25)
+    if r.status_code in (401, 403):
+        raise CommerceError("Wix rejected the key — check the API key has the Stores (Orders) "
+                            "permission and that the Site ID is correct.")
+    if not r.ok:
+        raise CommerceError(f"Wix error {r.status_code}: {r.text[:200]}")
+    return {"account": creds["site_id"], "name": "Wix site"}
+
+
+def wix_pull(creds: dict, start: datetime, end: datetime) -> pd.DataFrame:
+    _blank_needed(creds, ["api_key", "site_id"])
+    headers = _wix_headers(creds)
+    rows: list[dict] = []
+    cursor = None
+    pages = 0
+    while pages < 40:
+        if cursor:
+            body = {"search": {"cursorPaging": {"cursor": cursor}}}
+        else:
+            body = {"search": {
+                "filter": {"createdDate": {
+                    "$gte": start.astimezone(timezone.utc).isoformat(),
+                    "$lte": end.astimezone(timezone.utc).isoformat()}},
+                "cursorPaging": {"limit": 100}}}
+        r = requests.post("https://www.wixapis.com/ecom/v1/orders/search",
+                          headers=headers, json=body, timeout=30)
+        if not r.ok:
+            raise CommerceError(f"Wix error {r.status_code}: {r.text[:200]}")
+        data = r.json() or {}
+        orders = data.get("orders") or []
+        for o in orders:
+            buyer = o.get("buyerInfo") or {}
+            contact = ((o.get("billingInfo") or {}).get("contactDetails")) or {}
+            cname = " ".join(x for x in [contact.get("firstName"), contact.get("lastName")] if x)
+            total = _wix_amount((o.get("priceSummary") or {}).get("total") or {})
+            items = o.get("lineItems") or [{}]
+            for li in items:
+                pname = li.get("productName")
+                if isinstance(pname, dict):
+                    pname = pname.get("original") or pname.get("translated")
+                qty = li.get("quantity") or 1
+                amt = _wix_amount(li.get("totalPriceAfterTax") or li.get("price") or {})
+                rows.append({
+                    "date": o.get("createdDate") or o.get("_createdDate"),
+                    "order_id": o.get("number") or o.get("id"),
+                    "customer_id": buyer.get("email") or buyer.get("contactId"),
+                    "customer_name": cname or (buyer.get("email") or None),
+                    "product": pname or "Wix order",
+                    "category": None,
+                    "subcategory": None,
+                    "quantity": qty,
+                    # fall back to splitting the order total across its lines
+                    "amount": round(amt or (total / max(1, len(items))), 2),
+                })
+        cursor = (((data.get("pagingMetadata") or {}).get("cursors")) or {}).get("next")
+        pages += 1
+        if not cursor or not orders:
+            break
+    if not rows:
+        raise CommerceError("No Wix orders in that date range.")
+    return pd.DataFrame(rows)[CANONICAL]
+
+
+# ---------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------
 def test_connection(connector: str, creds: dict) -> dict:
     if connector == "shopify":
         return shopify_test(creds)
+    if connector == "woocommerce":
+        return woocommerce_test(creds)
+    if connector == "wix":
+        return wix_test(creds)
     if connector == "amazon":
         return amazon_test(creds)
     raise CommerceError(f"Unknown connector: {connector}")
@@ -258,6 +445,10 @@ def pull_orders(connector: str, creds: dict, days: int = 90) -> pd.DataFrame:
     start = end - timedelta(days=max(1, int(days)))
     if connector == "shopify":
         df = shopify_pull(creds, start, end)
+    elif connector == "woocommerce":
+        df = woocommerce_pull(creds, start, end)
+    elif connector == "wix":
+        df = wix_pull(creds, start, end)
     elif connector == "amazon":
         df = amazon_pull(creds, start, end)
     else:

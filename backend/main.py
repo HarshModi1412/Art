@@ -2617,6 +2617,15 @@ def verify_payment(body: VerifyBody, authorization: str | None = Header(default=
     return {"ok": True, "product": granted, "usage": _usage(email)}
 
 
+@app.post("/api/pay/cancel")
+def cancel_subscription(authorization: str | None = Header(default=None)):
+    """Cancel the paid subscription and return to Free. See
+    billing.cancel_subscription for why this is just a plan-flag revert."""
+    email = require_user(authorization)
+    res = billing.cancel_subscription(email)
+    return {**res, "usage": _usage(email), "plan": billing.get_plan(email)}
+
+
 # ---------------------------------------------------------
 # Position Strategy  (login required; state persisted per account)
 # ---------------------------------------------------------
@@ -4596,9 +4605,12 @@ def channels_state(authorization: str | None = Header(default=None)):
         "toggleable": bool(site.get("handle")),
         "orders": storefront.order_stats(email)["orders"],
     }]
-    for cid, label, icon in (("shopify", "Shopify", "🛍️"), ("amazon", "Amazon", "📦")):
+    # Every live commerce connector (Shopify, WooCommerce, Wix, Amazon …) —
+    # built from the catalog so a new connector shows up here automatically.
+    for c in commerce.catalog():
+        cid = c["id"]
         rows.append({
-            "id": cid, "label": label, "icon": icon, "kind": "marketplace",
+            "id": cid, "label": c["label"], "icon": c.get("icon", "🛒"), "kind": "marketplace",
             "status": "connected" if connected.get(cid) else "available",
             "detail": "Connected - pulling orders" if connected.get(cid) else "Connect to pull orders",
             "enabled": storefront.channel_enabled(email, cid),

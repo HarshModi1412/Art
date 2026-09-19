@@ -5877,6 +5877,8 @@ async function openAccount() {
       <section class="acc-sec">
         <h4>Plan</h4>
         <p style="margin-top:0;"><b>${esc(pl.name || "Max")}</b> — you're on premium. Everything is unlocked: unlimited AI, supply management, purchase orders, custom domain and multi-outlet.</p>
+        <button class="btn ghost sm danger" id="accCancelPlan">Cancel subscription</button>
+        <p class="muted tiny" style="margin:6px 0 0;">Cancelling returns you to Free, which keeps all the numbers and actions. You can re-subscribe any time.</p>
       </section>` : `
       <section class="acc-sec" style="border:1px solid var(--accent,#4f46e5); border-radius:12px; padding:14px;">
         <h4 style="margin-top:0;">Upgrade to ${esc(up.name || "Max")}</h4>
@@ -5968,9 +5970,18 @@ async function openAccount() {
         ${aiRow("gemini", "Google Gemini", "for brand-aware pictures")}
       </section>`;
 
+  // ---- Sales channels: connect a store's orders straight into analytics ----
+  const channelsHtml = `
+      <section class="acc-sec">
+        <h4 style="margin-top:0;">Sales channels</h4>
+        <p class="muted tiny" style="margin-top:0;">Connect where you already sell — WooCommerce, Wix, Shopify, Amazon — and pull your orders in. Once connected, press <b>Pull orders</b> and those sales show up in Sales Analytics like any other data.</p>
+        <div class="chan-strip" id="accChanStrip"><div class="ap-empty">Loading channels…</div></div>
+      </section>`;
+
   // ---- left-hand nav: one row per settings area, with an inline icon ----
   const NAV = [
     ["store",     "Store",          '<path d="M4 4h16l-1 5H5L4 4Z"/><path d="M6 9v10h12V9"/><path d="M10 19v-5h4v5"/>'],
+    ["channels",  "Sales channels", '<path d="M3 6h18"/><path d="M6 6v13h12V6"/><path d="M9 10h6"/><path d="M9 14h6"/>'],
     ["billing",   "Plan & Billing", '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>'],
     ["payments",  "Payments",       '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="16.5" cy="12" r="1.2"/><path d="M3 9h13"/>'],
     ["email",     "Email",          '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>'],
@@ -6006,6 +6017,7 @@ async function openAccount() {
       <nav class="acc2-nav">${navHtml}</nav>
       <div class="acc2-body">
         <div class="acc2-pane active" data-pane="store">${marketHtml}</div>
+        <div class="acc2-pane" data-pane="channels">${channelsHtml}</div>
         <div class="acc2-pane" data-pane="billing">${planHtml}${creditsHtml}</div>
         <div class="acc2-pane" data-pane="payments">${paymentsHtml}</div>
         <div class="acc2-pane" data-pane="email">${emailHtml}</div>
@@ -6025,6 +6037,11 @@ async function openAccount() {
       navs.forEach((n) => n.classList.toggle("active", n === b));
       panes.forEach((p) => p.classList.toggle("active", p.dataset.pane === b.dataset.nav));
       if (body) body.scrollTop = 0;
+      // Load the sales-channel connectors the first time that pane is opened.
+      if (b.dataset.nav === "channels") {
+        const el = $("accChanStrip");
+        if (el && !el.dataset.loaded) { el.dataset.loaded = "1"; renderChannels("accChanStrip"); }
+      }
     });
   })();
 
@@ -6096,6 +6113,15 @@ async function openAccount() {
 
   // plan + credits + danger zone
   if ($("accUpgrade")) $("accUpgrade").onclick = () => upgradeToMax((pl.upgrade || {}).product || "pro");
+  if ($("accCancelPlan")) $("accCancelPlan").onclick = async () => {
+    if (!confirm("Cancel your Max subscription and return to the free plan? "
+               + "You keep all the numbers and actions, and can re-subscribe any time.")) return;
+    try {
+      const r = await api("/api/pay/cancel", { method: "POST", json: {} });
+      toast(r.message || "Subscription cancelled — you're back on Free.", 6000);
+      closeModal(); openAccount();
+    } catch (e) { toast(e.message); }
+  };
   if ($("accBuyCredits")) $("accBuyCredits").onclick = () => openBuyCredits(cr);
   if ($("accReset")) $("accReset").onclick = () => confirmReset();
   if ($("accDelete")) $("accDelete").onclick = () => confirmDelete();
@@ -7650,7 +7676,7 @@ if ($("coConfirm")) $("coConfirm").onclick = async () => {
   const btn = $("coConfirm"); const label = btn.textContent; btn.disabled = true; btn.textContent = "Connecting…";
   try {
     await api("/api/commerce/connect", { method: "POST", json: { connector: _coCtx.id, credentials: creds } });
-    closeCommerce(); toast("Connected, click “Pull orders” to import your sales."); renderChannels();
+    closeCommerce(); toast("Connected, click “Pull orders” to import your sales."); refreshChannels();
   } catch (e) { el.textContent = e.message; el.hidden = false; }
   finally { btn.disabled = false; btn.textContent = label; }
 };
@@ -7684,8 +7710,8 @@ let _coCtx = null;
 // first, then the live marketplace connectors, then the ones we haven't built
 // yet. The switch on each live channel decides whether that channel's sales are
 // counted in analytics, forecasts and the approval panel.
-async function renderChannels() {
-  const strip = $("chanStrip");
+async function renderChannels(containerId = "chanStrip") {
+  const strip = $(containerId);
   if (!strip) return;
   strip.innerHTML = skeleton("cards");
   try {
@@ -7736,7 +7762,7 @@ async function renderChannels() {
     strip.querySelectorAll("[data-co-pull]").forEach((b) => b.onclick = () => commercePull(b.dataset.coPull));
     strip.querySelectorAll("[data-co-disc]").forEach((b) => b.onclick = () => commerceDisconnect(b.dataset.coDisc));
   } catch (e) {
-    strip.innerHTML = failed(e.message, renderChannels);
+    strip.innerHTML = failed(e.message, () => renderChannels(containerId));
   }
 }
 
@@ -7764,8 +7790,15 @@ async function commercePull(id) {
   } catch (e) { toast(e.message, 7000); }
 }
 async function commerceDisconnect(id) {
-  try { await api("/api/commerce/disconnect", { method: "POST", json: { connector: id, credentials: {} } }); toast("Disconnected"); renderChannels(); }
+  try { await api("/api/commerce/disconnect", { method: "POST", json: { connector: id, credentials: {} } }); toast("Disconnected"); refreshChannels(); }
   catch (e) { toast(e.message); }
+}
+
+// Re-render whichever channel strip is on screen — the home foldout, the Account
+// tab's Sales-channels pane, or both.
+function refreshChannels() {
+  if ($("chanStrip")) renderChannels("chanStrip");
+  if ($("accChanStrip")) renderChannels("accChanStrip");
 }
 
 // ---------- MODULE: Ad Analytics ----------
@@ -10000,16 +10033,34 @@ function openSocialEditor(post) {
 
   /* Where this post sits in the week's story. Without it the seller sees six
      posts and no reason why they are different from each other — which was
-     the whole complaint. The beat, the archetype and what it earns are the
-     three things that make a slot feel deliberate. */
+     the whole complaint. Now every post spells out: what KIND of post it is
+     (format + the archetype / type of image), its PURPOSE, the STORY it belongs
+     to and the role it plays, and HOW IT CONNECTS to the posts around it. */
+  const FMT_LABEL = { reel: "Reel", carousel: "Carousel", image: "Single image" };
+  const fmtLabel = FMT_LABEL[post.format] || (post.format ? esc(post.format) : "");
+  const shotLabel = (post.shot_type || "").replace(/_/g, " ");
+  // How this beat connects to the ones on either side of it in the week's arc.
+  const CONNECT = {
+    tease:  "Opens the week — it holds the product back so the reveal that follows lands.",
+    reveal: "Follows the tease and shows the product properly; the proof posts back it up next.",
+    prove:  "Earns the price the reveal set up, and leads into seeing it used in real life.",
+    place:  "Puts the proven product into a real life — the payoff of the reveal and proof before it.",
+    close:  "Closes the loop the week opened, turning the story into a reason to act now.",
+  };
+  const connect = CONNECT[post.beat] || (post.job || "");
+  const roleLabel = post.story_role ? post.story_role.replace(/_/g, " ") : "";
   const storyBar = post.beat ? `
     <div class="sm-story">
       <div class="sm-story-line">
         <span class="sm-beat">${esc(post.beat)}</span>
         <b>${esc(post.archetype_label || "")}</b>
+        ${fmtLabel ? `<span class="sm-fmt">${fmtLabel}</span>` : ""}
         ${post.occasion ? `<span class="sm-occ">${esc(post.occasion)}</span>` : ""}
       </div>
-      ${post.beat_job ? `<p class="sm-hint" style="margin:6px 0 0;">${esc(post.beat_job)}</p>` : ""}
+      ${post.story_name ? `<p class="sm-hint" style="margin:6px 0 0;"><b>Story:</b> ${esc(post.story_name)}${roleLabel ? ` · this post's role: <b>${esc(roleLabel)}</b>` : ""}</p>` : ""}
+      <p class="sm-hint" style="margin:${post.story_name ? 2 : 6}px 0 0;"><b>Type of post:</b> ${fmtLabel || "Post"}${post.archetype_label ? ` — ${esc(post.archetype_label)}` : ""}${shotLabel ? ` <span class="muted">(${esc(shotLabel)} shot)</span>` : ""}</p>
+      ${post.beat_job ? `<p class="sm-hint" style="margin:2px 0 0;"><b>Purpose:</b> ${esc(post.beat_job)}</p>` : ""}
+      ${connect ? `<p class="sm-hint" style="margin:2px 0 0;"><b>How it connects:</b> ${esc(connect)}</p>` : ""}
       ${post.earns ? `<p class="sm-hint" style="margin:2px 0 0;"><b>Earns:</b> ${esc(post.earns)}</p>` : ""}
       ${post.theme ? `<p class="sm-hint" style="margin:2px 0 0;"><b>This week:</b> ${esc(post.theme)}</p>` : ""}
       ${post.plan_reason ? `<p class="sm-hint sm-why" style="margin:6px 0 0;"><b>Why this product:</b> ${esc(post.plan_reason)}</p>` : ""}

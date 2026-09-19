@@ -59,8 +59,8 @@ log = logging.getLogger("autoplan")
 
 STATE_KEY = "social_autoplan"
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-DEFAULT_DAY = 5          # Saturday
-DEFAULT_HOUR = 9         # 9am local
+DEFAULT_DAY = 0          # Monday
+DEFAULT_HOUR = 21        # 9pm local — "Monday night", planning the week ahead
 
 # Reach by weekday, strongest first (Wed, Thu, Mon, Fri, Tue, Sat, Sun), and
 # the hour each day's slot goes out — the same table build_week() uses, keyed

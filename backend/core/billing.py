@@ -70,6 +70,29 @@ def is_unlimited(email: str) -> bool:
     return get_plan(email) == "pro"
 
 
+def cancel_subscription(email: str) -> dict:
+    """Cancel the seller's paid subscription and return them to Free.
+
+    The paid tier is a monthly charge the seller renews from the app rather than
+    an auto-recurring gateway subscription, so cancelling is simply reverting the
+    plan flag to Free — nothing keeps billing them, and there is no external
+    subscription object to stop. Everything in Free (the whole analytics and
+    action set) stays available; only the Max-only extras switch off. The seller
+    can re-subscribe any time from the same screen."""
+    was = get_plan(email)
+    if was == "free":
+        return {"ok": True, "plan": "free", "was": "free",
+                "message": "You are on the free plan — there is nothing to cancel."}
+    set_plan(email, "free")
+    try:
+        errors.record(RuntimeError("subscription cancelled"), where=f"billing.cancel:{email}")
+    except Exception:  # noqa: BLE001 — never fail a cancellation over a log line
+        pass
+    return {"ok": True, "plan": "free", "was": was,
+            "message": "Your Max subscription is cancelled. You are back on the free plan, "
+                       "which keeps all the numbers and actions."}
+
+
 def plan_summary(email: str) -> dict:
     """Everything the UI needs to render entitlements without a second call."""
     pid = get_plan(email)

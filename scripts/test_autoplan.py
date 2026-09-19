@@ -74,7 +74,12 @@ e1, H1 = account("ap1")
 add_products(H1, [{"name": "Silk Saree", "category": "Clothing", "price": 2500, "stock": 10}])
 cfg = autoplan.get_config(e1)
 check("on by default", cfg["enabled"] is True, cfg)
-check("Saturday by default", cfg["day"] == 5 and cfg["day_name"] == "Saturday", cfg)
+check("Monday by default", cfg["day"] == 0 and cfg["day_name"] == "Monday", cfg)
+# The trigger mechanics below were written against a Saturday trigger and a
+# standard (4-post) week. The DEFAULT is now Monday night / daily, so pin this
+# account to the old shape. Set it via save_settings (not save_config, which
+# would arm the account with the real date before the time monkeypatch below).
+social.save_settings(e1, {"auto_plan_day": 5, "auto_plan_hour": 9, "cadence": "standard"})
 check("next week means the Monday after", autoplan.next_monday(FRI.date()) == MON)
 check("a Sunday's next week is the very next day",
       autoplan.next_monday(date(2026, 9, 13)) == MON)
@@ -144,6 +149,7 @@ add_products(H2, [
     {"name": "Linen Kurta", "category": "Clothing", "price": 1800, "stock": 12},
     {"name": "Silk Lehenga", "category": "Clothing", "price": 6500, "stock": 6},
 ])
+social.save_settings(e2, {"cadence": "standard"})   # the arc tests below expect a 4-post week
 sales(e2, {"Bandhani Dupatta": (4000, 2000), "Linen Kurta": (500, 3000)})
 cat2 = autoplan._full_catalogue(e2)
 sig = autoplan.sales_signals(e2, cat2)
@@ -222,6 +228,7 @@ check("and says so in words", "already has 4 posts" in b2["note"], b2["note"])
 e4, H4 = account("ap4")
 add_products(H4, [{"name": "Kundan Set", "category": "Jewellery", "price": 3500, "stock": 5},
                   {"name": "Jhumka", "category": "Jewellery", "price": 900, "stock": 20}])
+social.save_settings(e4, {"cadence": "standard"})   # this section tests the 4-post cap
 rows = social._posts(e4)
 for i, dd in enumerate((MON + timedelta(days=2), MON + timedelta(days=4))):
     rows.append({"id": f"manual{i}", "product_name": "Jhumka", "product_id": "",
@@ -281,9 +288,10 @@ print("\n== 6. endpoints: settings, run now, approve, reel task, clip, schedule 
 e6, H6 = account("ap6")
 add_products(H6, [{"name": "Chanderi Kurta", "category": "Clothing", "price": 2200, "stock": 8},
                   {"name": "Mul Saree", "category": "Clothing", "price": 3100, "stock": 4}])
+c.post("/api/social/settings", json={"patch": {"cadence": "standard"}}, headers=H6)  # 4-post week below
 r = c.get("/api/social/autoplan", headers=H6)
 check("status endpoint 200", r.status_code == 200, r.text[:200])
-check("Saturday is the default there too", r.json()["day_name"] == "Saturday")
+check("Monday is the default there too", r.json()["day_name"] == "Monday")
 r = c.post("/api/social/autoplan/settings", json={"day": 6, "hour": 10}, headers=H6)
 check("settings save (Sunday 10am)", r.json()["day_name"] == "Sunday" and r.json()["hour"] == 10,
       r.json())

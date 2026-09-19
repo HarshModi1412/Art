@@ -101,6 +101,12 @@ CADENCE = {
                  "hours": "about 4 hours a week",
                  "why": "6-9 a week is where growth compounds. Only take this on "
                         "if you can actually shoot enough."},
+    "daily":    {"label": "Daily", "posts": 7, "stories": 7,
+                 "hours": "about 5 hours a week",
+                 "why": "A post every day, Sunday included — maximum presence. "
+                        "Only sustainable if you can keep the pictures and reels "
+                        "coming; a daily feed of near-identical posts hurts more "
+                        "than it helps."},
 }
 
 FORMATS = {
@@ -183,14 +189,15 @@ def blank_settings() -> dict:
     # item of clothing. get_settings() fills it from what they told us they
     # sell; if they have told us nothing, it stays empty and the copy simply
     # does not claim a category.
-    return {"category": "", "language": "hinglish", "cadence": "standard",
+    return {"category": "", "language": "hinglish", "cadence": "daily",
             "pillars": [p["id"] for p in PILLARS], "whatsapp": "",
             "brand_hashtag": "", "handle": "", "city": "",
             "order_cta": "DM us to order",
             # Automatic weekly planning (backend/core/autoplan.py): on by
-            # default, every Saturday at 9am India time, planning the week
-            # that starts the following Monday. Monday = 0 ... Sunday = 6.
-            "auto_plan": True, "auto_plan_day": 5, "auto_plan_hour": 9}
+            # default, every Monday night (9pm India time), planning the week
+            # that starts the following Monday so a post lands every day of it,
+            # Sunday included. Monday = 0 ... Sunday = 6.
+            "auto_plan": True, "auto_plan_day": 0, "auto_plan_hour": 21}
 
 
 def get_settings(email: str) -> dict:
@@ -1527,8 +1534,11 @@ def build_week(email: str, catalogue: list[dict], start: date | None = None,
     # what this anchors to now: each slot claims the next occurrence of its
     # weekday on or after the planning date. That is always 0-6 days out, so
     # every post still lands inside the week being planned.
-    best_weekdays = [2, 3, 0, 4, 1, 5]
-    best_hours = [18, 12, 19, 9, 20, 18]
+    # Wed, Thu, Mon, Fri, Tue, Sat, then Sun last — Sunday is the weakest reach
+    # day so it is only claimed once a cadence needs all seven, but the Daily
+    # cadence does, and every day must get exactly one slot with no collisions.
+    best_weekdays = [2, 3, 0, 4, 1, 5, 6]
+    best_hours = [18, 12, 19, 9, 20, 18, 11]
 
     # The week runs on ONE theme, not N unrelated posts. The theme is the
     # product the arc is about, and every beat refers back to it -- that single
