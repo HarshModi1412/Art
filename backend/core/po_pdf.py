@@ -69,6 +69,12 @@ def _init_fonts() -> None:
             continue
 
 
+def _esc(s) -> str:
+    """Escape the handful of characters ReportLab's Paragraph treats as markup,
+    so a business name or address with & or < renders as text, not broken XML."""
+    return (str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
 def _money(v) -> str:
     if v is None or v == "":
         return "—"
@@ -123,11 +129,20 @@ def _signature_flowable(path: str, width_mm: float = 38):
 
 
 def build_po_pdf(po: dict, buyer_email: str = "", brand: str = "Content Seller",
-                 for_supplier: bool = False, signature_path: str = "") -> io.BytesIO:
+                 for_supplier: bool = False, signature_path: str = "",
+                 buyer: dict | None = None) -> io.BytesIO:
     """`for_supplier` is the copy that is emailed to the vendor: no internal
     notes about how the quantity was worked out, and no "data-generated
-    suggestion" footer — to the supplier this is simply our order."""
+    suggestion" footer — to the supplier this is simply our order.
+
+    `buyer` is the sending company's identity — {name, address, gstin, phone,
+    email}. Its name becomes the letterhead at the top of the page and the
+    signatory, and the rest fills the Buyer block so the supplier knows exactly
+    who ordered and can invoice the right entity. Every field is optional; when
+    it is absent the PO falls back to `brand` and `buyer_email` as before."""
     _init_fonts()
+    b = buyer or {}
+    company = (str(b.get("name") or "").strip() or brand or "Your shop")
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=A4,
@@ -153,12 +168,17 @@ def build_po_pdf(po: dict, buyer_email: str = "", brand: str = "Content Seller",
     content_w = doc.width
 
     # ---- header band -----------------------------------------------------
+    # The sending company's name sits at the very top as a letterhead, so a
+    # supplier sees who the order is from before anything else.
+    letterhead = ParagraphStyle("lh", fontName=_FONT_B, fontSize=12.5,
+                                textColor=INK, leading=15, spaceAfter=1)
     status = "ISSUED" if for_supplier else str(po.get("status", "open")).upper()
     meta = (f"<b>PO No.</b>  {po.get('po_number', '')}<br/>"
             f"<b>Date</b>  {_fmt_date(po.get('created_at'))}<br/>"
             f"<b>Status</b>  {status}")
     head = Table(
-        [[Paragraph("PURCHASE ORDER", h_title), Paragraph(meta, meta_r)]],
+        [[[Paragraph(_esc(company), letterhead), Paragraph("PURCHASE ORDER", h_title)],
+          Paragraph(meta, meta_r)]],
         colWidths=[content_w * 0.55, content_w * 0.45])
     head.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -171,8 +191,22 @@ def build_po_pdf(po: dict, buyer_email: str = "", brand: str = "Content Seller",
     el.append(Spacer(1, 10))
 
     # ---- buyer block -----------------------------------------------------
-    buyer = (f"<b>Buyer</b><br/>{brand}"
-             + (f"<br/>{buyer_email}" if buyer_email else ""))
+    # The full identity of the company placing the order: name, address, GSTIN
+    # and a contact line, so the supplier can invoice the right entity.
+    buyer_lines = [f"<b>Buyer</b>", f"<b>{_esc(company)}</b>"]
+    if b.get("address"):
+        buyer_lines.append(_esc(b.get("address")))
+    if b.get("gstin"):
+        buyer_lines.append(f"GSTIN: {_esc(b.get('gstin'))}")
+    contact_bits = []
+    if b.get("phone"):
+        contact_bits.append(_esc(b.get("phone")))
+    contact_email = (b.get("email") or buyer_email or "").strip()
+    if contact_email:
+        contact_bits.append(_esc(contact_email))
+    if contact_bits:
+        buyer_lines.append(" &middot; ".join(contact_bits))
+    buyer = "<br/>".join(buyer_lines)
     note = f"{po.get('n_items', 0)} item(s) &middot; {len(po.get('suppliers') or [])} supplier(s)"
     buyer_tbl = Table(
         [[Paragraph(buyer, body), Paragraph(note, mut_r)]],
@@ -307,7 +341,7 @@ def build_po_pdf(po: dict, buyer_email: str = "", brand: str = "Content Seller",
         sig_bits.append(img)
     else:
         sig_bits.append(Spacer(1, 16))
-    sig_bits.append(Paragraph(f"<b>For {brand}</b>", body))
+    sig_bits.append(Paragraph(f"<b>For {_esc(company)}</b>", body))
     sig_bits.append(Paragraph("Authorised signatory", mut))
     sig = Table([[ "", sig_bits]], colWidths=[None, 62 * mm])
     sig.setStyle(TableStyle([

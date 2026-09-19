@@ -1521,6 +1521,30 @@ def _signature_file(email: str) -> str:
         return ""
 
 
+def _buyer_profile(email: str, brand: str) -> dict:
+    """The sending company's identity for the PO: registered business name (what
+    a supplier invoices), GSTIN, address and a contact line. Pulled from the
+    seller's site trust/contact settings; every field is optional and falls back
+    to the brand and login email, so an unconfigured account still gets a valid
+    PO — just with less detail."""
+    prof = {"name": brand, "gstin": "", "address": "", "phone": "", "email": email}
+    try:
+        from backend.core import sitebuilder
+        site = sitebuilder.get_site(email) or {}
+        trust = site.get("trust") if isinstance(site.get("trust"), dict) else {}
+        contact = site.get("contact") if isinstance(site.get("contact"), dict) else {}
+        biz = str(trust.get("business_name") or "").strip()
+        if biz:
+            prof["name"] = biz
+        prof["gstin"] = str(trust.get("gstin") or "").strip()
+        prof["address"] = str(trust.get("address") or contact.get("address") or "").strip()
+        prof["phone"] = str(contact.get("phone") or trust.get("support_phone") or "").strip()
+        prof["email"] = str(trust.get("support_email") or contact.get("email") or email).strip()
+    except Exception:  # noqa: BLE001 — a PO must render even if the site is not set up
+        pass
+    return prof
+
+
 def po_pdf_bytes(email: str, po: dict, for_supplier: bool = False) -> tuple[str, io.BytesIO]:
     """Render the PO to a professional PDF. Returns (filename, BytesIO)."""
     from backend.core import po_pdf
@@ -1530,7 +1554,8 @@ def po_pdf_bytes(email: str, po: dict, for_supplier: bool = False) -> tuple[str,
     except Exception:  # noqa: BLE001
         brand = "Your shop"
     buf = po_pdf.build_po_pdf(po, buyer_email=email, brand=brand, for_supplier=for_supplier,
-                              signature_path=_signature_file(email))
+                              signature_path=_signature_file(email),
+                              buyer=_buyer_profile(email, brand))
     return f"{po.get('po_number', 'purchase_order')}.pdf", buf
 
 
