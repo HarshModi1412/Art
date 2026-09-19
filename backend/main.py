@@ -5979,12 +5979,33 @@ def social_week(body: SocialWeekBody, authorization: str | None = Header(default
     cat = _social_catalogue(email)
     if not cat:
         raise HTTPException(400, "Add a product first, there is nothing to post about.")
-    # Replaces this window's undecided drafts rather than appending to them.
-    # Without that, pressing Plan my week twice produced two posts at the same
-    # day and time and the week doubled on every press.
-    made = (social.plan_ahead(email, cat, body.weeks)
-            if body.weeks and body.weeks > 1 else social.build_week(email, cat))
-    return {"posts": made, "week": social.week(email)}
+    # "Plan this week" runs the SAME planner the scheduler ("Plan next week now")
+    # runs — sales signals, the story engine and the festival auto-scheduling —
+    # so the two buttons can never produce different kinds of plan. The only
+    # difference is which week: this button plans the current week, the scheduler
+    # the next. replace=True so a re-press rebuilds this week's drafts; wait so a
+    # background catch-up in flight is waited on rather than erroring.
+    #
+    # "Plan 4 weeks" still uses the multi-week builder — a different feature.
+    if body.weeks and body.weeks > 1:
+        made = social.plan_ahead(email, cat, body.weeks)
+        return {"posts": made, "week": social.week(email)}
+    from datetime import timedelta as _td
+    today = autoplan.now_local(email).date()
+    this_week = today - _td(days=today.weekday())
+    # "This week" means the coming full week of content. If enough of the current
+    # week is still ahead to hold the cadence, plan it; once it is nearly over
+    # (a press on Friday or the weekend) plan the upcoming week instead — which
+    # is what the old builder effectively did by rolling forward from today.
+    cadence = social.CADENCE.get(social.get_settings(email).get("cadence") or "standard",
+                                 social.CADENCE["standard"])["posts"]
+    days_left = sum(1 for i in range(7) if (this_week + _td(days=i)) >= today)
+    target = this_week if days_left >= cadence else autoplan.next_monday(today)
+    res = autoplan.run_for(email, target, trigger="manual", replace=True, wait=120)
+    if res.get("skipped"):
+        raise HTTPException(409, res.get("reason") or "A plan is already being made.")
+    cache.clear(email)
+    return {"posts": social.week(email), "week": social.week(email), "brief": res}
 
 
 @app.post("/api/social/approve-all")
@@ -6508,7 +6529,11 @@ def social_autoplan_run_now(body: AutoplanRunBody,
         except ValueError:
             raise HTTPException(400, "week must be a date like 2026-09-14")
         week = week - __import__("datetime").timedelta(days=week.weekday())
-    res = autoplan.run_for(email, week, trigger="manual")
+    # wait: if the background catch-up grabbed the lock when the app opened, wait
+    # for it rather than failing with "a plan is already being made". replace: a
+    # re-press rebuilds this week's drafts instead of no-op'ing — the same engine
+    # and the same behaviour as the "Plan this week" button.
+    res = autoplan.run_for(email, week, trigger="manual", replace=True, wait=120)
     if res.get("skipped"):
         raise HTTPException(409, res.get("reason") or "A plan is already being made.")
     cache.clear(email)

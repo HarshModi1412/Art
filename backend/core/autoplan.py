@@ -663,10 +663,86 @@ def _full_catalogue(email: str) -> list[dict]:
     return [p for p in out if p.get("name")]
 
 
+def _ensure_live_festival_campaigns(email: str, today: date) -> list[dict]:
+    """A festival whose run-up is LIVE but has no campaign gets one scheduled
+    first, so the week is planned AROUND its dated posts instead of ignoring the
+    exact moment people are shopping for.
+
+    This is the "if the festival has started but is not scheduled, schedule it
+    first" rule. It only fires for a festival that is (a) still in the future —
+    a past date cannot be campaigned — (b) inside its run-up today, and (c) not
+    already scheduled. Once its campaign exists, plan_week's shortfall counts
+    those posts, so the week fills the gaps around the festival rather than
+    competing with it. Idempotent: a second call does nothing, because the
+    campaign now exists.
+
+    It lives in run_for, not plan_week, on purpose: plan_week is the pure weekly
+    ARC builder, and both the manual buttons and the background scheduler enter
+    through run_for — so scheduling the festival here covers every path that
+    actually plans, without entangling the arc builder with campaign state."""
+    started: list[dict] = []
+    catalogue = _full_catalogue(email)
+    if not catalogue:
+        return started
+    try:
+        category = social.get_settings(email).get("category") or ""
+        have = {c.get("key") for c in social._campaigns(email)}
+        for f in social.upcoming_festivals(today, category):
+            key = f.get("key")
+            if not key or key in have or not f.get("act_now"):
+                continue                      # not live yet, or already scheduled
+            res = social.start_campaign(email, key, catalogue, today)
+            if res.get("error") or not res.get("created"):
+                continue                      # undated / no future beats — skip quietly
+            have.add(key)
+            started.append({"key": key, "festival": res.get("festival", ""),
+                            "created": int(res.get("created") or 0),
+                            "date": res.get("date", "")})
+    except Exception as e:  # noqa: BLE001 — festival scheduling never blocks the week
+        log.warning("festival auto-schedule failed for %s: %s", email, e)
+    return started
+
+
+def _clear_week_drafts(email: str, week_start: date) -> int:
+    """Drop this week's undecided WEEKLY drafts so a manual replan rebuilds
+    rather than no-ops. Never touches the festival campaign (those are a
+    deliberate schedule), and never anything already scheduled or published.
+
+    This is what makes "Plan this week" replace its own earlier drafts the way
+    the old builder did, now that both buttons run the one planner."""
+    week_end = week_start + timedelta(days=6)
+    rows = social._posts(email)
+    keep, dropped = [], 0
+    for p in rows:
+        try:
+            on = date.fromisoformat((p.get("scheduled_at") or "")[:10])
+        except ValueError:
+            keep.append(p)
+            continue
+        if (week_start <= on <= week_end and p.get("state") in ("draft", "ready")
+                and not p.get("campaign")):
+            dropped += 1
+            continue
+        keep.append(p)
+    if dropped:
+        social._save_posts(email, keep)
+    return dropped
+
+
 def plan_week(email: str, week_start: date | None = None, trigger: str = "manual",
-              now: datetime | None = None, catalogue: list[dict] | None = None) -> dict:
+              now: datetime | None = None, catalogue: list[dict] | None = None,
+              replace: bool = False, started_campaigns: list[dict] | None = None) -> dict:
     """Plan one week (Monday `week_start`). Returns the brief shown to the
-    seller: what was found, what already existed, what was added and why."""
+    seller: what was found, what already existed, what was added and why.
+
+    This is the pure weekly ARC builder. It does NOT schedule festival campaigns
+    — run_for does that first and passes the result in as `started_campaigns`,
+    so the shortfall below already counts those posts. Called directly (as the
+    tests do) it plans a clean arc with no campaign side effects.
+
+    `replace` clears this week's own undecided weekly drafts first (used by the
+    manual "Plan this/next week" buttons so a re-press rebuilds); the festival
+    campaign and anything scheduled or published are left alone."""
     now = now or now_local(email)
     week_start = week_start or next_monday(now.date())
     week_end = week_start + timedelta(days=6)
@@ -684,6 +760,14 @@ def plan_week(email: str, week_start: date | None = None, trigger: str = "manual
              "sales_data": False, "note": ""}
 
     brief["opportunities"] = opportunities(week_start, category)
+    # run_for scheduled any live festival before calling us; record it so the
+    # brief and the toast can name it. The campaign's posts are already on the
+    # calendar, so the shortfall below fills the week around them.
+    brief["campaigns_started"] = started_campaigns or []
+    # A manual replan clears this week's own weekly drafts first (never the
+    # festival campaign, never scheduled/published) so a re-press rebuilds.
+    if replace:
+        brief["replaced"] = _clear_week_drafts(email, week_start)
     existing = existing_for_week(email, week_start)
     brief["existing"] = len(existing)
     need = max(0, target - len(existing))
@@ -820,6 +904,13 @@ def plan_week(email: str, week_start: date | None = None, trigger: str = "manual
 
 
 def _finish(email: str, brief: dict, week_start: date) -> dict:
+    # Say a festival campaign was scheduled first, so the seller reads it in the
+    # toast and the brief rather than wondering where the extra posts came from.
+    started = brief.get("campaigns_started") or []
+    names = ", ".join(c["festival"] for c in started if c.get("festival"))
+    if names:
+        brief["note"] = (f"Scheduled the {names} festival campaign first, then "
+                         f"planned the week around it. " + (brief.get("note") or "")).strip()
     st = _state(email)
     st["last_target"] = week_start.isoformat()
     st["last_run_at"] = brief["ran_at"]
@@ -884,15 +975,29 @@ def _running(email: str) -> bool:
     return bool(t and time.time() - t < 900)
 
 
-def run_for(email: str, week_start: date | None = None, trigger: str = "manual") -> dict:
-    """Plan one account's week, one run at a time per account."""
+def run_for(email: str, week_start: date | None = None, trigger: str = "manual",
+            replace: bool = False, wait: float = 0.0) -> dict:
+    """Plan one account's week, one run at a time per account.
+
+    `wait` lets a MANUAL button wait for a plan already in flight instead of
+    failing outright. The background catch-up (kick) grabs this lock the moment
+    the seller opens the app after a Clear; without the wait, their very next tap
+    on "Plan this/next week" raced it and got "a plan is already being made".
+    With it, the tap waits for that plan to finish and then runs — which, if the
+    background run already filled the week, simply reports it as planned."""
     email = (email or "").lower()
     lk = _lock(email)
-    if not lk.acquire(blocking=False):
+    got = lk.acquire(timeout=wait) if wait and wait > 0 else lk.acquire(blocking=False)
+    if not got:
         return {"skipped": True, "reason": "a plan is already being made for this account"}
     _RUNNING[email] = time.time()
     try:
-        return plan_week(email, week_start, trigger)
+        # If a festival's run-up is live but unscheduled, build its campaign
+        # first, then plan the week around it. Covers the buttons AND the
+        # background scheduler, since both enter here.
+        started = _ensure_live_festival_campaigns(email, now_local(email).date())
+        return plan_week(email, week_start, trigger, replace=replace,
+                         started_campaigns=started)
     finally:
         _RUNNING.pop(email, None)
         lk.release()

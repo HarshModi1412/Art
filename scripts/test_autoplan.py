@@ -102,7 +102,15 @@ try:
     autoplan.save_config(e1, {"day": 5, "hour": 9})
     autoplan.now_local = lambda email="": sat
     r = autoplan.run_if_due(e1)
-    check("run_if_due plans it", r and r.get("added") == 4, r and r.get("note"))
+    # A live festival with no campaign is scheduled first, then the week is
+    # filled to cadence around it: the seller's cadence is still 4 for the week,
+    # but some of those are now the festival's own dated posts.
+    check("run_if_due plans it, to the week's cadence",
+          r and (r.get("added", 0) + r.get("existing", 0)) == 4, r and r.get("note"))
+    check("and it scheduled the live festival first",
+          r and any(c.get("festival") == "Ganesh Chaturthi"
+                    for c in (r.get("campaigns_started") or [])),
+          r and r.get("campaigns_started"))
     check("and a second call does nothing — once per week", autoplan.run_if_due(e1) is None)
     autoplan.save_config(e1, {"enabled": False})
     check("switched off → never due", autoplan.due(e1, datetime(2026, 9, 19, 10, 0)) is None)
