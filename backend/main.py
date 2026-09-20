@@ -4516,6 +4516,16 @@ def site_preview(authorization: str | None = Header(default=None)):
 _IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".avif")
 _VIDEO_EXT = (".mp4", ".webm", ".mov", ".m4v")
 
+# The biggest clip an upload may be. Kept modest on purpose: the web service
+# runs on a 512MB Render box, and the storage client buffers the whole file
+# while sending it, so a large video is what pushed the box out of memory. A
+# Reel is ~8 seconds at 1080p — a few MB — so 24MB is generous. Tunable by env
+# for a bigger instance, floored so it can never be set uselessly small.
+try:
+    _MAX_VIDEO_MB = max(4, int(os.environ.get("MAX_VIDEO_UPLOAD_MB", "24") or 24))
+except (TypeError, ValueError):
+    _MAX_VIDEO_MB = 24
+
 
 @app.post("/api/site/image")
 async def site_image(files: list[UploadFile] = File(...),
@@ -4535,9 +4545,51 @@ async def site_image(files: list[UploadFile] = File(...),
     is_video = ext in _VIDEO_EXT
     if ext not in _IMAGE_EXT and not is_video:
         raise HTTPException(400, "Use a PNG, JPG, WEBP, GIF or SVG image, or an MP4/WEBM video.")
-    cap = 48 * 1024 * 1024 if is_video else 10 * 1024 * 1024
-    # Read in pieces and stop at the cap, rather than pulling a file of any
-    # size into the server's memory before finding out it is too big.
+    import uuid as _uuid
+
+    # VIDEO takes the memory-safe path. THE BUG THIS FIXES: a clip used to be
+    # read whole into the server's memory (and copied again by the storage
+    # client) before it was stored, which on a 512MB Render box is exactly the
+    # "uploading a video exceeded the memory limit" the seller saw. Now it is
+    # streamed straight to a file on disk a megabyte at a time and pushed to
+    # storage from that path, so the clip is never held whole in this process.
+    if is_video:
+        cap = _MAX_VIDEO_MB * 1024 * 1024
+        import tempfile
+        fd, tmp = tempfile.mkstemp(suffix=ext, prefix="upload_")
+        size = 0
+        try:
+            with os.fdopen(fd, "wb") as out:
+                while True:
+                    chunk = await f.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > cap:
+                        raise HTTPException(400,
+                            f"That clip is over {_MAX_VIDEO_MB}MB. Export it "
+                            f"shorter — about 8 seconds at 1080p is plenty for a "
+                            f"Reel — and upload it again.")
+                    out.write(chunk)
+        except BaseException:
+            # A rejected or aborted upload must not leave a temp file behind.
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
+        saved = media.save_file(f"{_uuid.uuid4().hex}{ext}", tmp, email)
+        url = saved["url"]
+        return {"ok": True, "image_url": url, "url": url, "kind": "video",
+                "filename": f.filename, "durable": saved["durable"],
+                "warning": saved["warning"], "compression": {}}
+
+    # IMAGES stay on the in-memory path: they are capped small and have to be
+    # read whole to be resized (media.compress_upload), which is the single
+    # biggest win a storefront's load time gets. A photo off a phone is ~4000px
+    # and several MB and used to be stored and served exactly as it arrived, to
+    # every shopper, for a card shown 400px wide.
+    cap = 10 * 1024 * 1024
     parts, size = [], 0
     while True:
         chunk = await f.read(1024 * 1024)
@@ -4546,28 +4598,18 @@ async def site_image(files: list[UploadFile] = File(...),
         size += len(chunk)
         if size > cap:
             raise HTTPException(400, f"That file is over {cap // (1024 * 1024)}MB, "
-                                     f"{'compress the clip (1080p, ~8 seconds is plenty)' if is_video else 'please compress it first'}.")
+                                     f"please compress it first.")
         parts.append(chunk)
     content = b"".join(parts)
     parts = []
-    import uuid as _uuid
 
-    # A photo off a phone is about 4000px and several megabytes, and it used to
-    # be stored and served exactly as it arrived, to every shopper, on a mobile
-    # connection, for a card shown 400px wide. That is the largest single thing
-    # on a storefront's loading time. It is resized once here, on the way in.
-    # See media.compress_upload for the rules and for everything it refuses to
-    # touch (video, GIF, SVG, anything already small).
-    shrink = {}
-    if not is_video:
-        content, shrunk_name, shrink = media.compress_upload(content, f.filename or "")
-        ext = os.path.splitext(shrunk_name)[1].lower() or ext
-
+    content, shrunk_name, shrink = media.compress_upload(content, f.filename or "")
+    ext = os.path.splitext(shrunk_name)[1].lower() or ext
     saved = media.save(f"{_uuid.uuid4().hex}{ext}", content, email)
     url = saved["url"]
-    return {"ok": True, "image_url": url, "url": url,
-            "kind": "video" if is_video else "image", "filename": f.filename,
-            "durable": saved["durable"], "warning": saved["warning"],
+    return {"ok": True, "image_url": url, "url": url, "kind": "image",
+            "filename": f.filename, "durable": saved["durable"],
+            "warning": saved["warning"],
             # Reported so the UI can say "13MB photo saved as 670KB" rather than
             # leaving a seller wondering why their upload looks different.
             "compression": shrink}

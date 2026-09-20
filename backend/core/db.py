@@ -271,6 +271,36 @@ def upload_blob(path: str, data: bytes, content_type: str = "application/octet-s
             return True
 
 
+def upload_blob_file(path: str, local_path: str,
+                     content_type: str = "application/octet-stream") -> bool:
+    """Upload a file that is already on disk, WITHOUT first reading it into a
+    bytes object in this process.
+
+    WHY THIS EXISTS. `upload_blob` takes the whole file as `bytes`, so a 48MB
+    video upload held the clip in our memory AND was copied again by the HTTP
+    client — two-plus full copies on a 512MB Render box, which is how "uploading
+    a video" turned into an out-of-memory. Handing the client the file PATH means
+    we no longer hold our copy; the client opens the file itself. (The client's
+    multipart layer still buffers its own copy while sending, so a sane size cap
+    on the upload endpoint is still what keeps the peak safe — this removes our
+    contribution to it.)"""
+    c = client()
+    if not c:
+        return False
+    store = c.storage.from_(BUCKET)
+    opts = {"content-type": content_type, "upsert": "true"}
+    try:
+        store.upload(path=path, file=local_path, file_options=opts)
+        return True
+    except Exception:
+        try:
+            store.update(path=path, file=local_path, file_options=opts)
+            return True
+        except Exception:
+            store.upload(path, local_path, opts)
+            return True
+
+
 def download_blob(path: str) -> bytes | None:
     c = client()
     if not c:

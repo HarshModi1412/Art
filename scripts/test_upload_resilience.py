@@ -59,6 +59,23 @@ up = c.post("/api/site/image", headers=H, files={"files": ("clip.mp4", clip, "vi
 url = up.json().get("url")
 check("the upload is stored", up.status_code == 200 and url, up.text[:200])
 
+# THE MEMORY GUARD. A clip is now streamed straight to disk and counted as it
+# arrives, so an oversized one is refused cleanly instead of being read whole
+# into a 512MB box and killing it. Patch the cap tiny so the test payload stays
+# small rather than allocating the real 24MB.
+import backend.main as _main  # noqa: E402
+_saved_cap = _main._MAX_VIDEO_MB
+_main._MAX_VIDEO_MB = 1
+try:
+    toobig = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * (1024 * 1024 + 4096)
+    rbig = c.post("/api/site/image", headers=H,
+                  files={"files": ("big.mp4", toobig, "video/mp4")})
+finally:
+    _main._MAX_VIDEO_MB = _saved_cap
+check("an oversized clip is refused cleanly, not read whole into memory",
+      rbig.status_code == 400 and "1MB" in rbig.text,
+      f"{rbig.status_code} {rbig.text[:160]}")
+
 print("\n== the clip is attached even when the bookkeeping after it fails ==")
 _real = smart.task_progress
 

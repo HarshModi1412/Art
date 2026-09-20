@@ -170,6 +170,52 @@ def save(filename: str, data: bytes, email: str = "") -> dict:
                        "Saved, but the durable copy failed — re-upload if it disappears."}
 
 
+def save_file(filename: str, src_path: str, email: str = "") -> dict:
+    """Store one upload that is already on disk, without ever holding it in
+    memory as bytes.
+
+    This is the memory-safe twin of `save()` for big files (video). The upload
+    endpoint streams the request straight to `src_path` a megabyte at a time, and
+    this moves it into the local cache and pushes it to Supabase Storage from the
+    path — so the clip is never read whole into this process. `save()` still
+    exists for the callers that already have the bytes in hand (a generated
+    image, a compressed photo), where a bytes copy costs nothing."""
+    import shutil
+
+    dst = os.path.join(cache_dir(), os.path.basename(filename))
+    try:
+        os.replace(src_path, dst)          # same filesystem: a rename, no copy
+    except OSError:
+        shutil.copyfile(src_path, dst)     # cache is on another disk (a mount)
+        try:
+            os.remove(src_path)
+        except OSError:
+            pass
+
+    stored = False
+    if durable():
+        try:
+            stored = bool(db.upload_blob_file(_storage_path(filename), dst,
+                                              content_type_for(filename)))
+        except Exception as e:  # noqa: BLE001
+            log.warning("media upload_file to storage failed for %s: %s", filename, e)
+        if stored:
+            try:
+                db.upsert("media", {
+                    "id": filename, "email": (email or "").strip().lower(),
+                    "kind": "video" if is_video(filename) else "image",
+                    "content_type": content_type_for(filename),
+                    "bytes": os.path.getsize(dst),
+                }, on_conflict="id")
+            except Exception:  # noqa: BLE001 — the index is a convenience, not the file
+                pass
+
+    return {"url": url_for(filename), "filename": filename,
+            "durable": stored,
+            "warning": "" if stored or not durable() else
+                       "Saved, but the durable copy failed — re-upload if it disappears."}
+
+
 # ---------------------------------------------------------------------------
 # read
 # ---------------------------------------------------------------------------
