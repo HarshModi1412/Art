@@ -1350,8 +1350,129 @@ def _posts(email: str) -> list[dict]:
     return rows if isinstance(rows, list) else []
 
 
+POSTS_KEPT = 400          # the store holds at most this many; the oldest fall off
+
+
 def _save_posts(email: str, rows: list[dict]) -> None:
-    user_store.set_key((email or "").lower(), POSTS_KEY, rows[-400:])
+    kept = rows[-POSTS_KEPT:]
+    dropped = rows[:-POSTS_KEPT] if len(rows) > POSTS_KEPT else []
+    user_store.set_key((email or "").lower(), POSTS_KEY, kept)
+    # A post that has fallen off the end of the store no longer exists in the
+    # scheduler, so nothing can ever ask for its picture or clip again. Its
+    # media was, until now, kept forever — which is one of the two ways the
+    # media store grew without bound and filled the disk on Render. Clean it,
+    # AFTER the shorter list is saved so the "still referenced?" check below
+    # sees the world as it now is.
+    if dropped:
+        try:
+            _cleanup_media(email, dropped)
+        except Exception:  # noqa: BLE001 — never fail a save over housekeeping
+            pass
+
+
+# --------------------------------------------------------------- media cleanup
+#
+# WHY THIS EXISTS. Every picture the app generates, every reel a seller uploads,
+# every pre-clean copy of a video, and every JPEG/MP4 twin the publisher makes
+# for Instagram was written to the media store and NEVER removed. A daily-cadence
+# account produces a post a day, each carrying a picture or a multi-megabyte clip
+# plus a twin, and the pile only ever grew — which is what took Render past its
+# memory limit and the service down with it.
+#
+# Media is now deleted at the two moments a post stops needing it:
+#   * PUBLISHED — Instagram has fetched and now hosts its own copy, so ours is
+#     dead weight (the calendar still opens the post by its permalink), and
+#   * PRUNED — once the post has fallen out of the store entirely, nothing can
+#     ever ask for its media again.
+#
+# A file is removed only when NOTHING ELSE still points at it: no other post,
+# and nothing anywhere else in the seller's saved data. A picture a seller both
+# attached to a post AND put on their storefront must outlive the post.
+_IG_IMAGE_TWIN = "_ig.jpg"
+_IG_VIDEO_TWIN = "_ig.mp4"
+
+
+def _media_name(url: str) -> str:
+    """The stored filename behind a /generated_images/<name> url, or "".
+
+    Only media THIS app hosts is ever a cleanup candidate. A picture the seller
+    pointed at some other website (an absolute http/https url) is left alone —
+    it is not ours to delete."""
+    u = str(url or "")
+    if "/generated_images/" not in u:
+        return ""
+    return u.split("/generated_images/")[-1].split("?")[0].strip("/")
+
+
+def post_media_names(post: dict) -> set[str]:
+    """Every file this post owns: its picture, its clip, the pre-clean original,
+    and the JPEG/MP4 twins the publisher derives for Instagram."""
+    import os as _os
+    names: set[str] = set()
+    for field in ("image_url", "video_url", "video_original_url"):
+        name = _media_name((post or {}).get(field))
+        if not name:
+            continue
+        names.add(name)
+        stem = _os.path.splitext(name)[0]
+        # The twin the publisher would have built for this file. Only one of the
+        # two ever exists (a photo makes a .jpg twin, a clip an .mp4), and
+        # deleting a name that was never written is a harmless no-op.
+        names.add(f"{stem}{_IG_IMAGE_TWIN}")
+        names.add(f"{stem}{_IG_VIDEO_TWIN}")
+    return names
+
+
+def _referenced_names(email: str, exclude_ids: set[str]) -> set[str]:
+    """Media filenames still spoken for by a post other than the ones going away."""
+    keep: set[str] = set()
+    for p in _posts(email):
+        if p.get("id") in exclude_ids:
+            continue
+        keep |= post_media_names(p)
+    return keep
+
+
+def _cleanup_media(email: str, gone: list[dict]) -> list[str]:
+    """Delete the media owned by the `gone` posts that nothing else still needs.
+
+    Never raises: housekeeping must not be able to break a publish or a save."""
+    import json as _json
+
+    candidates: set[str] = set()
+    for p in gone:
+        candidates |= post_media_names(p)
+    if not candidates:
+        return []
+
+    keep = _referenced_names(email, {p.get("id") for p in gone})
+
+    # The last line of defence against deleting a live file: a picture a seller
+    # also put on their storefront lives in site_config, a draft's media in the
+    # posts we already excluded, and so on. A cheap substring scan of everything
+    # the seller has saved (bar the posts, handled above) means a file that is
+    # referenced anywhere at all is never removed.
+    blob = ""
+    try:
+        state = dict(user_store.load_state(email) or {})
+        state.pop(POSTS_KEY, None)
+        blob = _json.dumps(state, ensure_ascii=False, default=str)
+    except Exception:  # noqa: BLE001
+        blob = ""
+
+    from backend.core import media
+    deleted = []
+    for name in candidates:
+        if name in keep:
+            continue
+        if blob and name in blob:
+            continue
+        try:
+            media.delete(name)
+            deleted.append(name)
+        except Exception:  # noqa: BLE001
+            pass
+    return deleted
 
 
 def occasion_for(day: date, category: str = "") -> dict | None:
@@ -1765,6 +1886,18 @@ def record_publish(email: str, post_id: str, result: dict) -> dict:
             p["permalink"] = result.get("permalink") or ""
             p["media_id"] = result.get("media_id") or ""
             p["publish_error"] = ""
+            # Instagram has fetched the media and now hosts its own copy, so
+            # ours is dead weight. Delete it (the post still opens by permalink)
+            # unless something else — another post, or the seller's storefront —
+            # still points at the same file. A FAILED post keeps its media on
+            # purpose: the seller may fix the reason and reschedule it.
+            _save_posts(email, rows)
+            try:
+                _cleanup_media(email, [p])
+            except Exception:  # noqa: BLE001 — never fail a publish over housekeeping
+                pass
+            _sync_tasks(email, p)
+            return p
         else:
             # "missed" is not a failure of ours — the time simply passed — but
             # it has to leave the scheduled queue or it is retried forever.

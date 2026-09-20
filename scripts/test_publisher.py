@@ -1091,5 +1091,92 @@ check("their words show wherever the app names what they sell",
 check("and the per-product Category field says it steers the caption writer",
       "tells the caption writer what this is" in _JS)
 
+section("Media is deleted once it has served its purpose")
+
+# WHY THIS SECTION EXISTS. Every picture the app generated, every clip a seller
+# uploaded, every pre-clean original and every JPEG/MP4 twin the publisher makes
+# for Instagram was written to the media store and NEVER removed. A daily-cadence
+# account produced a post a day, each carrying a picture or a multi-megabyte clip
+# plus a twin, and the pile only grew — until Render ran out of memory and the
+# service went down. Media is now cleaned at the two moments a post stops needing
+# it: it is PUBLISHED (Instagram hosts its own copy) or it falls out of the store.
+instagram.publish = fake_publish
+instagram.is_connected = lambda email: True
+NEXT.clear()
+NEXT.update({"ok": True, "media_id": "mc", "permalink": "https://instagram.com/p/clean"})
+
+CALLS.clear()
+shot = make("cleanup_pub.png", (1080, 1080))
+seed([post("cleanpub", img=f"/generated_images/{shot}")])
+res = publisher.run_for(EMAIL, BASE, NOW)
+check("a published post is recorded as published", res["published"] == 1, str(res))
+check("its picture is deleted once Instagram has fetched it", media.read(shot) is None)
+check("and the Instagram JPEG twin the publisher made is deleted too",
+      media.read("cleanup_pub_ig.jpg") is None)
+p = next(x for x in social.all_posts(EMAIL) if x["id"] == "cleanpub")
+check("the post keeps its permalink, so the seller can still open it",
+      p.get("permalink") == "https://instagram.com/p/clean", str(p.get("permalink")))
+
+# A FAILED post keeps its media on purpose: the seller may fix the reason it was
+# refused and reschedule it, and deleting the picture would make that impossible.
+CALLS.clear()
+NEXT.clear()
+NEXT.update({"ok": False, "error": "The aspect ratio is not supported"})
+shot2 = make("cleanup_fail.png", (1080, 1080))
+seed([post("cleanfail", img=f"/generated_images/{shot2}")])
+publisher.run_for(EMAIL, BASE, NOW)
+check("a post that failed keeps its media for a retry", media.read(shot2) is not None)
+NEXT.clear()
+NEXT.update({"ok": True, "media_id": "mc", "permalink": "https://instagram.com/p/clean"})
+
+# A file another post still points at must survive the post that published.
+CALLS.clear()
+shot3 = make("cleanup_shared.png", (1080, 1080))
+seed([post("pubshared", img=f"/generated_images/{shot3}"),
+      {**post("draftshared", state="draft", when=48), "image_url": f"/generated_images/{shot3}"}])
+publisher.run_for(EMAIL, BASE, NOW)
+check("a picture another post still uses is NOT deleted",
+      media.read(shot3) is not None,
+      "publishing one post must not pull the media out from under another")
+
+# A picture a seller also put on their storefront must outlive the post entirely.
+CALLS.clear()
+shot4 = make("cleanup_site.png", (1080, 1080))
+user_store.set_key(EMAIL, "site_config", {"hero": f"/generated_images/{shot4}"})
+seed([post("pubsite", img=f"/generated_images/{shot4}")])
+publisher.run_for(EMAIL, BASE, NOW)
+check("a picture also on the storefront survives the post being published",
+      media.read(shot4) is not None,
+      "the site still points at it — deleting it would break the storefront")
+user_store.set_key(EMAIL, "site_config", {})
+
+# The second trigger: a post that has fallen out of the store no longer exists in
+# the scheduler, so its media can go with it.
+prunefile = make("cleanup_prune.png", (600, 600))
+old = {**post("pruned_old", state="published"), "image_url": f"/generated_images/{prunefile}"}
+filler = [post(f"fill{i}", state="published", img="") for i in range(social.POSTS_KEPT)]
+social._save_posts(EMAIL, [old] + filler)
+check("the oldest post falls out of a full store",
+      social.get_post(EMAIL, "pruned_old") is None,
+      "the store holds POSTS_KEPT posts; older ones are dropped")
+check("and its orphaned media is deleted with it", media.read(prunefile) is None)
+
+# The unit underneath, so the guard logic is pinned independently of publishing.
+seed([])
+keeper = make("shared_unit.png", (400, 400))
+solo = make("solo_unit.png", (400, 400))
+seed([{**post("gone"), "image_url": f"/generated_images/{keeper}"},
+      {**post("stays", state="draft"), "image_url": f"/generated_images/{keeper}"}])
+gone = social.get_post(EMAIL, "gone")
+deleted = social._cleanup_media(EMAIL, [gone])
+check("a file another post references is refused for deletion",
+      media.read(keeper) is not None and keeper not in deleted, str(deleted))
+seed([{**post("gone2"), "image_url": f"/generated_images/{solo}"}])
+deleted = social._cleanup_media(EMAIL, [social.get_post(EMAIL, "gone2")])
+check("a file nothing else references is deleted",
+      media.read(solo) is None and solo in deleted, str(deleted))
+check("media hosted on another website is never touched",
+      social.post_media_names({"image_url": "https://cdn.example.com/x.jpg"}) == set())
+
 print(f"\n{PASSED} passed, {FAILED} failed")
 sys.exit(1 if FAILED else 0)
