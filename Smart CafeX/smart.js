@@ -14,6 +14,24 @@ const state = {
 };
 localStorage.setItem("cx_session", state.sessionId);
 
+/* Mint a brand-new browser session id and forget the old one.
+   ------------------------------------------------------------------
+   The server binds a session id to the first account that uses it while
+   signed in, and never lets a second account reuse it — that is what keeps a
+   leaked session id from reading someone else's data. The flip side is that a
+   session id which outlives a logout is poison: the next person to sign in on
+   this browser (or the same person switching accounts) inherits a session the
+   server already owns for the previous email, and every data call comes back
+   "This browser session belongs to another account."
+   So whenever the identity at this browser changes — a logout, an account
+   deletion, or the server telling us the id is bound to someone else — we drop
+   the id and start clean. */
+function resetSessionId() {
+  state.sessionId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
+  try { localStorage.setItem("cx_session", state.sessionId); } catch (e) {}
+  return state.sessionId;
+}
+
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmt = (n) => n == null ? "—" : Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 });
@@ -312,6 +330,20 @@ async function api(path, opts = {}, attempt = 0) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    // A session id that is still bound to a previous account (e.g. one created
+    // before logout learned to rotate it, so already sitting in this browser)
+    // fails EVERY data call with this 403. Mint a fresh id and replay the call
+    // once. bind_session raises before the endpoint does any work, so replaying
+    // is safe even for a POST — the first attempt changed nothing. Gated on
+    // being signed in and tried only once, so a genuinely forbidden call still
+    // surfaces its error.
+    const boundElsewhere = res.status === 403
+      && /belongs to another account/i.test(
+        (data.detail && typeof data.detail === "object" ? data.detail.message : data.detail) || "");
+    if (boundElsewhere && state.token && !opts._rebound) {
+      resetSessionId();
+      return api(path, { ...opts, _rebound: true }, attempt);
+    }
     if (retryable && attempt < RETRY_MAX && RETRY_STATUS.has(res.status)) {
       await nap(600 * (attempt + 1));
       return api(path, opts, attempt + 1);
@@ -654,6 +686,10 @@ $("logoutBtn").onclick = async () => {
   try { await api("/api/logout", { method: "POST" }); } catch {}
   state.token = null; state.email = null;
   localStorage.removeItem("cx_token"); localStorage.removeItem("cx_email");
+  // Abandon the server-side session too. Keeping the old id here is what made a
+  // different account fail to sign in afterwards with "belongs to another
+  // account" — the id was still bound to the seller who just left.
+  resetSessionId();
   // The cached screens hold this seller's figures. Signing out has to take
   // them with it, or the next person at this browser sees them.
   warmClear(); warmModClearAll();
@@ -2535,7 +2571,7 @@ async function approvePostReady(postId, opts = {}) {
            does not come back. But the picture is missing and the seller must
            know, because the post cannot go out empty. */
         toast("Approved, but the picture could not be drawn: " + r.media_error
-              + "It is on your task list.", 9000);
+              + " It is on your task list.", 9000);
       } else if (r.image) {
         const lab = (r.image && r.image.ai_label) || {};
         toast("Picture made" + (lab.labelled ? ", labelled \u201cAI generated\u201d" : "")
@@ -6259,6 +6295,7 @@ function confirmDelete() {
       // way logout does and drop the seller back at the login screen.
       state.token = null; state.email = null;
       try { localStorage.removeItem("cx_token"); localStorage.removeItem("cx_email"); } catch (e) {}
+      resetSessionId();   // the old session belonged to the account we just deleted
       warmClear(); warmModClearAll();
       closeModal();
       if ($("appShell")) $("appShell").hidden = true;
