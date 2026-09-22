@@ -5947,6 +5947,13 @@ async function openAccount() {
   // ---- Danger zone: reset (keep login) and delete (remove everything) ----
   const dangerHtml = `
       <section class="acc-sec">
+        <h4 style="margin-top:0;">Privacy</h4>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0;">
+          <div><b>Cookie settings</b><p class="muted tiny" style="margin:2px 0 0;">Change whether this site may count your visit. Saying no also deletes the cookies that were already set.</p></div>
+          <span data-cookie-settings style="flex:none;"></span>
+        </div>
+      </section>
+      <section class="acc-sec">
         <h4 style="color:var(--danger,#dc2626);">Danger zone</h4>
         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid rgba(127,127,127,.15);">
           <div><b>Reset account</b><p class="muted tiny" style="margin:2px 0 0;">Clears your settings, storefront, products, tasks and uploaded data. Your login and purchased credits stay.</p></div>
@@ -6064,6 +6071,10 @@ async function openAccount() {
     </div>
     <div class="modal-actions"><button class="btn ghost" data-accx>Close</button></div>`, { wide: true });
 
+  // This screen was just rebuilt, which threw away the Cookie settings control
+  // along with the old DOM. consent.js puts it back into the slot above.
+  if (window.cxCookieSettings) window.cxCookieSettings();
+
   // settings-style nav: show one pane at a time
   (function () {
     const navs = Array.from(document.querySelectorAll(".acc2-nav [data-nav]"));
@@ -6073,6 +6084,9 @@ async function openAccount() {
       navs.forEach((n) => n.classList.toggle("active", n === b));
       panes.forEach((p) => p.classList.toggle("active", p.dataset.pane === b.dataset.nav));
       if (body) body.scrollTop = 0;
+      // The slot only becomes visible when its own pane opens, so re-home the
+      // control then: findSlot() prefers whichever slot is actually on screen.
+      if (window.cxCookieSettings) window.cxCookieSettings();
       // Load the sales-channel connectors the first time that pane is opened.
       if (b.dataset.nav === "channels") {
         const el = $("accChanStrip");

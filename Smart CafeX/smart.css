@@ -3578,12 +3578,24 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
    target - a word in a paragraph is text, not a control. It is also the one
    link a seller who cannot get in has to hit, on a phone, probably in a
    hurry. So the words stay exactly where they are and the hit area is grown
-   underneath them to the full 44px. No layout moves. */
+   underneath them to the full 44px. No layout moves.
+
+   THE HIT AREA IS ::before, NOT ::after, AND THAT IS THE WHOLE POINT.
+   ios.css:630 already owns `.login-card a::after`: it is the hover underline,
+   a 1.5px bar of `background: currentColor` kept invisible by `scaleX(0)`.
+   Growing THAT pseudo-element to 44px here also replaced its transform, which
+   is the only thing hiding it, so the underline stopped being a hairline and
+   painted as a solid 116x44 block of link-blue under "Forgot your password?"
+   on every phone. Two individually correct rules, one shared pseudo-element.
+   ::before is unclaimed on this link, so the two concerns no longer overlap
+   and neither rule has to know about the other. */
 @media (pointer: coarse) {
   #forgotLink { position: relative; }
-  #forgotLink::after {
+  #forgotLink::before {
     content: ""; position: absolute; left: 0; right: 0; top: 50%;
     height: 44px; transform: translateY(-50%);
+    /* Belt and braces: a hit area is never allowed to paint. */
+    background: none;
   }
 }
 

@@ -961,7 +961,11 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
       <a href="/legal/terms">Terms</a> ·
       <a href="/legal/refunds">Refunds</a> ·
       <a href="/legal/cookies">Cookies</a> ·
-      <a href="/legal/grievance">Complaints</a>
+      <a href="/legal/grievance">Complaints</a> ·
+      <!-- consent.js renders the "Cookie settings" control in here. It used to
+           float over the bottom-left of the page; a footer is where a person
+           actually looks for it, and it covers nothing. -->
+      <span data-cookie-settings></span>
     </nav>
     <div class="foot-links"><a href="/smart">Open the app</a> · <a href="#pricing">Pricing</a> · <a href="#faq">Common questions</a> · <a href="/legal">All legal pages</a></div>
   </div>

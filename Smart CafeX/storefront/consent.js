@@ -146,7 +146,14 @@
       ".cxc-link{position:fixed;left:12px;bottom:12px;z-index:2147482000;",
       "font:12px/1 inherit;background:transparent;border:0;color:#6b7280;",
       "text-decoration:underline;cursor:pointer;padding:6px}",
-      "@media(prefers-color-scheme:dark){.cxc-link{color:#909bad}}"
+      "@media(prefers-color-scheme:dark){.cxc-link{color:#909bad}}",
+      /* The slotted form. It inherits the colour of whatever footer or
+         settings panel it was placed in, so it does not need to know
+         anything about that page's theme. 44px tall on a touch screen for
+         the same reason every other control here is. */
+      ".cxc-inline{font:inherit;background:transparent;border:0;color:inherit;",
+      "text-decoration:underline;cursor:pointer;padding:0;line-height:inherit}",
+      "@media(pointer:coarse){.cxc-inline{min-height:44px}}"
     ].join("");
     document.head.appendChild(css);
   }
@@ -189,12 +196,44 @@
     document.getElementById("cxcNo").focus();
   }
 
+  /* WHERE THE WITHDRAW CONTROL LIVES.
+   *
+   * It used to be one fixed button pinned to the bottom-left of every screen.
+   * On a phone that is not a footer, it is an overlay: it sat on top of the
+   * app's own tab bar, covering "Home". A permanent control that covers a
+   * navigation control is a bug, not compliance.
+   *
+   * So a page may now declare where it wants the control, with
+   * `data-cookie-settings` on any element, and it is rendered inline there:
+   * the landing page footer, the login card, and Account settings all do.
+   * A page that declares nothing still gets the floating button, because the
+   * one thing that must never happen is a surface where consent can be given
+   * and not taken back. Article 7(3): withdrawal has to be as easy as consent,
+   * which is why this is never behind the login alone.
+   */
+  function findSlot() {
+    var all = document.querySelectorAll("[data-cookie-settings]");
+    if (!all.length) return null;
+    for (var i = 0; i < all.length; i++) {
+      // The one actually on screen wins, so the app can declare several
+      // (login card, Account pane) and the right one is always used.
+      if (all[i].getClientRects().length) return all[i];
+    }
+    return all[0];  // declared but on a screen that is not open yet
+  }
+
   function showWithdrawLink() {
-    if (document.getElementById("cxcLink")) return;
+    var slot = findSlot();
+    var existing = document.getElementById("cxcLink");
+    if (existing) {
+      var parked = slot ? existing.parentNode === slot
+                        : existing.parentNode === document.body;
+      if (parked) return;      // already in the right place
+      existing.remove();       // the screen changed; re-home it
+    }
     styles();
     var b = document.createElement("button");
     b.id = "cxcLink";
-    b.className = "cxc-link";
     b.type = "button";
     b.textContent = "Cookie settings";
     b.onclick = function () {
@@ -203,8 +242,18 @@
       b.remove();
       start();
     };
-    document.body.appendChild(b);
+    if (slot) {
+      b.className = "cxc-inline";
+      slot.appendChild(b);
+    } else {
+      b.className = "cxc-link";
+      document.body.appendChild(b);
+    }
   }
+
+  /* The app rebuilds Account settings from scratch every time it is opened,
+     which throws this control away with it. It calls this to put it back. */
+  window.cxCookieSettings = showWithdrawLink;
 
   function start() {
     fetch("/api/legal/config")
