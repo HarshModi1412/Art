@@ -14,6 +14,7 @@ What replaced what:
 import datetime as _dt
 import hashlib
 import io
+import hmac
 import json
 import math
 import os
@@ -1429,18 +1430,51 @@ def instagram_webhook_verify(request: Request):
     raise HTTPException(403, "Verification token mismatch.")
 
 
+def _meta_signature_ok(raw: bytes, header: str | None) -> bool:
+    """Whether this body really came from Meta.
+
+    Meta signs every webhook delivery with the app secret as
+    X-Hub-Signature-256: sha256=<hex>. Unverified, this endpoint accepted a
+    POST from anybody: today that only writes a log line, which is log
+    flooding and log injection rather than a breach, but "nothing reacts to
+    these events YET" is exactly the note that is still in the file on the day
+    somebody adds the handler that does. The check belongs here now, while it
+    is cheap, not in the change that starts trusting the payload.
+
+    Compared in constant time, and False when no secret is configured, because
+    a signature check that passes when it cannot check anything is worse than
+    none: it reads as protection in every audit after this one.
+    """
+    secret = (os.environ.get("META_APP_SECRET") or "").strip()
+    if not secret:
+        return False
+    sig = (header or "").strip()
+    if not sig.startswith("sha256="):
+        return False
+    expected = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+    return secrets.compare_digest(expected, sig[len("sha256="):])
+
+
 @app.post("/api/instagram/webhook")
 async def instagram_webhook_receive(request: Request):
     """Meta expects a fast 200 OK (within a few seconds) or it'll retry and
     eventually flag the webhook as unhealthy. We just log the payload for
     now — nothing in the product currently reacts to these events."""
+    raw = await request.body()
+    if not _meta_signature_ok(raw, request.headers.get("x-hub-signature-256")):
+        # 403 and nothing else. Meta does not retry a 403, which is correct:
+        # a delivery we cannot prove came from Meta is not one to ask for
+        # again, and an attacker learns only that it was refused.
+        raise HTTPException(403, "Bad signature.")
     try:
-        body = await request.json()
-    except Exception:
+        body = json.loads(raw or b"{}")
+    except Exception:  # noqa: BLE001
         body = {}
+    # log, not print: print goes nowhere useful under a process manager and
+    # cannot be filtered by level.
     try:
-        print(f"[instagram webhook] {json.dumps(body)[:2000]}")
-    except Exception:
+        log.info("[instagram webhook] %s", json.dumps(body)[:2000])
+    except Exception:  # noqa: BLE001
         pass
     return {"ok": True}
 
@@ -5813,6 +5847,29 @@ async def _force_https(request, call_next):
     # making promises about.
     if not publicurl.is_local(request.url.hostname or ""):
         response.headers.setdefault("Strict-Transport-Security", "max-age=63072000")
+
+    # The rest of the headers a browser needs to be told, which HSTS is not.
+    #
+    # CLICKJACKING. /smart approves purchase orders, cancels subscriptions and
+    # deletes accounts, all of them one click behind a logged-in session. With
+    # nothing said about framing, any page anywhere could load the app in an
+    # invisible iframe and steer a seller into clicking one of them. frame-
+    # ancestors 'none' is the modern spelling and X-Frame-Options is the one
+    # older browsers still read; both are cheap and they say the same thing.
+    # Nothing in this product is meant to be embedded, so 'none' costs nothing.
+    #
+    # REFERRER. A password reset link is a bearer credential IN a URL. Without
+    # a policy, following any link from that page would hand the whole thing,
+    # token and all, to the site being visited in the Referer header.
+    # strict-origin-when-cross-origin keeps full referrers inside our own
+    # origin and sends only the bare origin outward.
+    #
+    # setdefault throughout: /generated_images sets its own, much stricter CSP
+    # for user-uploaded files, and that one must win.
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
     return response
 
 
