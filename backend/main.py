@@ -5307,14 +5307,44 @@ PUBLIC_PAGES = [
 ]
 
 
+# WHY lastmod IS NOT date.today().
+#
+# It used to be. Every page in the sitemap claimed it had been modified today,
+# on every single request, forever. That is not a small inaccuracy: Google
+# states plainly that it ignores lastmod when a site's values are demonstrably
+# unreliable, and "every URL changed today, again" is the textbook example. The
+# sitemap then carries no freshness signal at all, and the one field that tells
+# a crawler "this page is worth re-reading" is dead weight.
+#
+# The honest answer is the mtime of the file the page is actually rendered
+# from. It only moves when the content really changes, which is what the field
+# means, and it needs no hand-maintained date that would go stale the first
+# time somebody forgot it.
+_LEGAL_SRC = os.path.join(os.path.dirname(__file__), "core", "legal.py")
+_LANDING_SRC = os.path.join(STATIC_DIR, "landing.html")
+
+
+def _lastmod(path: str) -> str:
+    """The date the source behind this URL last actually changed."""
+    src = _LANDING_SRC if path == "/" else _LEGAL_SRC
+    try:
+        return _dt.date.fromtimestamp(os.path.getmtime(src)).isoformat()
+    except OSError:
+        # A missing file is not a reason to serve a broken sitemap; omitting
+        # lastmod entirely is valid and honest, so the caller drops the tag.
+        return ""
+
+
 @app.get("/sitemap.xml")
 def sitemap(request: Request):
     base = _public_base_url(request).rstrip("/")
-    today = _dt.date.today().isoformat()
-    body = "".join(
-        f"<url><loc>{base}{path}</loc><lastmod>{today}</lastmod>"
-        f"<changefreq>{freq}</changefreq><priority>{pri}</priority></url>"
-        for path, pri, freq in PUBLIC_PAGES)
+    body = ""
+    for path, pri, freq in PUBLIC_PAGES:
+        mod = _lastmod(path)
+        body += (f"<url><loc>{base}{path}</loc>"
+                 + (f"<lastmod>{mod}</lastmod>" if mod else "")
+                 + f"<changefreq>{freq}</changefreq>"
+                   f"<priority>{pri}</priority></url>")
     return Response(
         content=('<?xml version="1.0" encoding="UTF-8"?>'
                  '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
