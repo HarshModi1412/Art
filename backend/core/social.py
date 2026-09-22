@@ -562,7 +562,7 @@ TAGS: <5 hashtags separated by spaces>"""
 
 
 def _tags_from(text: str) -> list[str]:
-    """Hashtags out of a line a model wrote, however it chose to write them.
+    r"""Hashtags out of a line a model wrote, however it chose to write them.
 
     THE BUG THIS FIXES: this used to be `re.findall(r"#[\w]+")`, which only
     matched tags that already had a #. Smaller models — Cloudflare's, the one

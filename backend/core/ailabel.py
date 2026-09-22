@@ -209,6 +209,23 @@ def _font(size: int):
 # of something else and becoming unreadable. "Clearly and prominently" is not
 # satisfied by a label nobody can read.
 def _draw_label(img, text: str):
+    """Stamp the label on, using memory proportional to the LABEL, not the picture.
+
+    WHY THIS IS A PASTE AND NOT AN alpha_composite.
+
+    This used to build a full-size RGBA overlay, convert the picture to RGBA,
+    and alpha_composite the two. For a 2048x2048 render that is three
+    full-frame RGBA buffers at 16.8MB each, plus the decoded original and the
+    source bytes, to draw a plate about 150x40. Roughly 80MB of peak for one
+    picture, on a 512MB instance that also holds pandas, the model of the
+    seller's catalogue, and whatever else is in flight. It is the reason the
+    service was being restarted for exceeding its memory.
+
+    The label only ever touches one small corner, so the overlay is built at
+    plate size and pasted with itself as the mask. The arithmetic below is
+    unchanged and so is the result, pixel for pixel: the plate is drawn at the
+    origin of a small tile instead of at (x0, y0) of a full-size one.
+    """
     from PIL import Image, ImageDraw
     w, h = img.size
     # Scales with the picture: about 3.4% of the short edge, floored at 13px so
@@ -216,27 +233,60 @@ def _draw_label(img, text: str):
     # 2048px render.
     size = max(13, min(40, int(min(w, h) * 0.034)))
     font = _font(size)
-    draw = ImageDraw.Draw(img)
-    box = draw.textbbox((0, 0), text, font=font)
+    # Measured on a 1x1 scratch, so measuring never depends on, or holds a
+    # drawing context open over, the picture itself.
+    box = ImageDraw.Draw(Image.new("L", (1, 1))).textbbox((0, 0), text, font=font)
     tw, th = box[2] - box[0], box[3] - box[1]
     pad_x, pad_y = size * 0.62, size * 0.42
     margin = max(12, int(min(w, h) * 0.028))
     plate_w, plate_h = tw + pad_x * 2, th + pad_y * 2
     x0, y0 = margin, h - margin - plate_h
 
-    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    od = ImageDraw.Draw(overlay)
+    # The plate lands at a fractional y (plate_h is a float), and the old
+    # full-frame overlay drew it there, sub-pixel and all. A tile pasted at an
+    # integer offset would round that away and shift the antialiased edge by a
+    # pixel, so the remainder is kept and drawn INTO the tile.
+    bx, by = int(x0), int(y0)
+    fx, fy = x0 - bx, y0 - by
+    plate = Image.new("RGBA", (int(plate_w + fx) + 2, int(plate_h + fy) + 2),
+                      (0, 0, 0, 0))
+    od = ImageDraw.Draw(plate)
     # A dark plate at 72% behind white text. The opacity is computed, not
     # guessed: the worst case is a pure white product photo behind it, which
     # lifts the plate to #4f4f51, and white text on that is 8.17:1. WCAG asks
     # 4.5:1 for body text and 3:1 for large text, so the label stays legible on
     # any picture an engine can produce. The earlier 62% value cleared 4.5:1 but
     # only just, and "clearly and prominently" is not a thing to clear only just.
-    od.rounded_rectangle([x0, y0, x0 + plate_w, y0 + plate_h],
+    od.rounded_rectangle([fx, fy, fx + plate_w, fy + plate_h],
                          radius=plate_h * 0.24, fill=(12, 12, 14, 184))
-    od.text((x0 + pad_x - box[0], y0 + pad_y - box[1]), text,
+    od.text((fx + pad_x - box[0], fy + pad_y - box[1]), text,
             font=font, fill=(255, 255, 255, 242))
-    return Image.alpha_composite(img.convert("RGBA"), overlay)
+    # Palette and greyscale cannot be pasted onto with alpha, so those convert
+    # first — rare, and it is the same conversion the old code did to every
+    # picture regardless.
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGBA")
+    pw, ph = plate.size
+    if img.mode == "RGBA":
+        # A transparent picture needs a real alpha_composite, NOT a paste.
+        # paste() blends every band through the mask, the alpha band included,
+        # so a 72% plate would drag the destination's own alpha down with it
+        # and punch a translucent hole in the picture. Compositing only the
+        # region under the plate keeps the correct result and still costs a
+        # tile rather than a frame.
+        x1, y1 = max(0, bx), max(0, by)
+        x2, y2 = min(w, bx + pw), min(h, by + ph)
+        if x2 > x1 and y2 > y1:
+            region = img.crop((x1, y1, x2, y2))
+            tile = plate.crop((x1 - bx, y1 - by, x2 - bx, y2 - by))
+            img.paste(Image.alpha_composite(region, tile), (x1, y1))
+            region.close()
+            tile.close()
+    else:
+        # No alpha band to damage, so the cheap path is also the correct one.
+        img.paste(plate, (bx, by), plate)
+    plate.close()
+    return img
 
 
 def _png_metadata(p: dict):
@@ -292,7 +342,10 @@ def label_image(data: bytes, engine: str = "", model: str = "",
         out = _draw_label(im, text or LABEL_TEXT)
         buf = io.BytesIO()
         if fmt in ("JPEG", "JPG"):
-            rgb = out.convert("RGB")
+            # Another full-frame copy that was being made unconditionally. The
+            # paste above leaves a JPEG in the RGB it was already in, so in the
+            # ordinary case there is now nothing to convert.
+            rgb = out if out.mode == "RGB" else out.convert("RGB")
             try:
                 rgb.save(buf, format="JPEG", quality=95, exif=_jpeg_exif(im, p))
                 report["metadata"] = True
