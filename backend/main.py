@@ -200,6 +200,47 @@ if _ORIGINS:
     )
 
 
+# How big a request body this process will accept, by path. The video upload
+# streams to disk a megabyte at a time and caps itself, so it gets the room it
+# needs; everything else is a form or a spreadsheet.
+_BODY_CAP_DEFAULT = 16 * 1024 * 1024
+_BODY_CAPS = {"/api/site/image": (int(os.environ.get("MAX_VIDEO_UPLOAD_MB", "24") or 24) + 8) * 1024 * 1024}
+
+
+def _body_cap(path: str) -> int:
+    for prefix, cap in _BODY_CAPS.items():
+        if path.startswith(prefix):
+            return cap
+    return _BODY_CAP_DEFAULT
+
+
+@app.middleware("http")
+async def _body_size(request: Request, call_next):
+    """Refuse an oversized body before anything reads it.
+
+    THE HOLE THIS CLOSES: several endpoints do `content = await f.read()` on an
+    uploaded file with no ceiling at all — the complaint and positioning PDF
+    routes among them. On a 512MB instance one POST of a large enough file is
+    the whole box, and it needs no account and no cleverness. The upload paths
+    that stream (site/image) cap themselves as they go; this is the floor under
+    every other one, including any added later that forgets to.
+
+    Content-Length is what a browser and every HTTP client sends on an upload.
+    A chunked request has none, and nothing is guessed from its absence: those
+    are bounded by whatever the endpoint itself does, which is why the read-it-
+    all endpoints are the ones that matter and why this sits in front of them.
+    """
+    raw = request.headers.get("content-length")
+    if raw and raw.isdigit():
+        cap = _body_cap(request.url.path)
+        if int(raw) > cap:
+            return JSONResponse(
+                status_code=413,
+                content={"detail": f"That file is too large. The limit is "
+                                   f"{cap // (1024 * 1024)}MB."})
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def _rate_limit(request: Request, call_next):
     """A ceiling on requests per caller per minute.
@@ -1972,7 +2013,26 @@ _IMG_DIR = media.cache_dir()
 # Uploads are content-addressed — a fresh uuid per file — so the bytes behind a
 # URL never change and the browser can keep them forever. That one header is
 # what stops a storefront re-downloading every photo on every page view.
-_MEDIA_CACHE_HEADERS = {"Cache-Control": "public, max-age=31536000, immutable"}
+# Uploaded media is served from this app's OWN origin, so what it is allowed to
+# do matters as much as how long it is cached.
+#
+# THE HOLE THIS CLOSES: .svg is an accepted upload (sellers have SVG logos, and
+# refusing them is a real cost), and an SVG is a document, not a picture. It can
+# carry <script>. Served as image/svg+xml from our origin with no policy, a
+# seller could upload one and anyone who opened that URL would run its script
+# with our origin's cookies. Rendering it in an <img> was always safe; opening
+# it directly was not.
+#
+#   sandbox + default-src 'none'  is what the large code hosts serve user
+#   content with: an <img> still renders, and a document opened directly can
+#   run nothing, reach nothing and inherit no origin.
+#   nosniff stops a browser deciding for itself that something we labelled
+#   image/png is really HTML.
+_MEDIA_CACHE_HEADERS = {
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; sandbox",
+}
 
 
 @app.get("/generated_images/{filename}")
