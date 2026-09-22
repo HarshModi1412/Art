@@ -32,7 +32,12 @@ from backend.core import auth, messaging, user_store
 SELLER_KEY = "pw_resets"
 SHOPPER_KEY = "store_pw_resets"
 
-TTL_SECONDS = 60 * 60          # one hour
+TTL_SECONDS = 30 * 60          # thirty minutes. A reset link is a bearer
+                               # credential sitting in a mailbox: the window it
+                               # is useful to somebody who should not have it is
+                               # exactly its lifetime, so it is the shortest span
+                               # that still survives a person reading mail on a
+                               # phone and finishing on a laptop.
 _MAX_LIVE = 40                 # per account; oldest are trimmed
 
 
@@ -116,7 +121,7 @@ def request_seller(email: str, base_url: str) -> dict:
         # identical answer either way — never confirm whether an address exists
         return {"ok": True, "email_ready": True,
                 "message": "If that email has an account, a reset link is on its way. "
-                           "It expires in an hour. Check your spam folder too."}
+                           "It expires in 30 minutes. Check your spam folder too."}
     return {"ok": False, "email_ready": False,
             "message": "This server cannot send email yet, so we cannot send you a "
                        "link — and we would rather say so than leave you waiting "
@@ -137,7 +142,7 @@ def admin_reset_link(email: str, base_url: str) -> dict:
     if email not in (auth.load_users() or {}):
         raise ResetError("No account with that email.")
     token = _mint(email, SELLER_KEY, {"email": email})
-    return {"email": email, "expires_in_minutes": 60,
+    return {"email": email, "expires_in_minutes": 30,
             "reset_url": f"{base_url.rstrip('/')}/reset?token={token}&email={email}"}
 
 
@@ -174,7 +179,7 @@ def request_shopper(seller: str, email: str, base_url: str, handle: str,
     if can_email:
         return {"ok": True, "email_ready": True,
                 "message": "If that email has an account on this store, a reset link is "
-                           "on its way. It expires in an hour."}
+                           "on its way. It expires in 30 minutes."}
     # A shopper cannot be told to email our support — this is the seller's shop,
     # so the seller is who can help, and they can see the customer in Orders.
     return {"ok": False, "email_ready": False,

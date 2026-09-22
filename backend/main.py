@@ -28,6 +28,7 @@ from fastapi.responses import Response, FileResponse, JSONResponse, RedirectResp
 from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend.core import (ad_analytics, ai, analytics, auth, billing, complaints, connectors,
@@ -39,6 +40,7 @@ from backend.core import sitebuilder, storefront
 from backend.core import messaging, password_reset, today as today_mod
 from backend.core import winback_proof
 from backend.core import loginguard, google_auth, winback_auto, publisher
+from backend.core import ratelimit
 from backend.core import media
 from backend.core import cache
 from backend.core import cancellations
@@ -159,6 +161,89 @@ errors.init_sentry()
 # buy a 4x improvement for one line.
 # ---------------------------------------------------------------------------
 app.add_middleware(GZipMiddleware, minimum_size=800, compresslevel=6)
+
+
+# ---------------------------------------------------------------------------
+# Who may call this API from a browser, and how fast anyone may call it
+# ---------------------------------------------------------------------------
+# CORS. This app is same-origin: the pages, the seller storefronts and the API
+# are all served by this process, so nothing legitimate needs a cross-origin
+# XHR and the correct policy is the closed one. It is set explicitly rather
+# than left unset because "no CORSMiddleware" and "CORS denied" look identical
+# until somebody adds a middleware with allow_origins=["*"] to fix a console
+# error, which is exactly the accident this makes visible.
+#
+# ALLOWED_ORIGINS exists for the real exception: a separate front end, or a
+# staging domain, on a deployment that has one. Comma separated, exact origins
+# only. A seller's custom domain does NOT belong here and does not need to:
+# their shop is rendered by this app on their own host, so those requests are
+# same-origin already.
+def _allowed_origins() -> list[str]:
+    raw = (os.getenv("ALLOWED_ORIGINS") or "").strip()
+    out = [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
+    base = publicurl.configured()
+    if base and base not in out:
+        out.append(base)
+    return out
+
+
+_ORIGINS = _allowed_origins()
+if _ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Session-Id",
+                       "X-Admin-Token"],
+        max_age=600,
+    )
+
+
+@app.middleware("http")
+async def _rate_limit(request: Request, call_next):
+    """A ceiling on requests per caller per minute.
+
+    Only /api/ is limited. The HTML, the CSS and the images are cheap, cached
+    at the edge, and a person reloading a page hard is not an attack; putting a
+    counter in front of them only risks breaking a real seller.
+
+    The preflight is never limited either: answering OPTIONS with a 429 makes
+    the browser report a CORS failure instead of a rate limit, which sends
+    whoever is debugging it to entirely the wrong place.
+    """
+    path = request.url.path
+    if request.method == "OPTIONS" or not path.startswith("/api/"):
+        return await call_next(request)
+    caller = loginguard.client_ip(request) or "?"
+    ok, retry = ratelimit.check(caller, path)
+    if not ok:
+        return JSONResponse(
+            status_code=429,
+            headers={"Retry-After": str(retry)},
+            content={"detail": "That is a lot of requests at once. Wait about "
+                               "a minute and try again."},
+        )
+    return await call_next(request)
+
+
+@app.get("/healthz")
+def healthz():
+    """Liveness, for the platform rather than for a person.
+
+    Deliberately NOT /api/admin/health: that one needs the admin token and
+    checks whether Supabase and the storage bucket are really wired up, which
+    is the right answer to "is this deployment sound" and the wrong answer to
+    "is this process alive". A health check that fails because a third party is
+    slow will have the platform kill and restart a process that was serving
+    every request correctly.
+
+    Render uses this to hold a new deploy until it answers, so the old instance
+    keeps taking traffic until the new one is up, and a release that cannot
+    start never replaces a release that runs.
+    """
+    return {"ok": True, "service": "one-tap-manager"}
+
 
 
 log = logging.getLogger("onetap")

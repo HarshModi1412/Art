@@ -34,8 +34,20 @@ one instance is what is running.
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
+
+log = logging.getLogger(__name__)
+
+
+class SuspiciousLogin(Exception):
+    """Not a crash: an event worth an operator's attention.
+
+    It goes through errors.record() because that is where alerting already
+    lives, and it is its own type so it is filtered from real faults at a
+    glance in the error log.
+    """
 
 # failures -> how long the next attempt has to wait, in seconds.
 # 1, 2, 4, 8, 16, then a flat minute per attempt after that.
@@ -88,12 +100,51 @@ def check(email: str, ip: str = "") -> tuple[bool, float]:
 
 
 def failed(email: str, ip: str = "") -> None:
-    """Record one wrong password."""
+    """Record one wrong password, and write it down.
+
+    The counting is what stops the attack; the LOG is what tells anyone it
+    happened. Before this, a credential-stuffing run was throttled perfectly
+    and left no trace at all, so the first anybody knew of it was a seller
+    saying their account had been taken. Every failure now goes to the
+    application log with the address it came from.
+
+    The address is logged, the password never is, and the email is logged
+    because it IS the account under attack and there is no way to act on
+    "someone is being guessed at" without it.
+
+    Crossing the lock threshold is escalated to errors.record(), which is the
+    same path a crash takes, so it reaches the operator's error log and their
+    alert email rather than sitting in a log nobody reads.
+    """
     now = time.time()
+    acct = f"a:{(email or '').strip().lower()}"
     with _lock:
-        for key in (f"a:{(email or '').strip().lower()}", f"i:{ip}" if ip else ""):
+        for key in (acct, f"i:{ip}" if ip else ""):
             if key:
                 _fails.setdefault(key, []).append(now)
+        acct_fails = len(_fails.get(acct, []))
+        ip_fails = len(_fails.get(f"i:{ip}", [])) if ip else 0
+
+    log.warning("failed login for %s from %s (%d for this account, %d from "
+                "this address, in the last %d minutes)",
+                (email or "?").strip().lower() or "?", ip or "unknown",
+                acct_fails, ip_fails, int(WINDOW // 60))
+
+    # One escalation per threshold crossing, not one per attempt after it.
+    if acct_fails == LOCK_AFTER or (ip and ip_fails == IP_LOCK_AFTER):
+        what = ("account" if acct_fails == LOCK_AFTER else "address")
+        try:
+            from backend.core import errors
+            errors.record(
+                SuspiciousLogin(
+                    f"{acct_fails} failed logins for {(email or '?').strip().lower()} "
+                    f"and {ip_fails} from {ip or 'unknown'} within "
+                    f"{int(WINDOW // 60)} minutes; this {what} is now paused"),
+                where="POST /api/login",
+                extra={"ip": ip or "unknown", "account_failures": acct_fails,
+                       "ip_failures": ip_fails})
+        except Exception:  # noqa: BLE001 - alerting must not break the login path
+            log.exception("could not escalate a login lockout")
 
 
 def succeeded(email: str, ip: str = "") -> None:

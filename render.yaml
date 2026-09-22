@@ -19,6 +19,23 @@ services:
     # in the logs the real one instead of Render's proxy.
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
 
+    # ZERO-DOWNTIME RELEASE, AND THE ROLLBACK THAT COMES WITH IT.
+    #
+    # With a health check path, Render starts the new instance, waits for this
+    # to answer 200, and only then moves traffic and retires the old one. A
+    # release that cannot boot -- a bad import, a missing env var, a dependency
+    # that no longer resolves -- never takes over from the release that works:
+    # the deploy is marked failed and the previous instance keeps serving. That
+    # is the blue-green property and the automatic rollback, and without this
+    # line neither exists, because Render otherwise swaps as soon as the
+    # process has started, whether or not it can answer anything.
+    #
+    # /healthz and NOT /api/admin/health: the admin one needs a token and it
+    # checks Supabase and the storage bucket, so a slow third party would fail
+    # the check and have a perfectly healthy process killed and restarted.
+    # Liveness and soundness are different questions.
+    healthCheckPath: /healthz
+
     envVars:
       - key: OPENAI_API_KEY
         sync: false               # set manually in the dashboard — never store secrets in git

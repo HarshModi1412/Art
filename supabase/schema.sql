@@ -70,6 +70,10 @@ create table if not exists public.feedback (
     vote    text,
     ts      timestamptz not null default now()
 );
+-- feedback is a per-account table: account deletion reads it by email
+-- (account._PER_EMAIL_TABLES), and without this that is a sequential scan
+-- that gets slower for every seller who ever voted, not just this one.
+create index if not exists feedback_email_idx on public.feedback(email, ts);
 
 -- ---------- app config (stores a generated Fernet key if CS_SECRET_KEY unset) ----------
 create table if not exists public.app_config (
