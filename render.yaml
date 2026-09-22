@@ -84,6 +84,19 @@ services:
         sync: false               # the named grievance officer, Rule 3(2)
       - key: GRIEVANCE_EMAIL
         sync: false
+      # ---------------------------------------------------------------------
+      # AI labelling of generated pictures and clips.
+      # ---------------------------------------------------------------------
+      # LEAVE THIS UNSET in normal operation. Unset labels both and is the
+      # setting that meets the Amendment Rules 2026; the others are a
+      # deliberate, temporary trade and GET /api/admin/health reports them as
+      # a blocker rather than letting them pass quietly.
+      #   images   label pictures, skip clips. Clips are what exhausts a 512MB
+      #            instance: the upload is read into memory whole, written to a
+      #            temp file, re-encoded by ffmpeg and read back in whole.
+      #   off      label nothing.
+      - key: AI_LABEL
+        sync: false
       # Google Analytics. Leave it unset and no cookie banner appears at all,
       # because with no tracker there is nothing to ask permission for.
       - key: GA4_MEASUREMENT_ID

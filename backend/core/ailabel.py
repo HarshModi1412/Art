@@ -113,22 +113,92 @@ def removal_enabled() -> bool:
     return str(os.getenv("WATERMARK_REMOVAL", "")).strip().lower() in _TRUE
 
 
+# ------------------------------------------------------- the labelling switch
+# AI_LABEL says how much labelling this deployment actually does:
+#
+#     unset / on / 1 / true / yes   pictures and clips  (the default)
+#     images                        pictures only, clips left alone
+#     off / 0 / false / no          nothing is labelled
+#
+# WHY IT EXISTS. Labelling a clip is the most expensive thing this service
+# does: label_media_url reads the whole file into memory, label_video_bytes
+# writes it to a temp file, ffmpeg re-encodes it, and the result is read back
+# in whole again. A 50MB upload therefore peaks at several times 50MB on a
+# 512MB instance, which is enough to have the platform restarted in the middle
+# of the upload. Until that path streams or the instance is bigger, an
+# operator running a trial needs a way to keep uploads working at all.
+#
+# WHY THE DEFAULT IS NOT "off". Unset is the compliant setting, so a
+# deployment nobody has configured is lawful. Turning it down has to be a
+# deliberate act by whoever runs the service; it is reported by
+# GET /api/admin/health as a blocker rather than passing quietly; and it is
+# the operator's risk to carry, because the Information Technology
+# (Intermediary Guidelines) Amendment Rules 2026 require synthetic media to be
+# labelled and the price of not labelling it is safe harbour under section 79
+# of the IT Act. This is a temporary lever, not a setting to forget about.
+_LABEL_MODES = {
+    "": "all", "on": "all", "1": "all", "true": "all", "yes": "all",
+    "all": "all",
+    "images": "images", "image": "images", "pictures": "images",
+    "off": "off", "0": "off", "false": "off", "no": "off",
+}
+
+
+def labelling_mode() -> str:
+    """Either "all", "images" or "off". Anything unrecognised reads as "all"."""
+    raw = str(os.getenv("AI_LABEL", "")).strip().lower()
+    return _LABEL_MODES.get(raw, "all")
+
+
+def labels(kind: str = "image") -> bool:
+    """Whether a file of this kind is labelled on this deployment."""
+    mode = labelling_mode()
+    return mode == "all" or (mode == "images" and kind != "video")
+
+
+def _skipped(kind: str) -> dict:
+    """The report a caller gets back when labelling is switched off.
+
+    `labelled` stays False, exactly as it is for a failure, so a caller that
+    refuses to post unlabelled media keeps refusing. `skipped` is what tells
+    the two apart for anything that wants to log them differently.
+    """
+    return {"labelled": False, "metadata": False, "skipped": True,
+            "text": LABEL_TEXT, "gen_id": "",
+            "reason": "AI_LABEL is '%s', so %s are not labelled on this "
+                      "deployment" % (labelling_mode(), kind)}
+
+
 def compliance_state() -> dict:
     """For /api/admin/health. Says what is true, not what we would like."""
     removal = removal_enabled()
-    return {
-        "labelling": True,
-        "removal_enabled": removal,
-        "ok": not removal,
-        "note": (
+    mode = labelling_mode()
+    notes = []
+    if mode != "all":
+        notes.append(
+            "AI_LABEL is set to '%s', so %s generated here go out with no "
+            "label and no provenance metadata. The Information Technology "
+            "(Intermediary Guidelines) Amendment Rules 2026 require "
+            "synthetically generated media to carry both, and not carrying "
+            "them costs this platform its safe harbour under section 79 of "
+            "the IT Act. Set AI_LABEL to on, or unset it, to put the label "
+            "back." % (mode, "clips" if mode == "images"
+                       else "pictures and clips"))
+    if removal:
+        notes.append(
             "The watermark remover is switched on. Rule 3 of the IT Rules as "
             "amended on 20 February 2026 requires an intermediary that offers "
             "AI generation to ensure the removal of an AI label is not enabled, "
             "and breaking that costs this platform its safe harbour under "
             "section 79 of the IT Act, which is what stops the operator being "
             "personally answerable for what every seller posts. Unset "
-            "WATERMARK_REMOVAL to switch it off."
-            if removal else
+            "WATERMARK_REMOVAL to switch it off.")
+    return {
+        "labelling": mode,
+        "labelling_ok": mode == "all",
+        "removal_enabled": removal,
+        "ok": mode == "all" and not removal,
+        "note": " ".join(notes) or (
             "Generated pictures and clips are labelled and carry provenance "
             "metadata, and nothing removes another tool's label."),
     }
@@ -332,6 +402,8 @@ def label_image(data: bytes, engine: str = "", model: str = "",
     report["labelled"] is False, so a caller can decide whether to refuse the
     picture rather than posting something unlabelled by accident.
     """
+    if not labels("image"):
+        return data, _skipped("pictures")
     p = provenance(engine, model, "image")
     report = {"labelled": False, "gen_id": p["gen_id"], "metadata": False,
               "text": text or LABEL_TEXT, "reason": ""}
@@ -413,6 +485,8 @@ def label_video_file(src: str, dst: str, engine: str = "", model: str = "",
     track is not shown by Instagram, WhatsApp, or anything else a seller will
     post the clip to, and a label nobody sees is not a label.
     """
+    if not labels("video"):
+        return _skipped("clips")
     p = provenance(engine, model, "video")
     report = {"labelled": False, "gen_id": p["gen_id"], "metadata": False,
               "text": text or LABEL_TEXT, "reason": ""}
@@ -483,6 +557,8 @@ def label_video_bytes(data: bytes, filename_hint: str = "clip.mp4",
                       engine: str = "", model: str = "",
                       text: str = "") -> tuple[bytes, dict]:
     """Same as label_video_file, for bytes we already hold."""
+    if not labels("video"):
+        return data, _skipped("clips")
     import tempfile
     tmpdir = tempfile.mkdtemp(prefix="ailabel-")
     src = os.path.join(tmpdir, "in" + (os.path.splitext(filename_hint)[1] or ".mp4"))
@@ -521,6 +597,13 @@ def label_media_url(url: str, email: str = "", engine: str = "",
     name = os.path.basename((url or "").split("?", 1)[0])
     out = {"url": url, "report": {"labelled": False, "reason": "not a stored file"}}
     if not name:
+        return out
+    # Decided BEFORE the file is read. Reading a clip into memory is most
+    # of what labelling one costs, so a deployment with clips switched off
+    # must not read it in order to find out it was not going to label it.
+    kind = "video" if (kind_hint == "video" or media.is_video(name)) else "image"
+    if not labels(kind):
+        out["report"] = _skipped("clips" if kind == "video" else "pictures")
         return out
     got = media.read(name)
     if not got:
