@@ -788,7 +788,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
         <h3>Buy credits. Spend them only on the heavy things.</h3>
         <p>Analytics, win-back campaigns, complaint analysis, position reports, the daily digest,
         your website and your orders are free on every plan, no credits needed. Some sellers only
-        need Max's supply side occasionally — a season, a launch, a festival — so there is a second
+        need Max's supply side occasionally, for a season, a launch or a festival, so there is a second
         way to pay for just that: a pack of credits that <b>never expires</b>. A purchase order sent
         to your supplier is 5 credits, an AI run once your free 50 a day are used is 1.</p>
         <p class="stack-note">Deliberately not priced per order and never a percentage of your
@@ -803,6 +803,121 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
     </div>
   </div>
 </section>
+
+<!-- FAQ. Real questions a small Indian seller types into Google before they
+     sign up, answered plainly. This section exists for three audiences at once:
+     a person deciding whether to trust us, Google (an FAQ is where long-tail
+     queries land), and the AI answer engines that now sit above the blue links
+     and quote a page's own words back to the asker. Every answer here is
+     repeated verbatim in the FAQPage schema directly below it, because schema
+     that says something the page does not is spam. No em dashes: a person reads
+     this copy, and the house rule is commas and full stops. -->
+<style>
+  .faq { padding: 8px 0 4px; }
+  .faq h2 { font-size: 30px; margin: 8px 0 24px; }
+  .faq-list { display: grid; gap: 14px; max-width: 820px; }
+  .faq-item { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px 24px; }
+  .faq-item h3 { font-size: 18px; margin: 0 0 8px; }
+  .faq-item p { margin: 0; color: var(--ink-soft); font-size: 15px; line-height: 1.65; }
+  .faq-item p a { color: var(--accent); font-weight: 600; }
+</style>
+<section class="faq" id="faq" aria-labelledby="faqHeading">
+  <div class="wrap">
+    <span class="eyebrow">Questions</span>
+    <h2 id="faqHeading">Questions sellers ask before they start</h2>
+    <div class="faq-list">
+      <div class="faq-item">
+        <h3>What does One Tap Manager actually do?</h3>
+        <p>It reads the sales you already record, on Amazon, Shopify, Instagram or your own counter, and tells you the few things worth doing next: which stock to reorder, which customers have gone quiet and how to bring them back, and what to post this week. It also writes most of that work for you, from the supplier order form to the Instagram captions.</p>
+      </div>
+      <div class="faq-item">
+        <h3>How much does it cost?</h3>
+        <p>There is a Free plan that stays free: sales analytics, customer segments, win-back messages, complaint analysis, the morning summary and your own selling website. The Max plan is a flat ₹999 a month and adds stock and supplier ordering, purchase orders and a custom domain. We never take a cut of your sales. Heavy one-off jobs like generated images use credits you buy only if you want them.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Do I need to enter a card or bank details to start?</h3>
+        <p>No. You create an account with an email and a password and start on the Free plan with no card. You only add a payment method if you choose the Max plan later.</p>
+      </div>
+      <div class="faq-item">
+        <h3>What do I need to upload?</h3>
+        <p>A sales export as a CSV file from your billing app or Excel. One Tap Manager works out which column is the date, the amount, the customer and the product, and asks you to confirm any it had to guess.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Who is it for?</h3>
+        <p>Small Indian sellers: a shop, a café, a studio or an online store selling on Amazon, Shopify, Instagram or over the counter. It is built for one owner running the whole thing, not a team of analysts.</p>
+      </div>
+      <div class="faq-item">
+        <h3>How is it different from my billing or accounting app?</h3>
+        <p>A billing app records what happened. One Tap Manager reads those records and tells you what to do about them, then does most of it for you: the reorder, the win-back message, the week of posts.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Can it run my Instagram for me?</h3>
+        <p>Yes. It plans a whole week as one story rather than seven unrelated posts, writes the captions, chooses the times and makes the pictures from your own product photos. You approve, and it schedules and posts.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Will it tell me when to reorder stock?</h3>
+        <p>On the Max plan, yes. It learns how fast each item sells and how long your supplier takes, warns you before you run out, and hands you the order form for that supplier already filled in.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Is my data safe?</h3>
+        <p>Your sales file is yours. Third-party credentials and your dataset are encrypted, and the companies that store data for us, Render, Supabase and Razorpay, are named in the <a href="/legal/privacy">privacy policy</a> rather than described vaguely.</p>
+      </div>
+    </div>
+  </div>
+</section>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What does One Tap Manager actually do?",
+      "acceptedAnswer": { "@type": "Answer", "text": "It reads the sales you already record, on Amazon, Shopify, Instagram or your own counter, and tells you the few things worth doing next: which stock to reorder, which customers have gone quiet and how to bring them back, and what to post this week. It also writes most of that work for you, from the supplier order form to the Instagram captions." }
+    },
+    {
+      "@type": "Question",
+      "name": "How much does One Tap Manager cost?",
+      "acceptedAnswer": { "@type": "Answer", "text": "There is a Free plan that stays free: sales analytics, customer segments, win-back messages, complaint analysis, the morning summary and your own selling website. The Max plan is a flat ₹999 a month and adds stock and supplier ordering, purchase orders and a custom domain. We never take a cut of your sales. Heavy one-off jobs like generated images use credits you buy only if you want them." }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need to enter a card or bank details to start?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. You create an account with an email and a password and start on the Free plan with no card. You only add a payment method if you choose the Max plan later." }
+    },
+    {
+      "@type": "Question",
+      "name": "What do I need to upload to One Tap Manager?",
+      "acceptedAnswer": { "@type": "Answer", "text": "A sales export as a CSV file from your billing app or Excel. One Tap Manager works out which column is the date, the amount, the customer and the product, and asks you to confirm any it had to guess." }
+    },
+    {
+      "@type": "Question",
+      "name": "Who is One Tap Manager for?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Small Indian sellers: a shop, a café, a studio or an online store selling on Amazon, Shopify, Instagram or over the counter. It is built for one owner running the whole thing, not a team of analysts." }
+    },
+    {
+      "@type": "Question",
+      "name": "How is it different from my billing or accounting app?",
+      "acceptedAnswer": { "@type": "Answer", "text": "A billing app records what happened. One Tap Manager reads those records and tells you what to do about them, then does most of it for you: the reorder, the win-back message, the week of posts." }
+    },
+    {
+      "@type": "Question",
+      "name": "Can it run my Instagram for me?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. It plans a whole week as one story rather than seven unrelated posts, writes the captions, chooses the times and makes the pictures from your own product photos. You approve, and it schedules and posts." }
+    },
+    {
+      "@type": "Question",
+      "name": "Will it tell me when to reorder stock?",
+      "acceptedAnswer": { "@type": "Answer", "text": "On the Max plan, yes. It learns how fast each item sells and how long your supplier takes, warns you before you run out, and hands you the order form for that supplier already filled in." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is my data safe with One Tap Manager?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Your sales file is yours. Third-party credentials and your dataset are encrypted, and the companies that store data for us, Render, Supabase and Razorpay, are named in the privacy policy rather than described vaguely." }
+    }
+  ]
+}
+</script>
 
 <!-- FINAL CTA -->
 <section>

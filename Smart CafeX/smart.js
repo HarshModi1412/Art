@@ -6277,7 +6277,7 @@ function confirmReset() {
       await withBusy("Resetting your account…", "", () => api("/api/account/reset", { method: "POST" }));
       warmClear(); warmModClearAll();
       closeModal();
-      toast("Your account has been reset — starting fresh.", 5000);
+      toast("Your account has been reset. Starting fresh.", 5000);
       await goHome();
     },
   });
