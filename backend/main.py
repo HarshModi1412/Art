@@ -5478,6 +5478,109 @@ def og_image():
                     headers={"Cache-Control": "public, max-age=604800"})
 
 
+@app.get("/oops.js")
+def oops_script():
+    """The browser's unhandled-error handler, served to every surface.
+
+    Same reasoning as /consent.js above: one file behind one route, because
+    three copies under three mounts is how one of them ends up a version
+    behind.
+    """
+    path = os.path.join(STORE_DIR, "oops.js")
+    if not os.path.exists(path):
+        return Response(content="/* oops script missing */",
+                        media_type="application/javascript")
+    with open(path, encoding="utf-8") as fh:
+        return Response(content=fh.read(),
+                        media_type="application/javascript",
+                        headers={"Cache-Control": "public, max-age=300"})
+
+
+class ClientError(Exception):
+    """A fault that happened in somebody's browser, not in this process.
+
+    A real exception type so it goes through errors.record() like everything
+    else and lands in the same log, the same fingerprinting and the same
+    operator email. The name is what appears as the "kind" in that log, which
+    is how a browser fault is told apart from a server one at a glance.
+    """
+
+
+# A page in a render loop can throw thousands of times a second, and this
+# endpoint is public. oops.js caps itself at five per page load, but that is
+# the honest client's promise and not something to rely on, so the server
+# keeps its own ceiling: a bounded dict of recent reporters, and a global
+# count per window. Bounded because the key is caller-controlled.
+_CE_WINDOW = 600.0          # ten minutes
+_CE_PER_CALLER = 5
+_CE_GLOBAL = 200
+_ce_seen: dict[str, list] = {}
+_ce_global: list = [0.0, 0]  # window start, count in window
+
+
+def _client_error_allowed(caller: str) -> bool:
+    now = time.time()
+    if now - _ce_global[0] > _CE_WINDOW:
+        _ce_global[0], _ce_global[1] = now, 0
+        _ce_seen.clear()          # the only place this is emptied, so it cannot grow without bound
+    if _ce_global[1] >= _CE_GLOBAL:
+        return False
+    hits = _ce_seen.get(caller)
+    if hits is None:
+        if len(_ce_seen) >= 500:  # a flood of distinct callers must not grow the dict either
+            return False
+        hits = [0]
+        _ce_seen[caller] = hits
+    if hits[0] >= _CE_PER_CALLER:
+        return False
+    hits[0] += 1
+    _ce_global[1] += 1
+    return True
+
+
+@app.post("/api/client-error")
+async def client_error(request: Request):
+    """Record a fault that happened in the browser.
+
+    Always answers 204, whatever happens. This endpoint exists so a bug gets
+    seen; it can never itself become a reason a seller's page misbehaves, and
+    it tells an anonymous caller nothing about whether it was stored.
+    """
+    try:
+        raw = await request.body()
+        if len(raw) > 8192:              # bounded before it is parsed
+            return Response(status_code=204)
+        body = json.loads(raw or b"{}")
+        if not isinstance(body, dict):
+            return Response(status_code=204)
+        caller = (request.headers.get("x-session-id")
+                  or (request.client.host if request.client else "") or "?")[:80]
+        if not _client_error_allowed(caller):
+            return Response(status_code=204)
+        try:
+            who = optional_user(request.headers.get("authorization")) or ""
+        except Exception:  # noqa: BLE001
+            who = ""
+
+        def f(k, n):
+            return str(body.get(k) or "")[:n]
+
+        exc = ClientError(f("message", 400) or "a browser error with no message")
+        # The stack is the browser's, so it is passed as data rather than
+        # pretending it is this process's traceback.
+        errors.record(exc, where=f("page", 200) or "browser", email=who, extra={
+            "kind": f("kind", 40),
+            "source": f("source", 300),
+            "line": f("line", 12),
+            "col": f("col", 12),
+            "ua": f("ua", 200),
+            "stack": f("stack", 2000),
+        })
+    except Exception:  # noqa: BLE001 — reporting must never be the thing that breaks
+        pass
+    return Response(status_code=204)
+
+
 @app.get("/consent.js")
 def consent_script():
     """The consent gate, served to every surface from one file.
