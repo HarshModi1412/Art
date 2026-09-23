@@ -16,4 +16,24 @@
 **Priority:** P3
 **Depends on:** the launch em dash sweep of `smart.js` landing first (its script and test gate are the template).
 
+### Show rupee amounts with Indian grouping everywhere
+
+**What:** The Sub-Category screen shows totals like ₹272,721 instead of ₹2,72,721.
+
+**Why:** `Brand.md` asks for Indian number grouping. A seller reads lakhs, not thousands.
+
+**Context:** Look for `toLocaleString()` calls without `"en-IN"` in `smart.js`, and for server-built strings that use Python's `{:,}` formatting.
+
+**Effort:** S
+**Priority:** P3
+
+### Square off the landing page buttons
+
+**What:** `backend/static/landing.html` sets `.btn { border-radius: 999px }`, which makes pill buttons.
+
+**Why:** `Brand.md` bans pill buttons. The app itself already uses 8px corners.
+
+**Effort:** S
+**Priority:** P3
+
 ## Completed

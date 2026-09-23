@@ -1344,7 +1344,7 @@ async function startDemo() {
     await goHome();
     // Sample data is sales only. Saying "every module is live" sent sellers
     // into three review modules that then had nothing to show.
-    toast("Sample data loaded. Sales, stock, customers and posts are live now. The review modules need a reviews file.", 7000);
+    toast("Sample data loaded. Everything but the review modules is live now.", 6000);
   } catch (e) { toast(e.message); }
 }
 

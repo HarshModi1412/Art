@@ -3700,7 +3700,10 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .mg-steps { margin: 0 0 12px; padding-left: 1.3em; line-height: 1.55; }
 .mg-steps li { margin: 0 0 4px; }
 .mg-pre { margin: 0 0 6px; }
-.mg-link { margin: 0 0 14px; }
+/* An <a> styled as a button. Inline by default, so its bottom margin did not
+   push the form down and it overlapped the "Your email address" label. */
+.mg-link { display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; box-sizing: border-box; margin: 0 0 14px; text-decoration: none; }
 .mg-note { padding: 12px 14px; border-radius: 10px; margin: 0 0 12px; line-height: 1.55;
   background: var(--amber-soft, rgba(255,159,10,.12)); }
 .mg-adv { margin: 4px 0 10px; }

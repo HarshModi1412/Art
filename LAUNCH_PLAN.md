@@ -61,6 +61,9 @@ Cost of doing nothing: visitors dead-end on a login page with no signup. Outlook
 | R11 | `Brand.md` says plans are Free / Semi Pro / Pro and "₹999 for Pro"; the code and landing page sell Free / Max ₹999 | `Brand.md` vs `pricing.py` | Medium |
 | R12 | On a phone, the whole first screen is the explainer; the first action is below the fold | 375px screenshot | Low |
 | R13 | **Fixed and pushed (`ae21533`):** `frame-ancestors 'none'` from the last security pass blanked the Website Builder preview in production | console + live headers | Was critical |
+| R14 | **Found and fixed while building:** the home guide named groups the grid does not have, so a new seller could not match the words to the screen | `renderHome` guide text | Low |
+| R15 | **Found and fixed while building:** in dark mode the landing signup form was dark text on a dark card and could not be read | `landing.html` `.su-card` at 375px, dark | Medium |
+| R16 | **Found and fixed while building:** the new "Open the app password page" button overlapped the next label and was underlined | `smart.css` `.mg-link` at 375px | Low |
 
 ## Decision ledger
 
@@ -511,50 +514,52 @@ comment closers), so nothing is stale.
 
 ## Implementation Tasks
 
+Status 24 September 2026: T1 to T11 built and verified (72 checks in `scripts/test_launch_readiness.py`, every other suite at or above its baseline, phone-width walkthrough done). T12 is yours to run in Render.
+
 Synthesized from this review's findings. Each task derives from a specific finding above.
 Run with Claude Code or Codex; checkbox as you ship.
 
-- [ ] **T1 (P1, human: ~4h / CC: ~25min)** — seller_mail — one provider guide table, Outlook refusal, Zoho by region, 5.7.139 message, S3 host guard, `_friendly` order, S8 log line
+- [x] **T1 (P1, human: ~4h / CC: ~25min)** — seller_mail — one provider guide table, Outlook refusal, Zoho by region, 5.7.139 message, S3 host guard, `_friendly` order, S8 log line
   - Surfaced by: Sections 2, 3, 5, 8 — R1, R2, R3, S3, S8
   - Files: `backend/core/seller_mail.py`, `backend/core/ratelimit.py`, `backend/main.py`
   - Verify: `scripts/test_launch_readiness.py` (provider, Outlook, Zoho, guard, log cases)
-- [ ] **T2 (P1, human: ~6h / CC: ~30min)** — Account email box — inline guide with provider chips and direct links, shared with the Suppliers modal, inline errors, return to where the seller started; delete `MAIL_HOSTS`
+- [x] **T2 (P1, human: ~6h / CC: ~30min)** — Account email box — inline guide with provider chips and direct links, shared with the Suppliers modal, inline errors, return to where the seller started; delete `MAIL_HOSTS`
   - Surfaced by: Sections 5, 11 — R1
   - Files: `Smart CafeX/smart.js`, `Smart CafeX/smart.css`, `Smart CafeX/smart.html` (version bump)
   - Verify: browser at 375px and desktop; Gmail chip shows the link; Outlook chip shows the note
-- [ ] **T3 (P1, human: ~1h / CC: ~10min)** — signup from anywhere — login card link, `/?signup=1` opens the modal, final landing CTA opens signup
+- [x] **T3 (P1, human: ~1h / CC: ~10min)** — signup from anywhere — login card link, `/?signup=1` opens the modal, final landing CTA opens signup
   - Surfaced by: walkthrough — R4, R5
   - Files: `Smart CafeX/smart.html`, `backend/static/landing.html`
   - Verify: test + browser: `/smart` shows the link; `/?signup=1` opens signup
-- [ ] **T4 (P1, human: ~2h / CC: ~15min)** — review modules — 200 `needs: "review"` with an empty state; truthful sample toast
+- [x] **T4 (P1, human: ~2h / CC: ~15min)** — review modules — 200 `needs: "review"` with an empty state; truthful sample toast
   - Surfaced by: Section 2 — R8
   - Files: `backend/main.py`, `Smart CafeX/smart.js`
   - Verify: test for the three endpoints; browser shows the empty state, no console 400s
-- [ ] **T5 (P1, human: ~4h / CC: ~20min)** — sample data — seeded generator and a clothing / jewellery / perfume dataset with the same columns
+- [x] **T5 (P1, human: ~4h / CC: ~20min)** — sample data — seeded generator and a clothing / jewellery / perfume dataset with the same columns
   - Surfaced by: walkthrough — R7
   - Files: `scripts/make_sample_data.py`, `data/sample_transactions.csv`
   - Verify: test (categories, no café words, unique ids, win-back list); browser shows kurtas
-- [ ] **T6 (P2, human: ~1h / CC: ~10min)** — Today — hide "platform names not linked" while sales are the sample
+- [x] **T6 (P2, human: ~1h / CC: ~10min)** — Today — hide "platform names not linked" while sales are the sample
   - Surfaced by: Section 4 — S4
   - Files: to be determined (where Today builds that task)
   - Verify: test: after demo absent, after a real upload present
-- [ ] **T7 (P2, human: ~1h / CC: ~10min)** — suggestions — hold the generic "trending angle" post until the product type is known
+- [x] **T7 (P2, human: ~1h / CC: ~10min)** — suggestions — hold the generic "trending angle" post until the product type is known
   - Surfaced by: walkthrough — R10
   - Files: `backend/core/content_gen.py` (and its caller)
   - Verify: test: a brand-new seller's insights do not include it
-- [ ] **T8 (P2, human: ~1h / CC: ~10min)** — home — "Welcome" before any data; Today above the explainer while there is no data
+- [x] **T8 (P2, human: ~1h / CC: ~10min)** — home — "Welcome" before any data; Today above the explainer while there is no data
   - Surfaced by: walkthrough — R6, R12
   - Files: `Smart CafeX/smart.js`
   - Verify: browser at 375px: the first action is visible without scrolling
-- [ ] **T9 (P2, human: ~1 day / CC: ~45min)** — copy and icons — string-aware em dash sweep of `smart.js` and `smart.html`; icon names instead of emoji in 6 backend files; `ico()`; test gate
+- [x] **T9 (P2, human: ~1 day / CC: ~45min)** — copy and icons — string-aware em dash sweep of `smart.js` and `smart.html`; icon names instead of emoji in 6 backend files; `ico()`; test gate
   - Surfaced by: Sections 5, 10 — R9
   - Files: `Smart CafeX/smart.js`, `Smart CafeX/smart.html`, `backend/core/product_config.py`, `backend/core/commerce.py`, `backend/core/smart.py`, `backend/core/supply.py`, `backend/core/ad_analytics.py`, `backend/main.py`
   - Verify: `node` parses `smart.js`; comment em dash count unchanged; test gate passes
-- [ ] **T10 (P1, human: ~4h / CC: ~20min)** — tests — `scripts/test_launch_readiness.py` for everything above; all existing suites green
+- [x] **T10 (P1, human: ~4h / CC: ~20min)** — tests — `scripts/test_launch_readiness.py` for everything above; all existing suites green
   - Surfaced by: Section 6
   - Files: `scripts/test_launch_readiness.py`
   - Verify: `python scripts/test_launch_readiness.py` plus the existing suites
-- [ ] **T11 (P2, human: ~3h / CC: ~20min)** — docs — `Brand.md` plan names (Free / Max) and current offer; new `Product.md`
+- [x] **T11 (P2, human: ~3h / CC: ~20min)** — docs — `Brand.md` plan names (Free / Max) and current offer; new `Product.md`
   - Surfaced by: walkthrough — R11, and task 1 of the request
   - Files: `Brand.md`, `Product.md`
   - Verify: plan names and prices match `backend/core/pricing.py`

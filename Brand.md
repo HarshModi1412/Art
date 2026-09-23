@@ -1,4 +1,4 @@
-# One Tap Manager — Brand Guide
+# One Tap Manager brand guide
 
 This is the single reference for how One Tap Manager sounds, what it stands for, and who it is for. It governs product copy, the landing page, seller storefront defaults, generated captions, emails, and anything a customer reads. When a decision is not covered here, decide the way the rest of this document would.
 
@@ -96,7 +96,7 @@ Everything we say ladders up to these four. First pillar leads; the rest support
 
 2. **Connect what you already sell on, get told what to fix.** Analytics is the wedge and it is free forever. Upload one sales file, or connect a channel, and the first answers are on screen in about two minutes. It does not ask you to change how you sell.
 
-3. **One flat price that replaces four to six apps. Never a cut of your sales.** Priced explicitly against the Shopify app stack (roughly ₹7,600 a month across separate apps) versus ₹999 for Pro. Not per-order, not a percentage of sales. Your money is yours.
+3. **One flat price that replaces four to six apps. Never a cut of your sales.** Priced explicitly against the Shopify app stack (roughly ₹7,600 a month across separate apps) versus ₹999 a month for Max. Not per-order, not a percentage of sales. Your money is yours.
 
 4. **It does the work, not just the thinking.** The win-back message is written. The purchase order is filled in. The week of Instagram is planned, captioned and scheduled. You approve and press send. New-generation AI, aimed at doing, not at demos.
 
@@ -163,7 +163,9 @@ These are hard rules. They apply to every customer-facing surface, including gen
 
 ### Product and money terms
 - The product is **One Tap Manager**, capitalised, no "the" in front.
-- Plans are **Free**, **Semi Pro** and **Pro**. Credit packs are the pay-as-you-go alternative.
+- Plans are **Free** (₹0, forever) and **Max** (₹999 a month). Credit packs (100 for ₹299, 300 for ₹749, 1,000 for ₹1,999) are the pay-as-you-go alternative, and credits never expire.
+- "Semi Pro" is retired. Never show it. "pro" is only the internal id for Max; the seller always reads "Max".
+- While launch mode is on, every feature is free. Say "Free during launch" on anything that will later need Max, so nobody is surprised when it ends.
 - We never describe our pricing as a commission, a cut, a take rate, or per-order. We charge a flat monthly price, or credits that never expire. Say so plainly.
 
 ### AI and honesty terms
