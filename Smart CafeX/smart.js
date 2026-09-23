@@ -8033,9 +8033,18 @@ function saveState(live) {
         <i></i>Published</span>`;
 }
 
+/* The shop's public address: onetapmanager.com/<company>. The server decides
+   it (see public_path in _site_state), because only the server knows which
+   words are the app's own routes; a handle that is one of them only works at
+   /s/<handle>. Falls back to /s/, which always works, before the first load. */
+function shopPath() {
+  if (!_site || !_site.handle) return "";
+  return (_siteMeta && _siteMeta.public_path) || `/s/${_site.handle}`;
+}
+
 function renderSite() {
   const live = _site.published && _site.handle;
-  const url = _site.handle ? `/s/${_site.handle}` : "";
+  const url = shopPath();
 
   const rail = STEPS.map((st, i) => {
     const done = i < stepIndex();
@@ -8201,8 +8210,8 @@ function stepSetup() {
     <div class="sup-sub">Web address</div>
     <p class="muted tiny" style="margin:0 0 10px;">Your site always lives here. Pointing your own domain at it below does not take this address away.</p>
     <div class="handle-row">
-      <span class="handle-pre">${esc(location.origin)}/s/</span>
-      <input id="siteHandle" value="${esc(_site.handle || "")}" placeholder="your-brand" />
+      <span class="handle-pre">${esc(location.origin)}/</span>
+      <input id="siteHandle" value="${esc(_site.handle || "")}" placeholder="${esc((_siteMeta && _siteMeta.suggested_handle) || "your-company")}" />
       <span class="handle-state" id="handleState"></span>
     </div>
 
@@ -8814,7 +8823,7 @@ async function renderGateway() {
 /* ============================= STEP 5: PUBLISH =========================== */
 function stepPublish() {
   const c = _siteMeta.counts;
-  const url = location.origin + "/s/" + (_site.handle || "");
+  const url = location.origin + shopPath();
   const checks = [
     [!!_site.brand, "Brand name set"],
     [!!_site.handle, "Web address chosen"],
@@ -8835,7 +8844,7 @@ function stepPublish() {
         : "You can still publish — the warnings above are things shoppers will notice."}</p>
       <div class="row" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
         <button class="btn ${_site.published ? "ghost" : "primary"}" id="pubBtn">${_site.published ? "Unpublish site" : "Publish my site"}</button>
-        ${_site.published ? `<a class="btn ghost" href="/s/${esc(_site.handle)}" target="_blank" rel="noopener">Visit site ↗</a>` : ""}
+        ${_site.published ? `<a class="btn ghost" href="${esc(shopPath())}" target="_blank" rel="noopener">Visit site ↗</a>` : ""}
       </div>
     </div>
     <div class="card">
@@ -9074,7 +9083,7 @@ async function togglePublish() {
     const d = await api("/api/site/publish", { method: "POST", json: { published: want } });
     _siteMeta = d; _site = JSON.parse(JSON.stringify(d.site)); _siteDirty = false;
     renderSite();
-    toast(want ? `Live at ${location.origin}/s/${_site.handle}` : "Site unpublished");
+    toast(want ? `Live at ${location.origin}${shopPath()}` : "Site unpublished");
   } catch (e) { toast(e.message, 5000); }
 }
 

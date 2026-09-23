@@ -23,6 +23,7 @@ import json
 import os
 import re
 import threading
+import time
 
 import pandas as pd
 
@@ -469,9 +470,27 @@ def normalise_handle(raw: str) -> str:
     return h[:40]
 
 
+# Every first path segment the app itself answers on (legal, healthz, reset,
+# ...). Filled in by main.py once all routes are registered, because a shop is
+# now reachable at /<handle> as well as /s/<handle>, and a handle that equals a
+# real route would be a shop nobody can reach at its own address. Kept apart
+# from RESERVED_HANDLES so the list stays true as routes are added, instead of
+# depending on somebody remembering to edit a set in another file.
+ROUTE_RESERVED: set[str] = set()
+
+
+def reserve_routes(segments) -> None:
+    ROUTE_RESERVED.update(normalise_handle(x) for x in segments if x)
+
+
+def handle_reserved(handle: str) -> bool:
+    h = normalise_handle(handle)
+    return h in RESERVED_HANDLES or h in ROUTE_RESERVED
+
+
 def handle_available(handle: str, for_email: str = "") -> bool:
     h = normalise_handle(handle)
-    if not h or h in RESERVED_HANDLES or len(h) < 3:
+    if not h or handle_reserved(h) or len(h) < 3:
         return False
     owner = resolve_handle(h)
     return owner is None or owner == (for_email or "").strip().lower()
@@ -501,6 +520,21 @@ def _claim_handle(handle: str, email: str, previous: str = "") -> None:
             idx.pop(previous, None)
         idx[h] = email
         _write_index(idx)
+
+
+_PLACEHOLDER_RE = re.compile(r"my-store(-[0-9a-f]{1,4})?")
+
+
+def is_placeholder_handle(handle: str) -> bool:
+    """A handle we invented because there was no name to make one from."""
+    return bool(_PLACEHOLDER_RE.fullmatch(normalise_handle(handle)))
+
+
+def company_name(site: dict) -> str:
+    """The name the default web address is made from: the brand the shop
+    trades under, or failing that the business name from its trust details."""
+    return (str(site.get("brand") or "").strip()
+            or str(((site.get("trust") or {}).get("business_name")) or "").strip())
 
 
 def suggest_handle(brand: str, email: str) -> str:
@@ -571,14 +605,74 @@ def _domain_index() -> dict:
         return dict((_read_index().get(DOMAIN_KEY) or {}))
 
 
+# THE BUG THIS FIXES: a seller typed their domain, pressed Save, saw it in the
+# form afterwards, and the domain still did not open their shop. The domain was
+# saved: it lives in the site's config, which is in Supabase. What routes a
+# request that arrives on korastudio.com to the right shop is a separate
+# domain -> handle map, and that map was kept ONLY in site_index.json on local
+# disk. On Render that file does not outlive a redeploy unless a disk is
+# attached, and it is never shared between instances, so the form said one
+# thing and the router knew nothing. resolve_handle() always asked Supabase
+# first; resolve_domain() never did.
+#
+# Now it asks the same place the domain is actually stored. No new column and
+# no migration: config is a jsonb object and PostgREST filters on
+# config->>custom_domain directly. The file index stays as the fallback for a
+# deployment without Supabase, and as the answer for a row written before the
+# config was stored as an object.
+#
+# CACHED, because the middleware asks this for every request that arrives on a
+# host that is not the app's own, and two database round trips in front of
+# every page of every shop is not acceptable on a small instance. A minute is
+# short enough that a newly saved domain works almost at once (claim_domain
+# also clears its entry) and long enough that a burst of traffic costs one
+# lookup. Misses are cached too, because a bot trying random Host headers is
+# exactly the traffic that would otherwise reach the database every time.
+_DOMAIN_TTL = 60.0
+_DOMAIN_CACHE_MAX = 2000
+_domain_cache: dict[str, tuple[float, str]] = {}
+
+
+def _forget_domain(*domains: str) -> None:
+    for d in domains:
+        d = normalise_domain(d)
+        if d:
+            for k in (d, d[4:] if d.startswith("www.") else "www." + d):
+                _domain_cache.pop(k, None)
+
+
 def resolve_domain(domain: str) -> str:
     """Which handle answers on this domain, or "" — how a request that arrived
     on korastudio.com finds the shop to render."""
     d = normalise_domain(domain)
     if not d:
         return ""
-    idx = _domain_index()
-    return idx.get(d) or idx.get(d[4:] if d.startswith("www.") else "www." + d) or ""
+    now = time.time()
+    hit = _domain_cache.get(d)
+    if hit and now - hit[0] < _DOMAIN_TTL:
+        return hit[1]
+    twin = d[4:] if d.startswith("www.") else "www." + d
+    found = ""
+    if db.SUPABASE_ENABLED:
+        # The seller may have saved either form, and the customer may type
+        # either; both have to land on the shop.
+        for cand in (d, twin):
+            try:
+                row = db.fetch_one(T_SITE, {"config->>custom_domain": cand})
+            except Exception:  # noqa: BLE001 - table may not exist yet
+                row = None
+            if row and row.get("handle"):
+                found = normalise_handle(row["handle"])
+                break
+    if not found:
+        idx = _domain_index()
+        found = idx.get(d) or idx.get(twin) or ""
+    if len(_domain_cache) >= _DOMAIN_CACHE_MAX:
+        _domain_cache.clear()           # bounded: the key is caller-controlled
+    # Both forms are the same shop (or the same miss), so one lookup answers
+    # for the pair: a customer on www. and one on the bare domain cost one query.
+    _domain_cache[d] = _domain_cache[twin] = (now, found)
+    return found
 
 
 def claim_domain(handle: str, domain: str, previous: str = "") -> None:
@@ -599,6 +693,7 @@ def claim_domain(handle: str, domain: str, previous: str = "") -> None:
                 doms.setdefault("www." + d, h)
         idx[DOMAIN_KEY] = doms
         _write_index(idx)
+    _forget_domain(domain, previous)
 
 
 def domain_owner(domain: str, for_email: str = "") -> str:
@@ -779,12 +874,26 @@ def save_site(email: str, patch: dict) -> dict:
         site["theme"] = "basic"
 
     # ---- handle ----
+    # The default address is onetapmanager.com/<company name>. A shop whose
+    # address is still the "my-store" we invented before it had a name gets the
+    # company's name the first time there is one, as long as it has not gone
+    # live: a published address may already be printed on a card or shared on
+    # WhatsApp, and moving it would break every one of those links.
     wanted = normalise_handle(site.get("handle") or "")
-    if not wanted:
-        wanted = suggest_handle(site["brand"] or "my-store", email)
+    name = company_name(site)
+    explicit = normalise_handle((patch or {}).get("handle") or "")
+    if (not wanted or (is_placeholder_handle(wanted) and name
+                       and not site.get("published")
+                       and (not explicit or explicit == previous_handle))):
+        wanted = suggest_handle(name or "my-store", email)
     if wanted != previous_handle and not handle_available(wanted, email):
         raise ValueError(f"The address “{wanted}” is already taken, try another.")
-    if wanted in RESERVED_HANDLES or len(wanted) < 3:
+    # Route names are only enforced on a CHANGE. A shop that already owns a
+    # handle which later became an app route keeps it and stays reachable at
+    # /s/<handle>; refusing its next save over a word it did not choose would
+    # lock the seller out of editing their own shop.
+    if (wanted in RESERVED_HANDLES or len(wanted) < 3
+            or (wanted != previous_handle and wanted in ROUTE_RESERVED)):
         raise ValueError("Pick an address of at least 3 letters that isn't a reserved word.")
     site["handle"] = wanted
 

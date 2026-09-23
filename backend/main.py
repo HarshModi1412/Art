@@ -4486,7 +4486,7 @@ def _site_state(email: str) -> dict:
         "fonts": sitebuilder.FONTS,
         "resolved": sitebuilder.resolved_style(site),
         "suggested_handle": site.get("handle") or sitebuilder.suggest_handle(
-            site.get("brand") or "", email),
+            sitebuilder.company_name(site), email),
         "counts": {
             "listed": len(listed),
             "products": len(all_prods),
@@ -4496,7 +4496,14 @@ def _site_state(email: str) -> dict:
         "icons": sitebuilder.ICONS,
         "promise_icons": sitebuilder.PROMISE_ICONS,
         "stats": storefront.order_stats(email),
-        "public_path": f"/s/{site.get('handle')}" if site.get("handle") else "",
+        # The address to show and share: onetapmanager.com/<company>. Decided
+        # here rather than in the browser because only the server knows which
+        # words are routes the app answers on, and a handle that is one of
+        # them is only reachable at /s/<handle>.
+        "public_path": ((f"/s/{site.get('handle')}"
+                         if sitebuilder.handle_reserved(site.get("handle"))
+                         else f"/{site.get('handle')}")
+                        if site.get("handle") else ""),
     }
 
 
@@ -5220,13 +5227,24 @@ def _render_store(handle: str, request: Request, product_id: str = "") -> Respon
                         if p["id"] == product_id), None)
     meta = sitebuilder.seo_meta(handle, site, product)
     base = _public_base_url(request)
-    # On a seller's own domain the shop is at the root, so every link the crawler
-    # follows has to be written from the path this request actually arrived on.
-    on_own_domain = not request.url.path.startswith("/s/")
-    store_path = "" if on_own_domain else f"/s/{handle}"
-    # The canonical is the readable form, always, whichever form was requested.
-    # Two URLs for one page is the thing a canonical tag exists to settle.
-    url = (base + (store_path or "")) + (
+    # Three addresses reach a shop: the seller's own domain (the shop is at the
+    # root), onetapmanager.com/<company> (the default public address, which the
+    # router rewrites onto /s/ and marks with store_base), and /s/<handle>, which
+    # every link shared before the short form existed uses. Every link on the
+    # page is written in the form this request arrived on, so a crawler walking
+    # it stays on one form.
+    pretty_base = getattr(request.state, "store_base", "") or ""
+    on_own_domain = not pretty_base and not request.url.path.startswith("/s/")
+    store_path = pretty_base or ("" if on_own_domain else f"/s/{handle}")
+    # The canonical, though, is ONE address whichever form was requested,
+    # because two URLs for one page is the thing a canonical tag exists to
+    # settle. On the app's host that is the short /<company> form, unless the
+    # handle collides with a route the app itself answers on, where /s/ is the
+    # only address that reaches the shop.
+    public_path = ("" if on_own_domain
+                   else f"/s/{handle}" if sitebuilder.handle_reserved(handle)
+                   else f"/{handle}")
+    url = (base + public_path) + (
         f"/p/{sitebuilder.product_slug(product)}" if product else "")
 
     with open(index, encoding="utf-8") as fh:
@@ -5363,7 +5381,10 @@ def storefront_sitemap(handle: str, request: Request):
     owner = sitebuilder.resolve_handle(handle)
     if not owner or not sitebuilder.get_site(owner).get("published"):
         raise HTTPException(404, "No store at this address.")
-    base = f"{_public_base_url(request)}/s/{handle}"
+    # The same address the canonical tag names, so the map and the pages agree.
+    base = (f"{_public_base_url(request)}/s/{handle}"
+            if sitebuilder.handle_reserved(handle)
+            else f"{_public_base_url(request)}/{handle}")
     urls = ([base]
             + [f"{base}/p/{sitebuilder.product_slug(p)}"
                for p in products.storefront_payload(owner)]
@@ -5885,20 +5906,85 @@ async def _custom_domain(request, call_next):
     path = request.url.path
     if path.startswith(_APP_PATHS):
         return await call_next(request)
-    try:
-        handle = sitebuilder.resolve_domain(request.url.hostname or "")
-    except Exception:  # noqa: BLE001 — never break a request over this
-        handle = ""
-    if not handle:
+    host = request.url.hostname or ""
+    handle = ""
+    # Our own host is never a seller's domain, and asking the database whether
+    # it is would put a lookup in front of every visit to the landing page.
+    if not _own_host(host):
+        try:
+            handle = sitebuilder.resolve_domain(host)
+        except Exception:  # noqa: BLE001 — never break a request over this
+            handle = ""
+    if handle:
+        if path in ("/", ""):
+            return _render_store(handle, request)
+        if path.startswith("/p/"):
+            return _render_store(handle, request, sitebuilder.product_id_from_slug(
+                path[len("/p/"):].split("/")[0]))
+        if path == "/sitemap.xml":
+            return storefront_sitemap(handle, request)
         return await call_next(request)
-    if path in ("/", ""):
-        return _render_store(handle, request)
-    if path.startswith("/p/"):
-        return _render_store(handle, request, sitebuilder.product_id_from_slug(
-            path[len("/p/"):].split("/")[0]))
-    if path == "/sitemap.xml":
-        return storefront_sitemap(handle, request)
+
+    # onetapmanager.com/<company>: the default public address of every shop.
+    # Rewritten onto the /s/ routes rather than served by a second copy of
+    # them, so the home page, product pages, policy pages and sitemap all come
+    # from the one implementation that is already tested; store_base tells the
+    # renderer to write its links in this short form.
+    pretty = _pretty_shop(path)
+    if pretty:
+        h, rest = pretty
+        new_path = f"/s/{h}{rest}"
+        request.scope["path"] = new_path
+        request.scope["raw_path"] = new_path.encode()
+        request.state.store_base = f"/{h}"
     return await call_next(request)
+
+
+def _own_host(host: str) -> bool:
+    """The app's own addresses, as opposed to a seller's domain."""
+    h = (host or "").split(":")[0].lower()
+    if not h or publicurl.is_local(h) or h.endswith(".onrender.com"):
+        return True
+    own = {x for x in (publicurl.configured().split("://")[-1].split("/")[0],
+                       os.environ.get("RENDER_EXTERNAL_HOSTNAME", "")) if x}
+    own |= {"www." + x for x in own}
+    return h in own
+
+
+_PRETTY_TTL = 30.0
+_PRETTY_MAX = 5000
+_pretty_seen: dict[str, tuple[float, bool]] = {}
+
+
+def _pretty_shop(path: str):
+    """(handle, rest) when the first segment of `path` is a shop's handle.
+
+    Cached for thirty seconds, misses included. Anything that looks like a
+    word reaches here (/wp-admin, /phpmyadmin: the internet tries all of them),
+    and without a cache each of those would be a database query. Thirty seconds
+    is how long a brand-new shop's short address can take to start answering;
+    its /s/ address works from the first moment.
+    """
+    parts = path.split("/", 2)
+    seg = parts[1] if len(parts) > 1 else ""
+    if len(seg) < 3 or seg != sitebuilder.normalise_handle(seg):
+        return None
+    if sitebuilder.handle_reserved(seg):
+        return None
+    rest = ("/" + parts[2]) if len(parts) > 2 and parts[2] else ""
+    now = time.time()
+    hit = _pretty_seen.get(seg)
+    if hit and now - hit[0] < _PRETTY_TTL:
+        live = hit[1]
+    else:
+        try:
+            live = sitebuilder.resolve_handle(seg) is not None
+        except Exception:  # noqa: BLE001
+            live = False
+        if len(_pretty_seen) >= _PRETTY_MAX:
+            _pretty_seen.clear()       # bounded: the key is caller-controlled
+        _pretty_seen[seg] = (now, live)
+    return (seg, rest) if live else None
 
 
 # The landing page holds __BASE_URL__ wherever it needs its own absolute address:
@@ -7241,3 +7327,20 @@ def social_playbook(festival: str, authorization: str | None = Header(default=No
     if not b:
         raise HTTPException(404, "No playbook for that festival")
     return b
+
+
+# Every first path segment this app answers on is a word no shop may take as
+# its handle, now that /<handle> is a shop's address. Computed from the routes
+# themselves, at the end of this module where all of them exist, so a route
+# added later is reserved without anybody having to remember to reserve it.
+def _reserve_app_routes() -> None:
+    segs = set()
+    for r in app.routes:
+        p = getattr(r, "path", "") or ""
+        first = p.split("/")[1] if p.startswith("/") and "/" in p[1:] + "/" else ""
+        if first and "{" not in first:
+            segs.add(first)
+    sitebuilder.reserve_routes(segs)
+
+
+_reserve_app_routes()
