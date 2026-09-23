@@ -5875,9 +5875,16 @@ async def _force_https(request, call_next):
     # deletes accounts, all of them one click behind a logged-in session. With
     # nothing said about framing, any page anywhere could load the app in an
     # invisible iframe and steer a seller into clicking one of them. frame-
-    # ancestors 'none' is the modern spelling and X-Frame-Options is the one
-    # older browsers still read; both are cheap and they say the same thing.
-    # Nothing in this product is meant to be embedded, so 'none' costs nothing.
+    # ancestors is the modern spelling and X-Frame-Options is the one older
+    # browsers still read; both are cheap and they say the same thing.
+    #
+    # 'self', NOT 'none'. This was 'none' for one release, on the reasoning
+    # that nothing in the product is meant to be embedded, and that reasoning
+    # was wrong: the Website Builder's live preview IS an iframe of the seller's
+    # own storefront, served from this same origin, so 'none' blanked the
+    # builder for every seller while protecting nothing extra. 'self' still
+    # refuses every other site, which is the whole of the clickjacking threat;
+    # the only thing it allows is this app framing its own pages.
     #
     # REFERRER. A password reset link is a bearer credential IN a URL. Without
     # a policy, following any link from that page would hand the whole thing,
@@ -5887,8 +5894,8 @@ async def _force_https(request, call_next):
     #
     # setdefault throughout: /generated_images sets its own, much stricter CSP
     # for user-uploaded files, and that one must win.
-    response.headers.setdefault("X-Frame-Options", "DENY")
-    response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'self'")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     return response
