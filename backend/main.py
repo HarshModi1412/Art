@@ -5685,6 +5685,42 @@ def og_image_png():
                     headers={"Cache-Control": "public, max-age=604800"})
 
 
+# The logo Google shows beside the site in results and in the knowledge panel.
+# Organization markup needs a raster image of at least 112px, square, and it is
+# the "1T" mark from the site header so a search result and the page match.
+_LOGO_PNG_CACHE: dict = {}
+
+
+def _logo_png() -> bytes:
+    if "png" in _LOGO_PNG_CACHE:
+        return _LOGO_PNG_CACHE["png"]
+    from PIL import Image, ImageDraw
+    from backend.core import ailabel
+    S = 512
+    im = Image.new("RGB", (S, S), (247, 245, 239))
+    d = ImageDraw.Draw(im)
+    d.rounded_rectangle([32, 32, S - 32, S - 32], radius=96, fill=(30, 58, 138))
+    font = ailabel._font(210)
+    box = d.textbbox((0, 0), "1T", font=font)
+    w, h = box[2] - box[0], box[3] - box[1]
+    d.text(((S - w) / 2 - box[0], (S - h) / 2 - box[1]), "1T", font=font, fill=(255, 255, 255))
+    buf = io.BytesIO()
+    im.save(buf, format="PNG", optimize=True)
+    _LOGO_PNG_CACHE["png"] = buf.getvalue()
+    return _LOGO_PNG_CACHE["png"]
+
+
+@app.get("/logo.png")
+def logo_png():
+    try:
+        body = _logo_png()
+    except Exception as e:  # noqa: BLE001 - a missing logo must not 500 the route
+        errors.record(e, where="GET /logo.png")
+        return Response(content=_FAVICON, media_type="image/svg+xml")
+    return Response(content=body, media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=604800"})
+
+
 @app.get("/og-image.svg")
 def og_image():
     """The card a pasted link shows. Cached hard, because it never changes
