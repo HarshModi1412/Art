@@ -140,6 +140,7 @@ One screen for everything set up once (`account.py`). Secrets never come back to
   - Open Graph images;
   - Google Analytics (G-VMYF7N98B9, set as `GA4_MEASUREMENT_ID`), loaded only after the visitor says yes;
   - Terms, Privacy, Refunds and Cookies pages.
+- **Pages for AI assistants and search** (`geo.py`): `/about`, `/for/clothing-sellers`, `/for/jewellery-sellers`, `/for/perfume-sellers`, `/compare/shopify-apps` and the `/guides` hub. Each opens with a direct answer and a date, and carries FAQ schema. Prices come from `pricing.py`. `/llms.txt` summarises the product for AI agents. robots.txt names and allows every AI crawler while keeping the app private. See `AI_VISIBILITY_CHECKLIST.md` and `REDDIT_PLAYBOOK.md`.
 - **Admin health** (`/api/admin/health`): reports launch blockers, such as AI labelling being turned down.
 
 ---
@@ -164,6 +165,9 @@ One screen for everything set up once (`account.py`). Secrets never come back to
 | `LAUNCH_MODE` | `true` (default) makes everything free |
 | `AI_LABEL` | `on`, `images` or `off`, as above |
 | `META_APP_SECRET` | Needed to verify Instagram webhooks |
+| `BRAND_PROFILES` | Official profile URLs (Reddit, Instagram, LinkedIn and so on), comma separated. Listed as `sameAs` in the structured data and in `/llms.txt` |
+| `INDEXNOW_KEY` | Serves `/indexnow.txt`, so `scripts/indexnow_ping.py` can tell Bing that pages changed |
+| `BING_SITE_VERIFICATION` | Serves `/BingSiteAuth.xml` for Bing Webmaster Tools |
 | `GA4_MEASUREMENT_ID` | Google Analytics id. With none set, no tracker and no cookie banner |
 | `SMTP_*` | The app's own mail, for password resets and the digest |
 | `OPENAI_API_KEY` | The AI analyst, chatbot and writing |

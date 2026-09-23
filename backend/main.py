@@ -18,6 +18,7 @@ import hmac
 import json
 import math
 import os
+import re
 import secrets
 import time
 
@@ -42,6 +43,7 @@ from backend.core import messaging, password_reset, today as today_mod
 from backend.core import winback_proof
 from backend.core import loginguard, google_auth, winback_auto, publisher
 from backend.core import ratelimit
+from backend.core import geo
 from backend.core import media
 from backend.core import cache
 from backend.core import cancellations
@@ -5494,16 +5496,12 @@ def robots(request: Request):
     seller's private figures; there is nothing there for a crawler and no reason
     to let it try.
     """
-    base = _public_base_url(request)
-    return Response(
-        content=("User-agent: *\n"
-                 "Allow: /\n"
-                 "Disallow: /smart\n"
-                 "Disallow: /app\n"
-                 "Disallow: /api/\n"
-                 "Disallow: /reset\n"
-                 f"\nSitemap: {base}/sitemap.xml\n"),
-        media_type="text/plain")
+    # The AI crawlers are named one by one (see core/geo.py): a crawler that
+    # finds a group naming it follows only that group, so each carries the same
+    # private-path rules, and nobody can later drop us out of AI answers with a
+    # blanket rule without seeing the list first.
+    return Response(content=geo.robots_txt(_public_base_url(request)),
+                    media_type="text/plain")
 
 
 # Pages a crawler should know about. Deliberately short and hand-kept: this is a
@@ -5519,6 +5517,13 @@ PUBLIC_PAGES = [
     ("/legal/cookies", "0.3", "monthly"),
     ("/legal/acceptable-use", "0.3", "monthly"),
     ("/legal/grievance", "0.4", "monthly"),
+    # The pages written to be quoted by AI assistants and search (core/geo.py).
+    ("/guides", "0.7", "weekly"),
+    ("/about", "0.8", "monthly"),
+    ("/for/clothing-sellers", "0.8", "monthly"),
+    ("/for/jewellery-sellers", "0.8", "monthly"),
+    ("/for/perfume-sellers", "0.8", "monthly"),
+    ("/compare/shopify-apps", "0.7", "monthly"),
 ]
 
 
@@ -5537,11 +5542,13 @@ PUBLIC_PAGES = [
 # time somebody forgot it.
 _LEGAL_SRC = os.path.join(os.path.dirname(__file__), "core", "legal.py")
 _LANDING_SRC = os.path.join(STATIC_DIR, "landing.html")
+_GEO_SRC = os.path.join(os.path.dirname(__file__), "core", "geo.py")
 
 
 def _lastmod(path: str) -> str:
     """The date the source behind this URL last actually changed."""
-    src = _LANDING_SRC if path == "/" else _LEGAL_SRC
+    src = (_LANDING_SRC if path == "/"
+           else _GEO_SRC if path in geo.paths() else _LEGAL_SRC)
     try:
         return _dt.date.fromtimestamp(os.path.getmtime(src)).isoformat()
     except OSError:
@@ -6061,7 +6068,8 @@ def landing(request: Request):
     cached = _LANDING_CACHE.get(base)
     if cached is None:
         with open(os.path.join(STATIC_DIR, "landing.html"), encoding="utf-8") as fh:
-            cached = fh.read().replace("__BASE_URL__", base)
+            cached = (fh.read().replace("__BASE_URL__", base)
+                      .replace('["__SAME_AS__"]', geo.same_as_json()))
         # One entry per host, so a seller domain and the app's own host do not
         # keep evicting each other. Bounded, because this is a public endpoint
         # and Host is attacker-controlled.
@@ -6088,6 +6096,67 @@ def app_page():
 # all three are served from here rather than from a static file, because they
 # have to name the operator and that comes from configuration. See
 # backend/core/legal.py for which rule each document answers.
+# ---------------------------------------------------------------------------
+# Pages written to be quoted by AI assistants and search (core/geo.py)
+# ---------------------------------------------------------------------------
+def _geo_page(path: str, request: Request) -> Response:
+    html = geo.render(path, _public_base_url(request))
+    if not html:
+        raise HTTPException(404, "No such page.")
+    return Response(content=html, media_type="text/html",
+                    headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/guides", response_class=Response)
+def geo_guides(request: Request):
+    return Response(content=geo.hub(_public_base_url(request)), media_type="text/html",
+                    headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/about", response_class=Response)
+def geo_about(request: Request):
+    return _geo_page("/about", request)
+
+
+@app.get("/for/{slug}", response_class=Response)
+def geo_for(slug: str, request: Request):
+    return _geo_page(f"/for/{slug}", request)
+
+
+@app.get("/compare/{slug}", response_class=Response)
+def geo_compare(slug: str, request: Request):
+    return _geo_page(f"/compare/{slug}", request)
+
+
+@app.get("/llms.txt")
+def llms_txt(request: Request):
+    return Response(content=geo.llms_txt(_public_base_url(request)),
+                    media_type="text/plain; charset=utf-8",
+                    headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/indexnow.txt")
+def indexnow_key():
+    """The IndexNow key file. Bing, and through it ChatGPT search, re-crawls a
+    page within hours when told it changed; scripts/indexnow_ping.py does the
+    telling. 404 until INDEXNOW_KEY is set, so nothing is claimed early."""
+    key = (os.getenv("INDEXNOW_KEY") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9-]{8,128}", key):
+        raise HTTPException(404, "Not found")
+    return Response(content=key, media_type="text/plain")
+
+
+@app.get("/BingSiteAuth.xml")
+def bing_site_auth():
+    """Bing Webmaster Tools' XML verification file, from BING_SITE_VERIFICATION."""
+    code = (os.getenv("BING_SITE_VERIFICATION") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9]{8,64}", code):
+        raise HTTPException(404, "Not found")
+    return Response(content=('<?xml version="1.0"?>\n<users>\n'
+                             f"\t<user>{code}</user>\n</users>\n"),
+                    media_type="application/xml")
+
+
 @app.get("/legal", response_class=Response)
 def legal_hub(request: Request):
     return Response(content=legal_html.hub(_public_base_url(request)),
