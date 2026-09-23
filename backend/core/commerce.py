@@ -59,7 +59,7 @@ class CommerceError(RuntimeError):
 def catalog() -> list[dict]:
     return [
         {
-            "id": "shopify", "label": "Shopify", "icon": "🛍️",
+            "id": "shopify", "label": "Shopify", "icon": "bag",
             "fields": [
                 {"key": "shop_domain", "label": "Store domain", "placeholder": "your-store.myshopify.com"},
                 {"key": "access_token", "label": "Admin API access token", "placeholder": "shpat_…", "secret": True},
@@ -68,7 +68,7 @@ def catalog() -> list[dict]:
                     "enable read_orders + read_products, install it, then copy the Admin API access token.",
         },
         {
-            "id": "woocommerce", "label": "WooCommerce", "icon": "🟣",
+            "id": "woocommerce", "label": "WooCommerce", "icon": "grid",
             "fields": [
                 {"key": "store_url", "label": "Store URL", "placeholder": "https://yourstore.com"},
                 {"key": "consumer_key", "label": "Consumer key", "placeholder": "ck_…", "secret": True},
@@ -78,7 +78,7 @@ def catalog() -> list[dict]:
                     "give it Read access, then copy the Consumer key and Consumer secret.",
         },
         {
-            "id": "wix", "label": "Wix", "icon": "🟡",
+            "id": "wix", "label": "Wix", "icon": "globe",
             "fields": [
                 {"key": "api_key", "label": "API key", "placeholder": "IST.…", "secret": True},
                 {"key": "site_id", "label": "Site ID", "placeholder": "xxxxxxxx-xxxx-xxxx-…"},
@@ -87,7 +87,7 @@ def catalog() -> list[dict]:
                     "Wix Stores (Orders) permission, then copy the key and your Site ID.",
         },
         {
-            "id": "amazon", "label": "Amazon", "icon": "📦",
+            "id": "amazon", "label": "Amazon", "icon": "package",
             "fields": [
                 {"key": "refresh_token", "label": "LWA refresh token", "placeholder": "Atzr|…", "secret": True},
                 {"key": "lwa_client_id", "label": "LWA client id", "placeholder": "amzn1.application-oa2-client…"},

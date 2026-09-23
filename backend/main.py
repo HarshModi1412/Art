@@ -258,7 +258,7 @@ async def _rate_limit(request: Request, call_next):
     if request.method == "OPTIONS" or not path.startswith("/api/"):
         return await call_next(request)
     caller = loginguard.client_ip(request) or "?"
-    ok, retry = ratelimit.check(caller, path)
+    ok, retry = ratelimit.check(caller, path, request.method)
     if not ok:
         return JSONResponse(
             status_code=429,
@@ -3516,7 +3516,7 @@ def smart_positioning(lang: str = "en", authorization: str | None = Header(defau
     email = require_user(authorization)
     df = smart.load_review(email)
     if df is None:
-        raise HTTPException(400, "Upload a Review file in Review Analytics first.")
+        return _NEEDS_REVIEWS
     return positioning.analyze_reviews(df, lang, product_type=smart.get_product_type(email))
 
 
@@ -3525,7 +3525,7 @@ def smart_complaints(authorization: str | None = Header(default=None)):
     email = require_user(authorization)
     df = smart.load_review(email)
     if df is None:
-        raise HTTPException(400, "Upload a Review file in Review Analytics first.")
+        return _NEEDS_REVIEWS
     return complaints.analyze_complaints(df, product_type=smart.get_product_type(email))
 
 
@@ -3536,7 +3536,7 @@ def smart_strategy_detect(lang: str = "en", authorization: str | None = Header(d
     email = require_user(authorization)
     df = smart.load_review(email)
     if df is None:
-        raise HTTPException(400, "Upload a Review file in Review Analytics first.")
+        return _NEEDS_REVIEWS
     data = positioning.analyze_reviews(df, lang, product_type=smart.get_product_type(email))
     if not data.get("available"):
         raise HTTPException(400, data.get("reason", "Not enough review data to detect a position."))
@@ -4014,12 +4014,23 @@ def supply_signature(body: SignatureBody, authorization: str | None = Header(def
     return _supply_payload(email)
 
 
+# What the three review-based modules answer before any reviews exist. It
+# used to be an HTTP 400, which the app drew as "Could not load this": an
+# error screen for something that is simply not uploaded yet. A 200 with
+# needs="review" lets the app draw an empty state with an upload button, and
+# keeps a real 400 for a real problem (too few reviews to find a position).
+_NEEDS_REVIEWS = {"needs": "review",
+                  "message": "Upload your customer reviews once, and Review Analytics, "
+                             "Complaint Analysis and Position Strategy all fill in from them."}
+
+
 class SellerMailBody(BaseModel):
     address: str
     password: str
     host: str | None = ""
     port: int | None = 0
     display_name: str | None = ""
+    provider: str | None = ""   # the button picked in the guide; see seller_mail.connect
 
 
 @app.get("/api/mail/account")
@@ -4027,7 +4038,11 @@ def mail_account(authorization: str | None = Header(default=None)):
     """Which address this seller's purchase orders go out from."""
     email = require_user(authorization)
     st = seller_mail.status(email)
+    # `providers` is the step-by-step guide the Account box draws, one entry per
+    # provider button. The browser has no table of its own any more.
     return {**st, "guess": seller_mail.guess(st.get("address") or email),
+            "providers": seller_mail.providers(),
+            "domains": seller_mail.DOMAINS,
             "server_fallback": messaging.smtp_configured()}
 
 
@@ -4040,7 +4055,7 @@ def mail_account_connect(body: SellerMailBody,
     try:
         st = seller_mail.connect(email, body.address, body.password,
                                  body.host or "", int(body.port or 0),
-                                 body.display_name or "")
+                                 body.display_name or "", body.provider or "")
     except ValueError as e:
         raise HTTPException(400, str(e))
     cache.clear(email)
@@ -4826,7 +4841,7 @@ def channels_state(authorization: str | None = Header(default=None)):
     except Exception:  # noqa: BLE001
         connected = {}
     rows = [{
-        "id": "site", "label": site.get("brand") or "My website", "icon": "🏬",
+        "id": "site", "label": site.get("brand") or "My website", "icon": "globe",
         "kind": "own", "status": "live" if site.get("published") else "draft",
         "detail": (f"/s/{site['handle']}" if site.get("handle") else "Not set up yet"),
         "enabled": storefront.channel_enabled(email, "site"),
@@ -4838,7 +4853,7 @@ def channels_state(authorization: str | None = Header(default=None)):
     for c in commerce.catalog():
         cid = c["id"]
         rows.append({
-            "id": cid, "label": c["label"], "icon": c.get("icon", "🛒"), "kind": "marketplace",
+            "id": cid, "label": c["label"], "icon": c.get("icon", "bag"), "kind": "marketplace",
             "status": "connected" if connected.get(cid) else "available",
             "detail": "Connected - pulling orders" if connected.get(cid) else "Connect to pull orders",
             "enabled": storefront.channel_enabled(email, cid),

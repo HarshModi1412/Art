@@ -25,13 +25,13 @@ from __future__ import annotations
 # Product types
 # ---------------------------------------------------------
 PRODUCT_TYPES = [
-    {"id": "jewellery", "label": "Jewellery", "icon": "💍",
+    {"id": "jewellery", "label": "Jewellery", "icon": "spark",
      "noun": "piece", "nouns": "pieces"},
-    {"id": "clothes", "label": "Clothes", "icon": "👗",
+    {"id": "clothes", "label": "Clothes", "icon": "scissors",
      "noun": "item", "nouns": "items"},
-    {"id": "perfumes", "label": "Perfumes", "icon": "🧴",
+    {"id": "perfumes", "label": "Perfumes", "icon": "droplet",
      "noun": "fragrance", "nouns": "fragrances"},
-    {"id": "generic", "label": "Other products", "icon": "🛍️",
+    {"id": "generic", "label": "Other products", "icon": "bag",
      "noun": "product", "nouns": "products"},
 ]
 _BY_ID = {p["id"]: p for p in PRODUCT_TYPES}

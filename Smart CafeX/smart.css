@@ -3684,3 +3684,30 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
   .btn, .app-tile, .acc-sec, .card, .ins-card, .today-row, .cal-post { transition: none; }
   .btn:hover:not(:disabled), .app-tile:hover { transform: none; }
 }
+
+/* ============================================================
+   Email connect guide (renderMailGuide). Provider buttons are
+   rounded rectangles, not pills: Brand.md section 7.
+   ============================================================ */
+.mg-q { font-weight: 600; margin: 4px 0 8px; }
+.mg-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.mg-chip { font: inherit; font-size: 0.86rem; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid var(--border, #d7dae1); background: var(--surface, #fff);
+  color: inherit; cursor: pointer; }
+.mg-chip[aria-checked="true"] { border-color: var(--primary); background: var(--primary-soft);
+  font-weight: 600; }
+.mg-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mg-steps { margin: 0 0 12px; padding-left: 1.3em; line-height: 1.55; }
+.mg-steps li { margin: 0 0 4px; }
+.mg-pre { margin: 0 0 6px; }
+.mg-link { margin: 0 0 14px; }
+.mg-note { padding: 12px 14px; border-radius: 10px; margin: 0 0 12px; line-height: 1.55;
+  background: var(--amber-soft, rgba(255,159,10,.12)); }
+.mg-adv { margin: 4px 0 10px; }
+.mg-adv summary { cursor: pointer; font-size: 0.86rem; color: var(--muted); }
+.mg-err { margin: 6px 0 10px; }
+.mg-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin: 6px 0 4px; }
+@media (max-width: 860px) {
+  .mg-chip { min-height: 44px; }
+  .mg-row .btn { flex: 1 1 auto; }
+}

@@ -55,6 +55,11 @@ LIMITS: dict[str, int] = {
     "/api/password-reset/request": 6,
     "/api/store/password-reset": 6,
     "/api/client-error": 30,
+    # A key may name a method. Connecting an email makes this server log in to
+    # a mail server and send a test, so it gets a tight ceiling of its own,
+    # while GET on the same path (opening Account or Suppliers) stays on the
+    # default and is never throttled for a seller just looking.
+    "POST /api/mail/account": 10,
 }
 
 # Never limited. The scheduler calls tick every 15 minutes and locking it out
@@ -69,12 +74,17 @@ _counts: dict[str, int] = {}
 _window_start = [0.0]
 
 
-def limit_for(path: str) -> int:
-    """The ceiling for this path. Longest matching prefix wins."""
+def limit_for(path: str, method: str = "") -> int:
+    """The ceiling for this path. Longest matching prefix wins, and a key that
+    names a method beats the same prefix without one."""
     best, best_len = DEFAULT_LIMIT, -1
-    for prefix, n in LIMITS.items():
-        if path.startswith(prefix) and len(prefix) > best_len:
-            best, best_len = n, len(prefix)
+    for key, n in LIMITS.items():
+        m, _, prefix = key.rpartition(" ")
+        if m and m != (method or "").upper():
+            continue
+        score = len(prefix) + (1 if m else 0)
+        if path.startswith(prefix) and score > best_len:
+            best, best_len = n, score
     return best
 
 
@@ -82,17 +92,17 @@ def exempt(path: str) -> bool:
     return path.startswith(EXEMPT)
 
 
-def check(caller: str, path: str) -> tuple[bool, int]:
+def check(caller: str, path: str, method: str = "") -> tuple[bool, int]:
     """(allowed, retry_after_seconds). Never raises."""
     if exempt(path):
         return True, 0
-    cap = limit_for(path)
+    cap = limit_for(path, method)
     now = time.time()
     with _lock:
         if now - _window_start[0] >= WINDOW:
             _window_start[0] = now
             _counts.clear()
-        key = caller + " " + (path if cap != DEFAULT_LIMIT else "*")
+        key = caller + " " + (f"{(method or '').upper()} {path}" if cap != DEFAULT_LIMIT else "*")
         n = _counts.get(key)
         if n is None:
             if len(_counts) >= _MAX_KEYS:

@@ -34,7 +34,7 @@ function resetSessionId() {
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const fmt = (n) => n == null ? "—" : Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+const fmt = (n) => n == null ? "–" : Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 const relTime = (iso) => {
   if (!iso) return "";
   const t = new Date(iso).getTime(); if (!t) return "";
@@ -198,8 +198,8 @@ const HTTP_MSG = {
   413: "That file is too large.",
   429: "Too many requests just now - wait a few seconds.",
   500: "Something went wrong on our side. Try that again in a moment.",
-  502: "The server did not answer — it may be starting up. Try again in a few seconds.",
-  503: "The server did not answer — it may be starting up. Try again in a few seconds.",
+  502: "The server did not answer, it may be starting up. Try again in a few seconds.",
+  503: "The server did not answer, it may be starting up. Try again in a few seconds.",
   504: "The server took too long to answer. Try again in a moment.",
 };
 
@@ -479,7 +479,7 @@ async function aiWriteField(el, instruction) {
     current: el.value || "", context: aiContextFor(el), instruction: instruction || "" } });
   const fb = await puterFallback(r);
   if (fb) return { text: _stripAi(fb.text), via: "Puter (your account)", ai: true };
-  return { text: r.text || "", via: r.ai ? `AI · ${r.provider}` : "template — no AI connected", ai: !!r.ai };
+  return { text: r.text || "", via: r.ai ? `AI · ${r.provider}` : "template, no AI connected", ai: !!r.ai };
 }
 
 function aiAssist(el) {
@@ -513,7 +513,7 @@ function aiAssist(el) {
       };
       pop.querySelector("[data-aiagain]").onclick = () => run("Write a different version.");
       pop.querySelector("[data-aishort]").onclick = () => run("Make it noticeably shorter.");
-      pop.querySelector("[data-ailong]").onclick = () => run("Add one more concrete detail from the facts given — do not invent any.");
+      pop.querySelector("[data-ailong]").onclick = () => run("Add one more concrete detail from the facts given, do not invent any.");
       pop.querySelector("[data-aiclose]").onclick = () => pop.remove();
     } catch (e) {
       pop.innerHTML = `<div class="ai-pop-h">${sic("alert")}<b>${esc(e.message)}</b></div>
@@ -645,7 +645,7 @@ function askPassword() {
   return new Promise((resolve) => {
     openModal("Connect Google to your existing account", `
       <p class="muted">You already have an account with this email. Type its
-        password once and the two are joined — after that, one tap signs you in.</p>
+        password once and the two are joined, after that, one tap signs you in.</p>
       <label>Your current password
         <input type="password" id="gLinkPw" autocomplete="current-password" /></label>
       <div class="row" style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
@@ -1034,7 +1034,7 @@ const MODULES = [
   { id: "sales",      name: "Sales Analytics",        sub: "What sold, what it earned you, and what next month looks like.", ico: "chart", cls: "tile-sales", needs: "sales", tag: "SALES", group: "know" },
   { id: "subcategory",name: "Sub-Category Analysis",  sub: "Which kinds of products bring the money in, and which quietly do not.", ico: "layers", cls: "tile-sub", needs: "sales", tag: "SALES", group: "know" },
   // --- run the day -----------------------------------------------------------
-  { id: "orders",     name: "Orders",                 sub: "Every order from your website — pack it, ship it, mark it done.", ico: "bag", cls: "tile-orders", needs: null, tag: "ORDERS", group: "run" },
+  { id: "orders",     name: "Orders",                 sub: "Every order from your website, pack it, ship it, mark it done.", ico: "bag", cls: "tile-orders", needs: null, tag: "ORDERS", group: "run" },
   { id: "products",   name: "Product Management",     sub: "Your product list, with the different names each one has on Amazon, Shopify and the rest.", ico: "tag", cls: "tile-supply", needs: null, tag: "CATALOG", group: "run" },
   { id: "inventory",  name: "Inventory Management",   sub: "How much you have left. It goes down on its own as orders come in.", ico: "package", cls: "tile-supply", needs: null, tag: "STOCK", group: "run" },
   { id: "supply",     name: "Suppliers & Orders to Send", sub: "Who you buy from, when to buy again, and a ready order form to send them.", ico: "truck", cls: "tile-supply", needs: null, tag: "SUPPLY", group: "run" },
@@ -1149,6 +1149,21 @@ function warmModClearAll() {
 /* One shape for every module: paint what we had, fetch, repaint only if it
    actually changed. `render` must be safe to call twice with equal data —
    every caller below re-renders from scratch, so it is. */
+/* The three modules that read customer reviews, before any reviews exist.
+   This used to arrive as an HTTP 400 and render as "Could not load this", which
+   told a seller the app was broken when all that was missing was one file. */
+function needsReviewsHtml(d) {
+  return `<div class="card">
+    <h3 style="margin:0 0 6px;">This one reads your customer reviews</h3>
+    <p class="muted" style="margin:0 0 8px;">${esc(d.message || "Upload your customer reviews once, and the review modules fill in from them.")}</p>
+    <p class="muted tiny" style="margin:0 0 12px;">A CSV or Excel export of your Google, marketplace or Instagram reviews works. Each row needs the review text; a rating and a date help.</p>
+    <button type="button" class="btn primary" data-needs-reviews>${sic("plus")}Upload reviews</button></div>`;
+}
+function bindNeedsReviews() {
+  const b = document.querySelector("[data-needs-reviews]");
+  if (b) b.onclick = () => startUpload("review");
+}
+
 async function openCached(mod, title, fetcher, render, emptyHtml) {
   // THE BUG THIS GUARDS AGAINST: the fetch below takes a second or two, and a
   // seller does not wait. Open Suppliers, tap Home before it lands, and the
@@ -1171,7 +1186,11 @@ async function openCached(mod, title, fetcher, render, emptyHtml) {
   else restoreScroll(mod);
   try {
     const fresh = await fetcher();
-    if (!stillHere()) { warmModWrite(mod, fresh); return; }   // cache it, don't draw it
+    const empty = !!(fresh && fresh.needs === "review");
+    if (!stillHere()) { if (!empty) warmModWrite(mod, fresh); return; }   // cache it, don't draw it
+    // Nothing to read yet is an empty state, not an error, and it is never
+    // cached, so the real screen appears the moment the data exists.
+    if (empty) { moduleShell(title, needsReviewsHtml(fresh)); bindNeedsReviews(); return; }
     if (!painted || JSON.stringify(warm) !== JSON.stringify(fresh)) {
       // A repaint under someone's finger loses their place. The scroll position
       // is put back after the new screen exists, so a background refresh is
@@ -1263,7 +1282,8 @@ function productLabel(id) {
     return state.productLabel;
   }
   const t = (state.productTypes || []).find((x) => x.id === id);
-  return t ? `${t.icon} ${t.label}` : "Not set";
+  // Text only: callers escape this, and the chip it sits in has its own icon.
+  return t ? t.label : "Not set";
 }
 
 function dataCard(kind, label, icon, hint) {
@@ -1274,7 +1294,7 @@ function dataCard(kind, label, icon, hint) {
       <h4><span class="data-card-ico">${icon}</span>${label}</h4>
       <div class="status">
         <span class="dot ${ready ? "ready" : "empty"}"></span>
-        ${ready ? `${fmt(d.rows)} rows loaded${d.updated_at ? ` · saved ${esc(String(d.updated_at).slice(0, 10))}` : ""}` : `No ${label.toLowerCase()} yet — ${hint}`}
+        ${ready ? `${fmt(d.rows)} rows loaded${d.updated_at ? ` · saved ${esc(String(d.updated_at).slice(0, 10))}` : ""}` : `No ${label.toLowerCase()} yet, ${hint}`}
       </div>
       <div class="row">
         <button class="btn primary sm" data-up="${kind}">${sic(ready ? "refresh" : "arrow-up-right")}${ready ? "Update" : "Upload"} ${label}</button>
@@ -1322,7 +1342,9 @@ async function startDemo() {
     toast("Loading 90 days of sample data…");
     await api("/api/demo", { method: "POST" });
     await goHome();
-    toast("Sample data loaded, every module is live now.");
+    // Sample data is sales only. Saying "every module is live" sent sellers
+    // into three review modules that then had nothing to show.
+    toast("Sample data loaded. Sales, stock, customers and posts are live now. The review modules need a reviews file.", 7000);
   } catch (e) { toast(e.message); }
 }
 
@@ -1410,18 +1432,18 @@ function openDigest() {
     `<option value="${h}"${h === d.hour ? " selected" : ""}>${String(h).padStart(2, "0")}:00</option>`).join("");
   openModal("Morning digest", `
     <p class="muted" style="margin-top:0;">One message a day with the same rows you see under
-      <b>Today</b> — new orders, things running low, customers slipping away.
-      Nothing else.</p>
+      <b>Today</b> (new orders, things running low, customers slipping away.
+      Nothing else.)</p>
     <label class="fld"><span>Send it</span>
       <select id="dgOn">
         <option value="1"${d.enabled ? " selected" : ""}>Every morning</option>
-        <option value="0"${d.enabled ? "" : " selected"}>Never — I'll check myself</option>
+        <option value="0"${d.enabled ? "" : " selected"}>Never: I'll check myself</option>
       </select></label>
     <label class="fld"><span>At</span><select id="dgHour">${hours}</select></label>
     <label class="fld"><span>Email</span><input id="dgEmail" value="${esc(d.email || state.email)}" /></label>
     <label class="fld"><span>WhatsApp number <span class="muted">(optional)</span></span>
       <input id="dgPhone" value="${esc(d.phone || "")}" placeholder="10-digit mobile" inputmode="numeric" /></label>
-    <p class="muted tiny">WhatsApp delivery switches on the moment a provider is connected —
+    <p class="muted tiny">WhatsApp delivery switches on the moment a provider is connected,
       your number is stored ready for it.</p>
     <div class="modal-actions">
       <button class="btn ghost" id="dgTest">Send me one now</button>
@@ -1438,7 +1460,7 @@ function openDigest() {
       _digest = r.digest;
       closeModal();
       toast(r.digest.enabled
-        ? `Digest on — every morning at ${String(r.digest.hour).padStart(2, "0")}:00.`
+        ? `Digest on: every morning at ${String(r.digest.hour).padStart(2, "0")}:00.`
         : "Digest off.");
       const db = $("digestBtn"); if (db) db.classList.toggle("on", !!r.digest.enabled);
     } catch (e) { toast(e.message); }
@@ -1447,7 +1469,7 @@ function openDigest() {
     const b = $("dgTest"); b.disabled = true; b.textContent = "Sending…";
     try {
       const r = await api("/api/digest/test", { method: "POST" });
-      toast(r.sent ? "Sent — check your inbox."
+      toast(r.sent ? "Sent: check your inbox."
                    : (r.reason || "Nothing worth sending right now."), 5000);
     } catch (e) { toast(e.message); }
     b.disabled = false; b.textContent = "Send me one now";
@@ -1500,7 +1522,7 @@ function guideCard(s) {
         ${step(1, salesReady, "Give it your sales once",
                "Any export from your marketplace, your billing app or a spreadsheet. It reads the columns for you.")}
         ${step(2, salesReady, "It watches while you work",
-               "Stock cover, reorder points, what to post next week, who has stopped buying — all recalculated as orders come in.")}
+               "Stock cover, reorder points, what to post next week, who has stopped buying, all recalculated as orders come in.")}
         ${step(3, false, "You approve, it acts",
                "Purchase orders to your suppliers, posts to your calendar, win-back messages. Every one waits for your yes.")}
       </ol>`;
@@ -1515,11 +1537,11 @@ function guideCard(s) {
     return `
     <details class="fold guide-fold" id="guideCard">
       <summary>How this works
-        <span class="muted tiny">— give it your sales, it watches, you approve</span></summary>
+        <span class="muted tiny">(give it your sales, it watches, you approve)</span></summary>
       ${steps}
       <div class="guide-foot">
-        <span class="muted tiny">The apps below are grouped by what they are for —
-          <b>Sell</b>, <b>Make</b>, <b>Run</b>.</span>
+        <span class="muted tiny">The apps below are grouped by what they are for:
+          <b>Know what is happening</b>, <b>Run the day</b>, <b>Bring in more customers</b> and <b>Go deeper</b>.</span>
       </div>
     </details>`;
   }
@@ -1531,7 +1553,7 @@ function guideCard(s) {
           <div class="today-eyebrow">How this works</div>
           <h3>One place to run the shop, not fifteen apps to learn</h3>
           <p>You give it your sales. It works out what is selling, what is about
-             to run out, and what to post — then asks you to approve. Nothing is
+             to run out, and what to post, then asks you to approve. Nothing is
              sent, ordered or published without you saying yes.</p>
         </div>
         <button class="btn ghost tiny" id="guideHide" title="Hide this" aria-label="Hide this explanation">${sic("close")}</button>
@@ -1539,7 +1561,7 @@ function guideCard(s) {
       ${steps}
       <div class="guide-foot">
         <span class="muted tiny">Start anywhere. The apps below are grouped by
-          what they are for — <b>Sell</b>, <b>Make</b>, <b>Run</b>.</span>
+          what they are for: <b>Know what is happening</b>, <b>Run the day</b>, <b>Bring in more customers</b> and <b>Go deeper</b>.</span>
       </div>
     </section>`;
 }
@@ -1576,7 +1598,7 @@ function setupCard(setup) {
       </div>
       ${rest.length ? `<details class="setup-rest">
         <summary>${rest.length} more after that</summary>
-        <ul>${rest.map((r) => `<li><b>${esc(r.title)}</b> — ${esc(r.why)}</li>`).join("")}</ul>
+        <ul>${rest.map((r) => `<li><b>${esc(r.title)}</b>, ${esc(r.why)}</li>`).join("")}</ul>
       </details>` : ""}
     </section>`;
 }
@@ -1625,6 +1647,13 @@ function renderHome(s) {
   }).join("");
 
   const tasks = (s.tasks || []);
+  // A seller with no data yet came for one thing: the first action. On a phone
+  // the explainer filled the whole first screen and pushed "Load sample data"
+  // and "Upload" below the fold, so until there is data, Today goes first. They
+  // are also not "back": they signed up a moment ago.
+  const hasData = !!((s.data && s.data.sales && s.data.sales.ready)
+                     || (s.data && s.data.review && s.data.review.ready));
+  const guide = guideCard(s);
 
   setView(`
     <!-- The greeting used to take three rows on a phone: "Welcome back", then
@@ -1633,7 +1662,7 @@ function renderHome(s) {
          greeting as a subtitle, not on a line of its own below the buttons. -->
     <div class="page-head">
       <div class="ph-title">
-        <h2>Welcome back</h2>
+        <h2>${hasData ? "Welcome back" : "Welcome"}</h2>
         <span class="ph-sub">${esc(state.email)}</span>
       </div>
       <div class="page-actions">
@@ -1644,17 +1673,17 @@ function renderHome(s) {
       </div>
     </div>
 
-    ${guideCard(s)}
+    ${hasData ? guide : ""}
 
     <!-- ONE card, not two.
-         This used to be two stacked sections: "Your tasks — Nothing waiting on
-         you", and under it "Today — Nothing to act on yet". On a phone that is
+         This used to be two stacked sections: "Your tasks: Nothing waiting on
+         you", and under it "Today: Nothing to act on yet". On a phone that is
          two screenfuls of the app telling the seller that nothing is happening
          before they reach anything they can act on, and neither card could
          answer the only question they open the app with: what do I do now?
          The answer is one list. What the shop needs (read from the data) and
-         what the seller wrote down for themselves are the same kind of thing —
-         both are "do this today" — so they live in the same card, under one
+         what the seller wrote down for themselves are the same kind of thing,
+         both are "do this today", so they live in the same card, under one
          headline that counts both. -->
     <section class="today" id="todayBox">
       <div class="today-h">
@@ -1668,7 +1697,7 @@ function renderHome(s) {
       <!-- One list, not a list and then a widget.
            The seller's own tasks used to sit below a rule, under a standing
            "Add your own task…" input, which made the card read as two things
-           stacked — "Today", and then a little to-do app. They are the same
+           stacked, "Today", and then a little to-do app. They are the same
            kind of thing: work to do this morning. So the rows now run
            straight on from the ones above with no divider and the same
            shape, and adding one is a quiet line at the end of the list
@@ -1693,12 +1722,14 @@ function renderHome(s) {
       </div>
     </section>
 
+    ${hasData ? "" : guide}
+
     <section class="up-strip" id="upStrip" hidden></section>
 
     ${setupCard(s.setup)}
 
     <div class="section-title">Your data
-      <button class="btn ghost tiny pt-chip" id="ptChip" title="What you sell, in your own words — your captions, hashtags and photo prompts all use this">${sic("tag")}${esc(productLabel(state.productType))}</button>
+      <button class="btn ghost tiny pt-chip" id="ptChip" title="What you sell, in your own words, your captions, hashtags and photo prompts all use this">${sic("tag")}${esc(productLabel(state.productType))}</button>
     </div>
     <div class="data-grid">
       ${dataCard("sales", "Sales", sic("receipt"), "upload your orders / sales export")}
@@ -1711,7 +1742,7 @@ function renderHome(s) {
          and means nothing to one running none, and it used to sit above the apps
          competing for the same attention. -->
     <details class="fold" id="chanFold">
-      <summary>Where you sell <span class="muted tiny">— choose which channels count in your numbers</span></summary>
+      <summary>Where you sell <span class="muted tiny">(choose which channels count in your numbers)</span></summary>
       <div class="chan-strip" id="chanStrip"><div class="ap-empty">Loading platforms…</div></div>
     </details>
 
@@ -1797,13 +1828,13 @@ function openProductTypePicker(afterSet) {
      reach every caption, hashtag and image prompt. */
   $("ptGrid").innerHTML = types.map((t) => `
     <button class="pt-card ${t.id === state.productType ? "selected" : ""}" data-pt="${t.id}">
-      <div class="pt-ico">${t.icon}</div><div>${esc(t.label)}</div>
+      <div class="pt-ico">${ico(t.icon)}</div><div>${esc(t.label)}</div>
     </button>`).join("") + `
     <div class="pt-own">
       <label>Or tell us in your own words
         <input id="ptOwn" maxlength="40" placeholder="e.g. Soy wax candles, Blue pottery, Kundan jewellery"
                value="${esc(state.productLabel || "")}" /></label>
-      <p class="muted tiny">This is what your captions will call what you sell — so
+      <p class="muted tiny">This is what your captions will call what you sell, so
         "${esc(state.productLabel || "Soy wax candles")}" beats "products". Leave it
         blank to use the choice above.</p>
       <button class="btn primary sm" id="ptOwnGo">Use my words</button>
@@ -1917,9 +1948,13 @@ function taskRowsHtml(tasks) {
          not the instruction, so it joins the other context underneath. The
          server's wording is untouched: this is a display decision, and the
          digest still reads as one sentence. */
+      // A delimiter, not copy: it matches the em dash the SERVER writes in task
+      // titles ("Make the reel for X, em dash, goes out Mon"). It must stay an em
+      // dash for as long as the server writes one; see TODOS.md before changing
+      // either side. The launch copy sweep leaves .split() arguments alone.
       const cut = String(t.text || "").split(" — ");
       const title = cut[0];
-      const when = cut.length > 1 ? cut.slice(1).join(" — ") : "";
+      const when = cut.length > 1 ? cut.slice(1).join(" – ") : "";
       return `
       <div class="task-item task-post" data-task="${esc(t.id)}">
         <span class="task-ico ${t.kind === "video" ? "reel" : "photo"}">${sic(t.kind === "video" ? "play" : "image")}</span>
@@ -2284,7 +2319,7 @@ function renderApprovals(insights) {
   const decidedCount = (hist.approved || []).length + (hist.dismissed || []).length;
   paintApprovalCount((insights || []).filter((i) => !i.summary).length);
   if (!insights || !insights.length) {
-    list.innerHTML = `<div class="ap-empty">${decidedCount ? "All caught up — nothing pending. Check <b>History</b> for what you've handled." : "No pending insights. Upload data or check back after new activity."}</div>`;
+    list.innerHTML = `<div class="ap-empty">${decidedCount ? "All caught up: nothing pending. Check <b>History</b> for what you've handled." : "No pending insights. Upload data or check back after new activity."}</div>`;
     return;
   }
   /* One tap for the whole panel.
@@ -2563,7 +2598,7 @@ async function approvePostReady(postId, opts = {}) {
         /* The one case worth interrupting for: a reel needs the seller to go
            and film or generate something, and the steps are the whole point.
            Offered, not forced — they may be halfway through approving six. */
-        toastAction("Reel approved — it needs a clip.", "Open the steps", () => {
+        toastAction("Reel approved: it needs a clip.", "Open the steps", () => {
           if (r.task) openVideoTask(r.task.id, r.post);
         }, 7000);
       } else if (r.media_error) {
@@ -2575,7 +2610,7 @@ async function approvePostReady(postId, opts = {}) {
       } else if (r.image) {
         const lab = (r.image && r.image.ai_label) || {};
         toast("Picture made" + (lab.labelled ? ", labelled \u201cAI generated\u201d" : "")
-              + " \u2014 scheduled.");
+              + ". Scheduled.");
       }
     },
   });
@@ -2640,14 +2675,14 @@ async function openVideoTask(taskId, postHint) {
     }
   };
 
-  openModal(`Make the reel — ${post.product_name || "your post"}`, `
+  openModal(`Make the reel: ${post.product_name || "your post"}`, `
     <p class="sm-hint" style="margin-top:0;">Goes out <b>${esc(shortWhen(post.scheduled_at))}</b>${post.occasion ? ` · ${esc(post.occasion)}` : ""}${(post.script || {}).style_label ? ` · <b>${esc(post.script.style_label)}</b>` : ""}.
       Five steps; each one ticks itself off as you go.</p>
     <ol class="vt-steps2" id="vtSteps">
       <li data-step="copy">
         <div class="vs-h"><i></i><b>Copy the video prompt</b></div>
         <div class="vs-b">
-          <pre class="sm-prompt-body" id="vtPrompt">${esc(prompt || "No prompt yet — regenerate the script from the post editor.")}</pre>
+          <pre class="sm-prompt-body" id="vtPrompt">${esc(prompt || "No prompt yet: regenerate the script from the post editor.")}</pre>
           <button class="btn primary sm" id="vtCopy">${sic("layers")}Copy prompt</button>
         </div>
       </li>
@@ -2656,7 +2691,7 @@ async function openVideoTask(taskId, postHint) {
         <div class="vs-b">
           <p class="muted tiny" style="margin:0 0 8px;">Sign in, then in the prompt box choose <b>Video → Frames</b> and add
             ${photo ? `<a href="${esc(photo)}" target="_blank" rel="noopener" download>this product photo</a>` : "your product photo"}
-            as the <b>start frame</b> — that keeps the product in the clip your real product. Set <b>9:16</b> and <b>8 seconds</b>.</p>
+            as the <b>start frame</b> (that keeps the product in the clip your real product. Set) <b>9:16</b> and <b>8 seconds</b>.</p>
           <a class="btn primary sm" id="vtFlow" href="${esc(flowUrl)}" target="_blank" rel="noopener">${sic("arrow-up-right")}Open Google Flow</a>
           ${flow.free ? `<span class="muted tiny" style="margin-left:8px;">${esc(flow.free)}</span>` : ""}
         </div>
@@ -2665,7 +2700,7 @@ async function openVideoTask(taskId, postHint) {
         <div class="vs-h"><i></i><b>Paste the prompt, generate, download the clip</b></div>
         <div class="vs-b">
           <p class="muted tiny" style="margin:0 0 8px;">Paste (Ctrl+V), press Generate, pick the take you like and download it as MP4.
-            Flow puts its mark in a corner — leave it, we remove it when you upload.</p>
+            Flow puts its mark in a corner, leave it, we remove it when you upload.</p>
           <button class="btn ghost sm" id="vtMade">${sic("check")}I have the clip</button>
         </div>
       </li>
@@ -2720,7 +2755,7 @@ async function openVideoTask(taskId, postHint) {
   $("vtEditor").onclick = () => { closeModal(); openSocialEditor(post); };
   $("vtCopy").onclick = async () => {
     const ok = await copyPrompt();
-    $("vtCopy").innerHTML = sic("check") + (ok ? "Copied" : "Selected — press Ctrl+C");
+    $("vtCopy").innerHTML = sic("check") + (ok ? "Copied" : "Selected: press Ctrl+C");
     mark("copy");
   };
   // Copy again on the way out, so the paste on the other side always works.
@@ -2845,9 +2880,9 @@ async function openPhotoTask(post, task) {
     }
   };
 
-  openModal(`Add your own photo — ${post.product_name || "your post"}`, `
+  openModal(`Add your own photo, ${post.product_name || "your post"}`, `
     <p class="sm-hint" style="margin-top:0;">You have used this month's AI pictures, so
-      this one is a photo of your own — which for a real product usually looks better anyway.
+      this one is a photo of your own, which for a real product usually looks better anyway.
       Goes out <b>${esc(shortWhen(post.scheduled_at))}</b>${post.occasion ? ` · ${esc(post.occasion)}` : ""}.
       Four steps; each ticks itself off as you go.</p>
     <ol class="vt-steps2" id="ptxSteps">
@@ -2909,7 +2944,7 @@ async function openPhotoTask(post, task) {
   $("ptxEditor").onclick = () => { closeModal(); openSocialEditor(post); };
   $("ptxCopy").onclick = async () => {
     const ok = await copyShot();
-    $("ptxCopy").innerHTML = sic("check") + (ok ? "Copied" : "Selected — press Ctrl+C");
+    $("ptxCopy").innerHTML = sic("check") + (ok ? "Copied" : "Selected: press Ctrl+C");
     mark("copy");
   };
   $("ptxShot").onclick = () => mark("shoot");
@@ -2950,11 +2985,11 @@ async function openWeekBrief(card) {
     <p class="sm-hint" style="margin-top:0;">${esc(b.note || "")}</p>
     <div class="wk-grid">
       <div><h4>What is happening that week</h4>
-        ${list((b.opportunities || []).map((o) => `<li><b>${esc(o.name)}</b> — ${esc(o.text)}</li>`))}</div>
+        ${list((b.opportunities || []).map((o) => `<li><b>${esc(o.name)}</b>, ${esc(o.text)}</li>`))}</div>
       <div><h4>Sales${b.sales_anchor ? ` <span class="muted tiny">(data to ${esc(b.sales_anchor)})</span>` : ""}</h4>
-        ${b.sales_data ? "" : `<p class="muted tiny">No sales data yet — stock levels were used instead.</p>`}
-        ${list([...(b.winners || []).map((w) => `<li class="win"><b>${esc(w.name)}</b> · ${esc(w.label)} — ${esc(w.why)}</li>`),
-                ...(b.strugglers || []).map((w) => `<li class="slow"><b>${esc(w.name)}</b> · ${esc(w.label)} — ${esc(w.why)}</li>`)])}</div>
+        ${b.sales_data ? "" : `<p class="muted tiny">No sales data yet, stock levels were used instead.</p>`}
+        ${list([...(b.winners || []).map((w) => `<li class="win"><b>${esc(w.name)}</b> · ${esc(w.label)} – ${esc(w.why)}</li>`),
+                ...(b.strugglers || []).map((w) => `<li class="slow"><b>${esc(w.name)}</b> · ${esc(w.label)} – ${esc(w.why)}</li>`)])}</div>
     </div>
     <h4 style="margin:14px 0 6px;">The posts (${b.added} added, ${b.existing} already planned, ${b.target} a week)</h4>
     ${list((b.posts || []).map((p) => `<li><b>${esc(shortWhen(p.scheduled_at))}</b> · ${esc(p.product_name)} · ${esc(p.format)}
@@ -2976,10 +3011,10 @@ async function openWeekBrief(card) {
    in the editor because this is the moment the seller is thinking about it. */
 function openReelPrompt(post, script) {
   const beats = script.beats || [];
-  openModal(`Ready to film — ${esc((post && post.product_name) || "your reel")}`, `
+  openModal(`Ready to film: ${esc((post && post.product_name) || "your reel")}`, `
     <p class="sm-hint" style="margin-top:0;">Scheduled. A reel is filmed, not
-      drawn — so here is what to shoot. Film it yourself, or paste the prompt
-      into a video AI, or let us make it — then the clip goes on this post.</p>
+      drawn, so here is what to shoot. Film it yourself, or paste the prompt
+      into a video AI, or let us make it, then the clip goes on this post.</p>
 
     ${beats.length ? `<div class="sm-script-rows">
       ${beats.map((b) => `
@@ -3004,9 +3039,9 @@ function openReelPrompt(post, script) {
       <ol>
         <li><b>Film it yourself</b> on your phone from the shots above. 15 to 30
           seconds. This usually beats anything an AI makes.</li>
-        <li><b>Let Google Flow make it free</b> — we copy the prompt and open it
+        <li><b>Let Google Flow make it free</b> (we copy the prompt and open it
           for you. About five clips a day cost nothing there, and you see the
-          result before you commit to anything.</li>
+          result before you commit to anything.)</li>
         <li><b>Have us make it</b> if you would rather not leave. This one costs
           money per clip and you pay before you see it.</li>
       </ol>
@@ -3035,7 +3070,7 @@ function openReelPrompt(post, script) {
       const rg = document.createRange();
       rg.selectNodeContents($("rpBody"));
       const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
-      b.innerHTML = sic("check") + "Selected — press Ctrl+C";
+      b.innerHTML = sic("check") + "Selected: press Ctrl+C";
     }
     setTimeout(() => { b.innerHTML = was; }, 2500);
   };
@@ -3132,7 +3167,7 @@ function imageQuotaTracker(q) {
   const spent = left <= 0, low = !spent && left <= IMG_LOW_LEFT;
   const fill = spent || low ? "var(--amber,#8b672b)" : "var(--green,#3d785f)";
   const line = spent
-    ? `All ${cap} used. New posts now ask you to add your own photo — resets ${esc(q.resets || "on the 1st")}.`
+    ? `All ${cap} used. New posts now ask you to add your own photo, resets ${esc(q.resets || "on the 1st")}.`
     : low
       ? `${left} left. When they run out, posts ask you to upload your own photo instead.`
       : `Resets ${esc(q.resets || "on the 1st")}.`;
@@ -3186,7 +3221,7 @@ async function showVideoTools(promptText, copied) {
       <div class="vt-top">
         ${copied
           ? `<b>${sic("check")}Prompt copied.</b> Open Google Flow below and paste it in.`
-          : `<b>Copy the prompt first</b> — your browser blocked the automatic copy,
+          : `<b>Copy the prompt first</b>, your browser blocked the automatic copy,
              so use the Copy button above, then open Flow.`}
       </div>
       ${d.tools.map(card).join("")}
@@ -3237,7 +3272,7 @@ async function decide(id, decision) {
       await api(`/api/smart/insight/${id}/decision`, { method: "POST", json: { decision: "cancel" } });
       await afterPostChange();
       if (whole) toast("Week's plan cancelled. Posts you already approved are untouched.");
-      else toastUndo("Post cancelled — it will not go out.", async () => {
+      else toastUndo("Post cancelled: it will not go out.", async () => {
         await api("/api/social/state", { method: "POST", json: { post_id: id.slice(5), state: "draft" } });
         await afterPostChange();
       });
@@ -3288,7 +3323,7 @@ async function renderHistory() {
   }
   list.innerHTML = items.map((it) => `
     <div class="hist-item ${_histTab === "dismissed" ? "dismissed" : ""}" data-hid="${it.id}">
-      <div class="h-title">${it.icon || "•"} <span>${esc(it.title)}</span></div>
+      <div class="h-title">${ico(it.icon || "•")} <span>${esc(it.title)}</span></div>
       ${it.detail ? `<div class="muted tiny" style="margin-top:4px;">${esc(it.detail)}</div>` : ""}
       <div class="h-meta">${_histTab === "approved" ? "✓ Approved" : "✕ Dismissed"} ${it.at ? "· " + esc(relTime(it.at)) : ""}${it.valid ? "" : " · <span style='color:var(--amber);'>data changed since</span>"}</div>
       <div class="h-actions">
@@ -3421,7 +3456,7 @@ function openMapModal(d) {
   $("mapHint").textContent = d.kind === "review"
     ? "Which column holds the review text? (required). Rating and Date are optional but sharpen the analysis."
     : d.preset
-      ? `This looks like a ${d.preset}. We have filled it in — have a quick look and press Continue.`
+      ? `This looks like a ${d.preset}. We have filled it in, have a quick look and press Continue.`
       : confirm.length
         ? "We could not tell which columns these are from their names, so please check the "
           + "highlighted ones against the preview below. Getting these two right is what "
@@ -3430,7 +3465,7 @@ function openMapModal(d) {
   const labelFor = { date: "Date", amount: "Amount", customer_id: "Customer ID", customer_name: "Customer Name",
     order_id: "Order ID", product: "Product", category: "Category", subcategory: "Sub-category", quantity: "Quantity",
     review: "Review text", rating: "Rating" };
-  const opts = (sel) => `<option value="">—</option>` + d.columns.map((c) => `<option ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
+  const opts = (sel) => `<option value="">–</option>` + d.columns.map((c) => `<option ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
   $("mapGrid").innerHTML = d.roles.map((r) => `
     <label class="${confirm.includes(r) ? "map-check" : ""}">${labelFor[r] || r}${d.required.includes(r) ? " *" : ""}
       ${confirm.includes(r) ? `<span class="map-flag">please check</span>` : ""}
@@ -3481,7 +3516,7 @@ $("mapConfirm").onclick = async () => {
 async function clearData(kind) {
   const label = kind === "sales" ? "sales" : "review";
   if (!confirm(`Remove your uploaded ${label} data?\n\n`
-    + `This one cannot be undone — you would need to upload the file again. `
+    + `This one cannot be undone, you would need to upload the file again. `
     + `Everything built from it (insights, forecasts, segments) goes with it.`)) return;
   try { await api(`/api/smart/clear?kind=${kind}`, { method: "POST" }); toast("Removed"); goHome(); }
   catch (e) { toast(e.message); }
@@ -3640,7 +3675,7 @@ function busyStart(title, detail) {
       <div class="busy-dots" aria-hidden="true"><i></i><i></i><i></i></div>
       <b id="busyTitle">${esc(title || "Working…")}</b>
       <p id="busyDetail">${esc(detail || "")}</p>
-      <p class="busy-leave">Carry on using the app — this runs on the server, so
+      <p class="busy-leave">Carry on using the app, this runs on the server, so
         it finishes whether you wait here or not.</p>
     </div>`;
   el.hidden = false;
@@ -3827,7 +3862,7 @@ function _prodCard(p) {
           <div class="prod-thumb" style="${img ? `background-image:url('${esc(img)}')` : ""}">${img ? "" : ""}</div>
           <div>
             <b>${esc(p.name)}</b> ${p.status === "archived" ? `<span class="sup-badge moq">archived</span>` : ""}
-            <div class="muted tiny">${meta || "—"}</div>
+            <div class="muted tiny">${meta || "–"}</div>
             <div class="muted tiny ${p.track_stock !== false && !(p.stock > 0) ? "stock-out" : ""}">${stock}</div>
           </div>
         </div>
@@ -3876,7 +3911,7 @@ function renderProducts(d) {
     </div>` : "";
 
   const body = `
-    <p class="muted">Manage the products you sell and link each to the names it carries on your sales platforms (Amazon, Shopify…). Sales for every linked name roll up to the product across the app — analytics, forecasts and the Supply module all follow it.</p>
+    <p class="muted">Manage the products you sell and link each to the names it carries on your sales platforms (Amazon, Shopify…). Sales for every linked name roll up to the product across the app, analytics, forecasts and the Supply module all follow it.</p>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 6px;">
       <button class="btn primary sm" id="prodAdd">＋ Add product</button>
     </div>
@@ -4017,7 +4052,7 @@ function pickImage(onUrl, multiple, accept) {
     // Say plainly when the durable copy did not happen, rather than showing a
     // thumbnail that will be a broken slot after the next deploy.
     toast(warned || (_media && !_media.durable
-      ? "Uploaded — but this server does not keep uploads. See the warning above."
+      ? "Uploaded: but this server does not keep uploads. See the warning above."
       : "Uploaded and stored."), warned || (_media && !_media.durable) ? 7000 : 3200);
   };
   inp.click();
@@ -4179,7 +4214,7 @@ function openProductForm(id, prefillName) {
     <div class="card sup-form form-v pf">
       <div class="pf-head">
         <h4>${id ? "Edit product" : "Add product"}</h4>
-        <p class="muted tiny">${id ? esc(it.name) : "Only the name and price are required — everything else can wait."}</p>
+        <p class="muted tiny">${id ? esc(it.name) : "Only the name and price are required, everything else can wait."}</p>
       </div>
 
       <div class="pf-tabs" role="tablist">
@@ -4199,15 +4234,15 @@ function openProductForm(id, prefillName) {
             <input id="pfCat" value="${esc(v("category"))}" placeholder="${esc(state.productLabel || "e.g. Soy wax candles")}" list="pfCatList" />
             <datalist id="pfCatList">${[...new Set((_productsData.products || [])
               .map((x) => x.category).filter(Boolean))].map((c2) => `<option value="${esc(c2)}">`).join("")}</datalist></label>
-          <label>MRP ₹ <span class="muted tiny">optional — shows a struck-through price and a discount badge</span>
+          <label>MRP ₹ <span class="muted tiny">optional, shows a struck-through price and a discount badge</span>
             <input id="pfMrp" type="number" min="0" step="any" value="${num("mrp")}" placeholder="1999" /></label>
-          <label>What it costs you ₹ <span class="muted tiny">never shown to shoppers — used for your margins</span>
+          <label>What it costs you ₹ <span class="muted tiny">never shown to shoppers, used for your margins</span>
             <input id="pfCost" type="number" min="0" step="any" value="${num("unit_cost")}" /></label>
           <label>Your SKU <span class="muted tiny">internal code, optional</span>
             <input id="pfSku" value="${esc(v("sku"))}" /></label>
           <label>Status<select id="pfStatus">
-            <option value="active"${v("status", "active") === "active" ? "selected" : ""}>Active — on sale</option>
-            <option value="archived"${v("status") === "archived" ? "selected" : ""}>Archived — hidden everywhere</option>
+            <option value="active"${v("status", "active") === "active" ? "selected" : ""}>Active: on sale</option>
+            <option value="archived"${v("status") === "archived" ? "selected" : ""}>Archived: hidden everywhere</option>
           </select></label>
         </div>
       </div>
@@ -4218,7 +4253,7 @@ function openProductForm(id, prefillName) {
           A product without one is the single biggest reason a storefront looks unfinished.</div></div>`}
         <div class="ai-strip">
           <div>${sic("spark")}<b>Let the AI write it</b>
-            <span class="muted tiny">Description and key points from the name, category, price and anything you add here — nothing invented.</span></div>
+            <span class="muted tiny">Description and key points from the name, category, price and anything you add here, nothing invented.</span></div>
           <input id="pfAiNotes" placeholder="Optional: fabric, fit, who it's for, how it's made…" />
           <button type="button" class="btn primary sm" id="pfAiCopy">${sic("spark")}Write description &amp; key points</button>
         </div>
@@ -4226,9 +4261,9 @@ function openProductForm(id, prefillName) {
           ${imageField("pfImg", v("image_url"), "Main photo", "square images look best")}
           ${imageField("pfVid", v("video_url"), "Product clip", "plays when a shopper hovers the card", true)}
           <label>Description<textarea id="pfDesc" data-ai="product_description" data-ai-ctx="product" data-ai-label="Product description" rows="4" placeholder="What it is, what it's made of, why someone should buy it.">${esc(v("description"))}</textarea></label>
-          <label>Key points <span class="muted tiny">one per line — shown as ticks on the product page</span>
+          <label>Key points <span class="muted tiny">one per line, shown as ticks on the product page</span>
             <textarea id="pfHl" data-ai="product_highlights" data-ai-ctx="product" data-ai-label="Key points" rows="3" placeholder="100% cotton&#10;Ships in 24 hours&#10;Free returns">${esc((v("highlights", []) || []).join("\n"))}</textarea></label>
-          <label>Sold by <span class="muted tiny">piece / kg / box — optional</span>
+          <label>Sold by <span class="muted tiny">piece / kg / box, optional</span>
             <input id="pfUnit" value="${esc(v("unit_label"))}" placeholder="piece" /></label>
         </div>
         <div class="sup-sub">More photos</div>
@@ -4239,13 +4274,13 @@ function openProductForm(id, prefillName) {
         <div class="sup-sub">Sizes &amp; colours</div>
         <p class="muted tiny" style="margin:-6px 0 10px;">A shirt in three sizes and two colours is
         six things to count, not one. Name the options and each combination becomes a real record
-        with its own stock, its own code and — if you want — its own price.</p>
+        with its own stock, its own code and, if you want, its own price.</p>
         <div id="pfVarBox"></div>
 
         <div class="sup-sub">Stock</div>
         <div class="sup-form-grid">
           <label class="inline-check"><input type="checkbox" id="pfTrack"${v("track_stock", true) === false ? "" : "checked"} />
-            Track stock for this product <span class="muted tiny">— sells out at zero, and site orders deduct from it</span></label>
+            Track stock for this product <span class="muted tiny">(sells out at zero, and site orders deduct from it)</span></label>
           <label id="pfStockRow">Units available<input id="pfStock" type="number" min="0" step="1" value="${it && it.stock != null ? it.stock : 0}" /></label>
         </div>
       </div>
@@ -4254,11 +4289,11 @@ function openProductForm(id, prefillName) {
         <label class="site-toggle big" title="Show this product on your website">
           <input type="checkbox" id="pfListed"${listed ? "checked" : ""} />
           <span class="tsw"></span>
-          <span class="tlbl">List this product on my website<span class="muted tiny"> — on by default</span></span>
+          <span class="tlbl">List this product on my website<span class="muted tiny"> (on by default)</span></span>
         </label>
 
         <div class="place-note">Every listed product appears in <b>Shop</b>. These two decide whether
-          it <em>also</em> gets a place higher up the home page — leave both off and the site picks
+          it <em>also</em> gets a place higher up the home page, leave both off and the site picks
           for you.</div>
         <div class="place-grid">
           <label class="place">
@@ -4288,7 +4323,7 @@ function openProductForm(id, prefillName) {
     validate: (step) => {
       if (step !== 0) return null;
       if (!$("pfName").value.trim()) return "Give the product a name first.";
-      if ($("pfPrice").value === "") return "Add the selling price — shoppers need to see one.";
+      if ($("pfPrice").value === "") return "Add the selling price, shoppers need to see one.";
       return null;
     } });
   $("pfAiCopy").onclick = async () => {
@@ -4308,7 +4343,7 @@ function openProductForm(id, prefillName) {
       $("pfDesc").value = out.description || $("pfDesc").value;
       if ((out.highlights || []).length) $("pfHl").value = out.highlights.join("\n");
       ["pfDesc", "pfHl"].forEach((x) => $(x).dispatchEvent(new Event("input", { bubbles: true })));
-      toast(out.ai ? "Written — read it over and change anything that is not quite right."
+      toast(out.ai ? "Written: read it over and change anything that is not quite right."
                    : "No AI connected, so this is a starting draft from your details. Edit freely.", 6000);
     } catch (e) { toast(e.message, 6000); }
     b.disabled = false; b.innerHTML = sic("spark") + "Write description &amp; key points";
@@ -4409,7 +4444,7 @@ function renderVariants() {
 
   if (!_pfAxes.length) {
     box.innerHTML = `<div class="vx-empty">
-      <span>No options — this product is one thing with one stock count.</span>
+      <span>No options: this product is one thing with one stock count.</span>
       <button type="button" class="btn ghost sm" id="vxAdd">${sic("plus")}Add sizes or colours</button>
     </div>`;
     $("vxAdd").onclick = () => {
@@ -4439,8 +4474,8 @@ function renderVariants() {
         <tbody>${_pfVariants.map((v, i) => `
           <tr>
             <td><b>${esc(v.label)}</b></td>
-            <td><input data-vsku="${i}" value="${esc(v.sku)}" placeholder="—" /></td>
-            <td><input data-vprice="${i}" type="number" min="0" step="any" value="${v.price === "" ? "" : esc(String(v.price))}" placeholder="—" /></td>
+            <td><input data-vsku="${i}" value="${esc(v.sku)}" placeholder="–" /></td>
+            <td><input data-vprice="${i}" type="number" min="0" step="any" value="${v.price === "" ? "" : esc(String(v.price))}" placeholder="–" /></td>
             <td><input data-vstock="${i}" type="number" min="0" step="1" value="${parseInt(v.stock, 10) || 0}" /></td>
           </tr>`).join("")}</tbody>
       </table>
@@ -4598,7 +4633,7 @@ function renderStudio() {
   moduleShell("Product Studio", `
     ${!ready ? `<div class="nudge">${sic("spark")}<div><b>Start with your brand</b>
       Two or three lines about what you make and who buys it. Everything Studio
-      writes and every image it generates is built against this — it is the
+      writes and every image it generates is built against this, it is the
       difference between posts that look like yours and posts that look like
       anyone's.</div></div>` : ""}
 
@@ -4618,7 +4653,7 @@ function renderStudio() {
           `<option value="${esc(l.id)}"${b.look === l.id ? "selected" : ""}>${esc(l.label)}</option>`).join("")}</select></label>
         <label>How you sound<select id="sbVoice">${(d.voices || []).map((v) =>
           `<option value="${esc(v.id)}"${b.voice === v.id ? "selected" : ""}>${esc(v.label)}</option>`).join("")}</select></label>
-        <label>Your colours <span class="muted tiny">in words — generated images follow these</span>
+        <label>Your colours <span class="muted tiny">in words, generated images follow these</span>
           <input id="sbPal" data-ai="brand_palette" data-ai-ctx="brand" data-ai-label="Your colours" value="${esc(b.palette)}" placeholder="amber, deep brown, brass" /></label>
         <label>Never say <span class="muted tiny">words or looks to stay away from</span>
           <input id="sbAvoid" data-ai="brand_avoid" data-ai-ctx="brand" data-ai-label="Never say" value="${esc(b.avoid)}" placeholder="cheap, discount, sale" /></label>
@@ -4630,13 +4665,13 @@ function renderStudio() {
     <!-- Design language.
 
          A seller can rarely write "soft north light, warm sand, generous
-         negative space" — but every one of them can point at five pictures
+         negative space", but every one of them can point at five pictures
          and say "like this". This bucket takes the pointing and turns it
          into the words the image model needs. -->
     <div class="card dl-card">
       <div class="pf-head" style="padding:0 0 12px;">
         <h4>Your design language</h4>
-        <p class="muted tiny">Pictures whose <em>look</em> you want — not your products.
+        <p class="muted tiny">Pictures whose <em>look</em> you want, not your products.
           Your packaging, your shop, shots you admire, a mood board. Four is plenty.</p>
       </div>
       <div class="dl-refs" id="dlRefs"></div>
@@ -4652,7 +4687,7 @@ function renderStudio() {
       photos still work everywhere.</p>` : ""}
 
     <div class="section-title" style="margin-top:20px;">Your products
-      <span class="muted tiny" style="font-weight:500;">— the fuller the material, the better the posts. Ordered by what's ready.</span></div>
+      <span class="muted tiny" style="font-weight:500;">(the fuller the material, the better the posts. Ordered by what's ready.)</span></div>
     ${cards ? `<div class="st-grid">${cards}</div>`
             : `<div class="ap-empty">No products yet. Add them in Product Management first.</div>`}
     <div id="stPanel"></div>
@@ -4756,7 +4791,7 @@ function renderStudioProduct() {
       <div class="pf-head">
         <h4>${esc(p.name)}</h4>
         <p class="muted tiny">${c.next
-          ? `${esc(c.next.want)} — ${esc(c.next.why)}`
+          ? `${esc(c.next.want)} – ${esc(c.next.why)}`
           : "Everything's here. Make a post."}</p>
       </div>
       <div class="pf-tabs">
@@ -4795,7 +4830,7 @@ function renderStudioProduct() {
             <textarea id="stStory" data-ai="product_story" data-ai-ctx="studio-product" data-ai-label="The story behind it" rows="3" placeholder="Rested six months before it ever met a bottle.">${esc(m.story)}</textarea></label>
           <label>What it's made of<textarea id="stMat" data-ai="product_materials" data-ai-ctx="studio-product" data-ai-label="What it's made of" rows="2" placeholder="Oud, amber, a little smoke">${esc(m.materials)}</textarea></label>
           <label>What makes it different <span class="muted tiny">the line that makes someone stop scrolling</span>
-            <textarea id="stDiff" data-ai="product_different" data-ai-ctx="studio-product" data-ai-label="What makes it different" rows="2" placeholder="No alcohol burn — it opens soft.">${esc(m.different)}</textarea></label>
+            <textarea id="stDiff" data-ai="product_different" data-ai-ctx="studio-product" data-ai-label="What makes it different" rows="2" placeholder="No alcohol burn: it opens soft.">${esc(m.different)}</textarea></label>
           <label>Who it's for<input id="stWho" data-ai="product_for" data-ai-ctx="studio-product" data-ai-label="Who it's for" value="${esc(m.for_who)}" placeholder="Someone who wears one scent, not ten" /></label>
           <label>Where you'd wear or use it<input id="stOcc" data-ai="product_occasions" data-ai-ctx="studio-product" data-ai-label="Where you'd wear or use it" value="${esc(m.occasions)}" placeholder="Evenings, weddings, gifting" /></label>
         </div>
@@ -4805,7 +4840,7 @@ function renderStudioProduct() {
       <div class="pf-panel" data-st="make">
         <div class="sup-form-grid">
           <label>What should this post be about?<select id="stAngle">
-            ${(ang || []).map((a) => `<option value="${esc(a.label)}">${esc(a.label)} — ${esc(a.why)}</option>`).join("")}
+            ${(ang || []).map((a) => `<option value="${esc(a.label)}">${esc(a.label)} – ${esc(a.why)}</option>`).join("")}
           </select></label>
         </div>
         <div class="st-make">
@@ -4815,7 +4850,7 @@ function renderStudioProduct() {
           <button class="btn ghost sm" id="stImageOnly">${sic("image")}Image only</button>
         </div>
         <p class="muted tiny" style="margin:10px 0 0;">${_studio.ai_ready
-          ? "A generated image is built from your brand's look and colours — and is always labelled as generated, so you know which of your pictures is a real photograph."
+          ? "A generated image is built from your brand's look and colours, and is always labelled as generated, so you know which of your pictures is a real photograph."
           : "Image generation needs an AI key on the server. Your own photos work regardless."}</p>
         <div id="stOut"></div>
       </div>
@@ -4863,7 +4898,7 @@ function renderStudioProduct() {
   const make = async (withImage) => {
     const out = $("stOut");
     out.innerHTML = `<div class="ap-empty">${withImage
-      ? "Writing the caption and generating an image — this takes a few seconds…"
+      ? "Writing the caption and generating an image, this takes a few seconds…"
       : "Writing the caption…"}</div>`;
     try {
       const post = await api("/api/studio/post", { method: "POST", json: {
@@ -4909,7 +4944,7 @@ function renderStudioProduct() {
         <div class="card st-imgonly">
           <img src="${esc(img.url)}" alt="" />
           <div class="st-imgmeta">
-            <b>Image only — no caption written.</b>
+            <b>Image only: no caption written.</b>
             <span class="muted tiny">${img.used_seen ? "Built from your photos" : "No photo reading yet"}
               · ${img.used_aesthetic ? "your design language" : "the preset look"}
               · ${esc(img.engine)}${img.free ? " (free)" : ""}</span>
@@ -4969,7 +5004,7 @@ async function openInventory() { _supplyView = "inventory"; return openSupply();
 
 let _supplyData = null;
 let _afterUpload = null;   // set to a fn to run after the next Sales upload+map, instead of goHome
-const _rupee = (v) => (v == null || v === "" ? "—" : "₹" + fmt(v));
+const _rupee = (v) => (v == null || v === "" ? "–" : "₹" + fmt(v));
 const _eff = (v, auto) => (auto ? fmt(v) + "<span class=\"auto-tag\">auto</span>" : fmt(v));
 
 async function openSupply() {
@@ -4997,10 +5032,10 @@ function _sugCard(it) {
   const chips = [
     ["You have left", fmt(it.current_stock) + " " + esc(it.unit_label || "")],
     ["Used per day", it.avg_daily_consumption ?? 0],
-    ["Lasts (DOS)", it.dos == null ? "—" : `${it.dos} days`],
+    ["Lasts (DOS)", it.dos == null ? "–" : `${it.dos} days`],
     ["Need at least", `${it.dos_threshold} days`],
     ["Order (DOQ)", `<b>${fmt(it.doq)}</b> <span class="muted tiny">${DOQ_BASIS[it.doq_basis] || ""}</span>`],
-    ["Will cost about", it.est_line_cost == null ? "—" : _rupee(it.est_line_cost)],
+    ["Will cost about", it.est_line_cost == null ? "–" : _rupee(it.est_line_cost)],
   ].map(([k, v]) => `<span class="sug-chip"><i>${k}</i>${v}</span>`).join("");
   const sup = it.supplier_name
     ? `${esc(it.supplier_name)}${it.supplier_phone ? " · " + esc(it.supplier_phone) : ""}${it.supplier_email ? " · " + esc(it.supplier_email) : ""}`
@@ -5031,7 +5066,7 @@ function renderSupply(d) {
   const rule = d.rule || { dos_multiple: 1.2, eoq_min_days: 30, window_days: 30 };
   const salesNote = meta.has_sales
     ? `Days of supply (DOS) = what you have ÷ what you use a day, read from the last ${meta.window_days || rule.window_days} days of ${meta.source === "supply_sales" ? "the past sales you uploaded here" : "your sales, website orders included"}${meta.data_to ? ` (to ${meta.data_to})` : ""}. Every order placed re-checks the materials it used, and when DOS falls below ${rule.dos_multiple} × the supplier's lead time we draft a purchase order at the DOQ for you to approve.`
-    : `Once there are sales — website orders count — we work out how many days each raw material lasts, and draft a purchase order when that falls below ${rule.dos_multiple} × the supplier's lead time. Link each item to the products that use it so product sales turn into material usage.`;
+    : `Once there are sales, website orders count, we work out how many days each raw material lasts, and draft a purchase order when that falls below ${rule.dos_multiple} × the supplier's lead time. Link each item to the products that use it so product sales turn into material usage.`;
 
   const sugSection = suggestions.length ? `
     <div class="section-title" style="margin-top:8px;">Time to buy more <span class="muted tiny">(${suggestions.length} item${suggestions.length === 1 ? "" : "s"} running low)</span></div>
@@ -5040,7 +5075,7 @@ function renderSupply(d) {
       <button class="btn approve sm" id="supGenPo">Draft purchase order${belowN === 1 ? "" : "s"} for ${belowN === 1 ? "this item" : `these ${belowN} items`}</button>
     </div>` : `
     <div class="action-card ok" style="margin:10px 0;"><div class="do">${onOrderN ? "Everything running low is already on order" : "Nothing is running low"}</div><div class="why">${onOrderN
-      ? `${onOrderN} item${onOrderN === 1 ? " is" : "s are"} below the reorder line with a purchase order already out — see Purchase orders below. Anything else that gets close to running out will appear here.`
+      ? `${onOrderN} item${onOrderN === 1 ? " is" : "s are"} below the reorder line with a purchase order already out, see Purchase orders below. Anything else that gets close to running out will appear here.`
       : "You have enough of everything for now. When something gets close to running out it will appear here with a ready order form for that supplier."}</div></div>`;
 
   const rows = items.length ? items.map((it) => `
@@ -5048,11 +5083,11 @@ function renderSupply(d) {
         <td>${esc(it.name)}${(it.linked_products || []).length
             ? `<div class="muted tiny">in ${it.linked_products.map(esc).join(", ")}</div>`
             : `<div class="muted tiny warn-t">not linked to a product</div>`}</td>
-        <td>${it.supplier_name ? esc(it.supplier_name) : "<span class='muted tiny'>—</span>"}
+        <td>${it.supplier_name ? esc(it.supplier_name) : "<span class='muted tiny'>–</span>"}
             ${it.supplier_email ? `<div class="muted tiny">${esc(it.supplier_email)}</div>` : it.supplier_name ? `<div class="muted tiny warn-t">no email</div>` : ""}</td>
         <td class="num">${fmt(it.current_stock)} <span class="muted tiny">${esc(it.unit_label || "")}</span></td>
         <td class="num">${it.avg_daily_consumption ?? 0}</td>
-        <td class="num"><b>${it.dos == null ? "—" : it.dos}</b></td>
+        <td class="num"><b>${it.dos == null ? "–" : it.dos}</b></td>
         <td class="num">${_eff(it.effective_lead_time_days, it.lead_is_auto)}</td>
         <td class="num">${it.dos_threshold}</td>
         <td class="num">${fmt(it.moq)}</td>
@@ -5065,7 +5100,7 @@ function renderSupply(d) {
              These were four icon-only buttons explained by title tooltips.
              A tooltip needs a hover and a phone has no hover, so on a phone
              the card ended in four identical full-width empty boxes with a
-             tiny mark in the middle of each — one of which deletes the item.
+             tiny mark in the middle of each, one of which deletes the item.
              The label is hidden again above tablet width, so the desktop row
              keeps its compact icons. -->
         <td class="sup-actions">
@@ -5087,7 +5122,7 @@ function renderSupply(d) {
                     received: "Received", cancelled: "Cancel" };
   const PO_STEP_WHY = { mailed: "I sent this myself", replied: "The supplier has written back",
                         confirmed: "The supplier has accepted the order",
-                        received: "It arrived — put the quantities back into stock" };
+                        received: "It arrived: put the quantities back into stock" };
   const poActions = (p) => {
     const st = p.status || "open";
     const nexts = (flow.next || {})[st] || [];
@@ -5106,16 +5141,16 @@ function renderSupply(d) {
   const poRow = (p) => `
       <tr>
         <td>${esc(p.po_number)}${p.source === "auto" ? ` <span class="muted tiny">auto</span>` : ""}</td>
-        <td>${esc(((p.supplier || {}).name) || (p.suppliers || []).join(", ") || "—")}</td>
+        <td>${esc(((p.supplier || {}).name) || (p.suppliers || []).join(", ") || "–")}</td>
         <td>${esc(String(p.created_at || "").slice(0, 16).replace("T", " "))}</td>
         <td><span class="po-st st-${esc(p.status || "open")}">${esc((flow.labels || {})[p.status] || p.status || "open")}</span></td>
         <td class="num">${fmt(p.n_items)}</td>
         <td class="num">${fmt(p.total_qty)}</td>
-        <td class="num">${p.total_amount == null ? "—" : _rupee(p.total_amount)}</td>
+        <td class="num">${p.total_amount == null ? "–" : _rupee(p.total_amount)}</td>
         <td class="sup-actions">${poActions(p)}</td>
       </tr>`;
   const PO_GROUPS = [
-    ["draft", "Waiting for you"], ["open", "Approved — not sent"], ["mailed", "With the supplier"],
+    ["draft", "Waiting for you"], ["open", "Approved: not sent"], ["mailed", "With the supplier"],
     ["replied", "They have replied"], ["confirmed", "Confirmed, on the way"],
     ["received", "Received"], ["cancelled", "Cancelled"],
   ];
@@ -5149,7 +5184,7 @@ function renderSupply(d) {
     </div>
     <!-- Four sentences of arithmetic, above the list, every single visit.
          It is true and it is worth having, but it answers a question a seller
-         asks once — "where does 'days left' come from?" — and then never
+         asks once, "where does 'days left' come from?", and then never
          again, while costing a third of a phone screen before the first item
          appears. Folded, with the question as the summary. -->
     <details class="fold quiet">
@@ -5163,7 +5198,7 @@ function renderSupply(d) {
     <div class="section-title" style="margin-top:18px;">What you hold</div>` : `
     <!-- Folded here for the same reason it is folded on the Inventory screen:
          four sentences of arithmetic, above everything, on every single visit,
-         answering a question a seller asks once. Measured at 147px — a fifth
+         answering a question a seller asks once. Measured at 147px: a fifth
          of a phone screen before the first useful pixel. -->
     <details class="fold quiet">
       <summary>How "days left" is worked out</summary>
@@ -5186,7 +5221,7 @@ function renderSupply(d) {
       <div class="why">Connect your own email and every order goes out from it, so your
         supplier recognises it and their reply lands in your inbox.${d.email_ready
           ? "Until then this server's mailbox sends them."
-          : "Until then nothing can be emailed from here at all — Approve just gives you the PDF."}</div></div>`}
+          : "Until then nothing can be emailed from here at all, Approve just gives you the PDF."}</div></div>`}
 
     <div id="supForm" hidden></div>
     <div id="supPanel" hidden></div>
@@ -5211,7 +5246,7 @@ function renderSupply(d) {
               title="Order when DOS falls below this: ${rule.dos_multiple} × lead time">Order below</th>
           <th class="num" data-card-hide data-card-label="Smallest order">MOQ</th>
           <th class="num" data-card-hide data-card-label="Order this many"
-              title="Default order quantity — type your own to override">DOQ</th>
+              title="Default order quantity: type your own to override">DOQ</th>
           <th data-card-first>Status</th><th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -5304,7 +5339,7 @@ function renderSupply(d) {
     const val = inp.value === "" ? null : parseFloat(inp.value);
     try {
       _supAfter(await api("/api/supply/doq", { method: "POST", json: { id: inp.dataset.doq, doq: val } }));
-      toast(val ? "DOQ saved — used for every order of this item." : "Back to the worked-out DOQ.");
+      toast(val ? "DOQ saved: used for every order of this item." : "Back to the worked-out DOQ.");
     } catch (e) { toast(e.message); }
   });
   document.querySelectorAll("[data-popdf]").forEach((b) => b.onclick = () => download(`/api/supply/po/${encodeURIComponent(b.dataset.popdf)}/pdf`, `${b.dataset.popdf}.pdf`));
@@ -5361,7 +5396,7 @@ function editSupplier(sup) {
     <label class="fld"><span>Name</span><input id="seName" value="${esc(sup.name)}" /></label>
     <label class="fld"><span>Phone</span><input id="sePhone" value="${esc(sup.phone)}" placeholder="+91 …" /></label>
     <label class="fld"><span>Email <em>purchase orders are sent here</em></span><input id="seEmail" type="email" value="${esc(sup.email)}" /></label>
-    <label class="fld"><span>Lead time — days they take to deliver <em>applies to every item they supply</em></span>
+    <label class="fld"><span>Lead time: days they take to deliver <em>applies to every item they supply</em></span>
       <input id="seLead" type="number" min="0" step="any" value="${sup.lead_time_days || ""}" placeholder="7" /></label>
     <div class="modal-actions">
       <button class="btn ghost" id="seDetach">Remove from all items</button>
@@ -5423,7 +5458,7 @@ function openSupplyForm(id) {
       <div class="pf-head">
         <h4>${id ? "Edit item" : "Add item"}</h4>
         <p class="muted tiny">${id ? esc(it.name)
-          : "A raw material or packing item — what it goes into, who sells it to you, and how much to order."}</p>
+          : "A raw material or packing item, what it goes into, who sells it to you, and how much to order."}</p>
       </div>
 
       <div class="pf-tabs" role="tablist">
@@ -5436,12 +5471,12 @@ function openSupplyForm(id) {
         <div class="sup-form-grid">
           <label>Which product uses it? <span class="muted tiny">from Product Management</span>
             <select id="sfProd">
-              <option value="">— not linked to a product yet —</option>
+              <option value="">Not linked to a product yet</option>
               ${catalog.map((pr) => `<option value="${esc(pr.name)}">${esc(pr.name)}${pr.category ? ` · ${esc(pr.category)}` : ""}</option>`).join("")}
             </select></label>
           <label>How much one unit of that product uses <span class="muted tiny">e.g. 2.5 (metres per kurta)</span>
             <input id="sfQpu" type="number" min="0" step="any" value="1" /></label>
-          <label>Item name <span class="req">required</span> <span class="muted tiny">picking a product fills this in — change it to what you call the material</span>
+          <label>Item name <span class="req">required</span> <span class="muted tiny">picking a product fills this in, change it to what you call the material</span>
             <input id="sfName" value="${esc(v("name"))}" placeholder="e.g. Cotton fabric, 2m roll" /></label>
           <label>How much do you have now?
             <input id="sfStock" type="number" min="0" step="any" value="${v("current_stock", 0)}" /></label>
@@ -5465,10 +5500,10 @@ function openSupplyForm(id) {
           <label>Email <span class="muted tiny">where purchase orders go</span>
             <input id="sfSupE" type="email" value="${esc(v("supplier_email"))}" placeholder="orders@supplier.com" /></label>
           <label>Phone<input id="sfSupP" value="${esc(v("supplier_phone"))}" placeholder="+91 …" inputmode="tel" /></label>
-          <label>Lead time — days they take to deliver <span class="muted tiny">blank = we assume 7</span>
+          <label>Lead time: days they take to deliver <span class="muted tiny">blank = we assume 7</span>
             <input id="sfLead" type="number" min="0" step="any" placeholder="7"
                    value="${it && it.lead_time_days > 0 ? it.lead_time_days : ''}" /></label>
-          <label>Minimum order (MOQ) <span class="muted tiny">the smallest quantity they will sell — 0 if none</span>
+          <label>Minimum order (MOQ) <span class="muted tiny">the smallest quantity they will sell, 0 if none</span>
             <input id="sfMoq" type="number" min="0" step="any" value="${v("moq", 0)}" /></label>
         </div>
       </div>
@@ -5477,7 +5512,7 @@ function openSupplyForm(id) {
         <div class="nudge">${sic("spark")}<div><b>How ordering works here</b>
           We order when the days your stock will last fall below ${rule.dos_multiple} × the lead time.
           Each order is for the DOQ (default order quantity): the supplier's minimum, until you
-          add both costs below and there is a month of sales — then the cheapest quantity (EOQ), if it
+          add both costs below and there is a month of sales, then the cheapest quantity (EOQ), if it
           is more than the minimum. Or type your own.</div></div>
         <div class="sup-form-grid">
           <label>Cost of placing one order ₹ <span class="muted tiny">calls, transport, paperwork</span>
@@ -5486,7 +5521,7 @@ function openSupplyForm(id) {
           <label>Cost of holding one unit for a year ₹ <span class="muted tiny">storage, damage, money tied up</span>
             <input id="sfHold" type="number" min="0" step="any" placeholder="e.g. 12"
                    value="${it && it.holding_cost != null ? it.holding_cost : ""}" /></label>
-          <label>Your own DOQ <span class="muted tiny">leave blank and we work it out${it && it.doq ? ` — now ${fmt(it.doq)}` : ""}</span>
+          <label>Your own DOQ <span class="muted tiny">leave blank and we work it out${it && it.doq ? `, now ${fmt(it.doq)}` : ""}</span>
             <input id="sfQty" type="number" min="0" step="any" placeholder="we work it out"
                    value="${it && it.reorder_qty != null ? it.reorder_qty : ""}" /></label>
         </div>
@@ -5526,12 +5561,12 @@ function openSupplyForm(id) {
       if (step === 0) {
         const nm = $("sfName").value.trim().toLowerCase();
         const twin = ((_supplyData || {}).inventory || []).find((x) => x.id !== id && String(x.name || "").trim().toLowerCase() === nm);
-        if (twin) return `You already have "${twin.name}". Edit that one ( in the list) — or, if another product uses it too, add it under "What each product uses" so its stock is counted once.`;
+        if (twin) return `You already have "${twin.name}". Edit that one ( in the list), or, if another product uses it too, add it under "What each product uses" so its stock is counted once.`;
       }
       if (step === 0 && $("sfProd").value && !(parseFloat($("sfQpu").value) > 0)) return "How much of it does one unit of the product use? It has to be more than 0.";
       if (step === 1) {
         const e = $("sfSupE").value.trim();
-        if (e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return "That email does not look right — purchase orders are sent to it.";
+        if (e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return "That email does not look right, purchase orders are sent to it.";
       }
       return null;
     } });
@@ -5609,7 +5644,7 @@ function openWastePanel(preId) {
   p.innerHTML = `
     <div class="card sup-form">
       <h4 style="margin:0 0 4px;"> Record waste</h4>
-      <p class="muted tiny">Logs the loss and reduces stock — e.g. a packing material spoiled by mistake.</p>
+      <p class="muted tiny">Logs the loss and reduces stock, e.g. a packing material spoiled by mistake.</p>
       <div class="sup-form-grid">
         <label>Item<select id="wsItem">${opts}</select></label>
         <label>Quantity wasted<input id="wsQty" type="number" min="0" step="any" value="1" /></label>
@@ -5669,8 +5704,8 @@ function _renderLinks() {
 
   p.innerHTML = `
     <div class="card sup-form">
-      <h4 style="margin:0 0 4px;"> Product links <span class="muted tiny">— how much inventory each product needs</span></h4>
-      <p class="muted tiny">When you sell one of a product, how many of this item does it use up? Set that here and we can tell when you are about to run out — based on what you actually sell, not guesswork.</p>
+      <h4 style="margin:0 0 4px;"> Product links <span class="muted tiny">(how much inventory each product needs)</span></h4>
+      <p class="muted tiny">When you sell one of a product, how many of this item does it use up? Set that here and we can tell when you are about to run out, based on what you actually sell, not guesswork.</p>
       ${!items.length ? `<p class="muted tiny">Add inventory items first, then link them here.</p>` : `<div class="link-list">${prodBlocks}</div>`}
       <div class="modal-actions"><button class="btn ghost" id="lkClose">Close</button></div>
     </div>`;
@@ -5710,12 +5745,12 @@ async function _linkRemove(id) {
 async function supplyCheckNow() {
   try {
     const d = await withBusy("Checking every raw material…",
-      "Days of supply against 1.2 × each supplier's lead time — anything short gets a purchase order drafted.",
+      "Days of supply against 1.2 × each supplier's lead time, anything short gets a purchase order drafted.",
       () => api("/api/supply/replenish/check", { method: "POST" }));
     _supAfter(d);
     const c = d.check || {};
     const made = (c.created || []).length + (c.appended || []).length;
-    toast(made ? `${(c.low || []).length} item${(c.low || []).length === 1 ? "" : "s"} short — purchase order${made === 1 ? "" : "s"} drafted. Approve ${made === 1 ? "it" : "them"} in the Approval panel.`
+    toast(made ? `${(c.low || []).length} item${(c.low || []).length === 1 ? "" : "s"} short, purchase order${made === 1 ? "" : "s"} drafted. Approve ${made === 1 ? "it" : "them"} in the Approval panel.`
       : (c.low || []).length ? "Everything short is already on order." : "Every raw material has enough days of supply.", 7000);
   } catch (e) { toast(e.message, 6000); }
 }
@@ -5724,7 +5759,7 @@ async function supplyCheckNow() {
    quantities back into stock, which is the whole reason to record it. */
 async function movePo(poNumber, status) {
   const WORD = { mailed: "marked as mailed", replied: "marked as replied",
-                 confirmed: "marked as confirmed", received: "received — the quantities are back in stock",
+                 confirmed: "marked as confirmed", received: "received, the quantities are back in stock",
                  cancelled: "cancelled" };
   if (status === "cancelled") return cancelPo(poNumber);
   try {
@@ -5748,7 +5783,7 @@ async function cancelPo(poNumber) {
       : "Nothing has gone to the supplier, so this just closes the order here."}</p>
     ${out ? `<label class="inline-check" style="display:flex;gap:8px;align-items:flex-start;margin:10px 0;">
       <input type="checkbox" id="cpTell" checked />
-      <span>Email ${esc((po.supplier || {}).email || "the supplier")} to call it off — we write it, with the PO number in it.</span></label>
+      <span>Email ${esc((po.supplier || {}).email || "the supplier")} to call it off, we write it, with the PO number in it.</span></label>
     <label class="fld"><span>Anything to add? <em>optional</em></span>
       <input id="cpWhy" placeholder="e.g. the festival order is covered, we no longer need it" /></label>` : ""}
     <div class="modal-actions">
@@ -5776,65 +5811,134 @@ async function cancelPo(poNumber) {
 /* Connecting the seller's own email. A purchase order from no-reply@ourapp is
    an order from a stranger; from their own address it is the shop the supplier
    already deals with, and the reply comes back to them without us in the way. */
-async function openMailAccount() {
+/* ============================================================================
+   Connecting the seller's own email, drawn in two places.
+   Account > Email and the Suppliers "Send orders from my email" button both
+   call renderMailGuide(), so there is one guide and not two that drift. The
+   providers, their links and their steps come from the server
+   (seller_mail.GUIDES); this file keeps no host table of its own any more.
+
+   THE STEPS THIS REMOVES: the seller used to press a button that closed
+   Account, read one line of Gmail-only help with no link, leave the app to
+   hunt for the app-password page, fill in five fields, and land on Suppliers.
+   Now their provider is already picked from their address, one button opens
+   the exact page, the server is worked out for them, and they stay where they
+   started. An error sits under the button that caused it instead of in a
+   toast that vanishes while they are reading it.
+   ============================================================================ */
+async function renderMailGuide(boxId, opts = {}) {
+  const box = $(boxId);
+  if (!box) return;
+  box.innerHTML = `<div class="ap-empty">Checking your email…</div>`;
   let d;
-  try { d = await api("/api/mail/account"); } catch (e) { return toast(e.message); }
-  const g = d.guess || {};
+  try { d = await api("/api/mail/account"); }
+  catch (e) { box.innerHTML = `<p class="muted tiny">${esc(e.message)}</p>`; return; }
+  const provs = d.providers || [];
+  const byId = Object.fromEntries(provs.map((p) => [p.id, p]));
+  const domains = d.domains || {};
+  const form = { address: d.address || state.email || "", password: "", name: "",
+                 host: "", port: "", editing: !d.connected, error: "" };
+  let pick = (d.guess && d.guess.provider_id) || "gmail";
+  if (!byId[pick]) pick = provs.length ? provs[0].id : "other";
+
+  const out = (href, label) => href
+    ? `<a class="btn primary block mg-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${sic("arrow-up-right")}${esc(label)}</a>`
+    : "";
+  const draw = () => {
+    const p = byId[pick] || {};
+    const connected = d.connected && !form.editing;
+    let body;
+    if (connected) {
+      body = `<div class="action-card ok" style="margin:0 0 10px;">
+          <div class="do">Orders go out from ${esc(d.address)}</div>
+          <div class="why">${d.checked_at ? `Tested ${esc(String(d.checked_at).slice(0, 16).replace("T", " "))}. ` : ""}A supplier's reply comes straight to that inbox.</div></div>
+        <div class="mg-row">
+          <button type="button" class="btn ghost sm" data-mgedit>Change</button>
+          <button type="button" class="btn ghost sm danger" data-mgoff>Disconnect</button></div>`;
+    } else if (p.works === false) {
+      body = `<div class="mg-note">${esc(p.note || "")}</div>${out(p.link, p.link_label)}`;
+    } else {
+      body = `${p.prereq ? `<p class="muted tiny mg-pre">First: <a href="${esc(p.prereq.link)}" target="_blank" rel="noopener noreferrer">${esc(p.prereq.label)}</a></p>` : ""}
+        ${(p.steps || []).length ? `<ol class="mg-steps">${p.steps.map((t) => `<li>${esc(t)}</li>`).join("")}</ol>` : ""}
+        ${out(p.link, p.link_label)}
+        <div class="sup-form-grid" style="grid-template-columns:1fr;">
+          <label>Your email address<input data-mgf="address" type="email" value="${esc(form.address)}" placeholder="you@yourshop.com" autocomplete="email" /></label>
+          <label>${esc(p.password_label || "App password")}<input data-mgf="password" type="password" value="${esc(form.password)}" placeholder="${d.connected ? "saved, type a new one to replace it" : "paste it here"}" autocomplete="new-password" /></label>
+          <label>Name suppliers see <span class="muted tiny">optional</span><input data-mgf="name" value="${esc(form.name)}" placeholder="Kora Studio" /></label>
+        </div>
+        <details class="mg-adv"><summary>Advanced: mail server and port</summary>
+          <div class="sup-form-grid">
+            <label>Mail server<input data-mgf="host" value="${esc(form.host)}" placeholder="${esc(p.host || "worked out from your address")}" /></label>
+            <label>Port<input data-mgf="port" type="number" value="${esc(form.port)}" placeholder="587, or 465 if that is blocked" /></label>
+          </div></details>
+        <div class="err mg-err" ${form.error ? "" : "hidden"}>${esc(form.error)}</div>
+        <div class="mg-row">
+          ${d.connected ? `<button type="button" class="btn ghost sm" data-mgcancel>Keep the current one</button>` : ""}
+          <button type="button" class="btn primary" data-mgsave>${sic("mail")}Connect and send a test</button></div>
+        <p class="sm-hint">We only send with this, we never read your mail. The password is stored encrypted and never shown again. The test goes to your own inbox, so you see it arrive before a supplier ever does.</p>`;
+    }
+    box.innerHTML = `<div class="mg">
+        ${connected ? "" : `<div class="mg-q" id="${boxId}Q">Which email do you use?</div>
+        <div class="mg-chips" role="radiogroup" aria-labelledby="${boxId}Q">${provs.map((q) =>
+          `<button type="button" class="mg-chip" role="radio" aria-checked="${q.id === pick}" data-mgp="${esc(q.id)}">${esc(q.name)}</button>`).join("")}</div>`}
+        <div class="mg-body">${body}</div></div>`;
+    bind();
+  };
+
+  const done = (r, message) => {
+    toast(message, 8000);
+    if (opts.onDone) return opts.onDone(r);
+    renderMailGuide(boxId, opts);
+  };
+  const bind = () => {
+    box.querySelectorAll("[data-mgp]").forEach((b) => b.onclick = () => {
+      pick = b.dataset.mgp; form.error = ""; draw();
+    });
+    box.querySelectorAll("[data-mgf]").forEach((el) => el.oninput = () => {
+      form[el.dataset.mgf] = el.value;
+      if (el.dataset.mgf !== "address") return;
+      // Typing a Gmail or Yahoo address picks that guide. An unknown domain
+      // leaves the seller's own pick alone: orders@yourshop.com could be
+      // Google Workspace, Zoho or anything else, and only they know which.
+      const dom = (el.value.split("@")[1] || "").trim().toLowerCase();
+      if (domains[dom] && domains[dom] !== pick) {
+        pick = domains[dom]; draw();
+        const a = box.querySelector('[data-mgf="address"]');
+        if (a) { a.focus(); a.setSelectionRange(a.value.length, a.value.length); }
+      }
+    });
+    const on = (sel, fn) => { const el = box.querySelector(sel); if (el) el.onclick = fn; };
+    on("[data-mgedit]", () => { form.editing = true; draw(); });
+    on("[data-mgcancel]", () => { form.editing = false; form.error = ""; draw(); });
+    on("[data-mgoff]", async () => {
+      if (!confirm("Disconnect your email? Purchase orders stop going out from your address.")) return;
+      try { const r = await api("/api/mail/account", { method: "DELETE" }); done(r, "Disconnected."); }
+      catch (e) { toast(e.message); }
+    });
+    on("[data-mgsave]", async (ev) => {
+      ev.currentTarget.disabled = true;
+      form.error = "";
+      try {
+        const r = await withBusy("Checking your email…",
+          "Signing in and sending a test message to yourself. You can leave this screen.",
+          () => api("/api/mail/account", { method: "POST", json: {
+            address: form.address.trim(), password: form.password, provider: pick,
+            host: form.host.trim(), port: Number(form.port) || 0,
+            display_name: form.name.trim() } }));
+        done(r, `Connected. A test message is waiting in ${r.address}.`);
+      } catch (e) { form.error = e.message; draw(); }
+    });
+  };
+  draw();
+}
+
+async function openMailAccount() {
   openModal("Send purchase orders from your email", `
-    ${d.connected ? `<div class="action-card ok" style="margin:0 0 10px;">
-      <div class="do">Connected — orders go out from ${esc(d.address)}</div>
-      <div class="why">${d.checked_at ? `Tested ${esc(String(d.checked_at).slice(0, 16).replace("T", " "))}. ` : ""}A supplier's reply comes straight to that inbox.</div></div>` : ""}
-    <p class="muted tiny" style="margin-top:0;">${esc(g.help || "")}</p>
-    <div class="sup-form-grid">
-      <label>Your email address<input id="maAddr" type="email" value="${esc(d.address || "")}" placeholder="you@yourshop.com" /></label>
-      <label>App password<input id="maPass" type="password" placeholder="${d.connected ? "saved — type a new one to replace it" : "from your email provider"}" autocomplete="new-password" /></label>
-      <label>Mail server <span class="muted tiny">filled in for you</span>
-        <input id="maHost" value="${esc(g.host || "")}" /></label>
-      <label>Port <span class="muted tiny">587, or 465 if that is blocked</span>
-        <input id="maPort" type="number" value="${esc(String(g.port || 587))}" /></label>
-      <label>Name suppliers see<input id="maName" placeholder="Kora Studio" /></label>
-    </div>
-    <p class="sm-hint">We send with this, never read your mail. The password is
-      stored encrypted and never shown again. Connecting sends a test message to
-      yourself, so you can see it arrive before a supplier ever does.</p>
-    <div class="modal-actions">
-      <button class="btn ghost" data-mamx>Close</button>
-      ${d.connected ? `<button class="btn ghost danger" id="maOff">Disconnect</button>` : ""}
-      <button class="btn primary" id="maSave">${sic("mail")}Connect &amp; send test</button>
-    </div>`);
+    <div id="mailGuideModal"></div>
+    <div class="modal-actions"><button class="btn ghost" data-mamx>Close</button></div>`);
   document.querySelector("[data-mamx]").onclick = closeModal;
-  // Fill the server as they type the address. Same table as the server's, so
-  // the common providers need no thought and a business domain gets a sensible
-  // guess in an editable box.
-  const MAIL_HOSTS = { "gmail.com": "smtp.gmail.com", "googlemail.com": "smtp.gmail.com",
-    "outlook.com": "smtp-mail.outlook.com", "hotmail.com": "smtp-mail.outlook.com",
-    "live.com": "smtp-mail.outlook.com", "yahoo.com": "smtp.mail.yahoo.com",
-    "yahoo.in": "smtp.mail.yahoo.com", "zoho.com": "smtp.zoho.in", "zohomail.in": "smtp.zoho.in",
-    "icloud.com": "smtp.mail.me.com", "me.com": "smtp.mail.me.com",
-    "rediffmail.com": "smtp.rediffmail.com" };
-  const addr = $("maAddr");
-  addr.oninput = () => {
-    const dom = (addr.value.split("@")[1] || "").trim().toLowerCase();
-    if (dom) $("maHost").value = MAIL_HOSTS[dom] || `smtp.${dom}`;
-  };
-  if ($("maOff")) $("maOff").onclick = async () => {
-    if (!confirm("Disconnect your email? Purchase orders stop going out from your address.")) return;
-    try { await api("/api/mail/account", { method: "DELETE" }); closeModal(); openSupply(); toast("Disconnected."); }
-    catch (e) { toast(e.message); }
-  };
-  $("maSave").onclick = async () => {
-    try {
-      const r = await withBusy("Checking your email…",
-        "Signing in and sending a test message to yourself.",
-        () => api("/api/mail/account", { method: "POST", json: {
-          address: addr.value.trim(), password: $("maPass").value,
-          host: $("maHost").value.trim(), port: Number($("maPort").value) || 587,
-          display_name: $("maName").value.trim() } }));
-      closeModal();
-      openSupply();
-      toast(`Connected. Check ${r.address}, a test message is waiting there.`, 8000);
-    } catch (e) { toast(e.message, 9000); }
-  };
+  // From Suppliers, finishing returns to Suppliers, which is where they were.
+  renderMailGuide("mailGuideModal", { onDone: () => { closeModal(); openSupply(); } });
 }
 
 /* ============================================================================
@@ -5888,7 +5992,7 @@ async function openAccount() {
                <input data-pf="${esc(p.id)}:${esc(f.key)}" type="${f.secret ? "password" : "text"}"
                  autocomplete="off" placeholder="${esc(f.hint || "")}" /></label>`).join("")}
              <button class="btn primary sm" data-save="${esc(p.id)}">${sic("check")}Connect ${esc(p.label)}</button>
-             <p class="muted tiny" style="margin:6px 0 0;">${esc(p.help || "")} Money settles into your own ${esc(p.label)} account — we never hold it.</p>
+             <p class="muted tiny" style="margin:6px 0 0;">${esc(p.help || "")} Money settles into your own ${esc(p.label)} account, we never hold it.</p>
            </div>`}
     </div>`;
   };
@@ -5900,7 +6004,7 @@ async function openAccount() {
     return `<div class="acc-ai" data-ai="${esc(id)}">
       <label class="fld"><span>${dot(st.connected)}${esc(label)} key <span class="muted tiny">${esc(hint)}</span></span>
         <input data-aikey="${esc(id)}" type="password" autocomplete="off"
-          placeholder="${st.connected ? `saved — ends ${esc(st.last4 || "")}, type a new one to replace` : "optional — leave blank to use ours"}" /></label>
+          placeholder="${st.connected ? `saved, ends ${esc(st.last4 || "")}, type a new one to replace` : "optional, leave blank to use ours"}" /></label>
       <div class="acc-ai-acts">
         <button class="btn ghost sm" data-aisave="${esc(id)}">Save key</button>
         ${st.connected ? `<button class="btn ghost sm danger" data-airemove="${esc(id)}">Remove</button>` : ""}
@@ -5912,18 +6016,18 @@ async function openAccount() {
   const planHtml = pl.is_pro ? `
       <section class="acc-sec">
         <h4>Plan</h4>
-        <p style="margin-top:0;"><b>${esc(pl.name || "Max")}</b> — you're on premium. Everything is unlocked: unlimited AI, supply management, purchase orders, custom domain and multi-outlet.</p>
+        <p style="margin-top:0;"><b>${esc(pl.name || "Max")}</b> (you're on premium. Everything is unlocked: unlimited AI, supply management, purchase orders, custom domain and multi-outlet.)</p>
         <button class="btn ghost sm danger" id="accCancelPlan">Cancel subscription</button>
         <p class="muted tiny" style="margin:6px 0 0;">Cancelling returns you to Free, which keeps all the numbers and actions. You can re-subscribe any time.</p>
       </section>` : `
       <section class="acc-sec" style="border:1px solid var(--accent,#4f46e5); border-radius:12px; padding:14px;">
         <h4 style="margin-top:0;">Upgrade to ${esc(up.name || "Max")}</h4>
         <p class="muted tiny" style="margin-top:0;">You're on <b>${esc(pl.name || "Free")}</b>. ${esc(up.tagline || "Runs the shop, not just the reporting.")}${
-          pl.launch_mode ? " Everything is free during launch — upgrade now and you keep these when pricing starts." : ""}</p>
+          pl.launch_mode ? " Everything is free during launch, upgrade now and you keep these when pricing starts." : ""}</p>
         <ul style="margin:8px 0 12px; padding-left:18px; font-size:13px; line-height:1.6;">
           ${(up.includes || []).map((x) => `<li>${esc(x)}</li>`).join("")}
         </ul>
-        <button class="btn primary" id="accUpgrade">Upgrade to ${esc(up.name || "Max")} — ₹${up.price_inr ?? 999}/${esc(up.period || "month")}</button>
+        <button class="btn primary" id="accUpgrade">Upgrade to ${esc(up.name || "Max")}, ₹${up.price_inr ?? 999}/${esc(up.period || "month")}</button>
       </section>`;
 
   // ---- Credits: a monthly allowance + purchased packs, spent by real usage ----
@@ -5933,7 +6037,7 @@ async function openAccount() {
   const creditsHtml = (cr.enabled === false) ? "" : `
       <section class="acc-sec">
         <h4>Credits</h4>
-        <p class="muted tiny" style="margin-top:0;">A monthly allowance you can top up. Every generation spends what it actually costs —
+        <p class="muted tiny" style="margin-top:0;">A monthly allowance you can top up. Every generation spends what it actually costs,
           a picture ${cst.image ?? 10}, a video ${cst.video ?? 280}, a caption or an image read ${cst.text ?? 1}.${
           cr.launch_mode ? " Everything is free during launch; this is the meter for later." : ""}</p>
         <div style="display:flex; justify-content:space-between; font-size:13px;"><span class="muted">This month</span><b>${cr.monthly_left ?? 0} of ${cr.monthly_grant ?? 0} left</b></div>
@@ -5975,24 +6079,24 @@ async function openAccount() {
         <label class="fld"><span>Currency</span><select id="accCcy">${ccyOpts(m.currency)}</select></label>
         <p class="muted tiny">${m.charges_tax
           ? "GST applies on your store, as it does for a business in India."
-          : "No tax is added on your store — tax outside India is not handled yet, so prices are shown as you set them."}</p>
+          : "No tax is added on your store, tax outside India is not handled yet, so prices are shown as you set them."}</p>
         <button class="btn primary sm" id="accSaveMarket">${sic("check")}Save</button>
       </section>`;
 
+  // The guide is drawn inline when this pane opens (see the nav handler below),
+  // so connecting never takes the seller out of Account.
   const emailHtml = `
       <section class="acc-sec">
-        <h4 style="margin-top:0;">${dot(email.connected)}Email you send from</h4>
-        <p class="muted tiny" style="margin-top:0;">${email.connected
-          ? `Orders and messages go out from <b>${esc(email.address)}</b>.`
-          : "Not set up. Purchase orders and messages go from a shared address until you connect your own."}</p>
-        <button class="btn ghost sm" id="accMail">${sic("mail")}${email.connected ? "Change" : "Set up sending email"}</button>
+        <h4 style="margin-top:0;">Email you send orders from</h4>
+        <p class="muted tiny" style="margin-top:0;">Purchase orders go out from this address, so your supplier recognises it and replies straight to your inbox.</p>
+        <div id="accMailBox"><div class="ap-empty">Checking your email…</div></div>
       </section>`;
 
   const igHtml = `
       <section class="acc-sec">
         <h4 style="margin-top:0;">${dot(ig.connected)}Instagram</h4>
         <p class="muted tiny" style="margin-top:0;">${ig.connected
-          ? `Connected as <b>@${esc(ig.username || "your account")}</b> — posts can publish straight from here.`
+          ? `Connected as <b>@${esc(ig.username || "your account")}</b>, posts can publish straight from here.`
           : (ig.oauth_available ? "Connect Instagram to publish posts straight from the app."
              : "Instagram publishing is not configured on this server yet.")}</p>
         <button class="btn ghost sm" id="accIg">${sic("instagram")}${ig.connected ? "Manage" : "Connect Instagram"}</button>
@@ -6017,7 +6121,7 @@ async function openAccount() {
   const channelsHtml = `
       <section class="acc-sec">
         <h4 style="margin-top:0;">Sales channels</h4>
-        <p class="muted tiny" style="margin-top:0;">Connect where you already sell — WooCommerce, Wix, Shopify, Amazon — and pull your orders in. Once connected, press <b>Pull orders</b> and those sales show up in Sales Analytics like any other data.</p>
+        <p class="muted tiny" style="margin-top:0;">Connect where you already sell, WooCommerce, Wix, Shopify, Amazon, and pull your orders in. Once connected, press <b>Pull orders</b> and those sales show up in Sales Analytics like any other data.</p>
         <div class="chan-strip" id="accChanStrip"><div class="ap-empty">Loading channels…</div></div>
       </section>`;
 
@@ -6087,6 +6191,9 @@ async function openAccount() {
       // The slot only becomes visible when its own pane opens, so re-home the
       // control then: findSlot() prefers whichever slot is actually on screen.
       if (window.cxCookieSettings) window.cxCookieSettings();
+      // The email guide is drawn fresh each time, so it always shows the
+      // current connection rather than the one from when Account opened.
+      if (b.dataset.nav === "email") renderMailGuide("accMailBox");
       // Load the sales-channel connectors the first time that pane is opened.
       if (b.dataset.nav === "channels") {
         const el = $("accChanStrip");
@@ -6116,7 +6223,6 @@ async function openAccount() {
       closeModal(); openAccount();
     } catch (e) { toast(e.message, 7000); }
   };
-  $("accMail").onclick = () => { closeModal(); openMailAccount(); };
   if ($("accIg")) $("accIg").onclick = () => { closeModal(); openModule("instagram"); };
 
   // payment gateways
@@ -6168,7 +6274,7 @@ async function openAccount() {
                + "You keep all the numbers and actions, and can re-subscribe any time.")) return;
     try {
       const r = await api("/api/pay/cancel", { method: "POST", json: {} });
-      toast(r.message || "Subscription cancelled — you're back on Free.", 6000);
+      toast(r.message || "Subscription cancelled: you're back on Free.", 6000);
       closeModal(); openAccount();
     } catch (e) { toast(e.message); }
   };
@@ -6187,7 +6293,7 @@ function loadRazorpayScript() {
     const s = document.createElement("script");
     s.src = "https://checkout.razorpay.com/v1/checkout.js";
     s.onload = resolve;
-    s.onerror = () => reject(new Error("Could not load the payment window — check your connection."));
+    s.onerror = () => reject(new Error("Could not load the payment window, check your connection."));
     document.head.appendChild(s);
   });
 }
@@ -6202,7 +6308,7 @@ function openBuyCredits(cr) {
         <b>${esc(p.name)}</b> <span class="muted tiny">₹${p.price_inr}</span>
         <p class="muted tiny" style="margin:2px 0 0;">${esc(p.description || (p.credits + " credits"))}</p>
       </div>
-      <button class="btn primary sm" data-pack="${esc(p.id)}" style="flex:none;">Buy — ₹${p.price_inr}</button>
+      <button class="btn primary sm" data-pack="${esc(p.id)}" style="flex:none;">Buy: ₹${p.price_inr}</button>
     </div>`).join("") : `<p class="muted">No credit packs are configured on this server yet.</p>`;
 
   openModal("Buy credits", `
@@ -6215,13 +6321,13 @@ function openBuyCredits(cr) {
   document.querySelectorAll("[data-pack]").forEach((b) => b.onclick = () => buyCredits(b.dataset.pack));
 }
 
-function buyCredits(productId) { return startCheckout(productId, "Payment successful — credits added.", "It's free during launch — nothing to buy yet."); }
+function buyCredits(productId) { return startCheckout(productId, "Payment successful: credits added.", "It's free during launch, nothing to buy yet."); }
 
 /* Upgrade to Max (premium). Same pay flow as a credit pack; the server grants
    the tier on a verified signature, so all this does is start the checkout. */
 function upgradeToMax(productId) {
-  return startCheckout(productId || "pro", "You're on Max now — everything's unlocked.",
-    "Everything is free during launch — you're already getting Max features.");
+  return startCheckout(productId || "pro", "You're on Max now, everything's unlocked.",
+    "Everything is free during launch, you're already getting Max features.");
 }
 
 /* One Razorpay round-trip, shared by credit packs and the plan upgrade:
@@ -6302,7 +6408,7 @@ function confirmDelete() {
     title: "Delete account",
     word: "DELETE",
     danger: true,
-    body: `<p class="muted">This permanently removes your account and everything in it — settings, storefront, products, data and your login. It cannot be undone, and you'll be signed out.</p>`,
+    body: `<p class="muted">This permanently removes your account and everything in it, settings, storefront, products, data and your login. It cannot be undone, and you'll be signed out.</p>`,
     run: async () => {
       await withBusy("Deleting your account…", "", () => api("/api/account/delete", { method: "DELETE" }));
       // The session no longer exists on the server; clear the client the same
@@ -6330,7 +6436,7 @@ function pickSignature() {
 async function saveSignature(url) {
   try {
     _supAfter(await api("/api/supply/signature", { method: "POST", json: { url } }));
-    toast(url ? "Signature saved — it will appear on every purchase order." : "Signature removed.");
+    toast(url ? "Signature saved: it will appear on every purchase order." : "Signature removed.");
   } catch (e) { toast(e.message); }
 }
 
@@ -6348,15 +6454,15 @@ async function openPoDetail(poNumber) {
     const n = ln.now || {};
     return `<tr>
       <td><b>${esc(ln.name)}</b>${(n.linked_products || []).length ? `<div class="muted tiny">in ${n.linked_products.map(esc).join(", ")}</div>` : ""}</td>
-      <td class="num">${n.current_stock == null ? "—" : fmt(n.current_stock)}</td>
-      <td class="num">${n.dos == null ? "—" : n.dos} <span class="muted tiny">/ ${n.dos_threshold ?? "—"}</span></td>
-      <td class="num">${n.effective_lead_time_days ?? "—"}</td>
+      <td class="num">${n.current_stock == null ? "–" : fmt(n.current_stock)}</td>
+      <td class="num">${n.dos == null ? "–" : n.dos} <span class="muted tiny">/ ${n.dos_threshold ?? "–"}</span></td>
+      <td class="num">${n.effective_lead_time_days ?? "–"}</td>
       <td class="num">${draft ? `<input class="doq-in" type="number" min="0" step="1" data-poqty="${esc(ln.inventory_id)}" value="${ln.order_qty}" />` : fmt(ln.order_qty)}
         <span class="muted tiny">${esc(ln.unit_label || "")} · ${esc(DOQ_BASIS[n.doq_basis || ln.doq_basis] || "")}</span></td>
-      <td class="num">${ln.line_amount == null ? "—" : _rupee(ln.line_amount)}</td>
+      <td class="num">${ln.line_amount == null ? "–" : _rupee(ln.line_amount)}</td>
     </tr>`;
   }).join("");
-  openModal(`${po.po_number} — ${sup.name || "supplier"}`, `
+  openModal(`${po.po_number} – ${sup.name || "supplier"}`, `
     <div class="po-d-sup">
       <div><b>${esc(sup.name || "No supplier named")}</b>
         <div class="muted tiny">${esc(sup.email || "no email on file")}${sup.phone ? " · " + esc(sup.phone) : ""}</div></div>
@@ -6370,16 +6476,16 @@ async function openPoDetail(poNumber) {
     ${(po.lines || []).map((ln) => { const nw = ln.now || {}; if (!nw.reason) return "";
       const moved = nw.doq != null && ln.order_qty != null && Math.round(nw.doq) !== Math.round(ln.order_qty);
       return `<p class="muted tiny" style="margin:6px 0 0;"><b>${esc(ln.name)}:</b> ${esc(nw.reason)}${moved
-        ? ` <span class="warn-t">This order was drafted for ${fmt(ln.order_qty)}; with the latest sales the DOQ is now ${fmt(nw.doq)} — change the quantity above if you want it.</span>` : ""}</p>`; }).join("")}
+        ? ` <span class="warn-t">This order was drafted for ${fmt(ln.order_qty)}; with the latest sales the DOQ is now ${fmt(nw.doq)}, change the quantity above if you want it.</span>` : ""}</p>`; }).join("")}
 
-    <div class="sup-sub" style="margin-top:16px;">${sic("mail")}Email to the supplier <span class="muted tiny">— the PO goes as a PDF attachment</span></div>
+    <div class="sup-sub" style="margin-top:16px;">${sic("mail")}Email to the supplier <span class="muted tiny">(the PO goes as a PDF attachment)</span></div>
     <label class="fld"><span>To</span><input id="poTo" type="email" value="${esc(em.to || sup.email || "")}" placeholder="orders@supplier.com" /></label>
     <label class="fld"><span>Subject</span><input id="poSubj" value="${esc(em.subject || "")}" /></label>
     <label class="fld"><span>Message</span><textarea id="poMsg" rows="9">${esc(em.body || "")}</textarea></label>
     <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ghost sm" id="poRewrite">${sic("spark")}Rewrite with AI</button>
       <a class="btn ghost sm" id="poPdf" href="#">${sic("receipt")}See the PDF</a>
-      ${d.email_ready ? "" : `<span class="muted tiny">Email sending is not set up on this server — Approve gives you the PDF and opens your own mail app with this message.</span>`}
+      ${d.email_ready ? "" : `<span class="muted tiny">Email sending is not set up on this server, Approve gives you the PDF and opens your own mail app with this message.</span>`}
     </div>
     <div class="modal-actions">
       <button class="btn ghost" data-poclose>Close</button>
@@ -6445,9 +6551,9 @@ async function approvePo(poNumber) {
 /* The server could not send it. The order is approved either way, so this is
    not a failure of the decision — it is a handover, and it needs the seller. */
 function poSendItYourself(poNumber, r) {
-  openModal("Approved — send it yourself", `
+  openModal("Approved: send it yourself", `
     <p style="margin-top:0;">${esc(r.reason || "It could not be emailed from here.")}</p>
-    <p class="muted">The order is approved. Download the PDF and send it with the ready-written message —
+    <p class="muted">The order is approved. Download the PDF and send it with the ready-written message,
       the button below opens your own mail app with it filled in; attach the PDF there.</p>
     <div class="modal-actions">
       <button class="btn ghost" data-apx>Close</button>
@@ -6494,7 +6600,7 @@ function showSupplierOrders(orders) {
       : `<b>${esc(o.supplier_name || "Supplier")}</b><div class="muted tiny">${esc(o.supplier_phone || "")}${o.supplier_phone && o.supplier_email ? " · " : ""}${esc(o.supplier_email || "")}</div>`;
     const msg = encodeURIComponent(
       `Hello${o.supplier_name ? " " + o.supplier_name : ""}, I would like to place an order. `
-      + `Reference ${o.po_number} — ${o.n_items || 0} item${(o.n_items || 0) === 1 ? "" : "s"}. `
+      + `Reference ${o.po_number} – ${o.n_items || 0} item${(o.n_items || 0) === 1 ? "" : "s"}. `
       + `Sending the details now.`);
     const wa = o.supplier_phone
       ? `<a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/${String(o.supplier_phone).replace(/[^0-9]/g, "")}?text=${msg}">WhatsApp them</a>` : "";
@@ -6574,7 +6680,7 @@ function renderSales(payload) {
       ${cancelPanel(cx)}
       ${renderActions(d.insights)}
       <div class="chart-card"><h4>Monthly revenue</h4><div class="plot" id="cMonthly"></div></div>
-      ${d.forecast ? `<div class="chart-card"><h4>Next 30 days — ≈ ₹${fmt(d.forecast.next_30_total)} (${d.forecast.vs_last_30_pct >= 0 ? "+" : ""}${d.forecast.vs_last_30_pct}% vs last 30)</h4><div class="plot" id="cFcst"></div></div>` : ""}
+      ${d.forecast ? `<div class="chart-card"><h4>Next 30 days: ≈ ₹${fmt(d.forecast.next_30_total)} (${d.forecast.vs_last_30_pct >= 0 ? "+" : ""}${d.forecast.vs_last_30_pct}% vs last 30)</h4><div class="plot" id="cFcst"></div></div>` : ""}
       <div class="grid-2">
         ${d.by_category ? `<div class="chart-card"><h4>Revenue by category</h4><div class="plot" id="cCat"></div></div>` : ""}
         <div class="chart-card"><h4>Revenue by weekday</h4><div class="plot" id="cWk"></div></div>
@@ -6640,7 +6746,7 @@ function cancelPanel(cx) {
       <div id="cxBody" hidden>
         <p class="muted tiny cx-note">${esc(cx.note)}</p>
         ${!cx.enough_data ? `<p class="muted tiny cx-note">
-          Only ${fmt(cx.orders)} orders so far — too few for percentages to mean
+          Only ${fmt(cx.orders)} orders so far, too few for percentages to mean
           anything, so this shows counts and rupees. Rates appear from
           ${cx.min_denominator} orders.</p>` : ""}
 
@@ -6658,7 +6764,7 @@ function cancelPanel(cx) {
         ${(cx.by_payment || []).length > 1 ? `
           <div class="cx-sub">Cash on delivery vs paid online</div>
           <p class="muted tiny cx-note">Across India, cash-on-delivery orders fail
-            far more often than prepaid ones — Shipway's FY25 data puts COD
+            far more often than prepaid ones, Shipway's FY25 data puts COD
             return-to-origin at 26% against under 2% for prepaid. Your own split
             is below.</p>
           <div class="cx-pay">
@@ -6739,7 +6845,7 @@ function renderSubcategory(d) {
         <select id="subSel" class="sub-select"><option value="">All (overview)</option>${d.all_values.map((v) => `<option>${esc(v)}</option>`).join("")}</select>
       </div>
       ${renderActions(d.insights)}
-      <div class="chart-card"><h4>Monthly trend — top ${label}</h4><div class="plot" id="cSubTrend"></div></div>
+      <div class="chart-card"><h4>Monthly trend: top ${label}</h4><div class="plot" id="cSubTrend"></div></div>
       <div class="chart-card"><h4>Total revenue by ${label}</h4><div class="plot" id="cSubTot"></div></div>`;
     moduleShell("Sub-Category Analysis", html);
     $("subSel").onchange = () => $("subSel").value ? renderSubDetail($("subSel").value) : openSubcategory();
@@ -6766,7 +6872,7 @@ async function renderSubDetail(value) {
         <div class="kpi"><div class="label">Avg Order Value</div><div class="value">₹${fmt(k.avg_order_value)}</div></div>
         <div class="kpi"><div class="label">Share of revenue</div><div class="value">${k.share_of_total_pct}%</div></div>
       </div>
-      <div class="chart-card"><h4>${esc(value)} — monthly revenue</h4><div class="plot" id="cDT"></div></div>
+      <div class="chart-card"><h4>${esc(value)}, monthly revenue</h4><div class="plot" id="cDT"></div></div>
       <div class="grid-2">
         <div class="chart-card"><h4>Revenue by weekday</h4><div class="plot" id="cDW"></div></div>
         ${d.top_products ? `<div class="chart-card"><h4>Top items</h4><div class="plot" id="cDP"></div></div>` : ""}
@@ -6792,10 +6898,10 @@ function renderReview(d) {
     const html = `
       ${renderActions(d.insights)}
       <div class="card pos-banner"><span class="muted tiny">Your position, from your own reviews</span>
-        <h3 style="margin:4px 0 0;"> ${esc(pos.quadrant || "—")}</h3></div>
+        <h3 style="margin:4px 0 0;"> ${esc(pos.quadrant || "–")}</h3></div>
       <div class="kpis">
         <div class="kpi"><div class="label">Reviews</div><div class="value">${fmt(d.n_reviews)}</div></div>
-        <div class="kpi"><div class="label">Your rating</div><div class="value">${d.avg_rating ?? "—"}</div></div>
+        <div class="kpi"><div class="label">Your rating</div><div class="value">${d.avg_rating ?? "–"}</div></div>
         <div class="kpi"><div class="label">Sentiment</div><div class="value">${d.overall_sentiment > 0 ? "+" : ""}${d.overall_sentiment}</div></div>
       </div>
       <div class="chart-card"><h4>What your customers talk about (% of reviews)</h4><div class="plot" id="cShare"></div></div>
@@ -6820,7 +6926,7 @@ function renderComplaints(d) {
     const focus = (d.focus && d.focus.focus_now) || [];
     if (focus.length) {
       html += `<div class="card"><h4> Fix these first</h4>${focus.map((x, i) => `
-        <div class="action-card negative"><div class="do">${i + 1}. ${esc(x.theme)} — ${esc(x.severity)}</div>
+        <div class="action-card negative"><div class="do">${i + 1}. ${esc(x.theme)} – ${esc(x.severity)}</div>
         <div class="why"> ${esc(x.action)} · ${x.count} complaints (${x.share_pct}%)</div></div>`).join("")}</div>`;
     } else {
       html += `<div class="card"> No significant complaint patterns found.</div>`;
@@ -6852,7 +6958,7 @@ async function openStrategy() {
     renderStrategy,
     // Detection runs an analysis pass, so the empty state has to explain where
     // the input comes from rather than just showing a failure.
-    (msg) => `<div class="card">${esc(msg)}<br><br>Upload your reviews in <b>Review Analytics</b> first — the strategy is detected from them.</div>`);
+    (msg) => `<div class="card">${esc(msg)}<br><br>Upload your reviews in <b>Review Analytics</b> first, the strategy is detected from them.</div>`);
 }
 
 function posCard(p, eyebrow) {
@@ -6868,7 +6974,7 @@ function posCard(p, eyebrow) {
 
 function renderStrategy(d) {
   let html = posCard(d.current, `You are here${d.n_reviews ? ` · from ${d.n_reviews} reviews` : ""}`);
-  html += `<div class="section-title">Choose a target — or strengthen where you are</div>
+  html += `<div class="section-title">Choose a target: or strengthen where you are</div>
     <div class="apps-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));">
     ${d.options.map((o) => `<div class="app-tile opt-tile ${o.id === d.target_id ? "selected" : ""}" data-target="${o.id}" style="text-align:left;">
         <div class="opt-diff ${o.is_current ? "stay" : (o.axes_changing === 1 ? "adj" : "big")}">${esc(o.difficulty)}</div>
@@ -6883,7 +6989,7 @@ function renderStrategy(d) {
     html += `<div class="card" style="border-left:4px solid var(--green);"><h4 style="color:var(--green);">Keep these the same</h4>
       <p class="muted tiny" style="margin:4px 0;">${esc(pl.keep_note)}</p>
       <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:var(--text-2);">${pl.keep_same.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
-    html += `<div class="section-title">Your levelled checklist — ${pl.progress.done}/${pl.progress.total} (${pct}%)</div>
+    html += `<div class="section-title">Your levelled checklist: ${pl.progress.done}/${pl.progress.total} (${pct}%)</div>
       <p class="muted tiny" style="margin-top:-6px;">Finish a level to unlock the next one.</p>
       <div class="progress-bar" style="height:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;overflow:hidden;margin-bottom:14px;"><div id="pfill" style="height:100%;width:${pct}%;background:var(--primary);"></div></div>`;
 
@@ -6991,7 +7097,7 @@ function winbackStrip(a) {
   const head = p
     ? `<b>${fmt(p.reachable || p.n)} message${(p.reachable || p.n) === 1 ? "" : "s"} are written and waiting for you</b>
        <span class="muted tiny">Prepared ${esc(String(p.at || "").slice(0, 10))}. Approve them in the panel on the right and they go out from your own email address.${
-         p.skipped_cooldown ? `${fmt(p.skipped_cooldown)} more were left out — they were contacted within the last ${a.cooldown_days} days.` : ""}</span>`
+         p.skipped_cooldown ? `${fmt(p.skipped_cooldown)} more were left out, they were contacted within the last ${a.cooldown_days} days.` : ""}</span>`
     : a.enabled
       ? `<b>Checks every ${esc(a.day_name)} at ${esc(hr(a.hour))}${a.tz_label ? `${esc(a.tz_label)}` : ""}</b>
          <span class="muted tiny">It reads your sales for customers who have gone quiet, writes each message against what that person actually bought, and puts one card in your Approval panel. Nothing is ever sent until you approve it. Anyone contacted in the last ${a.cooldown_days} days is left alone.
@@ -7003,7 +7109,7 @@ function winbackStrip(a) {
     <div class="ap-strip ${p ? "on" : (a.enabled ? "on" : "off")}">
       <div class="ap-strip-t">${sic(p ? "bell" : "clock")}<div>${head}</div></div>
       <div class="ap-strip-a">
-        ${p ? `<button class="btn ghost sm" id="wbaSkip" title="Throw this batch away — these customers stay eligible next week">Skip this week</button>`
+        ${p ? `<button class="btn ghost sm" id="wbaSkip" title="Throw this batch away, these customers stay eligible next week">Skip this week</button>`
             : `<button class="btn primary sm" id="wbaRun">${sic("refresh")}Check now</button>`}
         <button class="btn ghost sm" id="wbaChange">${sic("settings")}${a.enabled ? "Change day" : "Turn on"}</button>
       </div>
@@ -7017,7 +7123,7 @@ function wireWinbackStrip() {
     try {
       const r = await api("/api/winback/auto/run", { method: "POST" });
       const res = r.run || {};
-      toast(res.ok ? `${res.reachable || res.n} customers ready — approve them in the panel`
+      toast(res.ok ? `${res.reachable || res.n} customers ready, approve them in the panel`
                    : `Nothing to send: ${res.reason || "no one has gone quiet"}`, 6000);
       warmModClearAll();
       openMarketing();
@@ -7091,17 +7197,17 @@ function renderMarketing(wb, proof, sends, auto) {
   if (wb && wb._error) {
     body = `<div class="ap-empty">${esc(wb._error)}</div>`;
   } else if (!rows.length) {
-    body = `<div class="ap-empty">No customers are at risk of going quiet right now —
+    body = `<div class="ap-empty">No customers are at risk of going quiet right now,
       nice work. This list is built from your order history, so check back as it grows.</div>`;
   } else {
     body = `
       <div class="card mk-card">
         <h4 style="margin:0 0 4px;">${rows.length} customer${rows.length === 1 ? "" : "s"} have gone quiet</h4>
         <p class="muted tiny" style="margin:0 0 12px;">Each one gets a written message
-          with their favourite item and a coupon — you edit every row before anything sends.</p>
+          with their favourite item and a coupon, you edit every row before anything sends.</p>
         <ul class="mk-list">
           ${rows.slice(0, 8).map((r) => `<li><b>${esc(r.customer_name || "Customer")}</b>
-            <span class="muted tiny">${esc(r.favorite_item || "")}${r.favorite_item ? " · " : ""}last order ${esc(r.last_purchase_date || "—")}</span></li>`).join("")}
+            <span class="muted tiny">${esc(r.favorite_item || "")}${r.favorite_item ? " · " : ""}last order ${esc(r.last_purchase_date || "–")}</span></li>`).join("")}
         </ul>
         ${rows.length > 8 ? `<p class="muted tiny">+ ${rows.length - 8} more</p>` : ""}
         <button class="btn primary" id="mkReview">Review &amp; send</button>
@@ -7114,7 +7220,7 @@ function renderMarketing(wb, proof, sends, auto) {
       <div class="mk-sends">
         ${sendRows.slice(0, 20).map((s) => `
           <div class="mk-send-row">
-            <b>${esc((s.channels || []).join(" + ") || "—")}</b>
+            <b>${esc((s.channels || []).join(" + ") || "–")}</b>
             <span class="muted tiny">${esc(String(s.at || "").slice(0, 10))}
               · ${fmt(s.recipients || 0)} sent
               ${s.skipped ? ` · ${fmt(s.skipped)} skipped (no email/phone)` : ""}</span>
@@ -7124,7 +7230,7 @@ function renderMarketing(wb, proof, sends, auto) {
 
   moduleShell("Marketing", `
     <p class="muted" style="margin-top:0;">Win-back campaigns for customers who used to
-      buy from you and have gone quiet — written and ready, one tap to send.</p>
+      buy from you and have gone quiet, written and ready, one tap to send.</p>
     ${winbackStrip(auto)}
     ${proofLine}
     ${body}
@@ -7208,7 +7314,7 @@ async function openWinbackSend(rows) {
 
   openModal(`Send to ${rows.length} customer${rows.length === 1 ? "" : "s"}`, `
     <p class="muted" style="margin-top:0;">These are the customers who have gone
-      quiet. One message is the cheapest revenue you will find this week — and we
+      quiet. One message is the cheapest revenue you will find this week, and we
       measure what comes back.</p>
 
     <div class="wb-ch">
@@ -7262,7 +7368,7 @@ function showWinbackResult(r) {
     <p style="margin-top:0;"><b>${esc(r.summary)}</b></p>
     ${links.length ? `
       <p class="muted tiny">No WhatsApp provider is connected yet, so these open
-        WhatsApp with the message already written — tap each one and press send.
+        WhatsApp with the message already written, tap each one and press send.
         Connect a provider and they will go on their own.</p>
       <div class="wb-links">${links.map((x) => `
         <a class="wb-link" href="${esc(x.wa_link)}" target="_blank" rel="noopener">
@@ -7270,7 +7376,7 @@ function showWinbackResult(r) {
           <span>${esc(x.phone)}</span></a>`).join("")}</div>` : ""}
     ${r.skipped ? `<p class="muted tiny">${r.skipped} customer${r.skipped === 1 ? " has" : "s have"}
       neither an email nor a phone number on file, so they could not be contacted.</p>` : ""}
-    <p class="muted tiny">Recorded for measurement — Sales Analytics will show what
+    <p class="muted tiny">Recorded for measurement: Sales Analytics will show what
       comes back over the next 30 days.</p>
     <div class="modal-actions"><button class="btn primary" id="wbDone">Done</button></div>`, { wide: true });
   $("wbDone").onclick = closeModal;
@@ -7281,7 +7387,7 @@ function askWinbackSent(rows) {
     <p class="muted" style="margin-top:0;">Tell us when this campaign actually goes out and we can
     measure it: of the <b>${rows.length}</b> customers on this list, how many come back, and how
     much they spend, in the 30 days after.</p>
-    <p class="muted tiny">Nothing is sent from here — you send it your own way. This is just the
+    <p class="muted tiny">Nothing is sent from here, you send it your own way. This is just the
     date we measure from. It is not a controlled test; it is what your own sales data says.</p>
     <label class="fld"><span>How are you sending it?</span>
       <select id="wbCh">
@@ -7292,7 +7398,7 @@ function askWinbackSent(rows) {
         <option value="other">Something else</option>
       </select></label>
     <div class="modal-actions">
-      <button class="btn ghost" id="wbLater">Not yet — I'll tick it later</button>
+      <button class="btn ghost" id="wbLater">Not yet: I'll tick it later</button>
       <button class="btn primary" id="wbSent">I've sent it</button>
     </div>`);
   $("wbLater").onclick = () => { closeModal(); toast("Exported & approved, moved to History."); };
@@ -7301,7 +7407,7 @@ function askWinbackSent(rows) {
       const p = await api("/api/rfm/winback/sent", { method: "POST",
         json: { customers: rows, channel: $("wbCh").value } });
       closeModal();
-      toast(p.headline || "Recorded — we'll measure it from today.", 6000);
+      toast(p.headline || "Recorded: we'll measure it from today.", 6000);
       renderProof();
     } catch (e) { toast(e.message); }
   };
@@ -7391,7 +7497,7 @@ async function openInstagramModule() {
       <div class="ig-form" style="margin-top:14px;">
         <div class="focus-box" style="background:var(--amber-soft);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
           <b style="color:var(--amber);">One-click OAuth isn't enabled on this server yet.</b>
-          <div class="muted tiny" style="margin-top:3px;">Ask the admin to set <code>META_APP_ID</code> and <code>META_APP_SECRET</code> env vars — then this page becomes a single "Connect Instagram" button. Until then, paste an access token below.</div>
+          <div class="muted tiny" style="margin-top:3px;">Ask the admin to set <code>META_APP_ID</code> and <code>META_APP_SECRET</code> env vars, then this page becomes a single "Connect Instagram" button. Until then, paste an access token below.</div>
         </div>
         <label>Access token <input id="igToken" placeholder="EAAG… (from Meta Graph API Explorer, instagram_content_publish scope)" /></label>
         <label>Instagram Business account id <input id="igUserId" placeholder="17841400000000000" /></label>
@@ -7407,14 +7513,14 @@ async function openInstagramModule() {
         <div class="row" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <div style="flex:1;min-width:220px;">
             <h3 style="margin:0;">${s.connected ? "Connected" : "Not connected yet"}</h3>
-            ${s.connected ? `<div class="muted tiny" style="margin-top:4px;">Account: <b>@${esc(s.account_username || "—")}</b> · IG user id: <code>${esc(s.ig_user_id)}</code> · since ${esc(String(s.connected_at || "").slice(0,10))}</div>`
-                          : `<div class="muted tiny" style="margin-top:4px;">${oauth ? "Sign in at instagram.com with the password you already use — it never passes through us." : "Follow the steps below."}</div>`}
+            ${s.connected ? `<div class="muted tiny" style="margin-top:4px;">Account: <b>@${esc(s.account_username || "–")}</b> · IG user id: <code>${esc(s.ig_user_id)}</code> · since ${esc(String(s.connected_at || "").slice(0,10))}</div>`
+                          : `<div class="muted tiny" style="margin-top:4px;">${oauth ? "Sign in at instagram.com with the password you already use, it never passes through us." : "Follow the steps below."}</div>`}
           </div>
           ${s.connected ? `<button class="btn ghost sm" id="igDisconnect">Disconnect</button>` : ""}
         </div>
         ${s.connected ? `
           <p class="muted tiny" style="margin-top:10px;">Approved posts on your
-            calendar go out on this account at the time you scheduled them —
+            calendar go out on this account at the time you scheduled them,
             reels as reels, photos as photos. Nothing is posted that you have
             not approved.</p>
           <div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;">
@@ -7426,10 +7532,10 @@ async function openInstagramModule() {
             <summary>Or put a real test post up now</summary>
             <p class="muted tiny">This posts for real, immediately, on @${esc(s.account_username || "")}.
               Use it once to see a post actually appear with your caption. Delete it
-              from Instagram afterwards — we cannot remove it for you.</p>
+              from Instagram afterwards, we cannot remove it for you.</p>
             <label>Caption
               <input id="igTpCap" placeholder="Testing our new posting setup." /></label>
-            <label>Picture <span class="muted tiny">optional — leave blank for a plain test card</span>
+            <label>Picture <span class="muted tiny">optional, leave blank for a plain test card</span>
               <input id="igTpUrl" placeholder="/generated_images/… or a public https link" /></label>
             <button class="btn ghost sm" id="igTpGo">${sic("instagram")}Post it now</button>
             <div id="igTpMsg" style="margin-top:8px;"></div>
@@ -7444,7 +7550,7 @@ async function openInstagramModule() {
           <ol style="line-height:1.7;padding-left:18px;margin:6px 0 0;">
             <li><b>Your account must be Business or Creator.</b> Instagram app →
               Settings → Account type and tools → Switch to professional account.
-              It is free and takes a minute. A personal account cannot connect —
+              It is free and takes a minute. A personal account cannot connect,
               this is the reason almost every failed connection fails.</li>
             <li><b>If we are still in testing, accept the invite first.</b> You were
               added as a tester, and the invite has to be accepted before Instagram
@@ -7452,18 +7558,18 @@ async function openInstagramModule() {
               <a href="https://www.instagram.com/accounts/manage_access_tools/" target="_blank" rel="noopener">instagram.com → Apps and websites → Tester invites</a>
               and press Accept. On a phone: Instagram app → Settings → Website
               permissions → Apps and websites → Tester invites. Nothing happens on
-              facebook.com — this invite lives on Instagram.</li>
+              facebook.com, this invite lives on Instagram.</li>
           </ol>
         </div>
         <b class="ig-then">Then press Connect Instagram, and:</b>
         <ol class="muted tiny" style="line-height:1.7;padding-left:18px;">
-          <li>An Instagram login window opens — instagram.com, not us, and no Facebook Page anywhere.</li>
+          <li>An Instagram login window opens, instagram.com, not us, and no Facebook Page anywhere.</li>
           <li>You sign in with the Instagram password you already use.</li>
           <li>Instagram asks whether to allow this app to see your profile, publish posts and read your insights. Press Allow.</li>
-          <li>You land back here, connected. We store the access token encrypted — you never see it and neither does anyone else.</li>
+          <li>You land back here, connected. We store the access token encrypted, you never see it and neither does anyone else.</li>
         </ol>
         <p class="muted tiny" style="margin-top:8px;">Use a desktop browser if you can,
-          and turn off any VPN or ad blocker for this one step — both are common causes of
+          and turn off any VPN or ad blocker for this one step, both are common causes of
           a login window that opens and then does nothing. Once Meta approves the app,
           the tester step disappears and this works for any Business or Creator account.</p>` : `
         <ol class="muted tiny" style="line-height:1.7;padding-left:18px;">
@@ -7471,7 +7577,7 @@ async function openInstagramModule() {
           <li>Add the <b>"Instagram"</b> product (not "Facebook Login") and set up Business Login for Instagram, with the OAuth Redirect URI <code>https://YOUR-APP/api/instagram/oauth/callback</code>.</li>
           <li>Add permissions: <code>instagram_business_basic</code>, <code>instagram_business_content_publish</code>.</li>
           <li>Set env vars on the server: <code>META_APP_ID</code>, <code>META_APP_SECRET</code> (the Instagram product's App ID/Secret), optionally <code>META_REDIRECT_URL</code>.</li>
-          <li>Reload this page — the "Connect Instagram" button appears.</li>
+          <li>Reload this page: the "Connect Instagram" button appears.</li>
         </ol>`}
       </div>` : ""}`);
     $("backHome").onclick = goHome;
@@ -7483,7 +7589,7 @@ async function openInstagramModule() {
         if (!at || !ig) { $("igMsg").innerHTML = "<span style='color:var(--red)'>Fill both fields first.</span>"; return; }
         $("igMsg").textContent = "Testing…";
         try { const r = await api("/api/instagram/test", { method: "POST", json: { access_token: at, ig_user_id: ig } });
-          $("igMsg").innerHTML = r.ok ? `<span style='color:var(--green)'>✓ OK — @${esc(r.username || "—")}</span>` : `<span style='color:var(--red)'>${esc(r.error || "Not OK")}</span>`;
+          $("igMsg").innerHTML = r.ok ? `<span style='color:var(--green)'>✓ OK, @${esc(r.username || "–")}</span>` : `<span style='color:var(--red)'>${esc(r.error || "Not OK")}</span>`;
         } catch (e) { $("igMsg").innerHTML = `<span style='color:var(--red)'>${esc(e.message)}</span>`; }
       };
       if (saveBtn) saveBtn.onclick = async () => {
@@ -7511,7 +7617,7 @@ async function openInstagramModule() {
             box.innerHTML = `<div class="focus-box" style="background:var(--green-soft,var(--surface-2));border-radius:8px;padding:10px 12px;">
               <b style="color:var(--green);">✓ Posting works.</b>
               <div class="muted tiny" style="margin-top:3px;">Instagram accepted a test picture from this server and
-                confirmed permission to publish on @${esc(r.username || "")}. The test was thrown away — nothing
+                confirmed permission to publish on @${esc(r.username || "")}. The test was thrown away, nothing
                 appeared on your profile. Your scheduled posts will go out.</div></div>`;
           } else {
             box.innerHTML = `<div class="focus-box" style="background:var(--amber-soft,var(--surface-2));border-radius:8px;padding:10px 12px;">
@@ -7592,13 +7698,13 @@ async function openContentModule() {
     const s = sug.suggestion || {};
     const openaiNote = sug.openai
       ? `<span class="pill-on">OpenAI on</span>`
-      : `<span class="pill-off">OpenAI off — using templates (set OPENAI_API_KEY on the server)</span>`;
+      : `<span class="pill-off">OpenAI off: using templates (set OPENAI_API_KEY on the server)</span>`;
     let html = `<div class="card">
       <div class="row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <h3 style="margin:0;">Current suggestion</h3><span style="flex:1"></span>${openaiNote}
         <button class="btn ghost sm" id="ccRotate">↻ Rotate</button>
       </div>
-      ${s.id ? `<p class="muted tiny">Topic: ${esc(s.topic || "—")}${s.generated ? " · generated" : " · not yet generated — open Details to fill in caption + image"}</p>
+      ${s.id ? `<p class="muted tiny">Topic: ${esc(s.topic || "–")}${s.generated ? " · generated" : " · not yet generated, open Details to fill in caption + image"}</p>
       <div class="row" style="display:flex;gap:10px;flex-wrap:wrap;">
         <button class="btn primary sm" id="ccOpen"> Open editor</button>
       </div>` : `<p class="muted">No suggestion active yet.</p>`}
@@ -7788,7 +7894,7 @@ async function renderChannels(containerId = "chanStrip") {
       return `
         <div class="chan-card ${soon ? "soon" : ""} ${c.id === "site" ? "own" : ""}">
           <div class="chan-top">
-            <span class="chan-ico">${c.icon}</span>
+            <span class="chan-ico">${ico(c.icon)}</span>
             <div class="chan-name"><b>${esc(c.label)}</b>${pill}</div>
             <label class="site-toggle sm" title="${c.toggleable ? "Count this channel's sales in your insights" : "Available once this channel is live"}">
               <input type="checkbox" data-chan="${c.id}"${c.enabled ? "checked" : ""} ${c.toggleable ? "" : "disabled"} />
@@ -7821,7 +7927,7 @@ function openCommerceModal(id, connectors) {
   const c = (connectors || []).find((x) => x.id === id);
   if (!c) return;
   _coCtx = c;
-  $("coTitle").textContent = `${c.icon} Connect ${c.label}`;
+  $("coTitle").innerHTML = `${ico(c.icon)} Connect ${esc(c.label)}`;
   $("coHelp").textContent = c.help || "";
   $("coGrid").innerHTML = (c.fields || []).map((f) => `
     <label>${esc(f.label)}
@@ -7860,11 +7966,11 @@ async function openAdsModule() {
 
 function renderAdsModule(d) {
   {
-    let html = `<div class="card"><p class="muted tiny">Connect each ad account once — free platforms will start pulling live data in the next update; paid ones show a demo dashboard for now.</p></div>
+    let html = `<div class="card"><p class="muted tiny">Connect each ad account once, free platforms will start pulling live data in the next update; paid ones show a demo dashboard for now.</p></div>
       <div class="ads-grid">${d.connectors.map((c) => `
         <div class="ads-card ${c.connected ? "connected" : ""}">
           <div class="row" style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:22px;">${c.icon}</span>
+            <span style="font-size:22px;">${ico(c.icon)}</span>
             <div style="flex:1;"><b>${esc(c.label)}</b> <span class="pill-${c.tier}">${esc(c.tier)}</span>
               <div class="muted tiny">${esc(c.help)}</div>
             </div>
@@ -7896,7 +8002,7 @@ async function viewAdsMetrics(id) {
   const m = await api(`/api/ads/metrics?connector=${id}&days=30`);
   const t = m.totals;
   $("adsMetrics").innerHTML = `<div class="card">
-    <h3 style="margin:0 0 6px;">${esc(id)} — last ${m.range.days} days ${m.mode === "demo" ? "<span class='pill-off'>demo</span>" : "<span class='pill-on'>live</span>"}</h3>
+    <h3 style="margin:0 0 6px;">${esc(id)}, last ${m.range.days} days ${m.mode === "demo" ? "<span class='pill-off'>demo</span>" : "<span class='pill-on'>live</span>"}</h3>
     <p class="muted tiny">${esc(m.note || "")}</p>
     <div class="kpis" style="margin-top:8px;">
       <div class="kpi"><div class="label">Spend</div><div class="value">₹${fmt(t.spend)}</div></div>
@@ -7986,6 +8092,15 @@ async function loadPairings() {
 }
 
 /** SVG from the shared icon set (same drawings the storefront uses). */
+/* An icon the SERVER chose. Those used to be emoji, which Brand.md bans as
+   interface icons, so the server now sends names from this same stroke set.
+   Anything that is not shaped like a name (an old cached emoji, a "•") is shown
+   as escaped text, so a stale payload degrades to a character, never to markup. */
+function ico(v, cls) {
+  const k = String(v == null ? "" : v);
+  return /^[a-z][a-z0-9-]*$/.test(k) ? sic(k, cls) : esc(k);
+}
+
 function sic(name, cls) {
   const path = ICONS[name]
     || (_siteMeta && _siteMeta.icons && _siteMeta.icons[name]) || "";
@@ -8021,14 +8136,14 @@ function saveState(live) {
   }
   if (!live) {
     return `<span class="save-state draft" id="siteDirty" title="Saved, but nobody can reach it yet">
-      <i></i>Draft — saved</span>`;
+      <i></i>Draft: saved</span>`;
   }
   const ahead = _siteMeta && _siteMeta.site &&
     _siteMeta.site.updated_at && _site.published_at &&
     _siteMeta.site.updated_at > _site.published_at;
   return ahead
     ? `<span class="save-state ahead" id="siteDirty" title="Saved changes are not live until you publish">
-        <i></i>Saved — not live yet</span>`
+        <i></i>Saved: not live yet</span>`
     : `<span class="save-state live" id="siteDirty" title="This is what shoppers see">
         <i></i>Published</span>`;
 }
@@ -8062,7 +8177,7 @@ function renderSite() {
           <b>${esc(_site.brand || "Your website")}</b>
           <div class="muted tiny">${live
             ? `Live at <a href="${esc(url)}" target="_blank" rel="noopener">${esc(location.origin + url)}</a>`
-            : "Draft — only you can see it"}</div>
+            : "Draft: only you can see it"}</div>
         </div>
       </div>
       <div class="site-bar-r">
@@ -8185,7 +8300,7 @@ function stepSetup() {
   return `
   <div class="card sup-form form-v ai-brief">
     <div class="sup-sub">${sic("spark")}Tell us about your shop</div>
-    <p class="muted tiny" style="margin:0 0 10px;">A sentence or two in your own words — what you sell,
+    <p class="muted tiny" style="margin:0 0 10px;">A sentence or two in your own words, what you sell,
       who makes it, who buys it, what makes it yours. The AI content writer turns it into every
       piece of text on your site: headline, story, promises, newsletter line and the words Google
       and WhatsApp show. You see it all before anything changes.</p>
@@ -8230,7 +8345,7 @@ function stepSetup() {
         </tbody></table>
       <p class="muted tiny" style="margin:6px 0 0;">If your provider has no ALIAS for the bare domain, point <b>www</b> only and
         set the bare domain to forward to it. DNS usually takes a few minutes, sometimes a few hours.
-        Your host also has to be told to accept the domain — on Render that is Settings → Custom Domains.
+        Your host also has to be told to accept the domain, on Render that is Settings → Custom Domains.
         Both the bare and www versions are answered here once they resolve.</p>
       <div class="row" style="display:flex;gap:8px;align-items:center;margin-top:8px;">
         <button class="btn ghost sm" id="siteDomCheck" type="button">${sic("refresh")}Check it</button>
@@ -8276,7 +8391,7 @@ function stepTheme() {
         </div>
       </div>`;
   }).join("");
-  return `<p class="muted" style="margin:6px 0 16px;">Each theme is a different website — its own layout, type scale and motion, not a colour swap. Pick the closest one; you can change every detail in the next step.</p>
+  return `<p class="muted" style="margin:6px 0 16px;">Each theme is a different website, its own layout, type scale and motion, not a colour swap. Pick the closest one; you can change every detail in the next step.</p>
     <div class="theme-grid">${cards}</div>`;
 }
 
@@ -8346,7 +8461,7 @@ function stepEditor() {
         </div>
       </div>
       <div class="ed-stage" id="edStage"><iframe id="edFrame" src="${esc(src)}" title="Live site"></iframe></div>
-      <p class="ed-hint muted tiny">Click anything on the site — a photo, a headline, the footer — and its controls open on the right.</p>
+      <p class="ed-hint muted tiny">Click anything on the site, a photo, a headline, the footer, and its controls open on the right.</p>
     </div>
     <aside class="ed-panel">
       <div class="ed-panel-head">
@@ -8400,7 +8515,7 @@ function gType() {
   // asked to become a typographer. Pairings first; the dropdowns stay, one
   // click away, for the seller who does want them.
   return `
-  <p class="muted tiny" style="margin:0 0 12px;">Pick a pairing — a display face, the body face
+  <p class="muted tiny" style="margin:0 0 12px;">Pick a pairing: a display face, the body face
   that sits under it, and the small face for buttons and prices. All three at once, chosen to
   work together.</p>
   <div class="pairs" id="pairGrid">${(_pairings || []).map((pr) => `
@@ -8440,10 +8555,10 @@ function gType() {
 function gColour() {
   const t = _siteMeta.themes.find((x) => x.id === _site.theme) || _siteMeta.themes[0];
   return `<div class="sup-form-grid">
-    <label>Accent — light mode
+    <label>Accent: light mode
       <span class="colour-row"><input type="color" data-bind="style.accent" value="${esc(_site.style.accent || t.light.accent)}" />
       <button type="button" class="btn ghost tiny" data-reset="style.accent">Theme colour</button></span></label>
-    <label>Accent — dark mode
+    <label>Accent: dark mode
       <span class="colour-row"><input type="color" data-bind="style.accent_dark" value="${esc(_site.style.accent_dark || t.dark.accent)}" />
       <button type="button" class="btn ghost tiny" data-reset="style.accent_dark">Theme colour</button></span></label>
     ${field("Colour mode", "style.mode", { type: "select", options: [["auto", "Follow the visitor's device"], ["light", "Always light"], ["dark", "Always dark"]] })}
@@ -8453,9 +8568,9 @@ function gShape() {
   const t = _siteMeta.themes.find((x) => x.id === _site.theme) || _siteMeta.themes[0];
   return `<div class="sup-form-grid">
     ${field("Corner radius", "style.radius", { type: "range", min: 0, max: 28, def: t.layout.radius, hint: "px" })}
-    ${field("Animation", "style.motion", { type: "select", options: [["full", "Full — everything this theme does"], ["subtle", "Subtle — fades and rails only"], ["none", "None — completely static"]] })}
+    ${field("Animation", "style.motion", { type: "select", options: [["full", "Full: everything this theme does"], ["subtle", "Subtle: fades and rails only"], ["none", "None: completely static"]] })}
     ${field("Page width", "style.width", { type: "select", options: [["wide", "Wide"], ["compact", "Compact"], ["full", "Edge to edge"]] })}
-    ${field("Show a loading screen on first visit", "style.preloader", { type: "check", hint: "— your name, a counter, then the site" })}
+    ${field("Show a loading screen on first visit", "style.preloader", { type: "check", hint: "(your name, a counter, then the site)" })}
   </div>
   <p class="muted tiny">${esc(t.label)} animates with: ${t.motion.map((m) => MOTION_LABEL[m] || m).join(" · ")}.</p>`;
 }
@@ -8466,7 +8581,7 @@ function gHighlights() {
 function gSpotlight() {
   return `${field("Show the spotlight", "sections.spotlight", { type: "check" })}
     <p class="muted tiny">Puts your first listed product against a sticky photo, with its own copy and
-    key points. Everything shown here comes from that product in <b>Product Management</b> —
+    key points. Everything shown here comes from that product in <b>Product Management</b>,
     give it a clip there and it plays in the spotlight.</p>`;
 }
 
@@ -8491,7 +8606,7 @@ function gStats() {
   return `${field("Show the numbers band", "sections.stats", { type: "check" })}
     <div class="sup-form-grid">${field("Label", "copy.stats_eyebrow", { ph: "By the numbers" })}</div>
     <p class="muted tiny">Each figure counts itself up the first time a visitor scrolls past it.
-    Write it however you like — “2,400+”, “6 weeks”, “4.9”.</p>
+    Write it however you like, “2,400+”, “6 weeks”, “4.9”.</p>
     <div id="stEditor" class="rep-list"></div>`;
 }
 
@@ -8503,7 +8618,7 @@ function gGallery() {
       ${field("Heading", "copy.gallery_title", { ph: "In the wild" })}
     </div>
     ${n ? "" : `<div class="nudge">${sic("image")}<div><b>Add four or five photos</b>
-      Your product being used, held, worn, opened. Clips work here too — they autoplay
+      Your product being used, held, worn, opened. Clips work here too, they autoplay
       muted in the rail.</div></div>`}
     <div id="glEditor" class="gal-wrap"></div>`;
 }
@@ -8514,7 +8629,7 @@ function gManifesto() {
       ${field("Statement", "manifesto", { type: "textarea", rows: 3, ph: "We make small batches, rest them properly, and stop when the batch is done." })}
     </div>
     <p class="muted tiny">One sentence, set large. It brightens word by word as the visitor scrolls
-    through it — keep it short and it lands.</p>`;
+    through it, keep it short and it lands.</p>`;
 }
 
 function gDrop() {
@@ -8534,7 +8649,7 @@ function gProducts() {
       ${field("Heading", "copy.all_title", { ph: "All products" })}
       ${field("Shop page heading", "copy.shop_title", { ph: "Everything we sell" })}
     </div>
-    ${field("Product layout", "style.card_style", { type: "select", options: [["", `Theme default (${t.layout.grid})`], ["cards", "Cards — square photos in a grid"], ["editorial", "Editorial — tall photos, no borders"], ["list", "List — a menu-style row per product"]] })}
+    ${field("Product layout", "style.card_style", { type: "select", options: [["", `Theme default (${t.layout.grid})`], ["cards", "Cards: square photos in a grid"], ["editorial", "Editorial: tall photos, no borders"], ["list", "List: a menu-style row per product"]] })}
     <p class="muted tiny">Photos, prices and stock live in <b>Product Management</b>. ${fmt(_siteMeta.counts.listed)} product${_siteMeta.counts.listed === 1 ? "" : "s"} listed${_siteMeta.counts.no_image ? `, ${fmt(_siteMeta.counts.no_image)} still without a photo` : ""}.</p>
     <button class="btn ghost sm" id="edToProducts">Open Product Management →</button>`;
 }
@@ -8739,7 +8854,7 @@ function stepCheckout() {
     <div class="sup-sub">Tax</div>
     <div class="sup-form-grid">
       ${field("GST %", "commerce.gst_percent", { type: "number", num: true, hint: "(0 = don't show tax)", ph: "18" })}
-      ${field("My prices already include GST", "commerce.gst_inclusive", { type: "check", hint: "— when off, GST is added on top at checkout" })}
+      ${field("My prices already include GST", "commerce.gst_inclusive", { type: "check", hint: "(when off, GST is added on top at checkout)" })}
     </div>
     <div class="sup-sub">Take payment online</div>
     <div id="gatewayBox"><div class="ap-empty">Checking your payment settings…</div></div>
@@ -8748,7 +8863,7 @@ function stepCheckout() {
     <p class="muted tiny" style="margin:-6px 0 10px;">Across India, cash-on-delivery orders come back
       undelivered about <b>26%</b> of the time against under 2% for prepaid
       (Shipway, FY25). A small advance paid online turns an idle order into a
-      committed one — it is the cheapest thing you can do about it.</p>
+      committed one, it is the cheapest thing you can do about it.</p>
     <div class="sup-form-grid">
       ${field("Offer cash on delivery", "commerce.cod_enabled", { type: "check" })}
       ${field("Advance to pay online ₹", "commerce.cod_advance", { type: "number", num: true,
@@ -8777,10 +8892,10 @@ async function renderGateway() {
         <div class="gw-b">
           <b>Razorpay connected · ${esc(_gateway.mode)} keys</b>
           <span>Key ending ${esc(_gateway.key_id_last4)}. ${esc(_gateway.detail)}</span>
-          ${_gateway.mode === "test" ? `<span class="gw-warn">These are test keys —
+          ${_gateway.mode === "test" ? `<span class="gw-warn">These are test keys,
             real cards will not be charged. Swap in your live keys before you sell.</span>` : ""}
           ${!_gateway.sdk_installed ? `<span class="gw-warn">The server is missing the
-            razorpay package — run <code>pip install razorpay</code> and restart.</span>` : ""}
+            razorpay package, run <code>pip install razorpay</code> and restart.</span>` : ""}
         </div>
         <button class="btn ghost sm" id="gwOff">Disconnect</button>
       </div>
@@ -8797,7 +8912,7 @@ async function renderGateway() {
     <div class="gw">
       <div class="gw-b">
         <b>Connect your own Razorpay</b>
-        <span>Shoppers pay straight into your bank account — we never hold your
+        <span>Shoppers pay straight into your bank account, we never hold your
           money. You need a Razorpay account; keys are in Dashboard →
           Settings → API Keys.</span>
       </div>
@@ -8841,7 +8956,7 @@ function stepPublish() {
         `<li class="${ok ? "ok" : "warn"}">${sic(ok ? "check" : "close")}<span>${esc(t)}</span></li>`).join("")}</ul>
       <p class="muted tiny" style="margin-top:14px;">${ready
         ? "Everything's in place. Publishing makes your site reachable by anyone with the link."
-        : "You can still publish — the warnings above are things shoppers will notice."}</p>
+        : "You can still publish, the warnings above are things shoppers will notice."}</p>
       <div class="row" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
         <button class="btn ${_site.published ? "ghost" : "primary"}" id="pubBtn">${_site.published ? "Unpublish site" : "Publish my site"}</button>
         ${_site.published ? `<a class="btn ghost" href="${esc(shopPath())}" target="_blank" rel="noopener">Visit site ↗</a>` : ""}
@@ -8850,7 +8965,7 @@ function stepPublish() {
     <div class="card">
       <h4 style="margin:0 0 12px;">Your link</h4>
       <div class="share-row"><input id="shareUrl" readonly value="${esc(url)}" /><button class="btn ghost sm" id="copyUrl">Copy</button></div>
-      <p class="muted tiny" style="margin-top:10px;">Share this anywhere — Instagram bio, WhatsApp, a QR code on your packaging.</p>
+      <p class="muted tiny" style="margin-top:10px;">Share this anywhere: Instagram bio, WhatsApp, a QR code on your packaging.</p>
       <div class="sup-sub">Custom domain</div>
       <p class="muted tiny" style="margin:0;">Not set up yet. When you're ready to point your own domain here, say the word and we'll wire it up.</p>
     </div>
@@ -9019,12 +9134,12 @@ async function writeWholeSite() {
       () => api("/api/ai/site-copy", { method: "POST", json: { brief } }));
   } catch (e) { toast(e.message, 6000); return; }
   let copy = r.copy || {};
-  let via = r.ai ? `Written by AI (${r.provider})` : "No AI connected on the server — a starting draft from your words";
+  let via = r.ai ? `Written by AI (${r.provider})` : "No AI connected on the server, a starting draft from your words";
   const fb = await puterFallback(r);
   if (fb) { const j = _aiJson(fb.text); if (j && j.hero_heading) { copy = j; via = "Written by AI (Puter, your account)"; } }
   const rows = SITE_COPY_FIELDS.filter(([k]) => copy[k] && (!Array.isArray(copy[k]) || copy[k].length));
   if (!rows.length) { toast("Nothing came back, try again in a moment."); return; }
-  const show = (v) => Array.isArray(v) ? v.map((h) => `<b>${esc(h.title || "")}</b> — ${esc(h.text || "")}`).join("<br>") : esc(v);
+  const show = (v) => Array.isArray(v) ? v.map((h) => `<b>${esc(h.title || "")}</b>, ${esc(h.text || "")}`).join("<br>") : esc(v);
   openModal("Your website, written", `
     <p class="muted tiny" style="margin-top:0;">${esc(via)}. Untick anything you want to keep as it is,
       then use the rest. Every line stays editable afterwards.</p>
@@ -9063,7 +9178,7 @@ async function saveSite(opts) {
       const keep = _step;
       renderSite();
       _step = keep;
-      toast(_site.published ? "Saved — press Publish to make it live" : "Saved as a draft");
+      toast(_site.published ? "Saved: press Publish to make it live" : "Saved as a draft");
     } else {
       const badge = $("siteDirty");
       if (badge) badge.outerHTML = saveState(_site.published && _site.handle);
@@ -9221,8 +9336,8 @@ async function setOrderStatus(id, status, reason) {
     _ordersData = await api("/api/store/orders/status", { method: "POST",
       json: { order_id: id, status, reason: reason || "" } });
     toast(status === "cancelled"
-      ? "Cancelled — it is out of your sales figures and counted in Cancellations."
-      : "Order updated — sales figures refreshed");
+      ? "Cancelled: it is out of your sales figures and counted in Cancellations."
+      : "Order updated: sales figures refreshed");
     renderOrders();
   } catch (e) { toast(e.message); }
 }
@@ -9265,11 +9380,11 @@ async function askCancelReason(id, sel) {
     `<option value="${esc(r.id)}">${esc(r.label)}</option>`).join("");
   openModal("Why is this cancelled?", `
     <p class="muted" style="margin-top:0;">One tap. It is the difference between
-    knowing you lost twelve orders and knowing <b>why</b> you lost them — and it
+    knowing you lost twelve orders and knowing <b>why</b> you lost them, and it
     is the only field Cancellation Analysis cannot work without.</p>
     <label class="fld"><span>Reason</span>
       <select id="cxReason">${opts}<option value="">Rather not say</option></select></label>
-    <p class="muted tiny">The stage — before packing, packed, or already shipped —
+    <p class="muted tiny">The stage: before packing, packed, or already shipped,
     is worked out from the order's own history, so you do not have to tell us that.</p>
     <div class="modal-actions">
       <button class="btn ghost" id="cxAbort">Don't cancel</button>
@@ -9304,7 +9419,7 @@ function orderCard(o) {
       <div class="ord-grid">
         <div>
           <div class="ord-lbl">Customer</div>
-          <div><b>${esc(o.customer_name || "—")}</b></div>
+          <div><b>${esc(o.customer_name || "–")}</b></div>
           <div class="muted tiny">${esc(o.customer_email || "")}</div>
           <div class="muted tiny">${esc(o.phone || "")}</div>
         </div>
@@ -9339,12 +9454,12 @@ async function loadCustomers() {
       <div class="table-scroll"><table>
         <thead><tr><th>Customer</th><th>Email</th><th>Phone</th><th>Orders</th><th>Spend</th><th>Last order</th></tr></thead>
         <tbody>${d.customers.map((c) => `<tr>
-          <td><b>${esc(c.name || "—")}</b></td><td>${esc(c.email)}</td><td>${esc(c.phone || "—")}</td>
+          <td><b>${esc(c.name || "–")}</b></td><td>${esc(c.email)}</td><td>${esc(c.phone || "–")}</td>
           <td>${fmt(c.orders)}</td><td>₹${fmt(c.spend)}</td>
-          <td class="muted tiny">${esc(String(c.last || "").replace("T", " ").slice(0, 16) || "—")}</td>
+          <td class="muted tiny">${esc(String(c.last || "").replace("T", " ").slice(0, 16) || "–")}</td>
         </tr>`).join("")}</tbody>
       </table></div>
-      <p class="muted tiny" style="margin-top:10px;">These shoppers are yours alone — they also appear in RFM and Win-Back once their orders are counted in your sales.</p>`
+      <p class="muted tiny" style="margin-top:10px;">These shoppers are yours alone, they also appear in RFM and Win-Back once their orders are counted in your sales.</p>`
       : `<div class="ap-empty">No one has signed up on your site yet.</div>`;
   } catch (e) { box.innerHTML = `<div class="card">${esc(e.message)}</div>`; }
 }
@@ -9503,7 +9618,7 @@ async function openSocialPerformance(days) {
     </div>`;
   }
 
-  const n = (v) => (typeof v === "number" ? v.toLocaleString("en-IN") : "—");
+  const n = (v) => (typeof v === "number" ? v.toLocaleString("en-IN") : "–");
   const m = acct.metrics || {};
   const cards = [
     ["Times seen", m.views, "How many times your posts appeared on a screen."],
@@ -9564,9 +9679,9 @@ async function openSocialPerformance(days) {
         <tr>
           <td>${p.permalink
                 ? `<a href="${esc(p.permalink)}" target="_blank" rel="noopener">${esc(p.caption_hook || p.product_name || "View")}</a>`
-                : esc(p.caption_hook || p.product_name || "—")}
+                : esc(p.caption_hook || p.product_name || "–")}
               <div class="muted tiny">${esc((p.posted_at || "").slice(0, 10))}${p.product_name ? " · " + esc(p.product_name) : ""}</div></td>
-          <td class="muted tiny">${esc(p.pillar_name || p.format || "—")}</td>
+          <td class="muted tiny">${esc(p.pillar_name || p.format || "–")}</td>
           <td><b>${n(p.views)}</b></td>
           <td>${n(p.reach)}</td>
           <td>${n(p.saved)}</td>
@@ -9631,12 +9746,12 @@ async function openPostQueue() {
       <thead><tr><th>When</th><th>Type</th><th>Where it stands</th></tr></thead>
       <tbody>${rows.map((p) => `
         <tr class="${p.will_post ? "pq-go" : ""}">
-          <td class="muted tiny">${esc((p.scheduled_at || "—").slice(0, 16).replace("T", " "))}</td>
+          <td class="muted tiny">${esc((p.scheduled_at || "–").slice(0, 16).replace("T", " "))}</td>
           <td class="muted tiny">${esc(p.format)}</td>
           <td>${esc(p.verdict)}</td>
         </tr>`).join("")}</tbody>
     </table></div>`
-    : `<div class="ap-empty">Nothing waiting — every post has either gone out or been cancelled.</div>`;
+    : `<div class="ap-empty">Nothing waiting: every post has either gone out or been cancelled.</div>`;
   openModal("What is going out, and what is not", `
     <p class="muted tiny">It is <b>${esc((q.now || "").replace("T", " at "))}</b> ${esc(q.tz || "")}.
       Instagram is ${q.instagram_connected ? "connected" : "<b>not connected</b>"}.
@@ -9701,8 +9816,8 @@ async function renderSocial() {
   _socialCal = cal;
 
   const aiLine = ai.ready
-    ? `<span class="sm-ok">${sic("check")}Writing with ${esc(ai.active)}${ai.free_ready && !(ai.providers || []).some((x) => x.name === ai.active && !x.free) ? " — free tier" : ""}</span>`
-    : `<span class="sm-warn">${sic("alert")}No AI connected — captions come from a template.</span>`;
+    ? `<span class="sm-ok">${sic("check")}Writing with ${esc(ai.active)}${ai.free_ready && !(ai.providers || []).some((x) => x.name === ai.active && !x.free) ? ", free tier" : ""}</span>`
+    : `<span class="sm-warn">${sic("alert")}No AI connected: captions come from a template.</span>`;
 
   // Decisions for these posts live in the Approval panel now (the next-7-days
   // ones get a one-tap card there automatically) -- this page used to have
@@ -9752,7 +9867,7 @@ async function renderSocial() {
   moduleShell("Social Media Manager", `
     <div class="sm-head">
       <div>${aiLine}
-        ${undecided.length ? `<div class="muted tiny sm-pending-note">${sic("bell")}${undecided.length} post${undecided.length === 1 ? "" : "s"} still need a decision — the next 7 days' worth are in the Approval panel; open any post below to decide it directly.</div>` : ""}
+        ${undecided.length ? `<div class="muted tiny sm-pending-note">${sic("bell")}${undecided.length} post${undecided.length === 1 ? "" : "s"} still need a decision, the next 7 days' worth are in the Approval panel; open any post below to decide it directly.</div>` : ""}
         ${imageQuotaTracker(d.image_quota)}
       </div>
       <div class="sm-head-actions">
@@ -9779,7 +9894,7 @@ async function renderSocial() {
       <div class="sm-radar-h">${sic("bell")}This month</div>
       ${fests.map((f) => `<div class="sm-radar-i">
         <b>${esc(f.name)}</b> ${esc(f.date.slice(-2))} ${esc(cal.label.split(" ")[0])}
-        — ${f.planned ? `${f.planned} post${f.planned === 1 ? "" : "s"} planned`
+        – ${f.planned ? `${f.planned} post${f.planned === 1 ? "" : "s"} planned`
                       : `<span class="sm-warn2">nothing planned yet</span>`}.
         Start posting ${esc(f.start_on)}.${f.note ? ` <span class="muted">${esc(f.note)}</span>` : ""}
       </div>`).join("")}
@@ -9788,7 +9903,7 @@ async function renderSocial() {
     <div class="cal-wrap">
       <div class="cal-head">
         <!-- A bare chevron is readable as "back a month" by convention, so it
-             keeps its shape — but a screen reader and a long-press both need
+             keeps its shape, but a screen reader and a long-press both need
              a name, and neither gets one from a glyph. -->
         <button class="btn ghost sm" id="calPrev" title="The month before" aria-label="Go to the month before">‹</button>
         <b>${esc(cal.label)}</b>
@@ -9802,7 +9917,7 @@ async function renderSocial() {
       <!-- WHAT A 45px COLUMN CANNOT HOLD.
            A phone gives each day about 45 pixels. "Ganesh Chaturthi" does not
            fit, and forcing it to wrap turned the cell into "Ganes / h /
-           Chatur / thi" — which is worse than not showing it, because it
+           Chatur / thi", which is worse than not showing it, because it
            reads as a broken layout rather than as a festival. So below phone
            width the day keeps its amber tint (the signal: something is on)
            and the names move here, under the grid, where there is a whole
@@ -9870,7 +9985,7 @@ async function renderSocial() {
       if (_currentModule === "social") await renderSocial();
       toast(_currentModule === "social"
         ? "Planned. Replanning replaces drafts, it never doubles them."
-        : `Your ${n} ${weeks > 1 ? "are" : "is"} planned — open Social Media Manager to see it.`);
+        : `Your ${n} ${weeks > 1 ? "are" : "is"} planned, open Social Media Manager to see it.`);
     } catch (e) { toast(e.message); }
     // Re-enabled by id, because renderSocial() above may have replaced the DOM
     // these references point at.
@@ -10002,7 +10117,7 @@ function igStrip(ig) {
     <div class="ap-strip off">
       <div class="ap-strip-t">${sic("instagram")}
         <div><b>Instagram is not connected</b>
-          <span class="muted tiny">Everything below still works — the week is planned, written and scheduled. Connecting only changes the last step: approved posts go out by themselves instead of you posting them by hand.</span></div>
+          <span class="muted tiny">Everything below still works, the week is planned, written and scheduled. Connecting only changes the last step: approved posts go out by themselves instead of you posting them by hand.</span></div>
       </div>
       <div class="ap-strip-a">
         <button class="btn primary sm" id="igConnectHere">${sic("instagram")}Connect Instagram</button>
@@ -10023,10 +10138,10 @@ function autoplanStrip(ap) {
             ? `Plans next week by itself every ${esc(ap.day_name)} at ${esc(hr(ap.hour))}${ap.tz_label ? `${esc(ap.tz_label)}` : ""}`
             : "Automatic weekly planning is off"}</b>
           <span class="muted tiny">${ap.enabled
-            ? (ap.pending_week ? `Next week is due now — it runs in the background as soon as it can.`
+            ? (ap.pending_week ? `Next week is due now, it runs in the background as soon as it can.`
                : `Next run ${esc(ap.next_run_label || "")}. It checks festivals, what is already planned and how each product is selling, then puts the posts in your Approval panel.`)
             : "Turn it on in Setup and the week plans itself."}
-            ${last ? `Last plan: ${esc(last.week_label || "")} — ${esc(last.note || "")}` : ""}</span>
+            ${last ? `Last plan: ${esc(last.week_label || "")} – ${esc(last.note || "")}` : ""}</span>
         </div>
       </div>
       <div class="ap-strip-a">
@@ -10042,12 +10157,12 @@ async function runAutoplanNow() {
   if (b) b.disabled = true;
   try {
     const r = await withBusy("Planning next week…",
-      "Checking festivals and seasons, what is already on the calendar and how each product is selling — then writing each post and its Product Studio prompt.",
+      "Checking festivals and seasons, what is already on the calendar and how each product is selling, then writing each post and its Product Studio prompt.",
       () => api("/api/social/autoplan/run-now", { method: "POST", json: {} }));
     const br = r.brief || {};
     await afterPostChange();
     toast(br.added
-      ? `${br.added} post${br.added === 1 ? "" : "s"} planned for ${br.week_label} — they are in your Approval panel.`
+      ? `${br.added} post${br.added === 1 ? "" : "s"} planned for ${br.week_label}, they are in your Approval panel.`
       : (br.note || "Nothing to add."), 8000);
   } catch (e) { toast(e.message, 6000); }
   if ($("apRunNow")) $("apRunNow").disabled = false;
@@ -10101,10 +10216,10 @@ function openSocialEditor(post) {
   const shotLabel = (post.shot_type || "").replace(/_/g, " ");
   // How this beat connects to the ones on either side of it in the week's arc.
   const CONNECT = {
-    tease:  "Opens the week — it holds the product back so the reveal that follows lands.",
+    tease:  "Opens the week: it holds the product back so the reveal that follows lands.",
     reveal: "Follows the tease and shows the product properly; the proof posts back it up next.",
     prove:  "Earns the price the reveal set up, and leads into seeing it used in real life.",
-    place:  "Puts the proven product into a real life — the payoff of the reveal and proof before it.",
+    place:  "Puts the proven product into a real life, the payoff of the reveal and proof before it.",
     close:  "Closes the loop the week opened, turning the story into a reason to act now.",
   };
   const connect = CONNECT[post.beat] || (post.job || "");
@@ -10118,7 +10233,7 @@ function openSocialEditor(post) {
         ${post.occasion ? `<span class="sm-occ">${esc(post.occasion)}</span>` : ""}
       </div>
       ${post.story_name ? `<p class="sm-hint" style="margin:6px 0 0;"><b>Story:</b> ${esc(post.story_name)}${roleLabel ? ` · this post's role: <b>${esc(roleLabel)}</b>` : ""}</p>` : ""}
-      <p class="sm-hint" style="margin:${post.story_name ? 2 : 6}px 0 0;"><b>Type of post:</b> ${fmtLabel || "Post"}${post.archetype_label ? ` — ${esc(post.archetype_label)}` : ""}${shotLabel ? ` <span class="muted">(${esc(shotLabel)} shot)</span>` : ""}</p>
+      <p class="sm-hint" style="margin:${post.story_name ? 2 : 6}px 0 0;"><b>Type of post:</b> ${fmtLabel || "Post"}${post.archetype_label ? ` – ${esc(post.archetype_label)}` : ""}${shotLabel ? ` <span class="muted">(${esc(shotLabel)} shot)</span>` : ""}</p>
       ${post.beat_job ? `<p class="sm-hint" style="margin:2px 0 0;"><b>Purpose:</b> ${esc(post.beat_job)}</p>` : ""}
       ${connect ? `<p class="sm-hint" style="margin:2px 0 0;"><b>How it connects:</b> ${esc(connect)}</p>` : ""}
       ${post.earns ? `<p class="sm-hint" style="margin:2px 0 0;"><b>Earns:</b> ${esc(post.earns)}</p>` : ""}
@@ -10191,8 +10306,8 @@ function openSocialEditor(post) {
       </div>
       ${videoBlock("No clip uploaded yet")}
       <p class="sm-hint" style="margin:12px 0;"><b>This is a reel, so it needs a video.</b>
-        Film it on your phone from the shot list below — that usually looks better than
-        anything an AI makes — or press "Generate a clip" above and pick which AI does it.
+        Film it on your phone from the shot list below, that usually looks better than
+        anything an AI makes, or press "Generate a clip" above and pick which AI does it.
         Either way, the clip goes in the slot above.</p>
       <div id="smEdScript"></div>
     </div>` : `
@@ -10222,7 +10337,7 @@ function openSocialEditor(post) {
         <div id="smPromptBox" hidden></div>
         <p class="sm-hint" style="margin:8px 0 0;">
           <b>Re-shoot</b> starts from your own photograph, so the item in the picture
-          is the item you ship — only the light and setting change.
+          is the item you ship, only the light and setting change.
           <b>Invent</b> draws from the description instead: fine for a backdrop,
           not for showing a customer what they are buying.</p>
       </div>
@@ -10233,7 +10348,7 @@ function openSocialEditor(post) {
       ${videoBlock("No clip on this post")}
     </details>`;
 
-  openModal(`${esc(shortWhen(post.scheduled_at))} — ${esc(post.product_name || "")}`, `
+  openModal(`${esc(shortWhen(post.scheduled_at))} – ${esc(post.product_name || "")}`, `
     ${topHtml}
     <label class="fld"><span>Hook <em id="smHookCount">${(c.hook || "").length} / 125</em></span>
       <textarea id="smHook" data-ai="caption_hook" data-ai-ctx="post" data-ai-label="Hook" rows="2">${esc(c.hook || "")}</textarea></label>
@@ -10247,7 +10362,7 @@ function openSocialEditor(post) {
     <label class="fld"><span>Question</span>
       <input id="smQ" value="${esc(c.question || "")}" /></label>
     <p class="sm-hint">A comment-focused question is the single biggest lever in a
-      caption — worth roughly 200% more comments.</p>
+      caption, worth roughly 200% more comments.</p>
 
     <label class="fld"><span>How to order</span>
       <input id="smCta" value="${esc(c.cta || "")}" /></label>
@@ -10255,7 +10370,7 @@ function openSocialEditor(post) {
     <label class="fld"><span>Hashtags <em>max 5</em></span>
       <input id="smTags" value="${esc((c.tags || []).join(" "))}" /></label>
     <p class="sm-hint">Instagram capped hashtags at 5 in January 2026. They are worth
-      about +2% reach now — the category words in your hook matter more.</p>
+      about +2% reach now, the category words in your hook matter more.</p>
 
     <label class="fld"><span>When</span>
       <input id="smWhen" type="datetime-local" value="${esc(post.scheduled_at || "")}" /></label>
@@ -10272,7 +10387,7 @@ function openSocialEditor(post) {
       <!-- ORDER IS THE BUG HERE, AND IT COST REAL POSTS.
            This used to ask "is it an approved reel?"BEFORE "is it ready?", so
            an approved reel that already had its clip uploaded was still only
-           offered "Open the video task" — never "Save & schedule". The seller
+           offered "Open the video task", never "Save & schedule". The seller
            uploaded the clip in this very editor, pressed Save, and the post
            stayed approved forever. Nothing publishes from the approved state:
            the publisher selects on scheduled. The post simply never went out
@@ -10343,7 +10458,7 @@ function openSocialEditor(post) {
       _engines = d.engines || [];
       _engineFor = forReshoot;
       sel.innerHTML = _engines.length
-        ? _engines.map((e) => `<option value="${esc(e.id)}">${esc(e.label)}${e.free ? " — free tier" : ""}</option>`).join("")
+        ? _engines.map((e) => `<option value="${esc(e.id)}">${esc(e.label)}${e.free ? ", free tier" : ""}</option>`).join("")
         : `<option value="">No engine connected</option>`;
       const showNote = () => {
         const e = _engines.find((x) => x.id === sel.value);
@@ -10377,7 +10492,7 @@ function openSocialEditor(post) {
           <div class="pp-head">What the AI is told <span class="muted tiny">${d.words} words${d.from_reference ? " · starting from your own photo" : " · no photo to start from"}</span></div>
           <pre class="pp-text">${esc(d.prompt)}</pre>
           <div class="pp-src">${(d.sources || []).map((x) => `
-            <div class="pp-row ${x.have ? "on" : "off"}"><i>${x.have ? "✓" : "—"}</i>
+            <div class="pp-row ${x.have ? "on" : "off"}"><i>${x.have ? "✓" : "–"}</i>
               <b>${esc(x.part)}</b><span class="muted tiny">${esc(x.note)}</span></div>`).join("")}</div>
           ${gaps.length ? `<p class="muted tiny" style="margin:8px 0 0;">
             The greyed-out rows are what is missing. Filling those in is what makes the
@@ -10484,7 +10599,7 @@ function openSocialEditor(post) {
     try {
       const vid = await withBusy(`Making your clip with ${picked.label}…`,
         "One to three minutes. It animates your own photograph, so the product "
-        + "stays yours. You can go and do something else — it keeps going.",
+        + "stays yours. You can go and do something else, it keeps going.",
         () => api("/api/studio/video", { method: "POST", json: {
           product_id: post.product_id, post_id: post.id,
           engine: picked.id || "" } }));
@@ -10532,7 +10647,7 @@ function openSocialEditor(post) {
     if (q && q.enabled) {
       if (q.left <= 0) {
         toast("That is all " + q.cap + " AI pictures for this month. Add your own "
-          + "photo instead — resets " + (q.resets || "on the 1st") + ".", 8000);
+          + "photo instead, resets " + (q.resets || "on the 1st") + ".", 8000);
         openPhotoUploadForPost(post);
         return;
       }
@@ -10737,7 +10852,7 @@ function openSocialEditor(post) {
         ? `Saved and scheduled for ${shortWhen($("smWhen").value || post.scheduled_at)}.`
         : mediaMissing() && post.state === "approved"
           ? (isReel
-             ? "Saved. It still needs a clip before it can go out — upload one and it schedules itself."
+             ? "Saved. It still needs a clip before it can go out, upload one and it schedules itself."
              : "Saved. It still needs a picture before it can go out.")
           : "Saved.");
     } catch (e) {
@@ -10779,7 +10894,7 @@ function renderScriptSection(post) {
       <button class="btn ghost sm" id="smRegenScript">${sic("spark")}Regenerate script</button>
     </div>` : `
     <div class="sm-ed-noimg" style="height:auto;padding:22px 10px;">
-      ${sic("spark")}<span>No shot list yet — this reel was planned before scripts existed.</span>
+      ${sic("spark")}<span>No shot list yet, this reel was planned before scripts existed.</span>
     </div>
     <button class="btn primary sm" id="smGenScript" style="margin-top:10px;">${sic("spark")}Generate script</button>`;
 
@@ -10803,7 +10918,7 @@ function renderScriptSection(post) {
         r.selectNodeContents($("smPromptBody"));
         const sel = window.getSelection();
         sel.removeAllRanges(); sel.addRange(r);
-        b.innerHTML = sic("check") + "Selected — press Ctrl+C";
+        b.innerHTML = sic("check") + "Selected: press Ctrl+C";
       }
       setTimeout(() => { b.innerHTML = was; }, 2500);
     };
@@ -10821,7 +10936,7 @@ function renderBeatRows() {
       <input class="sm-beat-shot" data-k="shot" value="${esc(b.shot || "")}" placeholder="Camera / shot" />
       <input class="sm-beat-osd" data-k="on_screen_text" value="${esc(b.on_screen_text || "")}" placeholder="On-screen text" />
       <button class="btn ghost tiny" data-del="${i}" title="Remove beat" aria-label="Remove this beat from the shot list">${sic("close")}</button>
-    </div>`).join("") || `<p class="muted" style="margin:6px 0;">No beats yet — add one below.</p>`;
+    </div>`).join("") || `<p class="muted" style="margin:6px 0;">No beats yet: add one below.</p>`;
   el.querySelectorAll("input").forEach((inp) => inp.onchange = (e) => {
     const row = e.target.closest("[data-r]");
     _smScript.beats[+row.dataset.r][e.target.dataset.k] = e.target.value;
@@ -10862,7 +10977,7 @@ async function openShootList() {
   openModal("Shoot list", `
     <p class="muted" style="margin-top:0;">One session of about ${esc(String(sl.minutes))}
        minutes on ${esc(String((sl.products || []).length))} products gives you
-       ${esc(String((sl.yields || []).length))} assets — two to three weeks of posting.
+       ${esc(String((sl.yields || []).length))} assets, two to three weeks of posting.
        Batching is the only way the arithmetic works.</p>
     <div class="sm-shoot">
       <h4>Shoot these</h4>
@@ -10904,7 +11019,7 @@ async function openSocialSetup() {
 
     <label class="fld"><span>How much time do you have?</span>
       <select id="soCad">${Object.entries(d.cadence || {}).map(([k, v]) =>
-        `<option value="${k}"${s.cadence === k ? " selected" : ""}>${esc(v.label)} — ${esc(String(v.posts))} posts a week, ${esc(v.hours)}</option>`).join("")}</select></label>
+        `<option value="${k}"${s.cadence === k ? " selected" : ""}>${esc(v.label)} – ${esc(String(v.posts))} posts a week, ${esc(v.hours)}</option>`).join("")}</select></label>
     <p class="sm-hint" id="soCadWhy">${esc(((d.cadence || {})[s.cadence] || {}).why || "")}</p>
 
     <div class="ap-setup">
@@ -10920,13 +11035,13 @@ async function openSocialSetup() {
       </div>
       <p class="sm-hint">It checks festivals and the season, what is already on the calendar
         and which products are selling or stuck, then tops next week up to your number of
-        posts — never past it. The posts wait in your Approval panel; nothing goes out
+        posts, never past it. The posts wait in your Approval panel; nothing goes out
         until you approve it.</p>
       ${loc ? `<label class="fld"><span>Times are local to</span>
         <select id="soCountry">${(loc.options || []).map((o) =>
-          `<option value="${esc(o.code)}"${o.code === loc.country ? " selected" : ""}>${esc(o.name)}${o.note ? ` — ${esc(o.note)}` : ""} · ${esc(o.now)} now</option>`).join("")}</select></label>
+          `<option value="${esc(o.code)}"${o.code === loc.country ? " selected" : ""}>${esc(o.name)}${o.note ? ` – ${esc(o.note)}` : ""} · ${esc(o.now)} now</option>`).join("")}</select></label>
       <p class="sm-hint" id="soTzWhy">Every posting time and this weekly check run on
-        ${esc(loc.label)}${loc.set ? "" : " — the default until you pick your country"}. The server
+        ${esc(loc.label)}${loc.set ? "" : ", the default until you pick your country"}. The server
         itself runs on UTC, so without this a 7:00 pm post goes out at the server's 7:00 pm.</p>` : ""}
     </div>
 
@@ -11027,7 +11142,7 @@ function renderGst() {
                  maxlength="15" style="text-transform:uppercase" /></label>
         <div id="gsCheck" class="gst-check">${
           st.gstin_check ? (st.gstin_check.ok
-            ? `<span class="sm-ok">${sic("check")}Valid — ${esc(st.gstin_check.state)}</span>`
+            ? `<span class="sm-ok">${sic("check")}Valid: ${esc(st.gstin_check.state)}</span>`
             : `<span class="sm-warn">${sic("alert")}${esc(st.gstin_check.reason)}</span>`) : ""}</div>
         <label class="fld"><span>Legal name</span>
           <input id="gsLegal" value="${esc(s.legal_name || "")}" /></label>
@@ -11040,7 +11155,7 @@ function renderGst() {
           you inside that: ${esc((s.series || "INV").toUpperCase())}/2627/000001.</p>
         <label class="fld chk"><input type="checkbox" id="gsIncl"${s.prices_include_tax !== false ? " checked" : ""} />
           <span>My prices already include GST</span></label>
-        <p class="sm-hint">This is the Indian default and, for packaged goods, the law —
+        <p class="sm-hint">This is the Indian default and, for packaged goods, the law,
           the Legal Metrology rules require MRP to include all taxes. Tax is worked
           backwards out of the price your shopper sees.</p>
         <div class="modal-actions"><button class="btn primary" id="gsSave">Save</button></div>
@@ -11094,7 +11209,7 @@ function renderGst() {
       try {
         const r = await api("/api/gst/check?gstin=" + encodeURIComponent(v));
         $("gsCheck").innerHTML = r.ok
-          ? `<span class="sm-ok">${sic("check")}Valid — ${esc(r.state)}</span>`
+          ? `<span class="sm-ok">${sic("check")}Valid: ${esc(r.state)}</span>`
           : `<span class="sm-warn">${sic("alert")}${esc(r.reason)}</span>`;
       } catch (e) { /* typing; not worth a toast */ }
     }, 350);
@@ -11162,7 +11277,7 @@ async function resolveCancel(id, decision) {
   try {
     await api("/api/cancel-requests/resolve", { method: "POST",
       json: { request_id: id, decision, note: note || "" } });
-    toast(decision === "approved" ? "Order cancelled." : "Kept — request closed.");
+    toast(decision === "approved" ? "Order cancelled." : "Kept: request closed.");
     await openOrders();
   } catch (e) { toast(e.message); }
 }
@@ -11190,7 +11305,7 @@ async function openInvoiceFor(orderId) {
 
   const p = d.preview, doc = p.document || {}, pos = p.place_of_supply || {};
   const lines = (p.lines || []).map(l => `
-    <tr><td>${esc(l.name)}</td><td>${esc(l.hsn || "—")}</td>
+    <tr><td>${esc(l.name)}</td><td>${esc(l.hsn || "–")}</td>
         <td class="num">${l.qty}</td><td class="num">${l.rate}%</td>
         <td class="num">₹${fmt(l.taxable / 100)}</td></tr>
     ${l.rate_why ? `<tr class="iv-why"><td colspan="5">${esc(l.rate_why)}</td></tr>` : ""}`).join("");
@@ -11198,8 +11313,8 @@ async function openInvoiceFor(orderId) {
   openModal("Issue invoice", `
     <div class="iv-doc"><b>${esc(doc.title || "Receipt")}</b>
       <span class="muted">${esc(doc.why || "")}</span></div>
-    <div class="iv-pos">Place of supply: <b>${esc((p.buyer || {}).state || "—")}</b>
-      — ${esc(pos.kind === "inter" ? "inter-state, IGST" : "intra-state, CGST + SGST")}</div>
+    <div class="iv-pos">Place of supply: <b>${esc((p.buyer || {}).state || "–")}</b>
+     , ${esc(pos.kind === "inter" ? "inter-state, IGST" : "intra-state, CGST + SGST")}</div>
     <div class="tbl-scroll"><table class="tbl">
       <thead><tr><th>Item</th><th>HSN</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Taxable</th></tr></thead>
       <tbody>${lines}</tbody></table></div>
@@ -11216,7 +11331,7 @@ async function openInvoiceFor(orderId) {
       <div><b>Fix these first</b><ul>${p.blockers.map(b => `<li>${esc(b)}</li>`).join("")}</ul></div></div>` : ""}
     <p class="sm-hint">Issuing takes the next number in your series. Numbers must run
       consecutively, so a number that is issued and later cancelled still has to be
-      reported — that is why this preview exists.</p>
+      reported, that is why this preview exists.</p>
     <div class="modal-actions">
       <button class="btn ghost" data-mclose6>Not yet</button>
       <button class="btn primary" id="ivIssue">Issue ${esc(doc.title || "invoice")}</button>
@@ -11258,7 +11373,7 @@ function poItemOptions(selectedId, supplierName) {
   const rest = inv.filter((x) => !mine.includes(x));
   const opt = (x) => `<option value="${esc(x.id)}"${x.id === selectedId ? "selected" : ""}>`
     + `${esc(x.name)}${x.unit_label ? ` (${esc(x.unit_label)})` : ""}</option>`;
-  return `<option value="">— pick an item —</option>`
+  return `<option value="">Pick an item</option>`
     + (mine.length ? `<optgroup label="From this supplier">${mine.map(opt).join("")}</optgroup>` : "")
     + (rest.length ? `<optgroup label="${mine.length ? "Everything else" : "Your inventory"}">${rest.map(opt).join("")}</optgroup>` : "")
     + `<option value="__other"${selectedId === "__other" ? "selected" : ""}>Something not in my inventory…</option>`;
@@ -11276,8 +11391,8 @@ function poLineRow(l, i) {
       </td>
       <td><input class="po-qty" type="number" min="1" value="${esc(String(l.order_qty || 1))}" /></td>
       <td><input class="po-unit" value="${esc(l.unit_label || "unit")}" /></td>
-      <td><input class="po-cost" type="number" min="0" step="0.01" value="${l.unit_cost != null ? esc(String(l.unit_cost)) : ""}" placeholder="—" /></td>
-      <td class="num po-amt">${l.unit_cost != null ? "₹" + fmt(l.unit_cost * (l.order_qty || 1)) : "—"}</td>
+      <td><input class="po-cost" type="number" min="0" step="0.01" value="${l.unit_cost != null ? esc(String(l.unit_cost)) : ""}" placeholder="–" /></td>
+      <td class="num po-amt">${l.unit_cost != null ? "₹" + fmt(l.unit_cost * (l.order_qty || 1)) : "–"}</td>
       <td><button class="btn ghost tiny danger" data-podel="${i}" title="Remove this line" aria-label="Remove this line from the order">✕</button></td>
     </tr>`;
 }
@@ -11291,7 +11406,7 @@ function paintPoTotal() {
     a + (l.unit_cost != null ? Number(l.unit_cost) * Number(l.order_qty || 1) : 0), 0);
   box.innerHTML = _poLines.some((l) => l.unit_cost != null)
     ? `<b>₹${fmt(total)}</b>`
-    : `<span class="muted">No rates entered — the PO will show quantities only.</span>`;
+    : `<span class="muted">No rates entered: the PO will show quantities only.</span>`;
 }
 
 function renderPoLines() {
@@ -11314,7 +11429,7 @@ function renderPoLines() {
       _poLines[i].unit_cost = c === "" ? null : Number(c);
       const l = _poLines[i];
       tr.querySelector(".po-amt").textContent =
-        l.unit_cost != null ? "₹" + fmt(l.unit_cost * (l.order_qty || 1)) : "—";
+        l.unit_cost != null ? "₹" + fmt(l.unit_cost * (l.order_qty || 1)) : "–";
       paintPoTotal();
     };
     // Picking an item fills its unit and last known rate, so the usual case is
@@ -11493,7 +11608,7 @@ async function renderUpcomingSocial() {
             <div class="up-when">${esc(shortWhen(p.scheduled_at))}
               ${p.occasion ? `<em class="sm-occ">${esc(p.occasion)}</em>` : ""}
               <span class="up-fmt">${esc(p.format || "")}</span></div>
-            <b>${esc(p.product_name || "—")}</b>
+            <b>${esc(p.product_name || "–")}</b>
             <span class="up-hook">${esc(((p.caption || {}).hook || "").slice(0, 80))}</span>
           </div>
           <div class="up-acts">
@@ -11579,7 +11694,7 @@ async function renderCampaignRail() {
                 ${"●".repeat(Math.round(f.weight / 2))}<i>${"●".repeat(5 - Math.round(f.weight / 2))}</i></span>
               <span class="cmp-core">${esc((f.core || "").slice(0, 96))}…</span>
               <span class="cmp-go">${f.running ? "Running · view"
-                : f.late ? "Plan it now — already late" : "Plan it — one tap"}</span>
+                : f.late ? "Plan it now: already late" : "Plan it: one tap"}</span>
             </button>`).join("")}
         </div>
       </div>` : ""}`;
@@ -11600,8 +11715,8 @@ async function revertCampaign(key, silent) {
     if (_currentModule === "social") await renderSocial();
     else await renderCampaignRail();
     if (!silent) toast(r.reverted
-      ? `${r.festival} campaign reverted — ${r.reverted} unposted draft${r.reverted === 1 ? "" : "s"} removed.`
-      : `Nothing to revert — every ${r.festival} post had already gone out.`);
+      ? `${r.festival} campaign reverted, ${r.reverted} unposted draft${r.reverted === 1 ? "" : "s"} removed.`
+      : `Nothing to revert: every ${r.festival} post had already gone out.`);
     return r;
   } catch (e) { if (!silent) toast(e.message, 6000); throw e; }
 }
@@ -11643,7 +11758,7 @@ async function openCampaign(key, running) {
     ${p.late ? `<div class="cmp-late">${sic("alert")}<div>
       <b>You are inside the window already</b>
       <span>${esc(p.festival)} is ${p.days_out} days away and the run-up has
-      started. The early beats will be skipped — start now rather than
+      started. The early beats will be skipped, start now rather than
       waiting.</span></div></div>` : ""}
 
     <h4>The six posts, and what each one is for</h4>
@@ -11657,7 +11772,7 @@ async function openCampaign(key, running) {
           <div class="cmp-beat-body">
             <div class="cmp-beat-h"><b>${esc(b.label)}</b>
               <span class="sm-fmt sm-fmt-${esc(b.format)}">${esc(b.format)}</span>
-              ${b.past ? `<span class="muted tiny">already passed — will be skipped</span>` : ""}</div>
+              ${b.past ? `<span class="muted tiny">already passed, will be skipped</span>` : ""}</div>
             <div class="cmp-beat-job">${esc(b.job)}</div>
             <div class="cmp-beat-why">${esc(b.why)}</div>
           </div>
@@ -11686,7 +11801,7 @@ async function openCampaign(key, running) {
     </div>
 
     <div class="cmp-run-note">${sic("check")}<span>This campaign is already planned and
-      saved. Its posts are in your plan below — edit any of them, or revert the
+      saved. Its posts are in your plan below, edit any of them, or revert the
       whole campaign to remove every post that has not gone out yet.</span></div>
 
     <div class="modal-actions">
@@ -11716,7 +11831,7 @@ async function planCampaign(key) {
   try {
     r = await withBusy(
       "Building the campaign…",
-      "Six beats, each with its own job, written and dated against the festival — saved as you watch.",
+      "Six beats, each with its own job, written and dated against the festival, saved as you watch.",
       () => api("/api/social/campaign", { method: "POST", json: { festival: key } }));
   } catch (e) { return toast(e.message, 6000); }
   if (r && r.error) return toast(r.error, 6000);
@@ -11727,7 +11842,7 @@ async function planCampaign(key) {
 
   const n = r.created || 0;
   toastUndo(
-    `${r.festival} campaign planned — ${n} post${n === 1 ? "" : "s"} saved as drafts.`,
+    `${r.festival} campaign planned, ${n} post${n === 1 ? "" : "s"} saved as drafts.`,
     () => revertCampaign(key, true),
     8000);
 }

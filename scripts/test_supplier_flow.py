@@ -171,7 +171,7 @@ r = c.post("/api/supply/replenish/check", headers=H)
 check("the stock check runs", r.status_code == 200, r.text[:200])
 JS = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                        "Smart CafeX", "smart.js"), encoding="utf-8").read()
-check("Create PO offers the inventory in a dropdown", "poItemOptions" in JS and "— pick an item —" in JS)
+check("Create PO offers the inventory in a dropdown", "poItemOptions" in JS and ">Pick an item<" in JS)
 check("its button sends the order", 'id="poSave">' in JS and "Create &amp; send" in JS)
 check("every PO is listed under where it has got to", "PO_GROUPS" in JS and "data-pomove" in JS)
 check("approving from the list sends it", "data-posend" in JS and "approvePo(b.dataset.posend)" in JS)

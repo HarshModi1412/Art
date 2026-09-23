@@ -22,7 +22,7 @@
     document.documentElement.setAttribute("data-theme", saved || (prefersDark ? "dark" : "light"));
   })();
 </script>
-<link rel="stylesheet" href="/smart-static/smart.css?v=70" />
+<link rel="stylesheet" href="/smart-static/smart.css?v=71" />
 <link rel="stylesheet" href="/smart-static/ios.css?v=3" />
 <!-- Plotly is NOT loaded here.
      It is ~3.5 MB of JavaScript, and it used to sit in this <head> with no
@@ -64,6 +64,11 @@
     <div class="err" id="loginErr" hidden></div>
     <div class="ok-note" id="loginNote" hidden></div>
     <p class="muted tiny"><a href="#" id="forgotLink">Forgot your password?</a></p>
+    <!-- This screen had no way in for someone new. Two buttons on the landing
+         page and every shared link to the app land here, and a visitor without
+         an account met a login form and nothing else. The signup form lives on
+         the landing page; ?signup=1 opens it straight away. -->
+    <p class="muted tiny login-new">New here? <a href="/?signup=1" id="signupLink">Create a free account</a></p>
     <!-- Someone can accept cookies on this screen without logging in, so the
          way to change that has to be on this screen too, not only inside the
          account they have not opened yet. -->
@@ -233,6 +238,6 @@
     <div class="err" id="addErr" hidden></div>
   </div>
 </div>
-<script src="/smart-static/smart.js?v=72"></script>
+<script src="/smart-static/smart.js?v=73"></script>
 </body>
 </html>

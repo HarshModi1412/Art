@@ -22,22 +22,22 @@ from backend.core import user_store
 _KEY = "ads_connections"
 
 CONNECTORS = [
-    {"id": "google_ads",         "label": "Google Ads",         "icon": "🇬", "tier": "free",
+    {"id": "google_ads",         "label": "Google Ads",         "icon": "search", "tier": "free",
      "help": "Search + Performance Max campaign metrics.",
      "needs": ["customer_id", "developer_token", "refresh_token"]},
     {"id": "meta_ads",           "label": "Meta Ads (Facebook + Instagram)", "icon": "Ⓜ️", "tier": "free",
      "help": "Facebook / Instagram ad campaign metrics via the Marketing API.",
      "needs": ["ad_account_id", "access_token"]},
-    {"id": "instagram_insights", "label": "Instagram Insights", "icon": "📸", "tier": "free",
+    {"id": "instagram_insights", "label": "Instagram Insights", "icon": "instagram", "tier": "free",
      "help": "Organic reach, impressions and top posts. Uses your connected Instagram account.",
      "needs": []},
-    {"id": "google_analytics",   "label": "Google Analytics 4", "icon": "📈", "tier": "free",
+    {"id": "google_analytics",   "label": "Google Analytics 4", "icon": "chart", "tier": "free",
      "help": "Site sessions, conversion rate and top sources.",
      "needs": ["property_id", "refresh_token"]},
-    {"id": "shopify_ads",        "label": "Shopify Marketing",  "icon": "🛒", "tier": "paid",
+    {"id": "shopify_ads",        "label": "Shopify Marketing",  "icon": "bag", "tier": "paid",
      "help": "Shopify Ads + marketing automation metrics.",
      "needs": ["shop_domain", "admin_api_token"]},
-    {"id": "amazon_ads",         "label": "Amazon Ads",         "icon": "📦", "tier": "paid",
+    {"id": "amazon_ads",         "label": "Amazon Ads",         "icon": "package", "tier": "paid",
      "help": "Sponsored Products / Brands metrics.",
      "needs": ["profile_id", "refresh_token"]},
 ]

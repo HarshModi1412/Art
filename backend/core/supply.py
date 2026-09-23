@@ -898,7 +898,7 @@ def build_reorder_insight(email: str) -> dict | None:
         names += f" +{len(below) - 4} more"
     plural = "s" if len(below) != 1 else ""
     return {
-        "id": "reorder", "module": "supply", "page": "supply", "icon": "📦",
+        "id": "reorder", "module": "supply", "page": "supply", "icon": "package",
         "title": f"{len(below)} item{plural} running low — order more",
         "detail": (f"{names} {'are' if len(below) != 1 else 'is'} down to fewer days of supply "
                    "than 1.2 × the supplier's lead time. Approve and we will draft one purchase "
@@ -947,7 +947,7 @@ def build_overstock_insight(email: str) -> dict | None:
         if not _blank(uc):
             tied += _num(r.get("current_stock")) * float(uc)
     return {
-        "id": "overstock", "module": "supply", "page": "inventory", "icon": "📊",
+        "id": "overstock", "module": "supply", "page": "inventory", "icon": "layers",
         "title": f"{len(rows)} item{'s' if len(rows) != 1 else ''} overstocked",
         "detail": (f"{names} hold more than {OVERSTOCK_DAYS} days of cover at the "
                    f"current sales rate."),
@@ -993,7 +993,7 @@ def build_supplier_risk_insight(email: str) -> dict | None:
     if len(exposed) > 4:
         names += f" +{len(exposed) - 4} more"
     return {
-        "id": "supplier_risk", "module": "supply", "page": "supply", "icon": "🔗",
+        "id": "supplier_risk", "module": "supply", "page": "supply", "icon": "truck",
         "title": f"{len(exposed)} item{'s' if len(exposed) != 1 else ''} single-sourced",
         "detail": f"{names} come from one supplier with no alternative on file.",
         "action_label": "Find alternatives",

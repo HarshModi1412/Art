@@ -188,6 +188,14 @@ def _content_suggestion_insights(email: str) -> list[dict]:
     ranked topic bank + generated on demand when the user opens details.
     Stored in the account so the same suggestion sticks between reloads
     (a new one appears once the seller approves/dismisses the current one)."""
+    # Until the seller has said what they sell or given us their sales, the
+    # only idea we have is the generic one ("this week's trending angle for
+    # small brands"), and the first suggestion a brand-new seller ever saw read
+    # like filler. Hold it back until there is something specific to say.
+    known_type = product_config.normalize(get_product_type(email)) != "generic"
+    has_sales = bool((data_status(email).get("sales") or {}).get("ready"))
+    if not known_type and not has_sales:
+        return []
     stored = user_store.get_key(email, "content_current_suggestion", None)
     if not stored or stored.get("_gone"):
         pt = get_product_type(email)
@@ -202,7 +210,7 @@ def _content_suggestion_insights(email: str) -> list[dict]:
         }
         user_store.set_key(email, "content_current_suggestion", stored)
     return [{
-        "id": stored["id"], "module": "content", "page": "content", "icon": "✨",
+        "id": stored["id"], "module": "content", "page": "content", "icon": "image",
         "title": f"Suggested post: {stored['topic']}",
         "detail": ("An Instagram post idea based on what's trending for your product type. "
                    "Open Details to see the caption, hashtags and image, edit anything, "
@@ -268,7 +276,7 @@ def _festival_insight(email: str) -> dict | None:
         return None
     f = due[0]
     return {
-        "id": "festival", "module": "sales", "page": "social", "icon": "🪔",
+        "id": "festival", "module": "sales", "page": "social", "icon": "gift",
         "title": f"Plan the {f['name']} campaign",
         "detail": f"{f['name']} is {f['days_away']} days away.",
         "action_label": "Build the plan",
@@ -322,7 +330,7 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
                 detail += (f" {cooled} more were left out because they were already "
                            f"contacted in the last {winback_auto.COOLDOWN_DAYS} days.")
             out.append({
-                "id": "winback_auto", "module": "marketing", "page": "winback", "icon": "💌",
+                "id": "winback_auto", "module": "marketing", "page": "winback", "icon": "mail",
                 "title": f"Send this week's win-back to {reach or n} customers",
                 "detail": detail,
                 "action_label": "Approve → send now", "count": reach or n,
@@ -333,7 +341,7 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
             at_risk = analytics.at_risk_cached(email, txns)
             if at_risk:
                 out.append({
-                    "id": "winback", "module": "sales", "page": "winback", "icon": "💌",
+                    "id": "winback", "module": "sales", "page": "winback", "icon": "mail",
                     "title": f"Win back {len(at_risk)} at-risk customers",
                     "detail": (f"{len(at_risk)} regulars haven't visited in a while. Approve to generate a "
                                "ready-to-send message + personalised coupon for each, exported to Excel."),
@@ -350,7 +358,7 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
             pos = {"available": False}
         if pos.get("available") and pos.get("insights"):
             out.append({
-                "id": "reputation", "module": "review", "page": "positioning", "icon": "📍",
+                "id": "reputation", "module": "review", "page": "positioning", "icon": "star",
                 "title": "Act on your brand positioning",
                 "detail": (f"From {pos.get('n_reviews', 0)} reviews we found {len(pos['insights'])} positioning "
                            "moves for your brand. Approve to export the prioritised action plan."),
@@ -364,7 +372,7 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
         focus = (comp.get("focus") or {}).get("focus_now") or []
         if focus:
             out.append({
-                "id": "complaints", "module": "review", "page": "complaints", "icon": "😤",
+                "id": "complaints", "module": "review", "page": "complaints", "icon": "flame",
                 "title": f"Fix your top {len(focus)} complaint themes",
                 "detail": ("These are the complaint themes hurting you most right now. Approve to export the "
                            "fix-first action plan."),

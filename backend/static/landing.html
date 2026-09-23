@@ -944,7 +944,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
   <div class="wrap" style="text-align:center;">
     <h2 style="font-size:30px;">The insight you're missing is already in your files.</h2>
     <p style="color:var(--ink-soft); max-width:52ch; margin:10px auto 26px;">Upload one month of sales. If One Tap Manager doesn't show you something you didn't know, it cost you nothing.</p>
-    <a class="btn btn-primary" href="/smart">Open One Tap Manager free</a>
+    <button class="btn btn-primary" onclick="openSignup('free')">Open One Tap Manager free</button>
   </div>
 </section>
 
@@ -1056,6 +1056,16 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 
 <script>
 let suPlan = "free";
+// /smart's login card links here as /?signup=1, so someone who reached the
+// app before they had an account gets the signup form in one tap instead of a
+// login form with no way in. Run once the page has parsed, so the modal exists.
+document.addEventListener("DOMContentLoaded", function () {
+  try {
+    if (new URLSearchParams(location.search).get("signup") === "1"
+        && document.getElementById("signupModal")) openSignup("free");
+  } catch (e) { /* a bad query string must not break the page */ }
+});
+
 function openSignup(plan) {
   suPlan = plan;
   document.getElementById("suEyebrow").textContent = "FREE DURING LAUNCH · NO CARD NEEDED";

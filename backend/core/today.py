@@ -148,7 +148,15 @@ def _site_items(email: str) -> list[dict]:
 
 
 def _catalogue_items(email: str) -> list[dict]:
-    from backend.core import products
+    from backend.core import products, smart
+    # The sample data has sales but no product list, so every product name in
+    # it is "not linked". Raising that as the first thing to do after "Load
+    # sample data" handed a seller a chore about fake data and told them the
+    # app's own numbers were wrong. It comes back the moment their own sales
+    # replace the sample, because that upload overwrites the source.
+    sales = (_safe(smart.data_status, email) or {}).get("sales") or {}
+    if sales.get("source") == "sample":
+        return []
     unmatched = products.unmatched_sales_names(email) or []
     if len(unmatched) < 3:
         return []
