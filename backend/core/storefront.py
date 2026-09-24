@@ -371,9 +371,12 @@ def price_cart(seller: str, lines: list[dict]) -> dict:
         "online_enabled": bool(c.get("online_enabled")) and store_payments.connected(seller),
         "cod_advance": _money(c.get("cod_advance")),
         "cod_note": store_payments.describe(c),
+        "upi_enabled": store_payments.upi_ready(c),
+        "upi_id": store_payments.clean_upi(c.get("upi_id")) if store_payments.upi_ready(c) else "",
         "due": {
             "prepaid": store_payments.split_due(c, total, "prepaid"),
             "cod": store_payments.split_due(c, total, "cod"),
+            "upi": store_payments.split_due(c, total, "upi"),
         },
     }
 
@@ -429,7 +432,9 @@ def place_order(seller: str, customer: dict, lines: list[dict],
     if len(re.sub(r"\D", "", phone)) < 10:
         raise StoreError("Enter a valid 10-digit phone number.")
 
-    pay = "cod" if payment not in ("cod", "prepaid") else payment
+    pay = payment if payment in ("cod", "prepaid", "upi") else "cod"
+    if pay == "upi" and not priced["upi_enabled"]:
+        raise StoreError("This store does not take UPI payments right now.")
     if pay == "cod" and not priced["cod_enabled"]:
         raise StoreError("Cash on delivery is not available for this store.")
     if pay == "prepaid" and not priced["online_enabled"]:
@@ -448,11 +453,14 @@ def place_order(seller: str, customer: dict, lines: list[dict],
         "updated_at": _now(),
         "status": "new",
         "payment": pay,
-        "payment_status": ("paid" if due["on_delivery"] <= 0 and due["online"] > 0
+        "payment_status": ("to_check" if pay == "upi"
+                           else "paid" if due["on_delivery"] <= 0 and due["online"] > 0
                            else "part_paid" if due["online"] > 0 else "pending"),
         "paid_online": due["online"],
         "due_on_delivery": due["on_delivery"],
         "payment_ref": str(payment_ref or "")[:64],
+        # Paid by the shopper to the seller's own UPI ID; the seller confirms it.
+        "upi_due": due.get("upi", 0.0),
         "customer_id": customer.get("id") or "",
         "customer_name": str((address or {}).get("name") or customer.get("name") or "").strip()[:80],
         "customer_email": _norm_email(customer.get("email")),
@@ -573,6 +581,31 @@ def set_status(seller: str, order_id: str, status: str, by: str = "seller",
             replenish.after_restore(seller, order)
         except Exception:  # noqa: BLE001
             pass
+    return order
+
+
+def confirm_upi_payment(seller: str, order_id: str, received: bool) -> dict:
+    """The seller's answer to "did this UPI payment arrive?".
+
+    Yes marks the order paid. No cancels it through set_status, which puts the
+    stock back and records why. Only an order still waiting to be checked can be
+    answered, so a double tap or a stale screen cannot flip a settled order."""
+    seller = _norm_email(seller)
+    rows = _orders(seller)
+    order = next((o for o in rows if o["id"] == order_id), None)
+    if not order:
+        raise StoreError("Order not found.")
+    if order.get("payment") != "upi" or order.get("payment_status") != "to_check":
+        raise StoreError("This order is not waiting for a UPI payment check.")
+    if not received:
+        return set_status(seller, order_id, "cancelled", by="seller",
+                          reason="Payment not received")
+    order["payment_status"] = "paid"
+    order["paid_online"] = order.get("upi_due") or order.get("total") or 0
+    order["updated_at"] = _now()
+    order.setdefault("history", []).append({"at": _now(), "status": order["status"],
+                                            "by": "seller", "note": "UPI payment received"})
+    _save_orders(seller, rows)
     return order
 
 

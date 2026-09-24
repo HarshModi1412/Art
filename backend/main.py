@@ -44,6 +44,7 @@ from backend.core import winback_proof
 from backend.core import loginguard, google_auth, winback_auto, publisher
 from backend.core import ratelimit
 from backend.core import geo
+from backend.core import onboarding
 from backend.core import media
 from backend.core import cache
 from backend.core import cancellations
@@ -738,6 +739,12 @@ def register(body: RegisterBody):
         raise HTTPException(400, str(e))
     token = auth.login(body.email, body.password)
     email = body.email.strip().lower()
+    # The setup journey's record is made here, at sign-up, so "new account"
+    # means signed up after the journey shipped, not "has no data yet".
+    try:
+        onboarding.create_for_new_account(email)
+    except Exception:  # noqa: BLE001 - a signup must never fail on this
+        pass
     consent = body.consent or {}
     consent_rec = legal.record_consent(
         email,
@@ -808,6 +815,10 @@ def auth_google(body: GoogleBody, request: Request):
         # written down anywhere — the seller uses "Forgot password" if they
         # later want to sign in without Google.
         auth.register(email, secrets.token_urlsafe(24), "free")
+        try:
+            onboarding.create_for_new_account(email)
+        except Exception:  # noqa: BLE001 - a signup must never fail on this
+            pass
 
     google_auth.remember(email, claims)
     loginguard.succeeded(email, ip)
@@ -2968,6 +2979,9 @@ def _smart_status_payload(email: str, sess) -> dict:
         # home screen leads with this for a seller who has just signed up, and
         # hides it entirely once they are through it.
         "setup": setup_steps.progress(email),
+        # The first-run journey (core/onboarding.py). A compact read; the
+        # journey's own screens fetch /api/onboarding for the full picture.
+        "onboarding": onboarding.summary(email),
         # When the Social Media Manager plans next week on its own.
         "autoplan": _safe_autoplan_status(email),
     }
@@ -3003,9 +3017,13 @@ def _home_fingerprint(email: str) -> str:
         # Not the content-suggestion id: the payload itself creates one on the
         # first read, which would make every first 200 look stale. Deciding a
         # suggestion changes smart_decisions, which is already in here.
+        try:
+            ob = onboarding.fingerprint(email)
+        except Exception:  # noqa: BLE001
+            ob = None
         return json.dumps([posts, tasks, sorted((k, str(v)) for k, v in dec.items()),
                            ap.get("last_run_at"), social.get_settings(email).get("auto_plan_day"),
-                           pos], default=str)
+                           pos, ob], default=str)
     except Exception:  # noqa: BLE001 — a fingerprint failure only costs a 200
         return secrets.token_hex(4)
 
@@ -3754,6 +3772,87 @@ def smart_tasks(body: SmartTaskBody, authorization: str | None = Header(default=
     else:
         raise HTTPException(400, "action must be add, toggle, delete or progress")
     return {"ok": True, "tasks": tasks}
+
+
+# ---------------------------------------------------------
+# The first-run journey ("Set up your shop in 3 parts")
+# ---------------------------------------------------------
+# Design: docs/designs/first-run-journey.md. The journey has its own simple
+# screens, but every save below writes the same data the modules own, and a
+# step only counts as done when that data says so (core/onboarding.py).
+class OnboardingActBody(BaseModel):
+    action: str
+    path: str | None = None
+    step: str | None = None
+    part: int | None = None
+    lang: str | None = None
+
+
+def _journey(email: str, fresh: dict | None = None) -> dict:
+    prog = fresh if fresh is not None else onboarding.progress(email)
+    return {**prog, "facts": onboarding.journey_facts(email)}
+
+
+@app.get("/api/onboarding")
+def onboarding_get(authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    return _journey(email)
+
+
+@app.post("/api/onboarding")
+def onboarding_act(body: OnboardingActBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    try:
+        prog = onboarding.act(email, body.action, path=body.path, step=body.step,
+                              part=body.part, lang=body.lang)
+    except onboarding.OnboardingError as e:
+        raise HTTPException(400, str(e))
+    return {**_journey(email, prog), "tasks": smart.get_tasks(email)}
+
+
+@app.post("/api/onboarding/save/{what}")
+def onboarding_save(what: str, body: dict, authorization: str | None = Header(default=None)):
+    """The journey's simple screens. Each writes the real module data."""
+    email = require_user(authorization)
+    cache.clear(email)
+    try:
+        if what == "shop":
+            onboarding.save_shop(email, body.get("name") or "", body.get("product_type") or "",
+                                 body.get("label") or "")
+        elif what == "site":
+            onboarding.save_site(email, body or {})
+        elif what == "publish":
+            sitebuilder.set_published(email, True)
+        elif what == "payment":
+            onboarding.save_payment(email, body.get("upi_id") or "", bool(body.get("rupees")))
+        elif what == "photo":
+            onboarding.set_product_photo(email, body.get("product_id") or "", body.get("url") or "")
+        elif what == "stock":
+            onboarding.save_stock(email, body.get("supplier") or {}, body.get("counts") or {})
+        elif what == "import":
+            onboarding.import_sales_products(email)
+        else:
+            raise HTTPException(404, "Unknown step.")
+    except (onboarding.OnboardingError, ValueError) as e:
+        raise HTTPException(400, str(e))
+    return {**_journey(email, onboarding.reconcile(email)), "tasks": smart.get_tasks(email)}
+
+
+class UpiConfirmBody(BaseModel):
+    order_id: str
+    received: bool
+
+
+@app.post("/api/orders/upi")
+def orders_upi(body: UpiConfirmBody, authorization: str | None = Header(default=None)):
+    """The seller checked their own UPI app: the money arrived, or it did not."""
+    email = require_user(authorization)
+    cache.clear(email)
+    try:
+        order = storefront.confirm_upi_payment(email, body.order_id, body.received)
+    except storefront.StoreError as e:
+        raise HTTPException(400, str(e))
+    return {"order": order}
 
 
 # ---------------------------------------------------------

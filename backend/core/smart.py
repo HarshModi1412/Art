@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import threading
 
 import pandas as pd
 
@@ -581,34 +582,51 @@ def _to_xlsx(df: pd.DataFrame, sheet: str) -> io.BytesIO:
 # ---------------------------------------------------------
 # Task list (per account)
 # ---------------------------------------------------------
+# One lock around every read-then-write of the task list. user_store locks a
+# single write, not a read followed by a write, and the setup journey's
+# reconcile (onboarding.py) ticks tasks while the seller may be ticking one
+# too. Without this, the later write silently drops the earlier one. The app
+# runs one uvicorn worker (render.yaml); with more workers this becomes a
+# per-account file lock. Re-entrant so a helper can call another helper.
+TASK_LOCK = threading.RLock()
+
+
 def get_tasks(email: str) -> list[dict]:
     return user_store.get_key(email, "smart_tasks", []) or []
 
 
-def add_task(email: str, text: str) -> list[dict]:
+def add_task(email: str, text: str, ob: str = "") -> list[dict]:
+    """`ob` tags a task as belonging to the setup journey ("step:products",
+    "part:2"), so the row can open the journey and close itself when done."""
     text = (text or "").strip()
     if not text:
         return get_tasks(email)
-    tasks = get_tasks(email)
-    tid = hashlib.md5(f"{text}{pd.Timestamp.now().isoformat()}".encode()).hexdigest()[:10]
-    tasks.append({"id": tid, "text": text[:280], "done": False})
-    user_store.set_key(email, "smart_tasks", tasks)
-    return tasks
+    with TASK_LOCK:
+        tasks = get_tasks(email)
+        tid = hashlib.md5(f"{text}{pd.Timestamp.now().isoformat()}".encode()).hexdigest()[:10]
+        row = {"id": tid, "text": text[:280], "done": False}
+        if ob:
+            row["ob"] = str(ob)[:40]
+        tasks.append(row)
+        user_store.set_key(email, "smart_tasks", tasks)
+        return tasks
 
 
 def toggle_task(email: str, task_id: str, done: bool) -> list[dict]:
-    tasks = get_tasks(email)
-    for t in tasks:
-        if t["id"] == task_id:
-            t["done"] = bool(done)
-    user_store.set_key(email, "smart_tasks", tasks)
-    return tasks
+    with TASK_LOCK:
+        tasks = get_tasks(email)
+        for t in tasks:
+            if t["id"] == task_id:
+                t["done"] = bool(done)
+        user_store.set_key(email, "smart_tasks", tasks)
+        return tasks
 
 
 def delete_task(email: str, task_id: str) -> list[dict]:
-    tasks = [t for t in get_tasks(email) if t["id"] != task_id]
-    user_store.set_key(email, "smart_tasks", tasks)
-    return tasks
+    with TASK_LOCK:
+        tasks = [t for t in get_tasks(email) if t["id"] != task_id]
+        user_store.set_key(email, "smart_tasks", tasks)
+        return tasks
 
 
 # ---------------------------------------------------------

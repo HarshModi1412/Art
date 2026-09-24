@@ -1069,13 +1069,19 @@ function paymentOptions(priced) {
   const advance = priced.cod_advance || 0;
   const online = priced.online_enabled;
   const cod = priced.cod_enabled;
-  const first = cod ? "cod" : "prepaid";
+  const upi = priced.upi_enabled;
+  // UPI first when the seller takes it: it is how shoppers here already pay.
+  const first = upi ? "upi" : cod ? "cod" : "prepaid";
   const opt = (kind, title, sub) => `
     <label class="pay-opt ${first === kind ? "on" : ""}" data-pay="${kind}">
       <input type="radio" name="pay" value="${kind}" ${first === kind ? "checked" : ""} />
       <div><b>${title}</b><div class="tiny muted">${sub}</div></div></label>`;
 
   const parts = [];
+  if (upi) {
+    parts.push(opt("upi", "Pay by UPI",
+      `Pay ${money(priced.total)} from GPay, PhonePe or Paytm after you place the order.`));
+  }
   if (cod) {
     parts.push(opt("cod",
       advance > 0 ? `Cash on delivery — ${money(advance)} now` : "Cash on delivery",
@@ -1096,6 +1102,7 @@ function paymentOptions(priced) {
 /* The label on the button, so nobody is surprised by what happens next. */
 function payButtonLabel(priced) {
   const pay = (document.querySelector('input[name="pay"]:checked') || {}).value || "cod";
+  if (pay === "upi") return "Place order, then pay by UPI";
   const due = (priced.due || {})[pay === "prepaid" ? "prepaid" : "cod"] || {};
   const onlineNow = due.online || 0;
   return onlineNow > 0 ? `Pay ${money(onlineNow)} & place order` : "Place order";
@@ -1130,13 +1137,45 @@ function trustBlock() {
     </div>`;
 }
 
+/* Paying the seller's own UPI ID. Copying the ID is the main path: some UPI
+   apps refuse a link with a preset amount to a personal ID, and on a laptop the
+   link does nothing at all. The link is a shortcut for phones that allow it.
+   The order number goes in the payment note so the seller can match the money
+   to the order, and the shopper can send the usual screenshot on WhatsApp. */
+function upiPanel(order) {
+  if (order.payment !== "upi") return "";
+  const c = (S.site && S.site.commerce) || {};
+  const id = c.upi_id || "";
+  if (!id) return "";
+  const amt = Number(order.upi_due || order.total || 0).toFixed(2);
+  const name = (S.site && (typeof S.site.brand === "string" ? S.site.brand : (S.site.brand || {}).name)) || "";
+  const link = `upi://pay?pa=${encodeURIComponent(id)}&pn=${encodeURIComponent(name)}`
+    + `&am=${amt}&cu=INR&tn=${encodeURIComponent("Order " + order.order_no)}`;
+  const wa = String(((S.site && S.site.contact) || {}).whatsapp || "").replace(/\D/g, "");
+  const waText = `Hi, I paid ${money(order.upi_due || order.total)} for order ${order.order_no}. Here is the screenshot.`;
+  return `
+    <div class="upi-pay" role="region" aria-label="Pay by UPI">
+      <p class="upi-amt">Pay <b>${money(order.upi_due || order.total)}</b></p>
+      <p class="tiny muted">Order ${esc(order.order_no)}: put this number in the payment note.</p>
+      <div class="upi-id"><span>Pay to this UPI ID</span><b id="upiId">${esc(id)}</b>
+        <button class="b g" id="upiCopy" type="button">${ic("copy")}Copy</button></div>
+      <div class="upi-acts">
+        <a class="b p" href="${esc(link)}">Open UPI app${ic("arrow-right")}</a>
+        ${wa.length >= 10 ? `<a class="b g" target="_blank" rel="noopener"
+          href="https://wa.me/${esc(wa)}?text=${encodeURIComponent(waText)}">Send payment screenshot on WhatsApp</a>` : ""}
+      </div>
+      <p class="tiny muted">The shop checks the payment and confirms your order.</p>
+    </div>`;
+}
+
 function viewDone(order) {
   const flow = ["new", "confirmed", "packed", "shipped", "delivered"];
   return header() + `
     <div class="wrap"><div class="empty" style="padding-top:90px">
       <div class="i" style="color:var(--accent);opacity:1">${ic("check")}</div>
       <h1 style="font-size:clamp(26px,4vw,48px);margin-bottom:14px">Order placed</h1>
-      <p>Thank you, ${esc(order.customer_name || "friend")}. Order <b>${esc(order.order_no)}</b> is confirmed for ${money(order.total)}.</p>
+      <p>Thank you, ${esc(order.customer_name || "friend")}. Order <b>${esc(order.order_no)}</b> ${order.payment === "upi" ? "is placed" : "is confirmed"} for ${money(order.total)}.</p>
+      ${upiPanel(order)}
       ${order.paid_online > 0 ? `<p class="muted">${money(order.paid_online)} paid online${
         order.due_on_delivery > 0
           ? ` · <b>${money(order.due_on_delivery)} to pay in cash on delivery</b>` : " · nothing left to pay"}.</p>` : ""}
@@ -1454,7 +1493,7 @@ async function placeOrder() {
   const pay = (document.querySelector('input[name="pay"]:checked') || {}).value || "cod";
   let paid = {};
   try {
-    const due = ((S.priced || {}).due || {})[pay === "prepaid" ? "prepaid" : "cod"] || {};
+    const due = ((S.priced || {}).due || {})[pay === "prepaid" ? "prepaid" : pay === "upi" ? "upi" : "cod"] || {};
     if ((due.online || 0) > 0) {
       btn.textContent = "Opening payment…";
       const res = await collectPayment(pay);
@@ -1594,6 +1633,12 @@ function askCancel(orderId) {
 
 function bindView() {
   document.querySelectorAll("[data-go]").forEach((n) => n.onclick = (e) => { e.preventDefault(); go(n.dataset.go); });
+  const upiCopy = document.getElementById("upiCopy");
+  if (upiCopy) upiCopy.onclick = async () => {
+    const id = (document.getElementById("upiId") || {}).textContent || "";
+    try { await navigator.clipboard.writeText(id); toast("UPI ID copied"); }
+    catch (e) { toast("Copy this ID: " + id, "copy", 5000); }
+  };
   document.querySelectorAll("[data-cancel]").forEach((n) =>
     n.onclick = () => askCancel(n.dataset.cancel));
   document.querySelectorAll("[data-p]").forEach((n) => n.onclick = (e) => {

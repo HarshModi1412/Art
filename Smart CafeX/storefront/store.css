@@ -1328,3 +1328,12 @@ html.editing .announce:hover > .edit-tag { transform: translateY(-50%); }
   .card:hover .card-img, [data-theme-id="beauty"] .card:hover .card-img,
   [data-theme-id="tech"] .card:hover .card-img { box-shadow: none; }
 }
+
+/* Paying the seller's own UPI ID after the order is placed. */
+.upi-pay { max-width: 520px; margin: 26px auto 0; text-align: left; border: 1px solid var(--accent); border-radius: calc(var(--radius) * .8); padding: 20px 22px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.upi-pay .upi-amt { font-size: 20px; margin: 0 0 4px; }
+.upi-id { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 16px 0; padding: 12px 14px; border: 1px dashed var(--line); border-radius: calc(var(--radius) * .6); }
+.upi-id span { flex-basis: 100%; font-size: 12.5px; color: var(--muted); }
+.upi-id b { font-size: 17px; word-break: break-all; flex: 1 1 auto; }
+.upi-acts { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.upi-acts .b { min-height: 44px; }

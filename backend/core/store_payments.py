@@ -32,6 +32,7 @@ import hashlib
 import hmac
 import logging
 import json
+import re
 import secrets
 
 from backend.core import secrets_store, user_store
@@ -268,12 +269,44 @@ def split_due(commerce: dict, total: float, payment: str) -> dict:
     advance = round(float(commerce.get("cod_advance") or 0), 2)
     if payment == "prepaid":
         return {"online": total, "on_delivery": 0.0, "kind": "prepaid"}
+    if payment == "upi":
+        # Paid to the seller's own UPI ID, outside any gateway: nothing is
+        # collected online by us and nothing is left for the courier.
+        return {"online": 0.0, "on_delivery": 0.0, "kind": "upi", "upi": total}
     if advance > 0:
         advance = min(advance, total)          # never ask for more than the order
         return {"online": advance,
                 "on_delivery": round(total - advance, 2),
                 "kind": "cod_advance"}
     return {"online": 0.0, "on_delivery": total, "kind": "cod"}
+
+
+# ---------------------------------------------------------------------------
+# UPI straight to the seller's own UPI ID
+# ---------------------------------------------------------------------------
+# How a seller who sells in DMs is paid today: the customer pays their UPI ID
+# and sends a screenshot. No gateway, no KYC, no keys. The shop takes the order
+# at once with payment "to check", and the SELLER marks it paid after seeing
+# the money in their own UPI app. The shopper can never mark it paid, and we
+# never touch the money, so this stays as far from payment aggregation as the
+# seller-owned Razorpay keys do.
+UPI_RE = re.compile(r"^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9]{1,63}$")
+
+
+def clean_upi(raw: str) -> str:
+    """A UPI ID as typed, tidied: no spaces, lower-case handle. "" if invalid."""
+    v = re.sub(r"\s+", "", str(raw or ""))
+    if not UPI_RE.match(v):
+        return ""
+    name, _, bank = v.partition("@")
+    return f"{name}@{bank.lower()}"
+
+
+def upi_ready(commerce: dict) -> bool:
+    """UPI is offered only in rupees, only when switched on, with a real ID."""
+    c = commerce or {}
+    return (bool(c.get("upi_enabled")) and bool(clean_upi(c.get("upi_id")))
+            and str(c.get("currency") or "INR").upper() == "INR")
 
 
 def describe(commerce: dict) -> str:

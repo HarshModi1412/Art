@@ -254,6 +254,7 @@ ICONS = {
     "mail": '<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="m3.6 7 8.4 6 8.4-6"/>',
     "phone": '<path d="M6 3.8h3.2l1.6 4-2 1.4a11.6 11.6 0 0 0 5 5l1.4-2 4 1.6V17c0 1.7-1.4 3.1-3.1 2.9C9.6 19.2 4.8 14.4 3.9 6.9 3.7 5.2 4.3 3.8 6 3.8Z"/>',
     "instagram": '<rect x="4" y="4" width="16" height="16" rx="4.6"/><circle cx="12" cy="12" r="3.6"/><circle cx="16.8" cy="7.2" r="1"/>',
+    "copy": '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
     "whatsapp": '<path d="M4 20l1.3-4A8 8 0 1 1 8 18.7L4 20Z"/><path d="M9 9.4c.4 2.4 2.2 4.2 4.6 4.6l1-1.3 1.8.8v1.2c0 .6-.5 1.1-1.1 1a7.6 7.6 0 0 1-6.9-6.9c-.1-.6.4-1.1 1-1.1h1.2l.8 1.8-1.4 1"/>',
     "scissors": '<circle cx="6.5" cy="7" r="2.2"/><circle cx="6.5" cy="17" r="2.2"/><path d="M8.4 8.4 19 17M19 7 8.4 15.6"/>',
     "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/>',
@@ -796,6 +797,10 @@ def default_site(email: str) -> dict:
             # 0 = plain COD. This is the cheapest lever a small Indian seller
             # has against return-to-origin, which runs ~26% on COD.
             "cod_advance": 0.0,
+            # The seller's own UPI ID. Shoppers pay it directly and the seller
+            # marks the order paid; see store_payments.upi_ready.
+            "upi_id": "",
+            "upi_enabled": False,
         },
         "policies": {"shipping": "", "returns": "", "privacy": ""},
         # What a pasted link shows in WhatsApp, and what a search engine reads.
@@ -1014,6 +1019,11 @@ def save_site(email: str, patch: dict) -> dict:
     c["cod_enabled"] = _b(c.get("cod_enabled"), True)
     c["online_enabled"] = _b(c.get("online_enabled"), False)
     c["cod_advance"] = max(0.0, round(_f(c.get("cod_advance"), 0), 2))
+    from backend.core import store_payments as _sp
+    c["upi_id"] = _sp.clean_upi(c.get("upi_id"))
+    # A switch with no valid ID behind it would show shoppers an option that
+    # cannot be paid, so it goes off with the ID.
+    c["upi_enabled"] = _b(c.get("upi_enabled"), False) and bool(c["upi_id"])
     c["gst_inclusive"] = _b(c.get("gst_inclusive"), True)
     # The store is priced in ONE currency the seller chose (INR/USD/GBP/EUR).
     # This used to be forced to INR, which is why a US or UK seller could set a

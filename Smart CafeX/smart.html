@@ -22,8 +22,9 @@
     document.documentElement.setAttribute("data-theme", saved || (prefersDark ? "dark" : "light"));
   })();
 </script>
-<link rel="stylesheet" href="/smart-static/smart.css?v=72" />
+<link rel="stylesheet" href="/smart-static/smart.css?v=73" />
 <link rel="stylesheet" href="/smart-static/ios.css?v=3" />
+<link rel="stylesheet" href="/smart-static/journey.css?v=3" />
 <!-- Plotly is NOT loaded here.
      It is ~3.5 MB of JavaScript, and it used to sit in this <head> with no
      `defer`, which means every single page view — including the login screen,
@@ -238,6 +239,9 @@
     <div class="err" id="addErr" hidden></div>
   </div>
 </div>
-<script src="/smart-static/smart.js?v=74"></script>
+<!-- journey.js first: it only defines functions, and the home screen's first
+     paint (inside smart.js) draws its card. -->
+<script src="/smart-static/journey.js?v=7"></script>
+<script src="/smart-static/smart.js?v=77"></script>
 </body>
 </html>

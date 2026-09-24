@@ -1636,6 +1636,17 @@ function moduleTile(m) {
     </div>`;
 }
 
+/* The setup card on home. The first-run journey (journey.js) replaces the old
+   five-step card for every account on it. An existing account that never
+   opened the journey is offered it only if the old card would still have had
+   something to say; a shop that is already set up is not nagged. */
+function homeSetupCard(s) {
+  const ob = s.onboarding;
+  if (typeof journeyCardHtml !== "function" || !ob) return setupCard(s.setup);
+  if (!ob.has_record && s.setup && s.setup.complete) return "";
+  return journeyCardHtml(ob);
+}
+
 function renderHome(s) {
   const tiles = MODULE_GROUPS.map((g) => {
     const inGroup = MODULES.filter((m) => m.group === g.id && !m.offGrid);
@@ -1654,6 +1665,10 @@ function renderHome(s) {
   const hasData = !!((s.data && s.data.sales && s.data.sales.ready)
                      || (s.data && s.data.review && s.data.review.ready));
   const guide = guideCard(s);
+  // The setup journey leads the page while it has something to say: for a
+  // seller who just signed up it is the answer to "what do I do now?".
+  const journeyOn = typeof journeyCardHtml === "function" && !!s.onboarding;
+  const journey = journeyOn ? homeSetupCard(s) : "";
 
   setView(`
     <!-- The greeting used to take three rows on a phone: "Welcome back", then
@@ -1668,11 +1683,16 @@ function renderHome(s) {
       <div class="page-actions">
         ${guideHidden() ? `<button class="btn ghost sm" id="guideShow" title="What this app does and how to use it">
           ${sic("compass")}How this works</button>` : ""}
+        ${s.onboarding && (!s.onboarding.finished || (s.onboarding.skipped_left || []).length)
+            && typeof openJourney === "function"
+          ? `<button class="btn ghost sm" id="journeyShow" title="Set up your shop, one step at a time">
+          ${sic("check")}${s.onboarding.lang === "hi" ? "सेटअप गाइड" : "Setup guide"}</button>` : ""}
         <button class="btn ghost sm" id="refreshPage" title="Pull the latest numbers without reloading the page">
           ${sic("refresh")}Refresh</button>
       </div>
     </div>
 
+    ${journey}
     ${hasData ? guide : ""}
 
     <!-- ONE card, not two.
@@ -1726,7 +1746,7 @@ function renderHome(s) {
 
     <section class="up-strip" id="upStrip" hidden></section>
 
-    ${setupCard(s.setup)}
+    ${journeyOn ? "" : setupCard(s.setup)}
 
     <div class="section-title">Your data
       <button class="btn ghost tiny pt-chip" id="ptChip" title="What you sell, in your own words, your captions, hashtags and photo prompts all use this">${sic("tag")}${esc(productLabel(state.productType))}</button>
@@ -1760,6 +1780,10 @@ function renderHome(s) {
   if (rp) rp.onclick = refreshCurrent;
   wireGuide();
   wireSetupCard();
+  if (typeof wireJourneyCard === "function") wireJourneyCard(s.onboarding);
+  const js = $("journeyShow");
+  if (js) js.onclick = () => openJourney();
+  if (typeof journeyAfterHome === "function") journeyAfterHome(s.onboarding);
   // Inside a folded section now: fetched when it is opened, not on every home
   // paint. One fewer round trip on the load that matters most.
   const chanFold = $("chanFold");
@@ -1970,6 +1994,8 @@ function taskRowsHtml(tasks) {
       <div class="task-item ${t.done ? "done" : ""}" data-task="${esc(t.id)}">
         <input type="checkbox"${t.done ? "checked" : ""} ${t.post_id ? "disabled" : ""} />
         <span class="t">${esc(t.text)}</span>
+        ${t.ob && !t.done && typeof openJourney === "function"
+          ? `<button class="btn ghost tiny" data-obopen="${esc(t.ob)}">Open</button>` : ""}
         <button class="task-del" title="Delete this task" aria-label="Delete this task">${sic("close")}</button>
       </div>`;
   }).join("") + more;
@@ -1981,6 +2007,11 @@ function wireTasks() {
     paintTasks(((state.lastState || {}).tasks) || []);
   };
   document.querySelectorAll("#taskList [data-vtask]").forEach((b) => b.onclick = () => openVideoTask(b.dataset.vtask));
+  // A setup task opens the journey at its own step or part.
+  document.querySelectorAll("#taskList [data-obopen]").forEach((b) => b.onclick = () => {
+    const [kind, val] = b.dataset.obopen.split(":");
+    openJourney(kind === "part" ? { part: parseInt(val, 10) } : { step: val });
+  });
   document.querySelectorAll("#taskList [data-task]").forEach((row) => {
     const box = row.querySelector("input[type=checkbox]");
     if (box) box.onchange = async (e) => {
@@ -9315,6 +9346,8 @@ function renderOrders() {
 
   document.querySelectorAll("[data-invoice]").forEach(b => b.onclick = () =>
     openInvoiceFor(b.dataset.invoice));
+  document.querySelectorAll("[data-upiok]").forEach(b => b.onclick = () => answerUpi(b.dataset.upiok, true));
+  document.querySelectorAll("[data-upino]").forEach(b => b.onclick = () => answerUpi(b.dataset.upino, false));
 
   document.querySelectorAll("[data-crkeep]").forEach(b => b.onclick = () =>
     resolveCancel(b.dataset.crkeep, "declined"));
@@ -9400,6 +9433,39 @@ async function askCancelReason(id, sel) {
   };
 }
 
+/* A UPI order waits for the seller, not the shopper: the money went to the
+   seller's own UPI ID, so only they can see whether it arrived. Two answers,
+   in the order they will almost always be given. "Not received" cancels the
+   order, which puts the stock back. */
+function upiCheckBox(o) {
+  if (o.payment !== "upi") return "";
+  if (o.payment_status === "paid") {
+    return `<div class="upi-check paid">${sic("check")}<span>UPI payment received</span></div>`;
+  }
+  if (o.payment_status !== "to_check" || o.status === "cancelled") return "";
+  const hrs = Math.max(0, Math.round((Date.now() - Date.parse(o.created_at)) / 36e5));
+  const waited = hrs < 1 ? "just now" : hrs < 48 ? `${hrs} hour${hrs === 1 ? "" : "s"} ago` : `${Math.round(hrs / 24)} days ago`;
+  return `
+    <div class="upi-check">
+      <div><b>Payment to check: ₹${fmt(o.upi_due || o.total)}</b>
+        <span class="muted tiny">Ordered ${esc(waited)}. Look in your UPI app for order ${esc(o.order_no)}.</span></div>
+      <div class="upi-check-acts">
+        <button class="btn primary sm" data-upiok="${esc(o.id)}">${sic("check")}Money received</button>
+        <button class="btn ghost sm" data-upino="${esc(o.id)}">Not received</button>
+      </div>
+    </div>`;
+}
+
+async function answerUpi(id, received) {
+  if (!received && !confirm("Cancel this order? The stock goes back on your shelf.")) return;
+  try {
+    await api("/api/orders/upi", { method: "POST", json: { order_id: id, received } });
+    _ordersData = await api("/api/store/orders");
+    toast(received ? "Marked paid." : "Order cancelled. Stock is back.");
+    renderOrders();
+  } catch (e) { toast(e.message); }
+}
+
 function orderCard(o) {
   const a = o.address || {};
   const items = (o.items || []).map((i) =>
@@ -9412,10 +9478,11 @@ function orderCard(o) {
         <div>
           <b>${esc(o.order_no)}</b>
           <span class="chan-pill ${esc(o.status)}">${esc(o.status)}</span>
-          <div class="muted tiny">${esc(String(o.created_at).replace("T", " ").slice(0, 16))} · ${esc(o.payment === "cod" ? "Cash on delivery" : "Pay online")}</div>
+          <div class="muted tiny">${esc(String(o.created_at).replace("T", " ").slice(0, 16))} · ${esc(o.payment === "cod" ? "Cash on delivery" : o.payment === "upi" ? "UPI" : "Pay online")}</div>
         </div>
         <div class="ord-total">₹${fmt(o.total)}</div>
       </div>
+      ${upiCheckBox(o)}
       <div class="ord-grid">
         <div>
           <div class="ord-lbl">Customer</div>

@@ -40,7 +40,7 @@ Source: `backend/core/pricing.py`, `billing.py`, `credits.py`.
 ## 4. The home screen
 
 - **Today** (`today.py`) lists the few things worth doing right now, each one a button straight into the action ("72 customers are slipping away", "4 items are below their buy-again level"). The daily digest email uses the same list, so the two never disagree.
-- **Setup steps** (`setup_steps.py`) put the single next thing a new seller must do first. A seller with no data sees "Welcome" with Today at the top; a returning seller sees "Welcome back".
+- **Set up your shop in 3 parts** (`onboarding.py`, `Smart CafeX/journey.js`, design in `docs/designs/first-run-journey.md`). A new seller is asked one question first: do you already have a website? "Yes" connects it (Shopify, WooCommerce, Wix, Amazon, or a sales file). "No" builds one, one small screen at a time: shop name and what they sell, 3 products (photo, name, price), a look, the web address, WhatsApp, the owner details the law requires, delivery, a preview, publish, then their UPI ID. Part 1 ends on their live link with Share on WhatsApp and Copy for Instagram bio. Part 2 (brand, style photos, product photos, Instagram) and Part 3 (supplier and stock) arrive as tasks. Every screen is in English and Hindi. A step is done only when the real data says so. Skip asks "Are you sure?" and puts the step on the task list, where it ticks itself once done. Existing accounts get a Start card, never a pop-up. It replaces the old five-step setup card on home (`setup_steps.py` still feeds the API).
 - **Data status** shows where the sales came from (sample, upload or connector) and how fresh they are.
 - **The app grid** is grouped as Know what is happening, Run the day, Bring in more customers and Go deeper.
 - **Fast return**: the last home screen is painted from the browser at once, then quietly corrected if anything changed.
@@ -70,7 +70,7 @@ Fourteen in `MODULES` in `Smart CafeX/smart.js`. Twelve are on the grid, and two
 |---|---|
 | Product Studio | The seller uploads their real photos once. The app learns their look and makes posts from their own product, not a stock picture |
 | Social Media Manager | A week of Instagram posts planned, captioned and scheduled, then actually published to Instagram (`publisher.py`). Festival content and an Instagram insights view are included |
-| Website Builder | The seller's own selling website: 8 themes (each a different layout, not a recolour), 20 fonts, a live click-to-edit canvas, shopper accounts, cart, COD and Razorpay payments into the seller's own account |
+| Website Builder | The seller's own selling website: 8 themes (each a different layout, not a recolour), 20 fonts, a live click-to-edit canvas, shopper accounts, cart, COD, UPI straight to the seller's own UPI ID (the shopper copies the ID or opens their UPI app with the order number as the note; the order waits as "Payment to check" until the seller taps Money received or Not received in Orders), and Razorpay payments into the seller's own account |
 
 ### Go deeper (these need a reviews file)
 | Module | What the seller gets |
@@ -155,6 +155,8 @@ One screen for everything set up once (`account.py`). Secrets never come back to
 | Outlook or Hotmail as the order email | Microsoft blocks password sign-in for other apps. The app says so and offers Gmail |
 | Video labelling on the current server | Switched to pictures only (`AI_LABEL=images`) for memory. Set it back to `on` after the hosting upgrade |
 | Server-written messages | Some still contain em dashes. Tracked in `TODOS.md` |
+| "Open UPI app" at checkout | Not yet tested on real phones. Some UPI apps may refuse a link with a preset amount to a personal (non-merchant) UPI ID, so copying the ID is the main path and the link is only a shortcut. Test on GPay, PhonePe and Paytm before promoting it |
+| UPI orders | The shopper is not told when the seller marks a UPI payment received. A "to check" order never expires on its own |
 
 ---
 
