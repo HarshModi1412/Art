@@ -1,16 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-IN">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
-<title>One Tap Manager: shop manager app for Indian clothing, jewellery and perfume sellers</title>
-<meta name="description" content="One Tap Manager reads the sales you already make on Amazon, Shopify, Instagram or your own counter, then tells you what to restock, who to win back and what to fix. Analytics free forever. One flat monthly price that replaces four to six separate apps, and never a cut of your sales." />
+<title>One Tap Manager: Shop Management App for Small Indian Sellers</title>
+<meta name="description" content="Shop management app for Indian clothing, jewellery and perfume sellers: sales analytics, low stock alerts, GST invoices, WhatsApp win-back and a free online store. Free plan, and never a cut of your sales." />
 <meta name="robots" content="index, follow" />
 <link rel="canonical" href="__BASE_URL__/" />
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <link rel="icon" href="/logo.png" type="image/png" sizes="512x512" />
 <link rel="apple-touch-icon" href="/logo.png" />
 <link rel="alternate" type="text/plain" href="/llms.txt" title="Summary for AI assistants" />
+<!-- The Hindi page links back with the same three lines (core/geo.py HREFLANG);
+     hreflang is ignored unless both sides agree. -->
+<link rel="alternate" hreflang="en-IN" href="__BASE_URL__/" />
+<link rel="alternate" hreflang="hi-IN" href="__BASE_URL__/hi" />
+<link rel="alternate" hreflang="x-default" href="__BASE_URL__/" />
 
 <!-- What a pasted link looks like in WhatsApp, which is where an Indian seller
      will actually see it first. The image is a card this app draws itself rather
@@ -68,6 +73,8 @@
       "applicationCategory": "BusinessApplication",
       "operatingSystem": "Web browser",
       "url": "__BASE_URL__/",
+      "inLanguage": ["en-IN", "hi-IN", "ta-IN", "kn-IN"],
+      "featureList": ["Sales analytics from a CSV or Excel file", "Customer win-back messages on WhatsApp and email", "Low stock alerts and supplier purchase orders", "GST tax invoices and a monthly tax file for your accountant", "AI product photos from your own product photo", "Instagram week planner and scheduler", "Customer review and complaint analysis", "Your own online store with no commission"],
       "publisher": { "@id": "__BASE_URL__/#org" },
       "offers": [
         { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "INR",
@@ -203,6 +210,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 .hero { display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; padding-block: 72px 80px; }
 .hero h1 { font-size: 46px; margin: 14px 0 18px; }
 .hero h1 em { font-style: normal; color: var(--accent); }
+.hero .hero-kw { font-family: var(--font-body); font-size: 16px; font-weight: 600; line-height: 1.45; letter-spacing: 0; color: var(--ink); max-width: 52ch; margin: 0 0 14px; }
 .hero p.lead { font-size: 18px; color: var(--ink-soft); max-width: 46ch; margin: 0 0 28px; }
 .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
 .hero-note { font-size: 13px; color: var(--ink-soft); margin-top: 12px; }
@@ -272,6 +280,11 @@ section { padding-block: 72px; }   /* the side gutter belongs to .wrap inside */
 .feature .f-icon svg { width: 26px; height: 26px; display: block; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .feature h3 { font-size: 18px; margin: 10px 0 8px; }
 .feature p { font-size: 14.5px; color: var(--ink-soft); margin: 0; }
+.feature .f-more { display: inline-flex; align-items: center; min-height: 44px; margin-top: 2px; font-size: 14px; font-weight: 600; color: var(--accent); }
+.cmp-links { display: block; margin-top: 6px; }
+.cmp-links a, .faq-item p a { display: inline-block; padding: 10px 0; color: var(--accent); font-weight: 600; }
+.f-also { margin: 18px 0 0; font-size: 15px; color: var(--ink-soft); }
+.f-also a { color: var(--accent); font-weight: 600; display: inline-block; padding: 11px 0; }
 
 /* how it works */
 .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; counter-reset: step; }
@@ -444,6 +457,8 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
       <a href="#stories">What it finds</a>
       <a href="#pricing">Pricing</a>
       <a href="#faq">Questions</a>
+      <a href="/guides">Guides</a>
+      <a href="/hi" lang="hi" hreflang="hi">हिंदी</a>
       <a class="btn btn-primary" href="/smart">Open the app</a>
     </div>
   </div>
@@ -454,6 +469,9 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
   <div>
     <span class="eyebrow">For Indian sellers · कपड़े, गहने, परफ़्यूम</span>
     <h1><span class="h1-brand">One Tap Manager</span> Run your shop the way a big brand runs theirs. <em>On your own, before lunch.</em></h1>
+    <!-- The H1 is the brand and the promise. This line carries the words a seller
+         searches for, so the page says plainly what it is, in text. -->
+    <h2 class="hero-kw">Shop management app for Indian sellers: sales analytics, stock reordering, GST invoices and WhatsApp win-back, in one place.</h2>
     <p class="lead">Big brands do not sell better products than you. They sell with a team:
       someone reading the numbers, someone chasing the customers who stopped coming,
       someone deciding what to reorder, someone shooting and posting every day.
@@ -561,13 +579,15 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
         you to learn anything.</p>
     </div>
     <div class="features">
-      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 20V11"/><path d="M11 20V5"/><path d="M16 20v-7"/><path d="M21 20v-4"/></svg></div><h3>The one who reads the numbers</h3><p>What sold, what it earned you, which days quietly lose money, and what next month looks like, from the sales file you already have. Plain sentences, not a wall of charts.</p></div>
-      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M18 19c0-2.3-1-4-2.6-4.8"/></svg></div><h3>The one who watches your customers</h3><p>Who buys often, who spends most, and who has gone quiet. The message to bring the quiet ones back is written for you, and we count how many actually returned.</p></div>
-      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3.5 8 12 3.5 20.5 8v8L12 20.5 3.5 16z"/><path d="M3.5 8 12 12.5 20.5 8"/><path d="M12 12.5v8"/></svg></div><h3>The one who orders stock</h3><p>It knows how fast each thing sells and how long your supplier takes, so it tells you to buy again before you run out, and hands you the order form for that supplier, filled in.</p></div>
-      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.4"/></svg></div><h3>The one who shoots your photos</h3><p>Upload five pictures you are proud of. It reads your light, your colours, your framing, and then every picture it makes for you looks like your brand, using your own product photo as the starting point so the item is really yours.</p></div>
-      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="7" y="2.8" width="10" height="18.4" rx="2.2"/><path d="M10.6 5.4h2.8"/><circle cx="12" cy="18" r="1"/></svg></div><h3>The one who posts every day</h3><p>A whole week of Instagram planned as one story rather than seven unrelated posts: the tease, the reveal, the proof, the close. Captions written, times chosen, pictures made. You approve, it schedules.</p></div>
-      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-1.8-3 1.8-3-1.8L6 21z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></div><h3>The one who does the paperwork</h3><p>Proper tax invoices with the right rates, and one file your accountant can file from. Nobody re-types anything.</p></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 20V11"/><path d="M11 20V5"/><path d="M16 20v-7"/><path d="M21 20v-4"/></svg></div><h3>The one who reads the numbers</h3><p>What sold, what it earned you, which days quietly lose money, and what next month looks like, from the sales file you already have. Plain sentences, not a wall of charts.</p><a class="f-more" href="/features/sales-analytics">Sales analytics</a></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M18 19c0-2.3-1-4-2.6-4.8"/></svg></div><h3>The one who watches your customers</h3><p>Who buys often, who spends most, and who has gone quiet. The message to bring the quiet ones back is written for you, and we count how many actually returned.</p><a class="f-more" href="/features/win-back">Customer win-back</a></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3.5 8 12 3.5 20.5 8v8L12 20.5 3.5 16z"/><path d="M3.5 8 12 12.5 20.5 8"/><path d="M12 12.5v8"/></svg></div><h3>The one who orders stock</h3><p>It knows how fast each thing sells and how long your supplier takes, so it tells you to buy again before you run out, and hands you the order form for that supplier, filled in.</p><a class="f-more" href="/features/stock-reorder">Low stock alerts and reordering</a></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.4"/></svg></div><h3>The one who shoots your photos</h3><p>Upload five pictures you are proud of. It reads your light, your colours, your framing, and then every picture it makes for you looks like your brand, using your own product photo as the starting point so the item is really yours.</p><a class="f-more" href="/features/ai-product-photos">AI product photos</a></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="7" y="2.8" width="10" height="18.4" rx="2.2"/><path d="M10.6 5.4h2.8"/><circle cx="12" cy="18" r="1"/></svg></div><h3>The one who posts every day</h3><p>A whole week of Instagram planned as one story rather than seven unrelated posts: the tease, the reveal, the proof, the close. Captions written, times chosen, pictures made. You approve, it schedules.</p><a class="f-more" href="/features/instagram-planner">Instagram planner</a></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-1.8-3 1.8-3-1.8L6 21z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></div><h3>The one who does the paperwork</h3><p>Proper tax invoices with the right rates, and one file your accountant can file from. Nobody re-types anything.</p><a class="f-more" href="/features/gst-invoices">GST invoices</a></div>
     </div>
+    <p class="f-also">Also included: <a href="/features/review-analysis">review and complaint analysis</a>
+      and <a href="/features/online-store">your own online store with no commission</a>.</p>
     <div class="cmp-line" style="margin-top:24px;">
       <b>The new part is the last three.</b> Reading numbers has been possible for years.
       A tool that looks at your own photographs, works out what your brand looks like, and
@@ -634,29 +654,21 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
           WhatsApp संदेश तैयार है, और कितने लौटे यह गिना जाएगा।</p>
         <div class="s-who">ग्राहक स्क्रीन जो बताती है, उसका उदाहरण।</div>
       </div>
+      <!-- Only languages the app actually writes in (core/i18n.py LANGUAGES), and
+           the app's own sentences with example numbers filled in. The page once
+           showed Bengali, Telugu and Marathi output the app cannot produce, and a
+           profit figure it cannot compute; both are gone. -->
       <div class="story" lang="ta">
         <span class="s-chip">எடுத்துக்காட்டு</span><span class="s-lang">தமிழ்</span>
-        <p class="s-body">அதிகம் விற்பனையாகும் பொருள் அல்ல, 61% லாபம் தரும்
-          பொருள் எது என்று காட்டுகிறது. சரக்கு தீர்வதற்கு முன் நினைவூட்டுகிறது.</p>
+        <p class="s-body">வெறும் 3 பொருட்கள் உங்கள் மொத்தப் பணத்தில் 62% கொண்டு
+          வருகின்றன. இது ஆபத்தானது. மெதுவாக நான்காவது பொருளை உருவாக்குங்கள்.</p>
         <div class="s-who">துணை வகை பகுப்பாய்வு திரையின் எடுத்துக்காட்டு.</div>
       </div>
-      <div class="story" lang="bn">
-        <span class="s-chip">উদাহরণ</span><span class="s-lang">বাংলা</span>
-        <p class="s-body">কোন ক্রেতা আর ফিরে আসছেন না, সেটি আপনার নিজের বিক্রির
-          ফাইল থেকেই প্রথমে দেখানো হয়।</p>
-        <div class="s-who">ফাইল আপলোডের পর প্রথম যে স্ক্রিনটি আসে, তার উদাহরণ।</div>
-      </div>
-      <div class="story" lang="te">
-        <span class="s-chip">ఉదాహరణ</span><span class="s-lang">తెలుగు</span>
-        <p class="s-body">అమ్మకాలు పెరిగినా లాభం పెరగకపోవడానికి కారణం: ఎక్కువ
-          అమ్ముడయ్యేవి తక్కువ మార్జిన్ వస్తువులు అని చూపిస్తుంది.</p>
-        <div class="s-who">లాభం విశ్లేషణ స్క్రీన్ ఉదాహరణ.</div>
-      </div>
-      <div class="story" lang="mr">
-        <span class="s-chip">उदाहरण</span><span class="s-lang">मराठी</span>
-        <p class="s-body">साध्या Excel फाइलमधून आठवड्याचा नफ्याचा नकाशा तयार
-          होतो, म्हणजे निर्णय अंदाजावर घ्यावा लागत नाही.</p>
-        <div class="s-who">अपलोड केल्यानंतर तयार होणाऱ्या अहवालाचे उदाहरण.</div>
+      <div class="story" lang="kn">
+        <span class="s-chip">ಉದಾಹರಣೆ</span><span class="s-lang">ಕನ್ನಡ</span>
+        <p class="s-body">ನಿಮ್ಮ ಅತ್ಯುತ್ತಮ ತಿಂಗಳು ಅಕ್ಟೋಬರ್. ಆ ತಿಂಗಳು ನೀವು ₹2.1 ಲಕ್ಷ
+          ಗಳಿಸಿದ್ದೀರಿ. ಆಗ ಏನು ನಡೆಯುತ್ತಿತ್ತು ಎಂದು ನೆನಪಿಸಿಕೊಳ್ಳಿ, ಅದನ್ನೇ ಮತ್ತೆ ಮಾಡಲು ಪ್ರಯತ್ನಿಸಿ.</p>
+        <div class="s-who">ಮಾರಾಟ ವಿಶ್ಲೇಷಣೆ ಪರದೆಯ ಉದಾಹರಣೆ.</div>
       </div>
     </div>
   </div>
@@ -714,6 +726,8 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
       <b>The difference in one sentence:</b> Shopify tells you what happened
       and sells you an app to work out what to do. We tell you what to do, and
       the doing is already wired to the same data.
+      <span class="cmp-links"><a href="/compare/shopify-apps">The Shopify comparison</a> ·
+      <a href="/compare/odoo">The Odoo comparison</a></span>
     </div>
 
     <div class="cmp-honest">
@@ -986,8 +1000,10 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
            actually looks for it, and it covers nothing. -->
       <span data-cookie-settings></span>
     </nav>
-    <nav class="foot-links" aria-label="Guides"><a href="/about">What is One Tap Manager?</a> · <a href="/for/clothing-sellers">For clothing sellers</a> · <a href="/for/jewellery-sellers">For jewellery sellers</a> · <a href="/for/perfume-sellers">For perfume sellers</a> · <a href="/compare/shopify-apps">Instead of five Shopify apps</a> · <a href="/guides">All guides</a></nav>
-    <div class="foot-links"><a href="/smart">Open the app</a> · <a href="#pricing">Pricing</a> · <a href="#faq">Common questions</a> · <a href="/legal">All legal pages</a></div>
+    <nav class="foot-links" aria-label="Features"><b>Features:</b> <a href="/features/sales-analytics">Sales analytics</a> · <a href="/features/win-back">Customer win-back</a> · <a href="/features/stock-reorder">Low stock alerts</a> · <a href="/features/gst-invoices">GST invoices</a> · <a href="/features/ai-product-photos">AI product photos</a> · <a href="/features/instagram-planner">Instagram planner</a> · <a href="/features/review-analysis">Review analysis</a> · <a href="/features/online-store">Online store</a> · <a href="/pricing">Pricing</a></nav>
+    <nav class="foot-links" aria-label="Who it is for"><b>For:</b> <a href="/for/clothing-sellers">Clothing sellers and boutiques</a> · <a href="/for/jewellery-sellers">Jewellery sellers</a> · <a href="/for/perfume-sellers">Perfume and attar sellers</a> · <a href="/for/instagram-sellers">Instagram sellers</a> · <a href="/hi" lang="hi">हिंदी</a></nav>
+    <nav class="foot-links" aria-label="Guides"><b>Guides:</b> <a href="/about">What is One Tap Manager?</a> · <a href="/compare/shopify-apps">Shopify alternative</a> · <a href="/compare/odoo">Odoo alternative</a> · <a href="/compare/billing-apps">Billing app or shop manager</a> · <a href="/guides/win-back-old-customers">Win back old customers</a> · <a href="/guides/when-to-reorder-stock">When to reorder stock</a> · <a href="/guides/sales-up-profit-down">Sales up, profit down</a> · <a href="/guides/gst-rate-clothes-jewellery-perfume">GST on clothes, jewellery and perfume</a> · <a href="/guides/analyse-sales-excel">Analyse sales in Excel</a> · <a href="/guides">All guides</a></nav>
+    <div class="foot-links"><a href="/smart">Open the app</a> · <a href="#faq">Common questions</a> · <a href="/legal">All legal pages</a></div>
   </div>
 </footer>
 

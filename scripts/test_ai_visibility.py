@@ -61,7 +61,11 @@ for path in geo.paths():
     check(f"{path} has exactly one h1", h.count("<h1") == 1)
     check(f"{path} has a canonical tag", 'rel="canonical"' in h)
     check(f"{path} is indexable", 'content="index, follow' in h)
-    check(f"{path} shows a last-updated date", "Last updated" in h and geo.UPDATED in h)
+    check(f"{path} shows a last-updated date", f'<time datetime="{geo.UPDATED}">' in h)
+    title = re.search(r"<title>(.*?)</title>", h, re.S).group(1)
+    check(f"{path} title fits a search result", len(title.split(" | ")[0]) <= 70, title)
+    check(f"{path} has a description",
+          re.search(r'<meta name="description" content="[^"]{60,}"', h) is not None)
     check(f"{path} opens with a direct answer", '<div class="answer">' in h)
     check(f"{path} has no em dash", EM not in h, h[max(0, h.find(EM) - 60):h.find(EM) + 20])
     check(f"{path} loads no script but its schema",
@@ -86,6 +90,8 @@ for path in geo.paths():
         check(f"{path} schema carries dateModified", page.get("dateModified") == geo.UPDATED)
 
 check("an unknown guide 404s", c.get("/for/cafes").status_code == 404)
+check("an unknown feature 404s", c.get("/features/nothing").status_code == 404)
+check("an unknown question guide 404s", c.get("/guides/nothing").status_code == 404)
 check("an unknown comparison 404s", c.get("/compare/nothing").status_code == 404)
 
 print("\n== the facts are the app's facts ==")
@@ -106,8 +112,63 @@ check("clothing GST is the post-September 2025 rule",
 check("the about page tells us apart from other One Tap apps",
       "not related" in about and "One Tap sign-in" in about)
 
+check("the imitation jewellery rate is hedged wherever it is stated",
+      all("accountant" in c.get(p).text for p in ("/for/jewellery-sellers",
+          "/guides/gst-rate-clothes-jewellery-perfume", "/features/gst-invoices")))
+check("no page claims to show profit per product",
+      "shows profit" not in c.get("/features/sales-analytics").text)
+check("win-back is honest about WhatsApp", "click-to-chat" in c.get("/features/win-back").text)
+check("no page calls itself the best",
+      not any(re.search(r"\b(the best (app|software|tool|choice|option)|best (app|software) for|#1|number one)\b",
+                        c.get(p).text, re.I) for p in geo.paths()))
+check("stock reordering says it is Max", "Max plan" in c.get("/features/stock-reorder").text)
+
+print("\n== reorder point calculator ==")
+calc = "/guides/when-to-reorder-stock"
+h = c.get(calc).text
+check("the form works with no script", '<form class="calc" method="get"' in h)
+check("the plain page is indexable", 'content="index, follow' in h)
+h = c.get(calc + "?sold=4&lead=10").text
+check("4 a day, 10 days, 20% = 48", "Reorder point: 48 units." in h,
+      re.findall(r"Reorder point: \d+", h))
+check("an answered page stays out of the index", 'content="noindex, follow"' in h)
+check("canonical still points at the plain page", f'rel="canonical" href="http://testserver{calc}"' in h)
+check("stock under the point says order now", "order now" in c.get(calc + "?sold=4&lead=10&stock=30").text)
+check("stock above the point says when",
+      "Order when it falls to 48" in c.get(calc + "?sold=4&lead=10&stock=200").text)
+h = c.get(calc + "?sold=abc&lead=%3Cscript%3E").text
+check("bad input asks again, and is not echoed",
+      "plain numbers" in h and "<script>" not in h.split("</head>")[1])
+check("the safety margin is honoured",
+      "Reorder point: 60 units." in c.get(calc + "?sold=4&lead=10&buffer=50").text)
+
+print("\n== Hindi page and hreflang ==")
+hi = c.get("/hi").text
+check("/hi is Hindi", '<html lang="hi-IN">' in hi)
+main._LANDING_CACHE.clear()
+land = c.get("/").text
+for code in ("en-IN", "hi-IN", "x-default"):
+    check(f"/hi carries hreflang {code}", f'hreflang="{code}"' in hi)
+    check(f"/ carries hreflang {code}", f'hreflang="{code}"' in land)
+check("the home page links the Hindi page", 'href="/hi"' in land)
+check("only /hi carries hreflang among the guides",
+      all('hreflang="hi-IN"' not in c.get(p).text for p in geo.paths() if p != "/hi"))
+
+print("\n== the home page ==")
+check("title names the category", "Shop Management App" in re.search(r"<title>(.*?)</title>", land).group(1))
+check("one h1", land.count("<h1") == 1)
+from backend.core import i18n  # noqa: E402
+langs = set(re.findall(r'<div class="story" lang="([a-z]+)"', land))
+check("example output only in languages the app writes", langs <= set(i18n.LANGUAGES), langs)
+check("the nav links the guides", '<a href="/guides">Guides</a>' in land)
+app_ld = next(g for g in ld_blocks(land)[0]["@graph"] if g["@type"] == "SoftwareApplication")
+check("schema lists the features", len(app_ld.get("featureList", [])) >= 6)
+check("every feature card links its page",
+      all(f'class="f-more" href="{p}"' in land for p in geo.paths() if p.startswith("/features/")
+          and p not in ("/features/review-analysis", "/features/online-store")))
+
 print("\n== the new paths can never be a shop address ==")
-for seg in ("guides", "about", "for", "compare"):
+for seg in ("guides", "about", "for", "compare", "features", "pricing", "hi"):
     check(f"'{seg}' is reserved", sitebuilder.handle_reserved(seg))
 
 print("\n== sitemap ==")

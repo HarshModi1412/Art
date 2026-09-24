@@ -5517,13 +5517,8 @@ PUBLIC_PAGES = [
     ("/legal/cookies", "0.3", "monthly"),
     ("/legal/acceptable-use", "0.3", "monthly"),
     ("/legal/grievance", "0.4", "monthly"),
-    # The pages written to be quoted by AI assistants and search (core/geo.py).
-    ("/guides", "0.7", "weekly"),
-    ("/about", "0.8", "monthly"),
-    ("/for/clothing-sellers", "0.8", "monthly"),
-    ("/for/jewellery-sellers", "0.8", "monthly"),
-    ("/for/perfume-sellers", "0.8", "monthly"),
-    ("/compare/shopify-apps", "0.7", "monthly"),
+    # The pages written for search and AI assistants come from core/geo.py
+    # (geo.sitemap_entries), so a new page there cannot be left out of here.
 ]
 
 
@@ -5561,7 +5556,7 @@ def _lastmod(path: str) -> str:
 def sitemap(request: Request):
     base = _public_base_url(request).rstrip("/")
     body = ""
-    for path, pri, freq in PUBLIC_PAGES:
+    for path, pri, freq in PUBLIC_PAGES + geo.sitemap_entries():
         mod = _lastmod(path)
         body += (f"<url><loc>{base}{path}</loc>"
                  + (f"<lastmod>{mod}</lastmod>" if mod else "")
@@ -6100,7 +6095,9 @@ def app_page():
 # Pages written to be quoted by AI assistants and search (core/geo.py)
 # ---------------------------------------------------------------------------
 def _geo_page(path: str, request: Request) -> Response:
-    html = geo.render(path, _public_base_url(request))
+    # Query parameters only matter to a page with a calculator (the reorder
+    # point guide); every other page ignores them.
+    html = geo.render(path, _public_base_url(request), dict(request.query_params))
     if not html:
         raise HTTPException(404, "No such page.")
     return Response(content=html, media_type="text/html",
@@ -6126,6 +6123,26 @@ def geo_for(slug: str, request: Request):
 @app.get("/compare/{slug}", response_class=Response)
 def geo_compare(slug: str, request: Request):
     return _geo_page(f"/compare/{slug}", request)
+
+
+@app.get("/features/{slug}", response_class=Response)
+def geo_feature(slug: str, request: Request):
+    return _geo_page(f"/features/{slug}", request)
+
+
+@app.get("/guides/{slug}", response_class=Response)
+def geo_guide(slug: str, request: Request):
+    return _geo_page(f"/guides/{slug}", request)
+
+
+@app.get("/pricing", response_class=Response)
+def geo_pricing(request: Request):
+    return _geo_page("/pricing", request)
+
+
+@app.get("/hi", response_class=Response)
+def geo_hindi(request: Request):
+    return _geo_page("/hi", request)
 
 
 @app.get("/llms.txt")

@@ -48,7 +48,8 @@ Read this before adding anything. It stops us spending time on things that do no
   python scripts/indexnow_ping.py https://onetapmanager.com
   ```
   Run it again after every deploy that changes a public page
-- [ ] **Google Search Console**: URL Inspection, then Request indexing, for `/about`, `/guides` and each `/for/...` page
+- [ ] **Google Search Console**: submit `https://onetapmanager.com/sitemap.xml`, then URL Inspection and Request indexing for `/`, `/hi`, `/pricing`, `/guides`, and each `/features/...`, `/for/...`, `/compare/...` and `/guides/...` page (the sitemap lists all of them). Google allows about ten requests a day, so start with the home page, `/pricing`, `/compare/shopify-apps` and the three `/for/` pages
+- [ ] After two to four weeks, Search Console, Performance: note which queries each page appears for, and compare with `SEO_KEYWORDS.md`
 
 ## 3. Reddit (you, ongoing, the biggest lever)
 
@@ -66,7 +67,7 @@ AI tools recommend brands that many independent sources describe the same way.
 
 - [ ] Profiles with the exact name "One Tap Manager" and a link to the site: Instagram, LinkedIn company page, YouTube, X, Facebook. Add each to `BRAND_PROFILES`
 - [ ] Google Business Profile, with the name "One Tap Manager"
-- [ ] Listings: Product Hunt launch, Crunchbase, G2, Capterra, and Indian startup directories. Use the same one-line description everywhere: "One Tap Manager is shop management software for small Indian clothing, jewellery and perfume sellers."
+- [ ] Listings: Product Hunt launch, Crunchbase, G2, Capterra India, SoftwareSuggest and Techjockey (these own most Indian "software for..." results), and Indian startup directories. Ask early users for honest reviews there; never write them yourself. Use the same one-line description everywhere: "One Tap Manager is shop management software for small Indian clothing, jewellery and perfume sellers."
 - [ ] A Wikidata entry, once there are independent articles to cite (ChatGPT leans heavily on Wikipedia and Wikidata; do not create one before then or it will be deleted)
 - [ ] Write for others: a guest post or a YouTube walkthrough in Hindi for Indian sellers
 
