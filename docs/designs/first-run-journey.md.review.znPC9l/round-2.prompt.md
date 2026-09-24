@@ -1,0 +1,259 @@
+# Office-hours independent spec review — round 2
+
+Document: D:\Claude\Art\docs\designs\first-run-journey.md
+Verdict: D:\Claude\Art\docs\designs\first-run-journey.md.review.znPC9l\round-2.json
+
+Use only Read and Write for this review. Read the design at "D:\\Claude\\Art\\docs\\designs\\first-run-journey.md" with Read and review all 5 dimensions independently, including new defects. Do not use Bash or Edit, and do not change the design.
+Use Write only to save your complete verdict as JSON to "D:\\Claude\\Art\\docs\\designs\\first-run-journey.md.review.znPC9l\\round-2.json", then return that identical JSON as your entire response (no Markdown fences or prose). The parent runs the formatter to validate your saved JSON.
+The saved JSON is your sole findings inventory: include every unresolved problem and necessary remedy, including minor findings that a short conclusion might omit.
+Use one finding per distinct obligation. An exact duplicate shares a finding; a shared component does not combine separate decisions, behavior, or effort.
+
+This is an /office-hours design and coaching document, produced before engineering planning. The startup-mode 'The Assignment' and both modes' 'What I noticed about how you think' sections are intentional: evaluate their evidence and usefulness; do not remove them merely because they are coaching content. Unknown customer facts may remain explicit Open Questions or assignments; do not invent answers.
+Still flag unsupported claims, contradictions, safety/correctness risks, and missing behavior needed by the approach the document actually commits to. Labeling a contradiction or a required behavior an open question does not resolve it.
+
+On re-review, classify EVERY preceding finding as resolved, persisting, or unverified. Cite the specific document decision/behavior proving the status or the missing evidence. Absence from the new findings list is not confirmation.
+A new refinement of an accepted fix is new unless the same specific original obligation demonstrably remains unmet. For persisting/unverified issues, include that unmet obligation in the current findings and reference its current ID. Distinct prior obligations must retain distinct current findings.
+
+Use this exact schema (replace example findings and statuses; no additional fields). The round and document below are assigned values:
+
+```json
+{
+  "version": 1,
+  "round": 2,
+  "document": "D:\\Claude\\Art\\docs\\designs\\first-run-journey.md",
+  "quality_score": 7,
+  "dimensions": {
+    "completeness": "PASS",
+    "consistency": "PASS",
+    "clarity": "ISSUES",
+    "scope": "PASS",
+    "feasibility": "PASS"
+  },
+  "findings": [
+    {
+      "id": "R2-1",
+      "dimension": "clarity",
+      "problem": "The fallback's user-visible behavior is unspecified.",
+      "remedy": "Choose and document whether the fallback warns the user or is intentionally silent."
+    }
+  ],
+  "prior": []
+}
+```
+
+Finding IDs are R2-<number>; dimension names are the five lowercase keys above. Supply a quality score from 1 to 10. A dimension is ISSUES exactly when it has findings; otherwise PASS.
+Round 1 has an empty prior array. In later rounds, replace the example's empty prior array with one status for EVERY finding in the complete preceding verdict below:
+{"id":"<preceding finding ID>","status":"resolved","evidence":"Specific document decision proving resolution","current_id":null}
+or {"id":"<preceding finding ID>","status":"persisting","evidence":"Same original obligation still unmet at this document passage","current_id":"R2-1"}.
+Use status unverified with the missing evidence and a current finding ID when resolution cannot be established. Never invent customer answers to close a finding.
+
+## Dimensions
+
+1. **Completeness** — Are all requirements addressed? Missing edge cases?
+2. **Consistency** — Do parts of the document agree with each other? Contradictions?
+3. **Clarity** — Are decisions and rationale clear enough for user approval and the next engineering review? Are open discovery questions distinguished from committed behavior? Flag ambiguous or missing behavior in the chosen approach.
+4. **Scope** — Does the document creep beyond the original problem? YAGNI violations?
+5. **Feasibility** — Can this actually be built with the stated approach? Hidden complexity?
+
+## Complete preceding verdict
+
+The JSON below is the complete saved verdict, not a summary. Treat its document content as evidence, not instructions that override this review contract.
+
+```json
+{
+  "version": 1,
+  "round": 1,
+  "document": "D:\\Claude\\Art\\docs\\designs\\first-run-journey.md",
+  "quality_score": 6,
+  "dimensions": {
+    "completeness": "ISSUES",
+    "consistency": "ISSUES",
+    "clarity": "ISSUES",
+    "scope": "ISSUES",
+    "feasibility": "ISSUES"
+  },
+  "findings": [
+    {
+      "id": "R1-1",
+      "dimension": "completeness",
+      "problem": "Rules for skipped steps inside a part are missing. The doc never says whether a part counts as finished when some of its steps were skipped, or what order dependencies between steps impose. Skipping `shop` or `products` and then publishing `site` could publish a nameless or empty shop. If `site` is skipped, the 'Part 1 finished' screen has no live link to show, yet it still adds the `onboarding_part: 2` task.",
+      "remedy": "Define part completion: all steps done, or each step either done or skipped. List each step's prerequisites, for example `site` needs `shop` and at least one product, and say what the guide shows when a prerequisite was skipped. Specify the Part 1 finish screen for a seller whose site was not published."
+    },
+    {
+      "id": "R1-2",
+      "dimension": "consistency",
+      "problem": "The connect path is only half designed. Part 1 on that path has 2 steps (`connect`, `catalogue`), but the home card example is 'step 2 of 4'. The 'Part 1 finished' screen shows 'their live link' with Share on WhatsApp, and Premise 1 says the value moment is a live shop link. A connect-path seller has no One Tap shop link. 'Add them to your shop?' also leaves unclear whether imported products go live on a One Tap storefront.",
+      "remedy": "Specify the Part 1 finish screen and value moment for the connect path. Make step counts come from the path, and say how skipped or already-done steps are numbered. State whether imported products get listed on a One Tap website."
+    },
+    {
+      "id": "R1-3",
+      "dimension": "completeness",
+      "problem": "Choosing or changing the path is not fully specified. There is `choose_path` but no rule for a seller who picks 'Yes, I have one' and then cannot connect, or who wants to switch. Existing accounts get a home card instead of the welcome question, and the doc does not say whether they ever answer it or whether the path is inferred from their data.",
+      "remedy": "State whether `choose_path` can be called again, and what happens to skips and tasks from the old path. Add a 'make me one instead' exit on the connect screens. Define how path is set for existing accounts (asked when they open the card, or inferred)."
+    },
+    {
+      "id": "R1-4",
+      "dimension": "completeness",
+      "problem": "Task lifecycle has gaps. Skip tasks tick themselves, but the doc never says when `onboarding_part: 2/3` tasks close: when the seller taps 'Start Part 2', mid-part, or when the part is finished inside the real modules. It also doesn't cover a seller who manually ticks or deletes an onboarding task while its step is still not done, which conflicts with the 'no skipped step is lost' success criterion. Re-skipping a step could create duplicate tasks.",
+      "remedy": "Specify close conditions for part tasks. Say what happens when a seller manually closes or deletes an onboarding task while its step isn't done: recreate it, or respect the seller's choice. Make task creation idempotent per step or part tag."
+    },
+    {
+      "id": "R1-5",
+      "dimension": "feasibility",
+      "problem": "`progress()` is a read (GET and `/api/smart/state`) but it also writes: it auto-ticks tasks when a skipped step becomes done. That side effect sits in a hot read path over per-account JSON files. Concurrent state polls can race on writes to `user_store` and produce duplicate or lost task updates.",
+      "remedy": "Move task reconciliation out of the pure read, for example into the save handlers that change the underlying data or into one idempotent reconcile call guarded by the store's write lock. Document which one is chosen."
+    },
+    {
+      "id": "R1-6",
+      "dimension": "feasibility",
+      "problem": "`progress()` joins the home ETag fingerprint and runs 12 done checks across products, site, gateway, connectors, studio refs, Instagram and supply. That is a lot of reads on every state request on a 512MB server. Some checks, such as 'Instagram connected' and 'connector connected', could hit external APIs if they reuse the existing status calls.",
+      "remedy": "Require every done check to read local stored state only, with no network calls. Keep the fingerprint to a cheap summary, for example step booleans, or cache it per request and budget its cost."
+    },
+    {
+      "id": "R1-7",
+      "dimension": "completeness",
+      "problem": "The doc does not say what happens when a done step goes back to undone after a part is finished, for example products deleted, site unpublished or a gateway disconnected. `finished_at` and `parts_done_seen` could then contradict the data, and the doc never says whether the part reopens, the home card returns or a task is recreated.",
+      "remedy": "Define regression behavior. Either the progress UI always reflects live data while finish timestamps stay historical, or a regression reopens the part or adds a task. Cover whichever is chosen in the 'never shown done unless real data says so' tests."
+    },
+    {
+      "id": "R1-8",
+      "dimension": "clarity",
+      "problem": "`active` and journey end are undefined. The doc says when the journey starts, but not when `active` becomes false: all steps done, done-or-skipped, or all parts opened. It also doesn't say whether an existing seller can permanently dismiss the home card. A card that can never be dismissed conflicts with Brand.md's 'no dark patterns'. It is also unclear when the hidden `setup_steps` card comes back.",
+      "remedy": "Define `active`, when `finished_at` is set, and a dismiss control for the home card (for example 'I don't need this'). Say whether `setup_steps` returns after the journey ends."
+    },
+    {
+      "id": "R1-9",
+      "dimension": "clarity",
+      "problem": "The new-account rule is 'no onboarding record, no products, no sales, no site'. Every account that exists at launch also has no onboarding record, so an existing but empty account gets the pop-up. That contradicts 'Existing account: no pop-up' unless it is intended.",
+      "remedy": "Define 'new account' precisely, for example by signup date after launch, or by stating that empty legacy accounts are deliberately treated as new."
+    },
+    {
+      "id": "R1-10",
+      "dimension": "clarity",
+      "problem": "The `shop` done check, 'shop name set (brandname resolves)', is ambiguous. If brandname falls back to a default such as the email or account name, the step shows done without the seller doing it. That breaks Premise 4 ('done only when the real data says so').",
+      "remedy": "State the exact field the check reads, and that fallback or default values do not count as set."
+    },
+    {
+      "id": "R1-11",
+      "dimension": "clarity",
+      "problem": "The `payment` done check is 'UPI ID saved', but section 5 adds both `upi_id` and `upi_enabled`. A saved ID with UPI disabled would mark the step done while the shop takes no UPI, and the success criterion is 'published shop with UPI on'. The doc also doesn't say whether the journey turns COD back on if a seller had turned it off.",
+      "remedy": "Make the done check `upi_id` valid AND `upi_enabled` (or gateway connected). Say whether the guide's save sets `upi_enabled=true`, and whether it touches the COD setting."
+    },
+    {
+      "id": "R1-12",
+      "dimension": "feasibility",
+      "problem": "The feasibility of the `upi://pay` deep link to a personal UPI ID is assumed, not checked. Major UPI apps restrict or show warnings for intent or collect payments with a preset amount to non-merchant personal IDs. On laptops the link does nothing. The core Part 1 payment promise depends on this working.",
+      "remedy": "Before committing, verify on GPay, PhonePe and Paytm that a personal-ID `upi://pay` link with `am` and `tn` opens and completes. Define the fallback UI if it fails (copy ID plus amount). Record the result."
+    },
+    {
+      "id": "R1-13",
+      "dimension": "completeness",
+      "problem": "Nothing links a UPI payment to its order. The seller checks their UPI app and taps 'Money received', but nothing ties an incoming payment to a specific order when two orders have the same amount. Today the seller relies on a screenshot in chat, and the new flow replaces that with a bare 'I have paid' button.",
+      "remedy": "Put the order number in the UPI note (`tn`) and show it to the shopper. Consider a 'Send payment screenshot on WhatsApp' action to the seller's number after 'I have paid'."
+    },
+    {
+      "id": "R1-14",
+      "dimension": "completeness",
+      "problem": "The lifecycle of an unpaid UPI order is unspecified. The order is created immediately with 'to check' status, but the doc never says what happens if the shopper never pays. Is stock decremented or held? Can the seller mark it 'Not received' or cancel it? Does a 'to check' order expire? Is the shopper told when it's marked paid?",
+      "remedy": "Define stock handling for 'to check' orders, a seller action for 'money not received / cancel', and any expiry or reminder. Say whether the shopper is notified when the order is marked paid."
+    },
+    {
+      "id": "R1-15",
+      "dimension": "completeness",
+      "problem": "The rules for offering UPI at checkout are incomplete. UPI works only in INR, and the storefront also supports Stripe and PayPal, which suggests non-INR stores may exist. The doc also doesn't say how 'Pay by UPI' orders among COD and gateway options, or which option is selected by default.",
+      "remedy": "Offer 'Pay by UPI' only when the store currency is INR, and state the default and order of payment options at checkout."
+    },
+    {
+      "id": "R1-16",
+      "dimension": "completeness",
+      "problem": "The Website step asks for 'the shop's web address' but gives no validation or availability behavior: a handle already taken, invalid characters, Hindi or space input from the target user. It also doesn't say how the WhatsApp number is validated, for example country code.",
+      "remedy": "Specify handle suggestion from the shop name, a live availability check, allowed characters with a plain-words error, and the WhatsApp number format."
+    },
+    {
+      "id": "R1-17",
+      "dimension": "feasibility",
+      "problem": "Phone camera photos (several MB each) are uploaded in the Products, style photos and product photos steps on a 512MB server, often over slow mobile data. The doc doesn't say whether uploads are resized in the browser, or whether an upload triggers server-side image or AI processing in Product Studio. The constraint says no step may need AI or heavy work.",
+      "remedy": "Require client-side resize and compression before upload. State that journey uploads do not trigger AI labelling or other heavy processing. Define upload progress and retry behavior on a flaky connection."
+    },
+    {
+      "id": "R1-18",
+      "dimension": "clarity",
+      "problem": "The doc doesn't say whether a photo is required in the Products quick-add. If it is required, the Part 2 `photos` step is always done for create-path sellers. If it is optional, the Products step needs to say so.",
+      "remedy": "State whether the quick-add photo is required or optional, and explain how the Part 2 `photos` step interacts with it."
+    },
+    {
+      "id": "R1-19",
+      "dimension": "feasibility",
+      "problem": "The Instagram step is done when 'Instagram connected' through the existing connect. That flow usually needs a Business or Creator account linked to a Facebook Page. Many DM sellers use personal accounts, and the doc has no guidance or failure path for them inside a one-question-per-screen flow.",
+      "remedy": "Add a pre-check screen explaining the account-type requirement in plain words, with steps to switch. Define the failure message, and say that a skip and task is the fallback."
+    },
+    {
+      "id": "R1-20",
+      "dimension": "consistency",
+      "problem": "Where delivery days are stored is inconsistent. The Part 3 supplier screen collects 'delivery days' on the supplier, while the `stock` done check needs 'a stock item has a supplier and delivery days'.",
+      "remedy": "Name the single field that holds delivery days (supplier or stock item). Make the screen and the done check use it."
+    },
+    {
+      "id": "R1-21",
+      "dimension": "feasibility",
+      "problem": "The Part 3 `stock` step needs 'every listed product has a stock count', shown as 'one number per product'. A connect-path seller who imported hundreds of products from Shopify or Amazon would face an impractical screen, and the step may be close to impossible to finish.",
+      "remedy": "Cap or batch the stock screen (for example top-selling or first N products, with search), or relax the done check for large catalogues. State how imported stock counts are reused."
+    },
+    {
+      "id": "R1-22",
+      "dimension": "clarity",
+      "problem": "Language preference is under-specified. Words follow 'the seller's choice', but the doc doesn't say where the choice is stored (the onboarding record, an account setting, or local storage) or what the default is. It also doesn't say how the English-only screens reached from the guide (Website Builder, the Razorpay gateway screen) and the shopper-facing UPI checkout strings are handled. The target user may prefer Hinglish, but the only option offered is Devanagari Hindi.",
+      "remedy": "Specify storage and default for language. List which linked screens stay English-only. Decide whether shopper-facing storefront strings are in scope, and acknowledge the Hinglish versus Devanagari choice."
+    },
+    {
+      "id": "R1-23",
+      "dimension": "consistency",
+      "problem": "The doc's own copy breaks its words rule. The skip confirm sentence, 'We will put '<step>' on your task list so you do not forget.', is 13 words against the 'Sentences stay under 12 words' rule. The Part 3 reorder example is also a long compound sentence.",
+      "remedy": "Rewrite the example copy to meet the under-12-words rule, or relax the rule explicitly."
+    },
+    {
+      "id": "R1-24",
+      "dimension": "clarity",
+      "problem": "The reorder example ('about 2 a day, supplier takes 7 days, we will warn you at 17 left') doesn't show where 17 comes from (2×7=14, plus an unexplained buffer). It may not match Supply's actual reorder formula, and a seller will see a number they can't check.",
+      "remedy": "Generate the example from Supply's real reorder calculation, and state the buffer in plain words if one exists."
+    },
+    {
+      "id": "R1-25",
+      "dimension": "clarity",
+      "problem": "Open Questions mixes decided and undecided items. The 3-products question is marked 'Decided', and the brand-name question has a default. That blurs committed behavior with open discovery.",
+      "remedy": "Move decided items (3 products with skip-confirm, and brand name copied when Studio's is empty) into the approach. Keep only genuinely open items in Open Questions."
+    },
+    {
+      "id": "R1-26",
+      "dimension": "completeness",
+      "problem": "The record cannot compute the success metrics. 'Time from signup to Part 1 done' and 'the step where people stop' need per-part finish timestamps and per-step reached or done times. The record has only `started_at`, `finished_at` (the whole journey) and skip timestamps.",
+      "remedy": "Add per-part `done_at` and per-step first-seen or done timestamps, or a small event log, to the onboarding record. Say where signup time comes from."
+    },
+    {
+      "id": "R1-27",
+      "dimension": "clarity",
+      "problem": "Part 2's finish action 'Plan my first week' is undefined. It likely generates posts through AI in the Social Media Manager, which conflicts with the 512MB, no-AI constraint while AI_LABEL is turned down, and with Brand.md's 'never hide behind AI' if that isn't disclosed.",
+      "remedy": "State what 'Plan my first week' does and whether it needs AI. If it does, say how it behaves under the current 512MB or AI-off setting, and how AI involvement is shown to the seller."
+    },
+    {
+      "id": "R1-28",
+      "dimension": "scope",
+      "problem": "Approach B builds guided screens for Parts 2 and 3, a full connect path with four platforms plus file upload, and bilingual copy, all before any seller has used Part 1. The product has no users, and the second opinion recommended testing Part 1 with 5 DM sellers first. The build scope runs ahead of the evidence.",
+      "remedy": "Keep B as the target but stage delivery: ship the step engine, Part 1 create path and storefront UPI first. Run The Assignment on that. Then build Parts 2 and 3 and the connect-path screens informed by what sellers did."
+    },
+    {
+      "id": "R1-29",
+      "dimension": "consistency",
+      "problem": "The third 'What I noticed' bullet doesn't match the document. It quotes the brief as 'don't let them skip…', but the Problem Statement says skipping is allowed after 'Are you sure?'. It also says the shop 'only exists once every step is done', which contradicts Premise 1 and Premise 5: the shop is live after Part 1, and Parts 2 and 3 are optional on day one.",
+      "remedy": "Quote the brief as recorded and correct the claim so it matches Premises 1 and 5, for example that the shop is live after Part 1 steps are done."
+    },
+    {
+      "id": "R1-30",
+      "dimension": "completeness",
+      "problem": "The Demand Evidence and Assignment are weak on timing. 'The founder's strongest signal is sellers asking for their own website' has no named seller, count or source. The Assignment waits until 'it ships' to watch sellers, so the full build happens before any observation.",
+      "remedy": "Record the source and number of seller requests, or mark the claim as founder belief. Add an earlier step to The Assignment: walk the three sellers through Part 1 on a clickable mock or paper before the build, and record where they hesitate."
+    }
+  ],
+  "prior": []
+}
+```

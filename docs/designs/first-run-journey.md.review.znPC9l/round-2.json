@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "round": 2,
+  "document": "D:\\Claude\\Art\\docs\\designs\\first-run-journey.md",
+  "quality_score": 7,
+  "dimensions": {
+    "completeness": "ISSUES",
+    "consistency": "ISSUES",
+    "clarity": "ISSUES",
+    "scope": "ISSUES",
+    "feasibility": "ISSUES"
+  },
+  "findings": [
+    {
+      "id": "R2-1",
+      "dimension": "consistency",
+      "problem": "The document gives two rules for existing accounts. Section 1 says accounts with no record get a home card that asks the welcome question the first time they open it, which sets `path`. Section 5 says the journey card replaces `setup_steps` only for accounts with an onboarding record, and accounts with no record keep the old setup card. Under section 5, an existing account never sees the journey card, so it can never answer the welcome question. Nothing says when a record is created for these accounts, and `choose_path` and `set_lang` need one.",
+      "remedy": "Pick one rule. Either existing accounts never enter the journey, which means deleting the section 1 sentence, or their home card offers the journey and a record (without `welcomed_at`, and with no pop-up) is created the first time they open it. Make section 5 match whichever is chosen."
+    },
+    {
+      "id": "R2-2",
+      "dimension": "clarity",
+      "problem": "The home card is undefined once `active` is false. `active` becomes false when every unlocked step is done or skipped. Section 4, however, promises that a skipped step whose task the seller deleted is still shown as not done on the home card. The doc also still doesn't say whether `setup_steps` returns for record-holding accounts after the journey ends or is hidden. It also doesn't say which header holds 'How this works', the control that undoes `dismiss`.",
+      "remedy": "State what the home card shows when `active` is false: hidden, an 'all done' state, or a list of the skipped steps that are still not done. Keep section 4's promise consistent with that choice. Say whether `setup_steps` ever returns, and name where 'How this works' lives."
+    },
+    {
+      "id": "R2-3",
+      "dimension": "consistency",
+      "problem": "Premise 5 says Parts 2 and 3 'can be opened any time'. The `active` rule instead unlocks Part 3 only once Part 2 is finished, and the `onboarding_part:3` task is created only when Part 2 finishes. A seller who does not use Instagram has to go through four skip-confirm sheets in Part 2 before stock and suppliers become reachable. The connect finish screen also says 'then Parts 2 and 3', which suggests both are offered.",
+      "remedy": "Decide whether the parts are locked in order. If Part 3 can be opened on its own, change the unlock rule in `active` and say when the Part 3 task is created. If the parts are locked, reword Premise 5 and the connect finish screen to match."
+    },
+    {
+      "id": "R2-4",
+      "dimension": "consistency",
+      "problem": "The `payment` done check is `upi_enabled` plus a valid `upi_id`, but section 7 offers UPI at checkout only when the store currency is INR. The journey never sets or checks the currency. A store whose currency defaults to something other than INR would show the payment step as done while shoppers never see UPI. That fails the success criterion 'a published shop with UPI on' and Premise 4.",
+      "remedy": "Either have the Payment (or Website) step set or confirm INR as the currency, or add 'currency is INR' to the `payment` done check. Say what the Payment screen shows when the currency is not INR."
+    },
+    {
+      "id": "R2-5",
+      "dimension": "clarity",
+      "problem": "The connect-path offer 'Want a free One Tap shop too?' has no defined behavior. The doc does not say whether 'yes' calls `choose_path` with `create`, which section 3 says would remove open skip tasks for the connect steps. It also doesn't say which create steps the seller then goes through, or whether imported products (which are 'not listed on a One Tap website') become listed.",
+      "remedy": "Specify what 'yes' does: whether it switches the path or adds the create steps alongside the connect ones, which steps are shown, how they are numbered, and whether imported products get listed on the new site."
+    },
+    {
+      "id": "R2-6",
+      "dimension": "clarity",
+      "problem": "Path switching covers skip tasks only. The doc doesn't say what happens to `parts.1.done_at`, the `onboarding_part:2` task, or Part 2 and 3 unlocking when a seller switches path after Part 1 was already finished on the old path. It also doesn't say whether the new path's Part 1 must be finished again.",
+      "remedy": "State the effect of a path switch on part completion, part tasks and unlocked parts. For example: Part 1 is recomputed from the new path's steps, while `done_at` stays as history."
+    },
+    {
+      "id": "R2-7",
+      "dimension": "clarity",
+      "problem": "The `photos` and `stock` checks use min(3, active products). With 0 active products that minimum is 0, so `photos` is done with no action from the seller, and 'already-done steps are passed silently with a tick'. 'Active product' is also undefined for connect-path imports, which are 'not listed on a One Tap website'. If imports don't count as active, connect sellers get vacuous `photos` and `stock` checks.",
+      "remedy": "Define 'active product' and whether imported products count. State the behavior when there are 0 qualifying products, for example the step is locked behind having a product, or requires at least 1."
+    },
+    {
+      "id": "R2-8",
+      "dimension": "clarity",
+      "problem": "The `shop` done check requires 'a product type saved', but the doc never names the field or store that holds the answer to 'What do you sell?'. It names only the brand name targets: the site's brand, and the Studio brand name when that is empty.",
+      "remedy": "Name the exact field the product type is saved to, including the 'in your own words' answer, and the module that owns it."
+    },
+    {
+      "id": "R2-9",
+      "dimension": "completeness",
+      "problem": "`reconcile()` runs only on onboarding POST actions and on the `sync` the client sends after reading `progress().needs_sync`. The `/api/smart/state` summary is listed as active, current and counts, with no `needs_sync`. A step finished inside a real module, such as adding products in Product Management or connecting Instagram from its own screen, therefore does not close its skip task or set `done_at` until the seller opens the journey. That undercuts the success criterion 'each task closes itself when its step is done' and skews the `done_at`-based metrics.",
+      "remedy": "Say which client surfaces trigger `sync`, for example by adding `needs_sync` to the state summary and having home send `sync`, or call `reconcile` from the relevant save handlers. Note that `done_at` records when a step was observed done, not when the data changed."
+    },
+    {
+      "id": "R2-10",
+      "dimension": "completeness",
+      "problem": "The web address is suggested from the shop name using a to z, 0 to 9 and hyphens. The design targets Hindi-preferring sellers, whose shop name may be in Devanagari. For such a name the doc defines no suggestion: no transliteration and no fallback.",
+      "remedy": "Define the suggestion for a non-Latin shop name: transliterate it, or leave the field empty with a plain example and a Hindi hint about the allowed letters."
+    },
+    {
+      "id": "R2-11",
+      "dimension": "completeness",
+      "problem": "The UPI checkout's 'Send payment screenshot on WhatsApp' needs the seller's WhatsApp number. That number is collected only in the journey's Website step. A shop published through the full Website Builder, or before this feature existed, may have UPI on but no number.",
+      "remedy": "State that the screenshot button is hidden when no seller number is saved. Alternatively, ask for the number on the Payment screen when it is missing."
+    },
+    {
+      "id": "R2-12",
+      "dimension": "feasibility",
+      "problem": "`reconcile` holds a module-level lock around its read and write of `onboarding` and `smart_tasks`. Other writers of `smart_tasks`, such as the task list's own tick, delete and create handlers, don't take that lock, so a seller's tick that lands during a reconcile can be lost. A module-level lock also protects nothing if the server runs more than one worker process.",
+      "remedy": "Guard the updates with the same per-account lock or atomic update that `user_store` and the task handlers use. Otherwise, state that the app runs one worker and that every `smart_tasks` writer takes this lock."
+    },
+    {
+      "id": "R2-13",
+      "dimension": "feasibility",
+      "problem": "Progress is memoised per account for 2 seconds. When a seller saves a step and the guide calls progress again to move on, it can get the cached result and show the step just saved as not done. That breaks 'every save shows its result'.",
+      "remedy": "Invalidate the memo on every onboarding POST and on the saves the journey makes, or bypass it for `GET /api/onboarding` and use it only for `/api/smart/state`."
+    },
+    {
+      "id": "R2-14",
+      "dimension": "feasibility",
+      "problem": "Section 9 sends every journey upload through `/api/site/image`. But the `style` check reads Studio reference photos, and the `photos` check reads each product's photo, and those are separate stores. Uploads that land only in site images would never satisfy those checks. The Part 2 intro promises 'We learn your look', while section 9 says journey uploads trigger no AI, so it is unclear when or how the look is learned.",
+      "remedy": "Name the upload endpoint and destination for each step (quick-add product photo, style photos, product photos) so each done check sees the result. Say whether Studio analyses the style photos later, and whether that uses AI."
+    },
+    {
+      "id": "R2-15",
+      "dimension": "scope",
+      "problem": "Delivery is now staged, but it is still 'staged inside one build'. Stages 3 and 4 (the connect path and Parts 2 and 3) start as soon as the previous stage is tested, not after The Assignment's observations on stage 2 are in. The remaining build can therefore still run ahead of the evidence.",
+      "remedy": "Add an explicit checkpoint after stage 2: record the Assignment results, and let them change or reorder stages 3 and 4 before those are built."
+    }
+  ],
+  "prior": [
+    {"id": "R1-1", "status": "resolved", "evidence": "Section 2 defines a finished part as each step done or skipped, lists the `site` prerequisites (`shop` done and 1 product) with the guard screen, and Section 6 defines the Part 1 finish screen when the site is not published.", "current_id": null},
+    {"id": "R1-2", "status": "resolved", "evidence": "Section 6 defines the connect finish ('Your sales are in' with three facts), states that imported products are not listed on a One Tap website, and Section 2 takes numbering from the path ('Step 1 of 2' on connect). Behavior after 'Want a free One Tap shop too?' is a new gap (R2-5).", "current_id": null},
+    {"id": "R1-3", "status": "persisting", "evidence": "Section 3 resolves re-calling `choose_path` and adds exits on both paths. The existing-account path-setting obligation is still unmet: Section 1 says their home card asks the welcome question, but Section 5 says accounts with no record keep the old setup card.", "current_id": "R2-1"},
+    {"id": "R1-4", "status": "resolved", "evidence": "Section 4: a part task closes when its part is finished; a seller's manual tick or delete is respected and not recreated; `tasks[tag]` makes task creation idempotent per tag.", "current_id": null},
+    {"id": "R1-5", "status": "resolved", "evidence": "Section 4: `progress()` is a pure read, and a separate `reconcile()` runs from the POST handler and `sync`. The lock's scope and trigger coverage are new issues (R2-12, R2-9).", "current_id": null},
+    {"id": "R1-6", "status": "resolved", "evidence": "Section 2: every check reads local stored state only (for example `instagram.is_connected()` uses the stored token). Section 5: the fingerprint adds only step booleans, and progress is memoised. Memo staleness is new (R2-13).", "current_id": null},
+    {"id": "R1-7", "status": "resolved", "evidence": "Section 2 'Live, not frozen': screens show live data, `done_at` is history, a regressed step shows as not done and the home card returns, with no auto-reopen or auto-task. Success Criteria covers regression in tests.", "current_id": null},
+    {"id": "R1-8", "status": "persisting", "evidence": "Section 2 now defines `active` and `finished_at`, and Section 5 adds 'Hide this'. The obligation to say whether `setup_steps` returns after the journey ends is still unmet, and the home card's state when `active` is false is undefined.", "current_id": "R2-2"},
+    {"id": "R1-9", "status": "resolved", "evidence": "Section 1: the record is created at registration, so 'new' means 'signed up after this ships', not 'empty'.", "current_id": null},
+    {"id": "R1-10", "status": "resolved", "evidence": "The Section 2 table: `shop` reads `brandname.resolve(email).ready`, 'a name the seller set, never a fallback'. The unnamed product-type field is a separate new gap (R2-8).", "current_id": null},
+    {"id": "R1-11", "status": "resolved", "evidence": "The Section 2 `payment` check requires `upi_enabled` with a valid `upi_id` or a gateway with `online_enabled`. Section 6: saving sets `upi_enabled` to true and does not touch cash on delivery.", "current_id": null},
+    {"id": "R1-12", "status": "resolved", "evidence": "Section 7 marks the deep link unverified, makes copying the ID the main path and the link only a convenience, and The Assignment item 2 tests GPay, PhonePe and Paytm.", "current_id": null},
+    {"id": "R1-13", "status": "resolved", "evidence": "Section 7: `tn=<order no>` in the link, the order number shown big, and 'Send payment screenshot on WhatsApp' pre-filled with the order number.", "current_id": null},
+    {"id": "R1-14", "status": "resolved", "evidence": "Section 7: stock goes down as for cash on delivery; 'Money received' and 'Not received' (cancel, which restores stock); nothing expires in v1; the shopper is not notified in v1 (deferred in Open Questions).", "current_id": null},
+    {"id": "R1-15", "status": "resolved", "evidence": "Section 7: UPI is offered only when the currency is INR, and checkout order and default are UPI (selected), then cash on delivery, then gateway. The currency-versus-done-check mismatch is new (R2-4).", "current_id": null},
+    {"id": "R1-16", "status": "resolved", "evidence": "Section 6 Website: suggestion from the shop name, allowed characters, 3 to 30 characters, live availability check, 'Taken. Try one of these' with two suggestions, and a 10-digit +91 WhatsApp number with an error message. Devanagari names are a new gap (R2-10).", "current_id": null},
+    {"id": "R1-17", "status": "resolved", "evidence": "Section 9: resized in the browser (1600px, JPEG 0.85), a progress bar, 'Try again' keeps the photo, and no AI or labelling. The upload endpoint per step is a new gap (R2-14).", "current_id": null},
+    {"id": "R1-18", "status": "resolved", "evidence": "Section 6 Products: the photo is optional but asked for first. The `photos` check (min(3, active products) with a photo) covers products without one.", "current_id": null},
+    {"id": "R1-19", "status": "resolved", "evidence": "Section 6 Part 2 Instagram: a check screen for Business or Creator accounts, how to switch, and a plain-words failure message with a Skip.", "current_id": null},
+    {"id": "R1-20", "status": "resolved", "evidence": "Section 6 Part 3: delivery days are saved on each stock item's `lead_time_days` and shown against the supplier. The `stock` check reads stock items with delivery days above 0.", "current_id": null},
+    {"id": "R1-21", "status": "resolved", "evidence": "Section 6 Stock: up to 20 products (top sellers first) with search. The Section 2 `stock` check needs only min(3, active products) with a count.", "current_id": null},
+    {"id": "R1-22", "status": "resolved", "evidence": "Section 8: language is stored in the `onboarding` record through `set_lang`, the default is English, linked screens stay English, and Hinglish is noted. Section 7: shopper-facing UPI words are English in v1.", "current_id": null},
+    {"id": "R1-23", "status": "resolved", "evidence": "Section 4: the skip sheet is now 'Skip this for now?' / 'It goes on your task list.' The Part 3 example is split into short sentences.", "current_id": null},
+    {"id": "R1-24", "status": "resolved", "evidence": "Section 6 Part 3 Finish states Supply's rule (delivery days plus 20%): 2 x 7 = 14, times 1.2 = 16.8, shown as 17. It is labelled as an example when there are no sales.", "current_id": null},
+    {"id": "R1-25", "status": "resolved", "evidence": "Open Questions now lists only shopper confirmation and Hinglish. The 3-product rule and the Studio brand name copy are in the approach (Sections 2 and 6).", "current_id": null},
+    {"id": "R1-26", "status": "resolved", "evidence": "Section 1 adds `created_at`, `steps.{first_seen, done_at}` and `parts.{opened_at, done_at}`. Success Criteria measures from them. How late `done_at` is set is a new issue (R2-9).", "current_id": null},
+    {"id": "R1-27", "status": "resolved", "evidence": "Section 6 Part 2 Finish: 'Plan my first week' opens the Social Media Manager, which uses AI and says so, counts toward AI uses, and says plainly when AI is off. The journey step itself never needs AI.", "current_id": null},
+    {"id": "R1-28", "status": "persisting", "evidence": "'Delivery order' stages the work and runs The Assignment on stage 2, but stages 3 and 4 follow as soon as the previous stage is tested, 'staged inside one build', with no gate on the Assignment's findings.", "current_id": "R2-15"},
+    {"id": "R1-29", "status": "resolved", "evidence": "The third 'What I noticed' bullet now quotes 'if they click yes, add that task to the task list' as in the brief, and says the shop goes live once the Part 1 steps are done, consistent with Premises 1 and 5.", "current_id": null},
+    {"id": "R1-30", "status": "resolved", "evidence": "Demand Evidence now says 'Founder belief, not yet measured' with no named source. Assignment item 1 walks three sellers through Part 1 on paper before stage 2 is finished.", "current_id": null}
+  ]
+}
