@@ -1,0 +1,29 @@
+POST 01 · "You do 6 people's jobs"
+Carousel · 6 slides · Week 1, Monday · Pin this post
+Upload slide-01.png to slide-06.png in order.
+
+========== CAPTION ==========
+
+The difference between you and a big brand isn't the product.
+
+They have a team that reads the numbers every morning and acts on them.
+You have a red notebook and a cold coffee.
+
+One Tap Manager is that team, for a one-person shop.
+It tells you what to do today, writes your customer messages, fills in your supplier orders and plans your week of posts.
+
+Try it free for 7 days. We never take a cut of your sales.
+
+Follow for Shop Doctor: one shop problem, roasted and fixed, every Tuesday.
+
+#smallbusiness #smallbusinessowner #shopsmall #boutiqueowner
+
+========== PINNED COMMENT ==========
+
+Which of the 6 jobs eats most of your day? Drop the number, 1 to 6.
+
+========== BEFORE YOU POST ==========
+
+- Switch on Instagram's AI label (slide 1 is AI generated).
+- Slide 4 shows app-today.png. Replace it with the US sample-shop screenshot (dollars) and re-run export.ps1.
+- Slide 5 quotes $10 / $12.99 and a 7-day trial: make sure the app's pricing page matches first.

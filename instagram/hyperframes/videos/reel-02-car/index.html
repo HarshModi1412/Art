@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&family=Kalam:wght@700&display=block" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="ledger.css" />
+    <style>
+      .feed-name { position: absolute; left: 150px; top: 290px; font-weight: 600; font-size: 34px; color: var(--ink); }
+      .post { position: absolute; left: 60px; top: 400px; width: 960px; height: 900px; border-radius: 26px; overflow: hidden; border: 3px solid #E4DDCF; background: #5F6368; }
+      .bar { position: absolute; height: 22px; border-radius: 11px; background: #DDD7CB; }
+      .note { position: absolute; left: 60px; right: 60px; top: 70px; height: 124px; border-radius: 26px; background: #FFFFFF; box-shadow: 0 14px 40px rgba(16, 24, 40, 0.18); display: flex; align-items: center; gap: 22px; padding: 0 30px; }
+      .rowline { position: absolute; left: 0; top: 0; height: 6px; border-radius: 3px; background: #FFFFFF; }
+      .cchip { position: absolute; left: 150px; width: 600px; height: 84px; border-radius: 18px; background: #FFFFFF; border: 2.5px solid var(--ink); display: flex; align-items: center; gap: 20px; padding: 0 22px 0 14px; box-shadow: 6px 7px 0 rgba(16, 24, 40, 0.08); }
+      .cchip .ini { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 24px; color: #fff; flex: none; }
+      .cchip .nm { font-weight: 700; font-size: 34px; color: var(--ink); }
+      .cchip .dt { margin-left: auto; font-family: var(--mono); font-weight: 600; font-size: 24px; color: var(--ink-soft); }
+      .empty { position: absolute; left: 150px; width: 600px; height: 84px; border-radius: 18px; border: 3px dashed rgba(71, 84, 103, 0.6); display: flex; align-items: center; justify-content: flex-end; padding-right: 22px; font-family: var(--mono); font-weight: 600; font-size: 22px; letter-spacing: 0.06em; color: var(--leak); text-transform: uppercase; }
+      .fcount { position: absolute; left: 690px; top: 250px; background: var(--sky); color: var(--indigo); border-radius: 14px; padding: 14px 22px; }
+      .wb-row { position: absolute; left: 14px; right: 14px; height: 56px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #F0F0F3; font-size: 13px; }
+      .wb-row .av { width: 32px; height: 32px; border-radius: 50%; background: #DCE6F7; color: #1E3A8A; font-weight: 800; font-size: 12px; display: grid; place-items: center; flex: none; }
+      .wb-row b { display: block; font-size: 14px; }
+      .wb-row small { display: block; color: #6B6B73; font-size: 12px; }
+      .wb-row i { margin-left: auto; font-style: normal; font-family: var(--mono); font-size: 12px; color: #6B6B73; }
+      .lift { position: absolute; left: 250px; top: 650px; width: 580px; padding: 26px 32px; background: #fff; border-radius: 26px; box-shadow: 0 40px 80px rgba(0, 0, 0, 0.45); }
+      .msg { position: absolute; left: 488px; top: 470px; width: 444px; padding: 30px 32px 34px; background: #FFFFFF; border-radius: 28px; box-shadow: 0 30px 70px rgba(0, 0, 0, 0.4); }
+      .msg .to { font-family: var(--mono); font-weight: 600; font-size: 22px; letter-spacing: 0.08em; color: var(--ink-soft); margin-bottom: 16px; }
+      .msg .txt { position: relative; font-weight: 600; font-size: 33px; line-height: 1.32; color: var(--ink); min-height: 350px; }
+      .coupon { display: inline-block; margin-top: 20px; background: var(--marigold); color: var(--ink); font-family: var(--mono); font-weight: 700; font-size: 32px; letter-spacing: 0.04em; border-radius: 12px; padding: 10px 18px; }
+      .send { margin-top: 24px; display: block; text-align: center; background: var(--indigo); color: var(--paper); font-weight: 700; font-size: 34px; border-radius: 20px; padding: 22px 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="32.26" data-width="1080" data-height="1920">
+      <div id="stage" class="clip" data-start="0" data-duration="32.26" data-track-index="0"></div>
+      <audio id="mix" src="assets/mix.wav" data-start="0" data-duration="32.26" data-track-index="9" data-volume="1"></audio>
+    </div>
+    <script>window.T = {"total":32.26,"hook":3,"endCard":27.683,"lines":[{"id":"L1","s":3.45,"e":8.304,"chunks":[{"text":"That's exactly how customers leave.","s":3.45,"e":5.438,"words":[{"w":"That's","s":3.48,"e":3.834},{"w":"exactly","s":3.834,"e":4.234},{"w":"how","s":4.234,"e":4.448},{"w":"customers","s":4.448,"e":4.941},{"w":"leave.","s":4.941,"e":5.388}]},{"text":"No goodbye.","s":5.788,"e":6.684,"words":[{"w":"No","s":5.818,"e":6.011},{"w":"goodbye.","s":6.011,"e":6.634}]},{"text":"They just stop showing up.","s":7.034,"e":8.304,"words":[{"w":"They","s":7.064,"e":7.272},{"w":"just","s":7.272,"e":7.48},{"w":"stop","s":7.48,"e":7.689},{"w":"showing","s":7.689,"e":8.008},{"w":"up.","s":8.008,"e":8.254}]}]},{"id":"L2","s":8.804,"e":12.047,"chunks":[{"text":"And you never notice, because new followers keep coming in.","s":8.804,"e":12.047,"words":[{"w":"And","s":8.834,"e":9.044},{"w":"you","s":9.044,"e":9.254},{"w":"never","s":9.254,"e":9.556},{"w":"notice,","s":9.556,"e":10.004},{"w":"because","s":10.004,"e":10.397},{"w":"new","s":10.397,"e":10.607},{"w":"followers","s":10.607,"e":11.092},{"w":"keep","s":11.092,"e":11.348},{"w":"coming","s":11.348,"e":11.695},{"w":"in.","s":11.695,"e":11.997}]}]},{"id":"L3","s":13.347,"e":18.402,"chunks":[{"text":"One Tap Manager finds everyone who went quiet:","s":13.347,"e":16.488,"words":[{"w":"One","s":13.377,"e":13.642},{"w":"Tap","s":13.642,"e":13.908},{"w":"Manager","s":13.908,"e":14.405},{"w":"finds","s":14.405,"e":14.786},{"w":"everyone","s":14.786,"e":15.341},{"w":"who","s":15.341,"e":15.607},{"w":"went","s":15.607,"e":15.93},{"w":"quiet:","s":15.93,"e":16.438}]},{"text":"what they bought, and when they left.","s":16.738,"e":18.402,"words":[{"w":"what","s":16.768,"e":16.964},{"w":"they","s":16.964,"e":17.159},{"w":"bought,","s":17.159,"e":17.501},{"w":"and","s":17.501,"e":17.662},{"w":"when","s":17.662,"e":17.857},{"w":"they","s":17.857,"e":18.052},{"w":"left.","s":18.052,"e":18.352}]}]},{"id":"L4","s":18.952,"e":23.734,"chunks":[{"text":"It writes the message, adds a coupon, and sends it by email.","s":18.952,"e":22.456,"words":[{"w":"It","s":18.982,"e":19.152},{"w":"writes","s":19.152,"e":19.51},{"w":"the","s":19.51,"e":19.727},{"w":"message,","s":19.727,"e":20.237},{"w":"adds","s":20.237,"e":20.501},{"w":"a","s":20.501,"e":20.623},{"w":"coupon,","s":20.623,"e":21.086},{"w":"and","s":21.086,"e":21.302},{"w":"sends","s":21.302,"e":21.614},{"w":"it","s":21.614,"e":21.783},{"w":"by","s":21.783,"e":21.953},{"w":"email.","s":21.953,"e":22.406}]},{"text":"You just check it.","s":22.806,"e":23.734,"words":[{"w":"You","s":22.836,"e":23.003},{"w":"just","s":23.003,"e":23.206},{"w":"check","s":23.206,"e":23.445},{"w":"it.","s":23.445,"e":23.684}]}]},{"id":"L5","s":25.234,"e":26.633,"chunks":[{"text":"Then it counts who came back.","s":25.234,"e":26.633,"words":[{"w":"Then","s":25.264,"e":25.472},{"w":"it","s":25.472,"e":25.605},{"w":"counts","s":25.605,"e":25.887},{"w":"who","s":25.887,"e":26.057},{"w":"came","s":26.057,"e":26.264},{"w":"back.","s":26.264,"e":26.583}]}]},{"id":"L6","s":27.933,"e":31.562,"chunks":[{"text":"Comment win back, and I'll send you three win-back emails, free.","s":27.933,"e":31.562,"words":[{"w":"Comment","s":27.963,"e":28.37},{"w":"win","s":28.37,"e":28.588},{"w":"back,","s":28.588,"e":28.957},{"w":"and","s":28.957,"e":29.174},{"w":"I'll","s":29.174,"e":29.439},{"w":"send","s":29.439,"e":29.704},{"w":"you","s":29.704,"e":29.922},{"w":"three","s":29.922,"e":30.234},{"w":"win-back","s":30.234,"e":30.641},{"w":"emails,","s":30.641,"e":31.105},{"w":"free.","s":31.105,"e":31.512}]}]}]};</script>
+    <script src="ledger.js"></script>
+    <script>
+      const tl = L.init();
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+      const at = T.at, H = T.hook, EC = at("EC");
+      const tR = at("L2e") + 1.0; // ripple into night
+      const tCut = at("L5") - 0.05; // hard cut back to the ledger
+
+      // ================= HOOK · a car drifts out of a post (our own feed design) =================
+      const hook = L.scene(0, H + 1.0, { bg: "#F7F5EF", vignette: false });
+      const feed = L.div("fill", hook.cam);
+      L.div("abs", feed, "left:72px;top:272px;width:64px;height:64px;border-radius:50%;background:#CFC8BA");
+      L.div("feed-name", feed, "", "@yourshop");
+      L.div("abs", feed, "left:930px;top:300px;font-weight:800;font-size:40px;color:#9A9384;letter-spacing:4px", "...");
+      const post = L.div("post", feed);
+      post.innerHTML = `<svg width="960" height="900" viewBox="0 0 960 900">
+        <rect width="960" height="900" fill="#5F6368"/>
+        <image href="assets/grain.png" width="960" height="900" preserveAspectRatio="none" opacity=".35" style="mix-blend-mode:multiply"/>
+        <g id="stalls" stroke="#F4F4F2" stroke-width="7"></g>
+        <line x1="0" y1="450" x2="960" y2="450" stroke="#E8C85A" stroke-width="5" stroke-dasharray="40 30" opacity=".55"/>
+        <g id="skids" fill="none" stroke="#1B1C1F" stroke-width="12" stroke-linecap="round" opacity=".78"></g>
+      </svg>`;
+      const ps = post.querySelector("svg");
+      ps.querySelector("#stalls").innerHTML = Array.from({ length: 9 }, (_, k) => `<line x1="${80 + k * 100}" y1="30" x2="${80 + k * 100}" y2="190"/><line x1="${80 + k * 100}" y1="710" x2="${80 + k * 100}" y2="870"/>`).join("");
+      // icons and caption bars under the post (our own simple icons)
+      L.markup(feed, `<svg class="abs" style="left:74px;top:1326px" width="260" height="56" viewBox="0 0 260 56" fill="none" stroke="#101828" stroke-width="3.2" stroke-linejoin="round">
+        <path d="M26 48 C10 36 2 28 2 17 C2 9 8 4 15 4 C20 4 24 7 26 11 C28 7 32 4 37 4 C44 4 50 9 50 17 C50 28 42 36 26 48Z"/>
+        <path d="M84 8 H128 A8 8 0 0 1 136 16 V38 A8 8 0 0 1 128 46 H100 L88 54 V46 H84 A8 8 0 0 1 76 38 V16 A8 8 0 0 1 84 8Z"/>
+        <path d="M160 26 L212 6 L196 50 L186 32 Z M186 32 L212 6"/></svg>`);
+      L.div("bar", feed, "left:74px;top:1406px;width:640px");
+      L.div("bar", feed, "left:74px;top:1446px;width:420px");
+      L.div("abs", feed, "left:72px;top:1520px;width:64px;height:64px;border-radius:50%;background:#D9D3C6");
+      L.div("bar", feed, "left:156px;top:1541px;width:240px");
+      L.div("abs", feed, "left:60px;top:1620px;width:960px;height:500px;border-radius:26px;background:#E4DFD5");
+      tl.fromTo(feed, { y: 40 }, { y: -10, duration: 0.55, ease: "power2.out" }, 0.15);
+      const thumb = L.div("abs", hook.cam, "left:700px;top:1500px;width:110px;height:110px;border-radius:50%;background:rgba(16,24,40,.14)");
+      tl.fromTo(thumb, { y: 60, autoAlpha: 0 }, { y: -160, autoAlpha: 1, duration: 0.5, ease: "power2.out" }, 0.1);
+      tl.to(thumb, { autoAlpha: 0, duration: 0.2 }, 0.6);
+      const note = L.div("note", hook.cam, "", `<div style="width:64px;height:64px;border-radius:18px;background:var(--paper2);display:grid;place-items:center"><svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="#1E3A8A" stroke-width="3"><path d="M8 24 V15 A9 9 0 0 1 26 15 V24 L29 27 H5 Z M13 30 A4 4 0 0 0 21 30"/></svg></div><div><div style="font-weight:700;font-size:32px">New follower</div><div style="font-family:var(--mono);font-size:22px;color:var(--ink-soft)">just now</div></div>`);
+      tl.fromTo(note, { y: -240 }, { y: 0, duration: 0.4, ease: "back.out(1.4)" }, 0.9);
+      tl.to(note, { y: -240, duration: 0.35, ease: "power2.in" }, 2.15);
+
+      // the car: two fast circles in the lot, then it slides out of the post and off the screen
+      const C = { x: 540, y: 850 }, R = 150, T1 = 1.35, T2 = 2.75;
+      const skids = ps.querySelector("#skids");
+      const ring = (r) => `M${480 + r} 450 A${r} ${r} 0 1 1 ${480 - r} 450 A${r} ${r} 0 1 1 ${480 + r} 450`;
+      [[R - 16, 0], [R + 16, 0], [R - 10, T1 / 2], [R + 22, T1 / 2]].forEach(([r, t0]) => L.ink(ps, ring(r), t0, T1 / 2, { color: "#1B1C1F", w: 12, ease: "none" }).style.opacity = 0.75);
+      const exitD = `M${C.x + R} ${C.y} C${C.x + R + 30} ${C.y + 200} ${C.x + 360} ${C.y + 500} ${C.x + 710} ${C.y + 650}`;
+      const exitLocal = `M${C.x + R - 60} ${C.y - 400} C${C.x + R - 30} ${C.y - 200} ${C.x + 300} ${C.y + 100} ${C.x + 650} ${C.y + 250}`;
+      L.ink(ps, exitLocal, T1, (T2 - T1) * 0.45, { color: "#1B1C1F", w: 13, ease: "power1.in" }).style.opacity = 0.75;
+      const smoke = L.div("fill", hook.cam, "pointer-events:none");
+      const car = L.div("abs", hook.cam, "left:0;top:0;width:110px;height:200px;margin:-100px 0 0 -55px;filter:drop-shadow(14px 18px 10px rgba(0,0,0,.4))");
+      car.innerHTML = `<svg width="110" height="200" viewBox="0 0 110 200"><rect x="8" y="6" width="94" height="188" rx="38" fill="#141518"/><path d="M22 58 Q55 40 88 58 L82 92 Q55 84 28 92Z" fill="#3B4A5C"/><path d="M28 140 Q55 148 82 140 L86 162 Q55 172 24 162Z" fill="#2E3A48"/><rect x="18" y="10" width="20" height="10" rx="4" fill="#F6F2C8"/><rect x="72" y="10" width="20" height="10" rx="4" fill="#F6F2C8"/><rect x="18" y="182" width="20" height="8" rx="3" fill="#C4320A"/><rect x="72" y="182" width="20" height="8" rx="3" fill="#C4320A"/><rect x="50" y="96" width="10" height="40" rx="5" fill="#26292E"/></svg>`;
+      const fps = 30;
+      for (let f = 0; f <= Math.round(T1 * fps); f++) {
+        const t = f / fps, p = t / T1, th = p * Math.PI * 4;
+        const x = C.x + Math.cos(th) * R, y = C.y + Math.sin(th) * R;
+        tl.set(car, { x, y, rotation: (th * 180) / Math.PI + 180 + 32 }, t);
+        if (f % 3 === 0) {
+          const pf = L.div("abs", smoke, `left:${x - 50}px;top:${y - 50}px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.85),rgba(255,255,255,0) 70%);visibility:hidden`);
+          tl.set(pf, { visibility: "visible" }, t);
+          tl.fromTo(pf, { scale: 0.4, opacity: 0.9 }, { scale: 2.2, opacity: 0, duration: 0.8, ease: "power1.out" }, t);
+          tl.set(pf, { visibility: "hidden" }, t + 0.8);
+        }
+      }
+      {
+        const tmp = L.s(L.svg(hook, "visibility:hidden"), "path", { d: exitD });
+        const len = tmp.getTotalLength();
+        const n = Math.round((T2 - T1) * fps);
+        for (let f = 1; f <= n; f++) {
+          const p = gsap.parseEase("power1.in")(f / n);
+          const a = tmp.getPointAtLength(p * len), b = tmp.getPointAtLength(Math.min(len, p * len + 2));
+          const head = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI + 90;
+          tl.set(car, { x: a.x, y: a.y, rotation: head - 38 * (1 - f / n) }, T1 + f / fps);
+        }
+      }
+      tl.set(car, { visibility: "hidden" }, T2 + 0.05);
+      L.aiChip(hook);
+      // freeze on the empty lot, paper flash, trace the tire marks in ink
+      L.flash(H);
+      L.drain(hook, H + 0.07, 0.6);
+      gsap.set(hook.cam, { transformOrigin: "540px 850px" });
+      tl.to(hook.cam, { scale: 1.08, duration: 1.0, ease: "power1.out" }, H);
+      const trace = L.svg(hook.cam);
+      L.ink(trace, `M${C.x + R} ${C.y} A${R} ${R} 0 1 1 ${C.x - R} ${C.y} A${R} ${R} 0 1 1 ${C.x + R} ${C.y} C${C.x + R + 30} ${C.y + 200} ${C.x + 290} ${C.y + 420} ${C.x + 480} ${C.y + 450}`, H + 0.1, 0.75, { w: 9, ease: "power1.inOut" });
+
+      // ================= BEAT 1 + 2 · the lot becomes the customer ledger =================
+      const ledger = L.scene(H + 0.55, null, { bg: "paper", ruled: false });
+      L.fadeIn(ledger, H + 0.55, 0.35);
+      const lsv = L.svg(ledger.cam);
+      const rowY = (k) => 380 + 110 * k;
+      // the white parking lines rotate 90 degrees and lock in as ledger rows
+      const lockT = L.series(H + 1.0, H + 1.9, 9);
+      for (let k = 0; k < 9; k++) {
+        const ln = L.div("rowline", ledger.cam, "width:173px");
+        const sx = 540 + (140 + 100 * k - 540) * 1.08, sy = 850 + (510 - 850) * 1.08;
+        gsap.set(ln, { xPercent: -50, yPercent: -50, x: sx, y: sy, rotation: 90 });
+        tl.to(ln, { x: 505, y: rowY(k), rotation: 0, width: 800, backgroundColor: "rgba(16,24,40,0.22)", duration: 0.55, ease: "power3.inOut" }, lockT[k] - 0.55);
+      }
+      // the skid mark stays as a bold marigold swoosh leaving through the right edge
+      const swooshD = "M150 1380 C470 1380 690 1290 800 1100 S960 760 1160 700";
+      L.ink(lsv, swooshD, H + 0.6, 0.9, { w: 18, ease: "power2.inOut" });
+      const tinyCar = L.div("abs", ledger.cam, "left:0;top:0;width:44px;height:78px;margin:-39px 0 0 -22px");
+      tinyCar.innerHTML = `<svg width="44" height="78" viewBox="0 0 44 78" fill="none" stroke="#101828" stroke-width="3.5"><rect x="4" y="3" width="36" height="72" rx="15"/><path d="M10 24 Q22 17 34 24 L32 36 Q22 33 12 36Z"/></svg>`;
+      tinyCar.style.visibility = "hidden";
+      {
+        const tmp = L.s(lsv, "path", { d: swooshD, fill: "none", stroke: "none" });
+        const len = tmp.getTotalLength(), t0 = at("L1.1:leave"), n = 27;
+        tl.set(tinyCar, { visibility: "visible" }, t0);
+        for (let f = 0; f <= n; f++) {
+          const p = gsap.parseEase("power1.in")(f / n);
+          const a = tmp.getPointAtLength(p * len), b = tmp.getPointAtLength(Math.min(len, p * len + 2));
+          tl.set(tinyCar, { x: a.x, y: a.y - 26, rotation: (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI + 90 }, t0 + f / 30);
+        }
+      }
+      const noGood = L.div("abs body", ledger.cam, "left:150px;top:1276px;color:var(--ink-soft);font-size:42px", "No goodbye.");
+      L.rise(noGood, at("L1.2"), { y: 16 });
+      const stop = L.div("abs headline", ledger.cam, "left:72px;top:236px;font-size:96px;transform-origin:10% 50%", "They just stop.");
+      L.slam(stop, at("L1.3"));
+      L.fadeOut(stop, at("L2") - 0.1, 0.3);
+      L.fadeOut(noGood, at("L2") - 0.1, 0.3);
+      // eight customers fill the rows
+      const people = [["Maya R.", "Aug 3", "#1E3A8A"], ["Jordan T.", "Jul 28", "#F5A623"], ["Priya K.", "Aug 11", "#4C9A8F"], ["Emily S.", "Jul 19", "#C4320A"], ["Chris P.", "Aug 20", "#1E3A8A"], ["Ava L.", "Jul 12", "#F5A623"], ["Sam W.", "Aug 6", "#4C9A8F"], ["Nina G.", "Jul 24", "#C4320A"]];
+      const L2 = at("L2");
+      const empties = [], chips = people.map(([n, d, c], k) => {
+        empties[k] = L.div("empty", ledger.cam, `top:${rowY(k) + 13}px;visibility:hidden`, "went quiet");
+        const ch = L.div("cchip", ledger.cam, `top:${rowY(k) + 13}px`, `<div class="ini" style="background:${c}">${n.split(" ").map((s) => s[0]).join("").replace(".", "")}</div><div class="nm">${n}</div><div class="dt">${d}</div>`);
+        L.pop(ch, L2 + k * 0.075, { from: 0.6, dur: 0.35 });
+        return ch;
+      });
+      // five of them drift out along the swoosh, one by one
+      const leavers = [1, 3, 5, 7, 0];
+      L.series(L2 + 0.9, at("L2e") + 0.7, 5).forEach((t, i) => {
+        const k = leavers[i], ch = chips[k];
+        tl.to(ch, { x: 1150, duration: 1.1, ease: "power2.in" }, t);
+        tl.to(ch, { y: 700 - rowY(k), rotation: -10, duration: 1.1, ease: "power3.in" }, t);
+        tl.set(empties[k], { visibility: "visible" }, t + 0.1);
+        L.fadeIn(empties[k], t + 0.1, 0.3);
+      });
+      // while new followers keep ticking up
+      const fc = L.div("fcount", ledger.cam, "", `<div class="label" style="color:var(--indigo)">followers</div>`);
+      L.counter(fc, "position:relative;font-family:var(--mono);font-weight:700;font-size:52px;letter-spacing:-.03em", "", 1204, 1207, L2 + 0.8, at("L2e") - 0.8 - L2 + 0.8, (v) => Math.round(v).toLocaleString("en-US"), { steps: 3, ease: "none" });
+      L.pop(fc, L2 + 0.4, { from: 0.7 });
+      L.series(L2 + 0.8 + 0.2, at("L2e") + 0.2, 3).forEach((t) => {
+        const p = L.div("abs num", ledger.cam, "left:940px;top:262px;font-size:34px;color:#1E8A5E", "+1");
+        tl.fromTo(p, { y: 10, autoAlpha: 0 }, { y: -30, autoAlpha: 1, duration: 0.35, ease: "power2.out" }, t);
+        tl.to(p, { autoAlpha: 0, duration: 0.3 }, t + 0.45);
+      });
+      // accents: torn paper scrap and a pencil mark
+      L.drift(L.div("abs", ledger.cam, "left:880px;top:1360px;width:120px;height:80px;background:var(--paper2);clip-path:polygon(0 12%,100% 0,92% 100%,6% 88%);box-shadow:0 6px 12px rgba(0,0,0,.08)"), H + 0.6, EC, { period: 5, y: -8, r: 3 });
+      L.ink(lsv, "M90 1500 q30 -10 60 4 t60 -2", H + 1.4, 0.3, { color: "#475467", w: 4 });
+
+      // ================= BEAT 3 + 4 · night: found, written, sent =================
+      const night = L.scene(tR, tCut, { bg: "night" });
+      L.ripple(night, tR, 450, rowY(0) + 55);
+      const L3 = at("L3"), L4 = at("L4");
+      const ph = L.phone(night.cam, { x: 330, y: 420, w: 420, crumb: "Win-back" });
+      tl.fromTo(ph, { x: -520, rotation: -8, autoAlpha: 0 }, { x: 0, rotation: 0, autoAlpha: 1, duration: 0.8, ease: "power3.out" }, L3);
+      const app = ph.app;
+      L.div("abs app-h1", app, "left:16px;top:74px;margin:0", "Win-back");
+      const stat = L.div("abs app-card", app, "left:14px;right:14px;top:124px;height:104px;margin:0", `<div style="display:flex;align-items:baseline;gap:8px"><span class="holder" style="font-size:40px;font-weight:800;letter-spacing:-.03em;color:#C4320A"></span><span style="font-size:17px;font-weight:700">customers went quiet</span></div><div style="font-size:12px;color:#6B6B73;margin-top:4px">No order in the last 45 days</div>`);
+      L.counter(stat.querySelector(".holder"), "position:relative;display:inline-block", "", 0, 60, L3 + 0.3, 0.8, (v) => String(Math.round(v)), { steps: 20 });
+      const list = L.div("abs app-card", app, "left:14px;right:14px;top:240px;height:380px;margin:0;padding:0");
+      const wb = [["MR", "Maya R.", "Linen Wrap Dress, Sage", "Aug 3"], ["JT", "Jordan T.", "Silk Scarf, Rust", "Jul 28"], ["PK", "Priya K.", "Gold Hoop Earrings", "Aug 11"], ["ES", "Emily S.", "Knit Sweater", "Jul 19"], ["CP", "Chris P.", "Everyday Tote", "Aug 20"], ["AL", "Ava L.", "Satin Slip Skirt", "Jul 12"]];
+      const wbRows = wb.map(([i, n, it, d], k) => L.div("wb-row", list, `top:${8 + k * 60}px`, `<div class="av">${i}</div><div><b>${n}</b><small>${it}</small></div><i>${d}</i>`));
+      L.series(L3 + 0.8, at("L3.1e"), wbRows.length).forEach((t, k) => L.glide(wbRows[k], t, { x: 60, dur: 0.35, ease: "power2.out" }));
+      L.div("abs app-btn", app, "left:14px;right:14px;top:634px;text-align:center", "Review &amp; send");
+      const appInk = L.svg(app, "", "0 0 390 844");
+      appInk.setAttribute("width", 390); appInk.setAttribute("height", 844);
+      const L32 = at("L3.2");
+      L.circleMark(appInk, 195, 276, 188, 36, L32, 0.45, { w: 5 });
+      const lift = L.div("lift", night.cam, "", `<div style="font-weight:800;font-size:44px;letter-spacing:-.02em">Maya R.</div><div style="font-weight:600;font-size:34px;color:var(--ink);margin-top:6px">Linen Wrap Dress, Sage</div><div style="font-family:var(--mono);font-weight:600;font-size:26px;color:var(--ink-soft);margin-top:10px">last order Aug 3</div>`);
+      tl.fromTo(lift, { y: 40, scale: 0.72, rotationX: 70, transformPerspective: 1200, autoAlpha: 0 }, { y: 0, scale: 1, rotationX: 0, autoAlpha: 1, duration: 0.6, ease: "back.out(1.4)" }, L32 + 0.45);
+      tl.to(lift, { y: 60, scale: 0.6, autoAlpha: 0, duration: 0.35, ease: "power2.in" }, L4 - 0.45);
+      // the message writes itself, the coupon snaps in, check and send
+      tl.to(ph, { x: -262, y: 60, rotation: -5, scale: 0.9, duration: 0.6, ease: "power3.inOut" }, L4 - 0.45);
+      const msg = L.div("msg", night.cam, "", `<div class="to">EMAIL · TO MAYA R.</div>`);
+      const txt = L.div("txt", msg);
+      L.pop(msg, L4 - 0.15, { from: 0.8 });
+      const body = "Hi Maya, the wrap dress you loved just came back in two new colors. Here's 10% off, just for you:";
+      L.type(txt, body, L4, body.length / Math.max(1.5, at("L4.1:coupon") - L4 - 0.1), { el: L.el("span", "", txt) });
+      const coupon = L.el("div", "coupon", txt, "", "COMEBACK10");
+      L.slam(coupon, at("L4.1:coupon"), { from: 1.8 });
+      const send = L.div("send", msg, "", "Check and send");
+      L.rise(send, at("L4.1e") - 0.1, { y: 20, dur: 0.35 });
+      const tTap = at("L4.2") + 0.2;
+      tl.to(send, { scale: 0.95, duration: 0.08 }, tTap);
+      tl.to(send, { scale: 1, duration: 0.18, ease: "back.out(3)" }, tTap + 0.08);
+      const tapSvg = L.svg(night.cam);
+      const tapRing = L.s(tapSvg, "circle", { cx: 710, cy: 1010, r: 10, fill: "none", stroke: "#F5A623", "stroke-width": 8 });
+      tapRing.style.visibility = "hidden";
+      tl.set(tapRing, { visibility: "visible" }, tTap);
+      tl.fromTo(tapRing, { attr: { r: 10 }, opacity: 1 }, { attr: { r: 150 }, opacity: 0, duration: 0.5, ease: "power2.out" }, tTap);
+      // fold into an envelope and fly back toward the ledger; two more follow
+      const tFold = at("L4.2e") + 0.2;
+      tl.to(msg, { scaleY: 0.06, scaleX: 0.55, duration: 0.3, ease: "power2.in" }, tFold);
+      tl.set(msg, { visibility: "hidden" }, tFold + 0.3);
+      const env = (delay, sx, sy) => {
+        const e = L.div("abs", night.cam, `left:${sx}px;top:${sy}px;width:220px;height:146px;visibility:hidden`, `<svg width="220" height="146" viewBox="0 0 220 146"><rect x="3" y="3" width="214" height="140" rx="12" fill="#EFECE3" stroke="#101828" stroke-width="4"/><path d="M6 8 L110 84 L214 8" fill="none" stroke="#101828" stroke-width="4"/><circle cx="110" cy="86" r="16" fill="#F5A623"/></svg>`);
+        const t = tFold + 0.3 + delay;
+        tl.set(e, { visibility: "visible" }, t);
+        tl.fromTo(e, { scale: 0.4 }, { scale: 1, duration: 0.2, ease: "back.out(2)" }, t);
+        tl.to(e, { x: -700, duration: 0.75, ease: "power2.in" }, t + 0.2);
+        tl.to(e, { y: 1500 - sy, rotation: -30, duration: 0.75, ease: "power1.in" }, t + 0.2);
+      };
+      env(0, 600, 720);
+      env(0.25, 150, 900);
+      env(0.5, 150, 1100);
+
+      // ================= BEAT 5 · counted: three come back =================
+      const L5 = at("L5");
+      [[0, 0], [3, 0.35], [1, 0.7]].forEach(([k, d]) => {
+        const t = L5 + 0.1 + d;
+        tl.to(chips[k], { x: 0, y: 0, rotation: 0, duration: 0.7, ease: "power3.out" }, t);
+        tl.set(empties[k], { visibility: "hidden" }, t + 0.6);
+      });
+      const back = L.div("abs num", ledger.cam, "left:72px;top:250px;font-size:60px;color:#139A66", "came back:&nbsp;");
+      L.counter(back, "position:relative;display:inline-block", "", 0, 3, L5 + 0.2, 0.75, (v) => String(Math.round(v)), { steps: 3, ease: "none" });
+      L.rise(back, L5, { y: 20 });
+      L.chip(ledger.cam, "EXAMPLE", "left:530px;top:266px", L5 + 0.5);
+      tl.to(fc, { opacity: 0.3, duration: 0.4 }, L5 + 0.3);
+
+      // ================= end card =================
+      L.flip(ledger, EC - 0.45);
+      L.endCard(EC - 0.45, "Comment WINBACK.", { anim: EC });
+      L.captions({ hide: [["L1.2", "L1e+0.3"]] });
+      L.done();
+    </script>
+  </body>
+</html>

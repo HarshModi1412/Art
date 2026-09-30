@@ -177,6 +177,31 @@ class MonthlyImageCapReached(CapReached):
     two apart (a different message, a different HTTP code) check the type."""
 
 
+class PlanRequired(CapReached):
+    """AI image or video generation needs Pro Max (or the trial).
+
+    A CapReached on purpose, like the monthly cap: every generate route already
+    turns a CapReached into "add your own photo" plus the shot on the task list,
+    which is exactly right for a Pro seller too. The handler in main.py sends
+    this one as a 402 with the paywall body, so the browser opens the plans."""
+
+    def __init__(self, message: str, feature: str):
+        super().__init__(message)
+        self.feature = feature
+
+
+def require_generation(email: str, kind: str) -> None:
+    """Raise PlanRequired unless this account's plan includes `kind`
+    ('image' or 'video') generation. Call before spending anything."""
+    feature = {"image": "image_generation", "video": "video_generation"}.get(kind)
+    if not feature:
+        return
+    from backend.core import billing, pricing
+    if pricing.plan_allows(billing.effective_plan(email), feature):
+        return
+    raise PlanRequired(billing.paywall(feature, email)["message"], feature)
+
+
 def _message(kind: str, cap: int) -> str:
     if kind == "video":
         return (f"That is {cap} clip{'s' if cap != 1 else ''} today, which is the "
@@ -193,7 +218,9 @@ def _message(kind: str, cap: int) -> str:
 
 
 def check(email: str, kind: str) -> None:
-    """Raise CapReached if this call would go over. Call BEFORE spending."""
+    """Raise CapReached if this call would go over. Call BEFORE spending.
+    Image and video also need a plan that includes them (PlanRequired)."""
+    require_generation(email, kind)
     cap = _cap(kind)
     if cap and used(email, kind) >= cap:
         raise CapReached(_message(kind, cap))
@@ -215,6 +242,7 @@ def check_image_month(email: str) -> None:
     daily guard because the two mean different things to the seller and read
     differently: one lifts tomorrow, the other on the 1st, and only this one
     sends them to the upload route instead."""
+    require_generation(email, "image")
     cap = _month_cap()
     if cap and image_month_used(email) >= cap:
         raise MonthlyImageCapReached(_month_message(cap))

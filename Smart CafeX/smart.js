@@ -344,7 +344,21 @@ async function api(path, opts = {}, attempt = 0) {
       resetSessionId();
       return api(path, { ...opts, _rebound: true }, attempt);
     }
-    if (retryable && attempt < RETRY_MAX && RETRY_STATUS.has(res.status)) {
+    // The seller's own ChatGPT usage ran out on this request. Never retried
+    // behind their back (a 429 is otherwise a retry code): they choose on the
+    // limit screen, and this request carries on with their choice, whether
+    // that is our AI for this one ("app") or another go after changing their
+    // limit in ChatGPT ("retry"). Asked once per request, so it cannot loop.
+    const cgptLimit = res.status === 429 && data.code === "chatgpt_limit";
+    if (cgptLimit && !opts._cgpt) {
+      const choice = await chatgptLimitDialog(data.chatgpt || {});
+      if (choice === "app") {
+        return api(path, { ...opts, _cgpt: true,
+          headers: { ...(opts.headers || {}), "X-AI-Route": "app" } }, attempt);
+      }
+      if (choice === "retry") return api(path, { ...opts, _cgpt: true }, attempt);
+    }
+    if (!cgptLimit && retryable && attempt < RETRY_MAX && RETRY_STATUS.has(res.status)) {
       await nap(600 * (attempt + 1));
       return api(path, opts, attempt + 1);
     }
@@ -362,6 +376,10 @@ async function api(path, opts = {}, attempt = 0) {
     // "monthly_image_cap" vs "daily_cap" on a 429), so a caller can react
     // without string-matching the human message.
     err.code = data.code || "";
+    if (res.status === 402 && state.token) {
+      openPlans({ ...(d && typeof d === "object" ? d : { message: fromServer }),
+                  code: (d && d.code) || data.code });
+    }
     throw err;
   }
   // Any successful write can change what several modules would show — adding a
@@ -479,6 +497,7 @@ async function aiWriteField(el, instruction) {
     current: el.value || "", context: aiContextFor(el), instruction: instruction || "" } });
   const fb = await puterFallback(r);
   if (fb) return { text: _stripAi(fb.text), via: "Puter (your account)", ai: true };
+  if (r.provider === "chatgpt") return { text: r.text || "", via: "Using ChatGPT plan", ai: true, plan: true };
   return { text: r.text || "", via: r.ai ? `AI · ${r.provider}` : "template, no AI connected", ai: !!r.ai };
 }
 
@@ -495,7 +514,9 @@ function aiAssist(el) {
     try {
       const r = await aiWriteField(el, instruction);
       pop.innerHTML = `
-        <div class="ai-pop-h">${sic("spark")}<b>Suggestion</b><span class="muted tiny">${esc(r.via)}</span></div>
+        <div class="ai-pop-h">${sic("spark")}<b>Suggestion</b>${r.plan
+          ? `<span class="muted tiny">${cgptUsingLine()}</span>`
+          : `<span class="muted tiny">${esc(r.via)}</span>`}</div>
         <textarea class="ai-pop-t" rows="${Math.min(10, Math.max(2, Math.ceil((r.text || "").length / 70)))}">${esc(r.text)}</textarea>
         <div class="ai-pop-a">
           <button type="button" class="btn primary tiny" data-aiuse>Use this</button>
@@ -577,9 +598,19 @@ async function doLogin() {
    would otherwise get a button that silently does nothing. */
 let _gsiNonce = "";
 
+/* Which sign-in buttons this server offers. Asked once per page load and
+   shared by the Google and ChatGPT buttons; a failed ask is not remembered,
+   so the next caller tries again. */
+let _providersP = null;
+function authProviders() {
+  if (!_providersP) {
+    _providersP = api("/api/auth/providers").catch(() => { _providersP = null; return null; });
+  }
+  return _providersP;
+}
+
 async function setupGoogleSignIn() {
-  let cfg;
-  try { cfg = await api("/api/auth/providers"); } catch (e) { return; }
+  const cfg = await authProviders();
   const g = cfg && cfg.google;
   if (!g || !g.enabled || !g.client_id) return;
 
@@ -611,6 +642,7 @@ async function setupGoogleSignIn() {
     size: "large", text: "continue_with", shape: "rectangular", width: 320,
   });
   box.hidden = false;
+  if ($("ssoBox")) $("ssoBox").hidden = false;
 }
 
 async function onGoogleCredential(resp) {
@@ -641,11 +673,11 @@ async function googleFinish(payload) {
   }
 }
 
-function askPassword() {
+function askPassword(title, introHtml) {
   return new Promise((resolve) => {
-    openModal("Connect Google to your existing account", `
-      <p class="muted">You already have an account with this email. Type its
-        password once and the two are joined, after that, one tap signs you in.</p>
+    const wrap = openModal(title || "Connect Google to your existing account", `
+      ${introHtml || `<p class="muted">You already have an account with this email. Type its
+        password once and the two are joined, after that, one tap signs you in.</p>`}
       <label>Your current password
         <input type="password" id="gLinkPw" autocomplete="current-password" /></label>
       <div class="row" style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
@@ -653,6 +685,11 @@ function askPassword() {
         <button class="btn primary" id="gLinkGo">Connect</button>
       </div>`);
     const done = (v) => { closeModal(); resolve(v); };
+    // Closing the popup any other way is a Cancel too. Without this the
+    // promise never settled, and whatever was waiting on it waited forever.
+    wrap.querySelector("[data-mclose]").onclick = () => done(null);
+    wrap.onclick = (e) => { if (e.target === wrap) done(null); };
+    wrap.addEventListener("keydown", (e) => { if (e.key === "Escape") done(null); });
     $("gLinkNo").onclick = () => done(null);
     $("gLinkGo").onclick = () => done(($("gLinkPw").value || "").trim() || null);
     $("gLinkPw").addEventListener("keydown", (e) => {
@@ -660,6 +697,281 @@ function askPassword() {
     });
     $("gLinkPw").focus();
   });
+}
+
+/* ------------------------------------------------ continue with ChatGPT ----
+   Sign in with ChatGPT, and, when the seller allows it, AI writing on their
+   own ChatGPT Plus or Pro plan instead of ours (backend/core/chatgpt_auth.py
+   and chatgpt_plan.py).
+
+   It is a full-page trip to OpenAI and back, not a popup: the server starts it
+   (POST /api/auth/chatgpt/start, which also sets the cookie that ties the
+   return to this browser), OpenAI sends the browser back to the server, and
+   the server sends it here with a one-time ticket in the URL fragment. This
+   page trades the ticket for a session. No OpenAI code or token ever reaches
+   this page.
+
+   What OpenAI's guidelines ask of the screens, and where each one is:
+     * "Continue with ChatGPT", their logo, beside the other sign-in options
+       (the login card, and the ChatGPT card in Account);
+     * "You're using your ChatGPT plan", once, the first time (showChatGPTWelcome);
+     * "Using ChatGPT plan" and "Manage usage" wherever it writes (cgptUsingLine);
+     * at a usage limit, "Manage usage" first and our own AI second
+       (chatgptLimitDialog);
+     * an invitation for sellers who signed in some other way (Home);
+     * which of our plans support it, on the plan cards (planSectionHtml). */
+const CGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
+
+/* The logo is OpenAI's, drawn once in the login card; everything else borrows
+   that copy rather than carrying a second one. */
+function cgptLogo() {
+  const s = document.querySelector("#siwcBtn .siwc-logo");
+  return s ? s.outerHTML : "";
+}
+
+function cgptButton(label, attrs) {
+  return `<button type="button" class="siwc-btn" ${attrs || ""}>${cgptLogo()}<span>${esc(label || "Continue with ChatGPT")}</span></button>`;
+}
+
+function cgptUsingLine(url) {
+  return `<span class="cgpt-line">${cgptLogo()}Using ChatGPT plan · <a href="${esc(url || CGPT_USAGE_URL)}" target="_blank" rel="noopener">Manage usage</a></span>`;
+}
+
+async function setupChatGPTSignIn() {
+  const cfg = await authProviders();
+  const c = cfg && cfg.chatgpt;
+  if (!c || !c.enabled) return;
+  const box = $("siwcBox"), btn = $("siwcBtn");
+  if (!box || !btn) return;
+  btn.onclick = () => startChatGPT("signin");
+  box.hidden = false;
+  if ($("ssoBox")) $("ssoBox").hidden = false;
+}
+
+/* Off to OpenAI. "signin" from the login card; "connect" from Account, for a
+   seller already signed in here (the server takes the account from their
+   session). `reconsent` asks OpenAI to show the permission screen again, for
+   someone who said no to sharing their plan the first time. */
+async function startChatGPT(intent, opts = {}) {
+  const btns = document.querySelectorAll(".siwc-btn");
+  btns.forEach((b) => { b.disabled = true; });
+  try {
+    const d = await api("/api/auth/chatgpt/start", { method: "POST",
+      json: { intent, reconsent: !!opts.reconsent } });
+    if (d && d.url) { window.location.assign(d.url); return; }
+    throw new Error("Could not start Sign in with ChatGPT.");
+  } catch (e) {
+    btns.forEach((b) => { b.disabled = false; });
+    if (intent === "signin" && $("loginErr")) {
+      $("loginErr").textContent = e.message; $("loginErr").hidden = false;
+    } else toast(e.message, 6000);
+  }
+}
+
+const CGPT_ERRORS = {
+  access_denied: "Sign in with ChatGPT was cancelled.",
+  expired: "That sign-in took too long or was already used. Please try again.",
+  state: "That sign-in could not be verified. Please try again.",
+  invalid_token: "That sign-in could not be verified. Please try again.",
+  exchange_failed: "OpenAI did not accept that sign-in. Please try again.",
+  linked_elsewhere: "That ChatGPT account already signs in to a different One Tap Manager "
+    + "account. Sign in to that one, or use another ChatGPT account.",
+  email_unverified: "ChatGPT has not verified the email address on that account, so it "
+    + "cannot be used to sign in here.",
+  unavailable: "Could not reach ChatGPT just now. Try again in a minute.",
+  not_configured: "Sign in with ChatGPT is not set up on this server.",
+  failed: "Sign in with ChatGPT did not finish. Please try again.",
+};
+
+/* What the server sent back in the fragment, if anything, and the fragment
+   removed at once so a reload or a shared URL cannot replay it. */
+function takeChatGPTReturn() {
+  const h = location.hash || "";
+  if (!/^#cx_chatgpt/.test(h)) return null;
+  const p = new URLSearchParams(h.slice(1));
+  try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+  return { ticket: p.get("cx_chatgpt") || "", link: p.get("cx_chatgpt_link") || "",
+           error: p.get("cx_chatgpt_error") || "", plan: p.get("plan") === "1" };
+}
+
+function chatgptSignedIn(d) {
+  state.token = d.token; state.email = d.email;
+  localStorage.setItem("cx_token", d.token); localStorage.setItem("cx_email", d.email);
+  state.chatgpt = d.chatgpt || null;
+  loadMediaStatus();
+  showShell();
+  if (d.chatgpt && d.chatgpt.welcome) setTimeout(showChatGPTWelcome, 400);
+}
+
+function loginMessage(text) {
+  const err = $("loginErr");
+  if (err) { err.textContent = text; err.hidden = false; }
+}
+
+/* Called first thing at boot. True when it has signed the seller in and shown
+   the app; false when the normal boot should carry on. */
+async function finishChatGPTReturn(back) {
+  if (back.error) {
+    const msg = CGPT_ERRORS[back.error] || CGPT_ERRORS.failed;
+    if (state.token) setTimeout(() => toast(msg, 7000), 900);
+    else loginMessage(msg);
+    return false;
+  }
+  if (back.ticket === "connected") {
+    if (!state.token) { loginMessage("ChatGPT is connected. Log in to carry on."); return false; }
+    // Connected from Account: this browser is already signed in.
+    setTimeout(async () => {
+      let st = null;
+      try { st = await api("/api/account/chatgpt"); } catch (e) { st = null; }
+      state.chatgpt = st;
+      if (st && st.welcome) showChatGPTWelcome();
+      else if (back.plan) toast("ChatGPT connected. Your AI writing now uses your ChatGPT plan.", 6000);
+      else toast("ChatGPT connected for sign-in. To use your plan for AI writing, open Account "
+                 + "and press Continue with ChatGPT again.", 8000);
+    }, 700);
+    return false;
+  }
+  if (back.ticket) {
+    try {
+      chatgptSignedIn(await api("/api/auth/chatgpt/finish", { method: "POST",
+        json: { ticket: back.ticket } }));
+      return true;
+    } catch (e) { loginMessage(e.message); return false; }
+  }
+  if (back.link) {
+    // Not awaited: the login card stays usable while the password is asked for.
+    chatgptLinkFlow(back.link);
+    return false;
+  }
+  return false;
+}
+
+/* The ChatGPT account's address already has an account here, made with a
+   password. The password is asked for once, as with Google; a typo gets
+   another go on the same ticket, a few times. */
+async function chatgptLinkFlow(ticket) {
+  for (let i = 0; i < 5; i++) {
+    const pw = await askPassword("Connect ChatGPT to your existing account",
+      `<p class="muted">You already have an account with this email. Type its password
+        once and ChatGPT is connected to it, after that, one tap signs you in.</p>
+       <p class="muted tiny">Signed up with Google? Cancel this, sign in with Google,
+        then connect ChatGPT from Account.</p>`);
+    if (!pw) { loginMessage("ChatGPT was not connected. You can sign in with your password below."); return; }
+    try {
+      chatgptSignedIn(await api("/api/auth/chatgpt/finish", { method: "POST",
+        json: { ticket, password: pw } }));
+      return;
+    } catch (e) {
+      if (e.status === 401 && !/start again/i.test(e.message || "")) {
+        toast(e.message, 4000);
+        continue;
+      }
+      loginMessage(e.message);
+      return;
+    }
+  }
+}
+
+/* A layer of its own above any popup, because the request that needed it is
+   often made FROM a popup, and replacing that popup would lose the seller's
+   unsaved work. */
+function cgptOverlay(inner) {
+  const wrap = document.createElement("div");
+  wrap.className = "cgpt-back";
+  wrap.innerHTML = `<div class="cgpt-card" role="dialog" aria-modal="true" aria-labelledby="cgptTitle">${inner}</div>`;
+  document.body.appendChild(wrap);
+  return wrap;
+}
+
+function showChatGPTWelcome() {
+  if (document.querySelector(".cgpt-back[data-welcome]")) return;
+  const w = cgptOverlay(`
+    <div class="cgpt-id">${cgptLogo()}<span>ChatGPT</span></div>
+    <h3 id="cgptTitle">You're using your ChatGPT plan</h3>
+    <p>AI writing in One Tap Manager now uses your ChatGPT plan: captions, reel scripts,
+      picture prompts, your website and product copy, emails and the analyst. You can see
+      and manage it in <a href="${CGPT_USAGE_URL}" target="_blank" rel="noopener">ChatGPT settings</a>.</p>
+    <p class="cgpt-note">AI pictures and clips never use your ChatGPT plan. OpenAI does not
+      allow image generation through it.</p>
+    <div class="cgpt-acts"><button type="button" class="btn primary" data-cgok>Got it</button></div>`);
+  w.dataset.welcome = "1";
+  const done = () => {
+    w.remove();
+    if (state.chatgpt) state.chatgpt.welcome = false;
+    api("/api/account/chatgpt/welcomed", { method: "POST" }).catch(() => {});
+  };
+  w.querySelector("[data-cgok]").onclick = done;
+  w.addEventListener("keydown", (e) => { if (e.key === "Escape") done(); });
+  w.querySelector("[data-cgok]").focus();
+}
+
+/* The limit screen. One at a time: when several requests run out together
+   they all wait on the same answer. Resolves to "app" (our AI, this request
+   only), "retry" (the seller changed something in ChatGPT) or "close". */
+let _cgptLimitP = null;
+function chatgptLimitDialog(info) {
+  if (_cgptLimitP) return _cgptLimitP;
+  info = info || {};
+  const manage = info.manage_url || CGPT_USAGE_URL;
+  const mins = Number(info.retry_after) > 0 ? Math.ceil(Number(info.retry_after) / 60) : 0;
+  _cgptLimitP = new Promise((resolve) => {
+    const w = cgptOverlay(`
+      <div class="cgpt-id">${cgptLogo()}<span>ChatGPT</span></div>
+      <h3 id="cgptTitle">Usage limit reached</h3>
+      <p>You have used the ChatGPT usage available to One Tap Manager for now. That can be
+        your plan's limit, or the limit you set for this app in ChatGPT.</p>
+      <p>ChatGPT's usage settings show exactly when it resets. There you can also let apps use
+        ChatGPT credits, and buy more credits, if your account offers them.</p>
+      ${mins ? `<p class="cgpt-note">ChatGPT asked us to wait about ${mins} minute${mins === 1 ? "" : "s"} before asking again.</p>` : ""}
+      <div class="cgpt-acts">
+        <a class="btn primary" href="${esc(manage)}" target="_blank" rel="noopener" data-cgmanage>Manage usage</a>
+        <button type="button" class="btn ghost" data-cgapp>Use One Tap Manager AI this time</button>
+        <button type="button" class="btn ghost" data-cgretry hidden>I changed it in ChatGPT, try again</button>
+        <button type="button" class="btn ghost" data-cgclose>Close</button>
+      </div>`);
+    const finish = (v) => { w.remove(); _cgptLimitP = null; resolve(v); };
+    w.querySelector("[data-cgmanage]").addEventListener("click", () => {
+      w.querySelector("[data-cgretry]").hidden = false;
+    });
+    w.querySelector("[data-cgapp]").onclick = () => finish("app");
+    w.querySelector("[data-cgretry]").onclick = async () => {
+      try { await api("/api/account/chatgpt/retry", { method: "POST" }); } catch (e) {}
+      finish("retry");
+    };
+    w.querySelector("[data-cgclose]").onclick = () => finish("close");
+    w.addEventListener("keydown", (e) => { if (e.key === "Escape") finish("close"); });
+    w.querySelector("[data-cgmanage]").focus();
+  });
+  return _cgptLimitP;
+}
+
+/* The invitation on Home, for a seller whose writing is not on their ChatGPT
+   plan yet. Asked about once per page load, and never again once dismissed. */
+async function paintChatGPTInvite() {
+  const box = $("cgptInvite");
+  if (!box) return;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem("cx_cgpt_invite_off") === "1"; } catch (e) {}
+  if (dismissed) return;
+  const cfg = await authProviders();
+  if (!cfg || !cfg.chatgpt || !cfg.chatgpt.enabled || !cfg.chatgpt.plan_usage) return;
+  if (state.chatgpt === undefined || state.chatgpt === null) {
+    try { state.chatgpt = await api("/api/account/chatgpt"); } catch (e) { return; }
+  }
+  const st = state.chatgpt || {};
+  const el = $("cgptInvite");
+  if (!el || !st.enabled || st.plan) { if (el) el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="cgpt-invite">
+      <span class="cgpt-new">New</span>
+      <b>Use your ChatGPT plan for AI writing in this app</b>
+      ${cgptButton("Continue with ChatGPT", 'data-cginvite')}
+      <button type="button" class="cgpt-x" data-cginvx aria-label="Dismiss">${sic("close")}</button>
+    </div>`;
+  el.querySelector("[data-cginvite]").onclick = () => startChatGPT("connect", { reconsent: !!st.linked });
+  el.querySelector("[data-cginvx]").onclick = () => {
+    try { localStorage.setItem("cx_cgpt_invite_off", "1"); } catch (e) {}
+    el.innerHTML = "";
+  };
 }
 
 // A seller locked out of their account is locked out of their whole catalogue,
@@ -698,6 +1010,10 @@ $("logoutBtn").onclick = async () => {
   // the next tap, which is not what "log out" means to anyone.
   try { if (window.google && google.accounts) google.accounts.id.disableAutoSelect(); } catch (e) {}
   setupGoogleSignIn();
+  // Logging out of this app does not stop its use of the seller's ChatGPT
+  // plan (OpenAI says the same of every app); Account has the button for that.
+  state.chatgpt = undefined;
+  setupChatGPTSignIn();
 };
 
 function showShell() {
@@ -1692,6 +2008,7 @@ function renderHome(s) {
       </div>
     </div>
 
+    <div id="cgptInvite"></div>
     ${journey}
     ${hasData ? guide : ""}
 
@@ -1792,6 +2109,7 @@ function renderHome(s) {
   }, { once: false });
   renderToday();
   renderUpcomingSocial();
+  paintChatGPTInvite();
   warmOnIntent();
   warmPlotly();     // idle-time, so the first chart does not wait for 3.5 MB
   warmModules();
@@ -4374,7 +4692,9 @@ function openProductForm(id, prefillName) {
       $("pfDesc").value = out.description || $("pfDesc").value;
       if ((out.highlights || []).length) $("pfHl").value = out.highlights.join("\n");
       ["pfDesc", "pfHl"].forEach((x) => $(x).dispatchEvent(new Event("input", { bubbles: true })));
-      toast(out.ai ? "Written: read it over and change anything that is not quite right."
+      toast(out.provider === "chatgpt"
+              ? "Written with your ChatGPT plan: read it over and change anything that is not quite right."
+              : out.ai ? "Written: read it over and change anything that is not quite right."
                    : "No AI connected, so this is a starting draft from your details. Edit freely.", 6000);
     } catch (e) { toast(e.message, 6000); }
     b.disabled = false; b.innerHTML = sic("spark") + "Write description &amp; key points";
@@ -5995,6 +6315,8 @@ async function openAccount() {
   const ig = d.instagram || {};
   const pay = d.payments || {};
   const ai = d.ai_keys || {};
+  const cg = d.chatgpt || {};
+  state.chatgpt = cg;
   const cr = d.credits || {};
   const cst = cr.costs || {};
   const pl = d.plan || {};
@@ -6042,24 +6364,8 @@ async function openAccount() {
       </div></div>`;
   };
 
-  // ---- Plan: current tier, and the Upgrade to Max (premium) offer ----
-  const up = pl.upgrade || {};
-  const planHtml = pl.is_pro ? `
-      <section class="acc-sec">
-        <h4>Plan</h4>
-        <p style="margin-top:0;"><b>${esc(pl.name || "Max")}</b> (you're on premium. Everything is unlocked: unlimited AI, supply management, purchase orders, custom domain and multi-outlet.)</p>
-        <button class="btn ghost sm danger" id="accCancelPlan">Cancel subscription</button>
-        <p class="muted tiny" style="margin:6px 0 0;">Cancelling returns you to Free, which keeps all the numbers and actions. You can re-subscribe any time.</p>
-      </section>` : `
-      <section class="acc-sec" style="border:1px solid var(--accent,#4f46e5); border-radius:12px; padding:14px;">
-        <h4 style="margin-top:0;">Upgrade to ${esc(up.name || "Max")}</h4>
-        <p class="muted tiny" style="margin-top:0;">You're on <b>${esc(pl.name || "Free")}</b>. ${esc(up.tagline || "Runs the shop, not just the reporting.")}${
-          pl.launch_mode ? " Everything is free during launch, upgrade now and you keep these when pricing starts." : ""}</p>
-        <ul style="margin:8px 0 12px; padding-left:18px; font-size:13px; line-height:1.6;">
-          ${(up.includes || []).map((x) => `<li>${esc(x)}</li>`).join("")}
-        </ul>
-        <button class="btn primary" id="accUpgrade">Upgrade to ${esc(up.name || "Max")}, ₹${up.price_inr ?? 999}/${esc(up.period || "month")}</button>
-      </section>`;
+  // ---- Plan: the 7-day trial, or the paid plan, and both offers ----
+  const planHtml = planSectionHtml(pl);
 
   // ---- Credits: a monthly allowance + purchased packs, spent by real usage ----
   const pct = cr.monthly_grant
@@ -6071,6 +6377,9 @@ async function openAccount() {
         <p class="muted tiny" style="margin-top:0;">A monthly allowance you can top up. Every generation spends what it actually costs,
           a picture ${cst.image ?? 10}, a video ${cst.video ?? 280}, a caption or an image read ${cst.text ?? 1}.${
           cr.launch_mode ? " Everything is free during launch; this is the meter for later." : ""}</p>
+        ${cg.plan ? `<p class="muted tiny">Your AI writing runs on your ChatGPT plan, so it does not spend
+          these credits. Pictures and clips still do.</p>
+          <p style="margin:0 0 10px;">${cgptUsingLine(cg.manage_url)}</p>` : ""}
         <div style="display:flex; justify-content:space-between; font-size:13px;"><span class="muted">This month</span><b>${cr.monthly_left ?? 0} of ${cr.monthly_grant ?? 0} left</b></div>
         <div style="height:8px; border-radius:6px; background:rgba(127,127,127,.18); overflow:hidden; margin:6px 0 3px;"><div style="height:100%; width:${pct}%; background:var(--accent,#4f46e5);"></div></div>
         <div class="muted tiny" style="margin:0 0 10px;">Resets ${esc(cr.resets || "on the 1st")}.</div>
@@ -6140,11 +6449,58 @@ async function openAccount() {
         ${providersHtml}
       </section>`;
 
-  const apiHtml = `
+  // ---- ChatGPT: sign in with it, and write on the seller's own plan ----
+  const cgModel = (m) => m === "gpt-6-luna" ? "GPT-6 Luna, OpenAI's most efficient model"
+    : (m ? esc(m) : "an efficient model");
+  const cgWho = cg.email ? `<b>${esc(cg.email)}</b>` : "your ChatGPT account";
+  let cgBody = "";
+  if (cg.enabled && cg.plan) {
+    cgBody = `
+        <p style="margin-top:0;">${dot(true)}Connected as ${cgWho}. Your AI writing runs on your ChatGPT
+          plan, with ${cgModel(cg.model)}, so it uses as little of your plan as it can.</p>
+        ${cg.limit ? `<div class="mg-note"><b>Paused: usage limit reached.</b> ChatGPT shows exactly when it
+            resets. Until then, you choose each time whether One Tap Manager's AI writes instead.
+            <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+              <a class="btn primary sm" href="${esc(cg.manage_url)}" target="_blank" rel="noopener">Manage usage</a>
+              <button class="btn ghost sm" data-cgretryacc>Try again</button></div></div>` : ""}
+        ${cg.eligible === false ? `<div class="mg-note">Your ChatGPT account cannot share its plan with
+            apps. That needs ChatGPT Plus or Pro, so One Tap Manager's AI writes for now.
+            <div style="margin-top:8px;"><button class="btn ghost sm" data-cgretryacc>I upgraded, try again</button></div></div>`
+          : (cg.blocked ? `<div class="mg-note">ChatGPT is not accepting requests from this app for your
+            account right now, so One Tap Manager's AI writes for the moment.
+            <div style="margin-top:8px;"><button class="btn ghost sm" data-cgretryacc>Try again</button></div></div>` : "")}
+        <p style="margin:6px 0 12px;">${cgptUsingLine(cg.manage_url)}</p>
+        <button class="btn ghost sm danger" id="accCgOff">Stop using my ChatGPT plan</button>`;
+  } else if (cg.enabled && cg.linked) {
+    cgBody = `
+        <p style="margin-top:0;">${dot(false)}You sign in with ChatGPT as ${cgWho}${cg.plan_offered
+          ? `, but your plan is not used for AI writing here${cg.needs_reconnect ? ": the connection to ChatGPT expired" : ""}.`
+          : "."}</p>
+        ${cg.plan_offered ? cgptButton("Continue with ChatGPT", 'id="accCgGo" data-reconsent="1"') : ""}`;
+  } else if (cg.enabled) {
+    cgBody = cg.plan_offered ? `
+        <p style="margin-top:0;">Complete eligible AI writing in this app with the usage included in your
+          ChatGPT plan or credits balance. It needs ChatGPT Plus or Pro, and in ChatGPT you choose how much
+          of your plan this app may use.</p>
+        ${cgptButton("Continue with ChatGPT", 'id="accCgGo"')}` : `
+        <p style="margin-top:0;">Sign in to One Tap Manager with your ChatGPT account.</p>
+        ${cgptButton("Continue with ChatGPT", 'id="accCgGo"')}`;
+  }
+  const cgptHtml = !cg.enabled ? "" : `
+      <section class="acc-sec">
+        <h4 style="margin-top:0;">Use your ChatGPT plan</h4>
+        ${cgBody}
+        <p class="muted tiny" style="margin:12px 0 0;">Pictures and clips never use your ChatGPT plan: OpenAI
+          does not allow image generation through it. For those, add your own OpenAI key below, or use ours
+          on Pro Max.${cg.help_url ? ` <a href="${esc(cg.help_url)}" target="_blank" rel="noopener">How this works</a>` : ""}</p>
+      </section>`;
+
+  const apiHtml = `${cgptHtml}
       <section class="acc-sec">
         <h4 style="margin-top:0;">Your own AI keys <span class="muted tiny">optional</span></h4>
-        <p class="muted tiny" style="margin-top:0;">Leave these blank to use ours (subject to the monthly picture limit). Add your own and captions and pictures run on your key and your bill, with no monthly limit from us.</p>
-        ${aiRow("openai", "OpenAI", "for captions and pictures, starts with sk-")}
+        <p class="muted tiny" style="margin-top:0;">Leave these blank to use ours (subject to the monthly picture limit). Add your own and pictures run on your key and your bill, with no monthly limit from us.${
+          cg.enabled ? " Writing does not need a key: it uses your ChatGPT plan once you connect it above." : ""}</p>
+        ${aiRow("openai", "OpenAI", "for pictures only, starts with sk-")}
         ${aiRow("gemini", "Google Gemini", "for brand-aware pictures")}
       </section>`;
 
@@ -6164,7 +6520,7 @@ async function openAccount() {
     ["payments",  "Payments",       '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="16.5" cy="12" r="1.2"/><path d="M3 9h13"/>'],
     ["email",     "Email",          '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>'],
     ["instagram", "Instagram",      '<rect x="4" y="4" width="16" height="16" rx="4.5"/><circle cx="12" cy="12" r="3.6"/><circle cx="17" cy="7" r="1"/>'],
-    ["api",       "API keys",       '<circle cx="8" cy="12" r="3.4"/><path d="M11.2 12H20l-2.2 2.2M20 12l-2.2-2.2"/>'],
+    ["api",       cg.enabled ? "ChatGPT & AI keys" : "API keys", '<circle cx="8" cy="12" r="3.4"/><path d="M11.2 12H20l-2.2 2.2M20 12l-2.2-2.2"/>'],
     ["danger",    "Account",        '<circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/>'],
   ];
   const navHtml = NAV.map(([id, label, icon], i) =>
@@ -6298,14 +6654,38 @@ async function openAccount() {
       toast("Removed. Back to ours."); closeModal(); openAccount(); } catch (e) { toast(e.message); }
   });
 
+  // ChatGPT
+  if ($("accCgGo")) $("accCgGo").onclick = () =>
+    startChatGPT("connect", { reconsent: $("accCgGo").dataset.reconsent === "1" });
+  document.querySelectorAll("[data-cgretryacc]").forEach((b) => b.onclick = async () => {
+    try {
+      const r = await api("/api/account/chatgpt/retry", { method: "POST" });
+      state.chatgpt = r.chatgpt;
+      toast("The next piece of AI writing will try your ChatGPT plan again.", 5000);
+      closeModal(); openAccount();
+    } catch (e) { toast(e.message); }
+  });
+  if ($("accCgOff")) $("accCgOff").onclick = async () => {
+    if (!confirm("Stop using your ChatGPT plan here? AI writing goes back to One Tap Manager's "
+               + "own AI. You can still sign in with ChatGPT, and connect your plan again any time.")) return;
+    try {
+      const r = await api("/api/account/chatgpt/disconnect", { method: "POST" });
+      state.chatgpt = r.chatgpt;
+      toast(r.revoked ? "Done. One Tap Manager no longer uses your ChatGPT plan."
+        : "Done here, but ChatGPT did not confirm it. To be sure, remove One Tap Manager in "
+          + "ChatGPT: Settings, Security and login, Login connections.", 9000);
+      closeModal(); openAccount();
+    } catch (e) { toast(e.message, 6000); }
+  };
+
   // plan + credits + danger zone
-  if ($("accUpgrade")) $("accUpgrade").onclick = () => upgradeToMax((pl.upgrade || {}).product || "pro");
+  document.querySelectorAll("[data-buyplan]").forEach((b) => b.onclick = () => upgradeToMax(b.dataset.buyplan));
   if ($("accCancelPlan")) $("accCancelPlan").onclick = async () => {
-    if (!confirm("Cancel your Max subscription and return to the free plan? "
-               + "You keep all the numbers and actions, and can re-subscribe any time.")) return;
+    if (!confirm("Cancel your subscription? It stays on until the end of the month you "
+               + "paid for and will not renew. Your data is kept.")) return;
     try {
       const r = await api("/api/pay/cancel", { method: "POST", json: {} });
-      toast(r.message || "Subscription cancelled: you're back on Free.", 6000);
+      toast(r.message || "Cancelled.", 6000);
       closeModal(); openAccount();
     } catch (e) { toast(e.message); }
   };
@@ -6336,16 +6716,16 @@ function openBuyCredits(cr) {
   const rows = packs.length ? packs.map((p) => `
     <div class="acc-sec" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
       <div>
-        <b>${esc(p.name)}</b> <span class="muted tiny">₹${p.price_inr}</span>
+        <b>${esc(p.name)}</b> <span class="muted tiny">${esc(p.price_label || ("₹" + p.price_inr))}</span>
         <p class="muted tiny" style="margin:2px 0 0;">${esc(p.description || (p.credits + " credits"))}</p>
       </div>
-      <button class="btn primary sm" data-pack="${esc(p.id)}" style="flex:none;">Buy: ₹${p.price_inr}</button>
-    </div>`).join("") : `<p class="muted">No credit packs are configured on this server yet.</p>`;
+      <button class="btn primary sm" data-pack="${esc(p.id)}" style="flex:none;">Buy: ${esc(p.price_label || ("₹" + p.price_inr))}</button>
+    </div>`).join("") : `<p class="muted">Credit packs are not on sale in your currency yet. Your plan's monthly credits refill on the 1st.</p>`;
 
   openModal("Buy credits", `
     <p class="muted tiny" style="margin-top:0;">Credits never expire and stack on top of your monthly allowance.
       A picture costs ${cst.image ?? 10}, a video ${cst.video ?? 280}, a caption or an image read ${cst.text ?? 1}.
-      Paid securely through Razorpay.</p>
+      Paid securely by card.</p>
     ${rows}
     <div class="modal-actions"><button class="btn ghost" data-mclose2>Close</button></div>`, { wide: true });
   const x = document.querySelector("[data-mclose2]"); if (x) x.onclick = closeModal;
@@ -6354,11 +6734,70 @@ function openBuyCredits(cr) {
 
 function buyCredits(productId) { return startCheckout(productId, "Payment successful: credits added.", "It's free during launch, nothing to buy yet."); }
 
-/* Upgrade to Max (premium). Same pay flow as a credit pack; the server grants
-   the tier on a verified signature, so all this does is start the checkout. */
+/* Buy (or renew) Pro or Pro Max. Same pay flow as a credit pack; the server
+   grants the tier on a verified signature, in the account's own currency. */
 function upgradeToMax(productId) {
-  return startCheckout(productId || "pro", "You're on Max now, everything's unlocked.",
-    "Everything is free during launch, you're already getting Max features.");
+  const name = productId === "pro" ? "Pro" : "Pro Max";
+  return startCheckout(productId || "promax", `You're on ${name} now. Thank you.`,
+    "Everything is open on this server right now, nothing to buy.");
+}
+
+/* The Plan card on the Account tab: where the trial stands, or the paid plan,
+   then both plans with their price in the seller's currency. */
+function planSectionHtml(pl) {
+  pl = pl || {};
+  const t = pl.trial || {};
+  const offers = pl.offers || [];
+  const day = (iso) => { try { return new Date(iso).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }); } catch (_) { return ""; } };
+  let status;
+  if (pl.launch_mode) {
+    status = `<p class="muted tiny" style="margin-top:0;">Every feature is open on this server right now.</p>`;
+  } else if (pl.is_paid) {
+    status = `<p style="margin-top:0;"><b>${esc(pl.name)}</b>, paid until ${esc(day(pl.paid_until))}${pl.cancelled ? ", then it stops (cancelled)" : ""}.</p>`;
+  } else if (t.active) {
+    status = `<p style="margin-top:0;"><b>Free trial</b>: ${t.days_left} day${t.days_left === 1 ? "" : "s"} left of ${t.days}, with every Pro Max feature.
+      Started ${esc(day(t.started_at))}, ends ${esc(day(t.ends_at))}.</p>`;
+  } else {
+    status = `<p style="margin-top:0;"><b>Your free trial ended on ${esc(day(t.ends_at))}.</b> Pick a plan to keep going. Your data is all still here.</p>`;
+  }
+  const cards = offers.map((o) => `
+      <div style="flex:1 1 220px; border:1px solid ${o.product === "promax" ? "var(--accent,#4f46e5)" : "var(--line,#ddd)"}; border-radius:12px; padding:12px;">
+        <b>${esc(o.name)}</b> <span class="muted tiny">${esc(o.price_label)} / month</span>
+        <p class="muted tiny" style="margin:4px 0 6px;">${esc(o.tagline || "")}</p>
+        <ul style="margin:0 0 10px; padding-left:18px; font-size:13px; line-height:1.55;">
+          ${(o.includes || []).map((x) => `<li>${esc(x)}</li>`).join("")}
+          ${o.chatgpt_plan ? `<li>${esc(o.chatgpt_plan.text)} <a href="${esc(o.chatgpt_plan.learn_more)}"
+            target="_blank" rel="noopener">Learn more</a></li>` : ""}
+        </ul>
+        <button class="btn ${o.product === "promax" ? "primary" : "ghost"} sm" data-buyplan="${esc(o.product)}">${
+          o.current ? "Renew" : (pl.is_paid ? "Switch to " : "Choose ") + esc(o.name)}, ${esc(o.price_label)}</button>
+      </div>`).join("");
+  return `
+      <section class="acc-sec">
+        <h4 style="margin-top:0;">Plan</h4>
+        ${status}
+        <div style="display:flex; flex-wrap:wrap; gap:10px;">${cards}</div>
+        ${pl.is_paid && !pl.cancelled ? `<button class="btn ghost sm danger" id="accCancelPlan" style="margin-top:10px;">Cancel subscription</button>` : ""}
+      </section>`;
+}
+
+/* The plan picker, opened by any 402 from the server: the trial has ended, or
+   the thing asked for (AI pictures and clips) is a Pro Max feature. */
+let _plansOpen = 0;
+async function openPlans(detail) {
+  if (Date.now() - _plansOpen < 4000) return;   // many calls fail at once on load
+  _plansOpen = Date.now();
+  detail = detail || {};
+  let acc = null;
+  try { acc = await api("/api/account"); } catch (_) { /* fall back to the message */ }
+  const pl = (acc && acc.plan) || {};
+  const title = detail.code === "trial_ended" ? "Your free trial has ended" : "Upgrade your plan";
+  openModal(title, `
+    <p class="muted" style="margin-top:0;">${esc(detail.message || "")}</p>
+    ${planSectionHtml(pl)}
+    <div class="modal-actions"><button class="btn ghost" data-mclose3>Not now</button></div>`, { wide: true });
+  const x = document.querySelector("[data-mclose3]"); if (x) x.onclick = closeModal;
+  document.querySelectorAll("[data-buyplan]").forEach((b) => b.onclick = () => upgradeToMax(b.dataset.buyplan));
 }
 
 /* One Razorpay round-trip, shared by credit packs and the plan upgrade:
@@ -6453,6 +6892,8 @@ function confirmDelete() {
       if ($("loginView")) $("loginView").hidden = false;
       try { if (window.google && google.accounts) google.accounts.id.disableAutoSelect(); } catch (e) {}
       try { setupGoogleSignIn(); } catch (e) {}
+      state.chatgpt = undefined;
+      try { setupChatGPTSignIn(); } catch (e) {}
       toast("Your account has been deleted.", 5000);
     },
   });
@@ -7727,9 +8168,11 @@ async function openContentModule() {
   try {
     const sug = await api("/api/content/suggestion");
     const s = sug.suggestion || {};
-    const openaiNote = sug.openai
-      ? `<span class="pill-on">OpenAI on</span>`
-      : `<span class="pill-off">OpenAI off: using templates (set OPENAI_API_KEY on the server)</span>`;
+    const openaiNote = sug.chatgpt
+      ? cgptUsingLine()
+      : sug.openai
+      ? `<span class="pill-on">AI on</span>`
+      : `<span class="pill-off">AI off: using templates (connect an AI provider on the server)</span>`;
     let html = `<div class="card">
       <div class="row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <h3 style="margin:0;">Current suggestion</h3><span style="flex:1"></span>${openaiNote}
@@ -9165,7 +9608,8 @@ async function writeWholeSite() {
       () => api("/api/ai/site-copy", { method: "POST", json: { brief } }));
   } catch (e) { toast(e.message, 6000); return; }
   let copy = r.copy || {};
-  let via = r.ai ? `Written by AI (${r.provider})` : "No AI connected on the server, a starting draft from your words";
+  let via = r.provider === "chatgpt" ? "Written with your ChatGPT plan"
+    : r.ai ? `Written by AI (${r.provider})` : "No AI connected on the server, a starting draft from your words";
   const fb = await puterFallback(r);
   if (fb) { const j = _aiJson(fb.text); if (j && j.hero_heading) { copy = j; via = "Written by AI (Puter, your account)"; } }
   const rows = SITE_COPY_FIELDS.filter(([k]) => copy[k] && (!Array.isArray(copy[k]) || copy[k].length));
@@ -9539,9 +9983,14 @@ async function loadCustomers() {
   // Icons come from localStorage on any warm start, so this almost never
   // blocks. On a cold one it is still the only thing the shell needs first.
   await loadIcons();
+  // Back from Sign in with ChatGPT? The fragment carries a one-time ticket
+  // (or the reason it did not work), and it is read before anything else.
+  const cgptBack = takeChatGPTReturn();
+  if (cgptBack && await finishChatGPTReturn(cgptBack)) return;
   if (!state.token) {
     $("loginView").hidden = false;
     setupGoogleSignIn();     // not awaited: the password form is usable meanwhile
+    setupChatGPTSignIn();
     return;
   }
 
@@ -9882,7 +10331,10 @@ async function renderSocial() {
   if (_currentModule !== "social") return;
   _socialCal = cal;
 
-  const aiLine = ai.ready
+  const cgs = d.chatgpt || {};
+  const aiLine = cgs.plan
+    ? cgptUsingLine(cgs.manage_url)
+    : ai.ready
     ? `<span class="sm-ok">${sic("check")}Writing with ${esc(ai.active)}${ai.free_ready && !(ai.providers || []).some((x) => x.name === ai.active && !x.free) ? ", free tier" : ""}</span>`
     : `<span class="sm-warn">${sic("alert")}No AI connected: captions come from a template.</span>`;
 

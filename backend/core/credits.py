@@ -154,9 +154,11 @@ def spend(email: str, kind: str, n: int = 1) -> dict:
 def status(email: str) -> dict:
     """What the Account tab's Credits card shows, in one call."""
     g = monthly_grant()
+    # Packs are priced in rupees only, so a dollar account is offered none.
     packs = [{"id": c["id"], "name": c["name"], "price_inr": c["price_inr"],
+              "price_label": c["price_label"],
               "credits": c["credits"], "description": c.get("description", "")}
-             for c in pricing.CREDIT_PACKS.values()]
+             for c in pricing.packs_for(billing.billing_currency(email))]
     return {
         "monthly_grant": g,
         "monthly_used": monthly_used(email),

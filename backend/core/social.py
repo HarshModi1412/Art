@@ -935,7 +935,7 @@ def write_hashtags(email: str, product: dict, caption: dict | None = None,
     try:
         res = aiprovider.generate(HASHTAG_SYSTEM, "\n".join(facts) or "An Indian D2C product.",
                                   sensitivity="public", max_tokens=80, temperature=0.7,
-                                  fallback="")
+                                  fallback="", email=email)
         tags = clean_tags(_tags_from(res.get("text") or ""))
     except Exception:  # noqa: BLE001 — hashtags are never worth failing a post for
         tags = []
@@ -974,7 +974,7 @@ def write_caption(email: str, product: dict, pillar_id: str,
     fb = _fallback_caption(product, pillar, s, playbook, beat, slot)
     res = aiprovider.generate(_caption_system(s), user, sensitivity="public",
                               max_tokens=400, temperature=0.8,
-                              fallback="")
+                              fallback="", email=email)
     if not res["text"]:
         return {**fb, "provider": "template", "free": True, "error": res.get("error", "")}
     parsed = _parse_caption(res["text"])
@@ -1268,7 +1268,7 @@ def write_reel_script(email: str, product: dict, pillar_id: str,
     style = _reel_style(product.get("name") or "", pillar_id, angle or shot_type)
     fb = _fallback_script(product, occasion)
     res = aiprovider.generate(_script_system(s, style), user, sensitivity="public",
-                              max_tokens=500, temperature=0.8, fallback="")
+                              max_tokens=500, temperature=0.8, fallback="", email=email)
     parsed = _parse_script(res["text"]) if res["text"] else {}
     if not res["text"] or not parsed.get("beats"):
         out = {**fb, "provider": "template", "free": True,

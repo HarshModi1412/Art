@@ -94,10 +94,16 @@ def generate_suggestion(email: str, product_type: str | None = None,
     topic = topic or suggest_topic(pt)
     engine = "openai" if is_openai_available() else "template"
 
-    if engine == "openai":
+    if engine == "openai" or _plan_ready(email):
+        from backend.core import chatgpt_plan
         try:
-            copy = _openai_copy(pt, topic)
+            copy = _openai_copy(pt, topic, email)
             engine = "ai"
+        except chatgpt_plan.LimitReached:
+            # The seller's own ChatGPT usage is spent and they are waiting on
+            # this screen: they choose what happens next, a template does not
+            # quietly take their place.
+            raise
         except Exception as e:
             # never fail the whole call — fall back so the panel keeps working
             copy = _template_copy(pt, topic)
@@ -134,8 +140,17 @@ def generate_suggestion(email: str, product_type: str | None = None,
 # ---------------------------------------------------------
 # OpenAI engines
 # ---------------------------------------------------------
-def _openai_copy(product_type: str, topic: str) -> dict:
-    """Post copy through the content writer's provider chain (Puter first when
+def _plan_ready(email: str | None) -> bool:
+    try:
+        from backend.core import aiprovider
+        return aiprovider.plan_ready(email)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _openai_copy(product_type: str, topic: str, email: str | None = None) -> dict:
+    """Post copy on the seller's own ChatGPT plan when they connected one,
+    otherwise through the content writer's provider chain (Puter first when
     configured). Name kept for the callers; it is no longer OpenAI-only."""
     import json
     from backend.core import aiprovider, writer
@@ -146,7 +161,7 @@ def _openai_copy(product_type: str, topic: str) -> dict:
     user = (f"Product type: {product_type}. Trend / topic to lean on: {topic}. "
             f"Write one Instagram post.")
     res = aiprovider.generate(system, user, sensitivity="public", max_tokens=600,
-                              temperature=0.8, fallback="", role="writer")
+                              temperature=0.8, fallback="", role="writer", email=email)
     data = writer._json(res.get("text", ""))
     if not data.get("caption"):
         raise RuntimeError(res.get("error") or "no copy came back")
@@ -181,9 +196,11 @@ def _openai_image(product_type: str, topic: str, email: str | None = None) -> st
             own_key = account.ai_key(email, "openai")
         except Exception:  # noqa: BLE001
             own_key = None
-    if email and not own_key:
+    if email:
         from backend.core import aicaps
-        aicaps.check_image_month(email)   # raises MonthlyImageCapReached at the cap
+        aicaps.require_generation(email, "image")   # Pro Max only, own key or not
+        if not own_key:
+            aicaps.check_image_month(email)   # raises MonthlyImageCapReached at the cap
     client = OpenAI(api_key=own_key) if own_key else OpenAI()
     style = {
         "jewellery": "clean minimal studio photograph, soft warm lighting, marble backdrop",

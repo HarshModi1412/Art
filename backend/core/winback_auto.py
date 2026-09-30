@@ -313,8 +313,12 @@ def run_due() -> dict:
     """Every account whose win-back moment has come."""
     from backend.core import auth
     ran = skipped = failed = 0
+    from backend.core import billing
     for account in (auth.load_users() or {}):
         try:
+            if billing.is_locked(account):   # trial over, nothing paid
+                skipped += 1
+                continue
             res = run_if_due(account)
         except Exception as e:  # noqa: BLE001
             log.warning("win-back failed for %s: %s", account, e)

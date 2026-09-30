@@ -151,7 +151,7 @@ def register(email: str, password: str, plan: str = "free") -> None:
         raise ValueError("Please enter a valid email address")
     if len(password_clean) < 6:
         raise ValueError("Password must be at least 6 characters")
-    if plan not in ("free", "pro", "chain"):
+    if plan not in ("free", "pro", "promax"):
         plan = "free"
 
     if db.SUPABASE_ENABLED:
@@ -173,12 +173,13 @@ def register(email: str, password: str, plan: str = "free") -> None:
     df.to_csv(users_file, index=False)
 
 
-# Plan ids that may live in the users table. "chain" is a legacy row that
-# backend.core.pricing normalises to the Max ("pro") tier; "semipro" is the
+# Plan ids that may live in the users table: "free" (the trial), "pro" and
+# "promax". "chain" and "max" are legacy rows that backend.core.pricing
+# normalises to Pro Max; "semipro" is the
 # retired middle tier, kept here only so an old stored row still reads back
 # instead of being coerced to "free" a step earlier than pricing.normalize_plan
 # already does it.
-_KNOWN_PLANS = ("free", "semipro", "pro", "chain")
+_KNOWN_PLANS = ("free", "semipro", "pro", "promax", "max", "chain")
 
 
 def get_plan(email: str) -> str:

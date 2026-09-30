@@ -6,25 +6,30 @@ What the app does today, written from the code as of 24 September 2026. Use it t
 
 ## 1. The product in one paragraph
 
-One Tap Manager is a web app for small Indian D2C sellers of clothing, jewellery and perfume. A seller brings in the sales they already make (a file from Amazon, Shopify, a POS or a spreadsheet, a live connector, or orders from their own One Tap website). The app reads it and answers "what should I do this morning?" on the home screen, then does most of the work: the win-back message is written, the purchase order is filled in, the week of Instagram is planned and scheduled. It lives at onetapmanager.com, and the app itself is at onetapmanager.com/smart.
+One Tap Manager is a web app for small online sellers of clothing, jewelry and fragrance. Since September 2026 the primary market is the United States (onetapmanager.com, prices in USD); India is the second market (onetapmanager.com/in, prices in INR). A seller brings in the sales they already make (a file from Amazon, Shopify, a POS or a spreadsheet, a live connector, or orders from their own One Tap website). The app reads it and answers "what should I do this morning?" on the home screen, then does most of the work: the win-back message is written, the purchase order is filled in, the week of Instagram is planned and scheduled. It lives at onetapmanager.com, and the app itself is at onetapmanager.com/smart.
 
 ---
 
 ## 2. Plans and money
 
-Source: `backend/core/pricing.py`, `billing.py`, `credits.py`.
+Source: `backend/core/pricing.py`, `billing.py`, `region.py`, `credits.py`.
 
-| Plan | Price | What it adds |
-|---|---|---|
-| Free | ₹0, forever | Sales and sub-category analytics, customer groups and the at-risk list, unlimited win-back campaigns, complaint and reputation reports, the daily digest, your own website with no badge, up to 250 products, 50 AI uses a day |
-| Max | ₹999 a month | Supplier management and reorder maths, PDF purchase orders sent to suppliers, Position Strategy checklists, unlimited AI, products and outlets, your own custom domain |
+| Plan | US price | India price | What it includes |
+|---|---|---|---|
+| Free trial | $0 for 7 days | ₹0 for 7 days | Every Pro Max feature, no card. When it ends nothing is free: the app shows the plan picker until a plan is bought. Data is kept |
+| Pro | $10 a month | ₹700 a month | Everything except AI image and video generation: analytics, customer groups, win-back, stock, suppliers and purchase orders, the Instagram planner, review and complaint analysis, the website and custom domain, unlimited AI writing |
+| Pro Max | $12.99 a month | ₹1,299 a month | Everything in Pro, plus AI product photos and short product clips |
 
-- **Credit packs**, for sellers who do not want a monthly plan: 100 credits for ₹299, 300 for ₹749, 1,000 for ₹1,999. Credits never expire. One AI use costs 1 credit, and one purchase order costs 5.
-- **Launch mode** (`LAUNCH_MODE`, on by default) makes every feature free for everyone. Anything that will later need Max is labelled "Free during launch".
-- **No cut of sales, ever.** There are no per-order or percentage fees. The pricing page shows the Shopify app stack the seller replaces (about ₹7,600 a month) with the arithmetic.
-- **Payments for plans** go through Razorpay.
-- **Cancel** is self-serve from the Account tab (`cancel_requests.py`). Downgrading never deletes data.
-- "Semi Pro" (₹499) is retired, and accounts still stamped with it read as Free. "pro" is only the internal id for Max.
+- **The trial start date** is saved on the account at signup (`billing.start_trial`, stored under `billing_account` in the user store), along with the billing currency. The trial cannot be restarted. Accounts made before this pricing get their 7 days from the first time the app checks them.
+- **Currency** is chosen by region (`region.py`): `?region=in|us`, then a cookie, then the edge country header (`CF-IPCountry` and similar), then Accept-Language, then USD. A seller is billed in the currency saved at signup. Prices are set by hand in each currency, never converted.
+- **After the trial**, a middleware in `main.py` answers every seller API with a 402 `trial_ended`, except sign-in, account, pricing and payment routes. The app turns that into the plan picker. Scheduled jobs (autoplan, win-back, digest) skip locked accounts. Public pages and the storefront keep working.
+- **Image and video generation** is gated in `aicaps.require_generation`, so every generate route (including a seller's own OpenAI key) needs Pro Max or the trial.
+- **A paid month** runs 30 days from payment (`paid_until`). Nothing renews automatically: the seller pays again from the Account tab ("Renew" in the last week). Cancel stops renewal and the plan runs to the end of the paid month.
+- **Credit packs** (₹299, ₹749, ₹1,999) are sold to rupee accounts only and top up the monthly credit meter. They have no dollar price yet.
+- **Launch mode** (`LAUNCH_MODE`) now defaults to off. Set it to `true` to open everything for a demo.
+- **No cut of sales, ever.** There are no per-order or percentage fees.
+- **Payments** go through Razorpay, in INR or USD. USD needs International Payments switched on in the Razorpay dashboard.
+- Legacy plan ids: "max" and "chain" read as Pro Max, "semipro" as the trial.
 
 ---
 
@@ -164,7 +169,7 @@ One screen for everything set up once (`account.py`). Secrets never come back to
 
 | Variable | What it does |
 |---|---|
-| `LAUNCH_MODE` | `true` (default) makes everything free |
+| `LAUNCH_MODE` | Off by default (7-day trial, then paid). `true` makes everything free |
 | `AI_LABEL` | `on`, `images` or `off`, as above |
 | `META_APP_SECRET` | Needed to verify Instagram webhooks |
 | `BRAND_PROFILES` | Official profile URLs (Reddit, Instagram, LinkedIn and so on), comma separated. Listed as `sameAs` in the structured data and in `/llms.txt` |
@@ -188,7 +193,7 @@ Auto-deploy is off on Render, so every push needs a Manual Deploy.
 | Business logic | `backend/core/*.py` (one file per area, named as above) |
 | Seller app | `Smart CafeX/smart.html`, `smart.js`, `smart.css`, `ios.css` |
 | Shopper website | `Smart CafeX/storefront/` |
-| Landing page | `backend/static/landing.html` |
+| Landing pages | `backend/static/landing-us.html` (served at `/`), `backend/static/landing.html` (India, served at `/in`) |
 | Database migrations | `supabase/*.sql` |
 | Tests | `scripts/test_*.py` (each prints "N passed, M failed") |
 | Sample data | `data/sample_transactions.csv`, made by `scripts/make_sample_data.py` |

@@ -1,14 +1,20 @@
 """
 AI features — ports of BA.py (Business Analyst) and chatbot2.py.
 
-Same models, same prompts, same caching-by-dataframe-hash idea. The only
-change: instead of returning Plotly figures, chart data is computed
-server-side and shipped to the frontend as JSON for Plotly.js.
+Same prompts, same caching-by-dataframe-hash idea. Instead of returning Plotly
+figures, chart data is computed server-side and shipped to the frontend as JSON
+for Plotly.js.
+
+WHO ANSWERS: the seller's own ChatGPT plan when they signed in with ChatGPT and
+allowed it (aiprovider.plan_text, chatgpt_plan.py), and the server's
+OPENAI_API_KEY otherwise, exactly as before. The plan's route refuses
+`temperature` and `max_output_tokens`, so those two only apply to the key.
 """
 import hashlib
 import json
 import os
 import re
+import threading
 from functools import lru_cache
 
 import pandas as pd
@@ -19,6 +25,37 @@ except ImportError:  # allows the non-AI parts of the app to run without the pac
     OpenAI = None
 
 _client = None
+
+# Answers already written on a seller's own plan, by (seller, prompt): the same
+# upload asked about twice should not spend their ChatGPT usage twice, which is
+# what the lru_cache below already guarantees for the server's key. Only
+# successful answers are kept, so a fallback is never remembered as an answer.
+_PLAN_CACHE: dict[tuple[str, str], str] = {}
+_PLAN_CACHE_MAX = 256
+_plan_cache_lock = threading.Lock()
+
+
+def _plan_answer(email: str | None, prompt: str) -> str | None:
+    if not email:
+        return None
+    key = (email.strip().lower(), prompt)
+    with _plan_cache_lock:
+        hit = _PLAN_CACHE.get(key)
+    if hit:
+        return hit
+    from backend.core import aiprovider
+    text = aiprovider.plan_text(email, "", prompt)
+    if text:
+        with _plan_cache_lock:
+            if len(_PLAN_CACHE) >= _PLAN_CACHE_MAX:
+                _PLAN_CACHE.pop(next(iter(_PLAN_CACHE)))
+            _PLAN_CACHE[key] = text
+    return text
+
+
+def ask_llm(prompt: str, email: str | None = None) -> str:
+    """The seller's ChatGPT plan first, then the server's key."""
+    return _plan_answer(email, prompt) or ask_llm_cached(prompt)
 
 
 def get_client():
@@ -58,7 +95,7 @@ def ask_llm_cached(prompt: str) -> str:
 # =========================================================
 # BUSINESS ANALYST  (BA.py)
 # =========================================================
-def get_insights(df: pd.DataFrame) -> list[dict]:
+def get_insights(df: pd.DataFrame, email: str | None = None) -> list[dict]:
     """Port of get_insights() — identical prompt, JSON-array extraction."""
     prompt = f"""
 You are a senior business consultant.
@@ -88,7 +125,7 @@ Return ONLY JSON:
 }}
 ]
 """
-    raw = ask_llm_cached(prompt)
+    raw = ask_llm(prompt, email)
     try:
         start = raw.find("[")
         end = raw.rfind("]") + 1
@@ -97,7 +134,7 @@ Return ONLY JSON:
         return []
 
 
-def get_chart_spec(insight_text: str, columns: str) -> dict | None:
+def get_chart_spec(insight_text: str, columns: str, email: str | None = None) -> dict | None:
     """Port of get_chart_spec() — identical prompt, JSON-object extraction."""
     prompt = f"""
 You are a data visualization expert.
@@ -116,7 +153,7 @@ Return ONLY JSON:
 "title": "title"
 }}
 """
-    raw = ask_llm_cached(prompt)
+    raw = ask_llm(prompt, email)
     try:
         start = raw.find("{")
         end = raw.rfind("}") + 1
@@ -186,7 +223,7 @@ def _fallback_message(c: dict) -> str:
     return msg[:300]
 
 
-def generate_winback_messages(customers: list[dict]) -> list[dict]:
+def generate_winback_messages(customers: list[dict], email: str | None = None) -> list[dict]:
     """
     One batched prompt -> one short, personalized win-back message per at-risk
     customer, grounded in marketing-analytics signals (favorite category, price
@@ -258,7 +295,7 @@ no markdown code fences, no commentary before or after:
 {{"customer_id": "the id exactly as given", "message": "the message text"}}
 ]
 """
-        raw = ask_llm_cached(prompt)
+        raw = ask_llm(prompt, email)
         try:
             start = raw.find("[")
             end = raw.rfind("]") + 1
@@ -279,18 +316,19 @@ no markdown code fences, no commentary before or after:
     ]
 
 
-def run_business_analyst(raw_dfs: dict[str, pd.DataFrame]) -> list[dict]:
+def run_business_analyst(raw_dfs: dict[str, pd.DataFrame],
+                         email: str | None = None) -> list[dict]:
     """Port of run_business_analyst_tab() — returns structured results per file."""
     results = []
     for filename, df in raw_dfs.items():
         if not isinstance(df, pd.DataFrame):
             continue
-        insights = get_insights(df)
+        insights = get_insights(df, email)
         entry = {"file": filename, "preview_columns": list(df.columns),
                  "preview_rows": df.head(20).astype(str).values.tolist(), "insights": []}
         columns = ", ".join(df.columns)
         for ins in insights:
-            spec = get_chart_spec(ins.get("decision", ""), columns)
+            spec = get_chart_spec(ins.get("decision", ""), columns, email)
             chart = generate_chart_data(df, spec) if spec else None
             entry["insights"].append({**ins, "chart": chart})
         results.append(entry)
@@ -300,18 +338,22 @@ def run_business_analyst(raw_dfs: dict[str, pd.DataFrame]) -> list[dict]:
 # =========================================================
 # CHATBOT  (chatbot2.py)
 # =========================================================
-def ask_chatgpt(messages: list[dict], df_context: str | None = None, first_time: bool = False) -> str:
-    """Port of ask_chatgpt() — same system prompt, first-time tips prompt, model, settings."""
-    client = get_client()
-    try:
-        structured = [{
-            "role": "system",
-            "content": "You are a smart business consultant. Give short, practical, data-backed advice. Avoid long answers.",
-        }]
-        if first_time and df_context:
-            structured.append({
-                "role": "user",
-                "content": f"""
+CHAT_SYSTEM = ("You are a smart business consultant. Give short, practical, "
+               "data-backed advice. Avoid long answers.")
+
+
+def ask_chatgpt(messages: list[dict], df_context: str | None = None, first_time: bool = False,
+                email: str | None = None) -> str:
+    """Port of ask_chatgpt() — same system prompt, first-time tips prompt, model, settings.
+
+    On the seller's own ChatGPT plan first. That route takes the system prompt
+    as `instructions` and refuses a system-role message, so the history goes
+    across without it."""
+    turns = []
+    if first_time and df_context:
+        turns.append({
+            "role": "user",
+            "content": f"""
 Give 3 short, practical tips to improve revenue or profit.
 Format:
 - 📌 Tip 1: ...
@@ -320,8 +362,16 @@ Format:
 Keep it simple.
 {df_context}
 """,
-            })
-        structured.extend({"role": m["role"], "content": m["content"]} for m in messages)
+        })
+    turns.extend({"role": m["role"], "content": m["content"]} for m in messages)
+    if email:
+        from backend.core import aiprovider
+        planned = aiprovider.plan_text(email, CHAT_SYSTEM, messages=turns)
+        if planned:
+            return planned
+    client = get_client()
+    try:
+        structured = [{"role": "system", "content": CHAT_SYSTEM}] + turns
 
         response = client.responses.create(
             model="gpt-4.1-mini",
@@ -358,7 +408,8 @@ def try_plot_instruction(text: str, df: pd.DataFrame) -> dict | None:
     return None
 
 
-def run_chat(raw_dfs: dict[str, pd.DataFrame], messages: list[dict], first_time: bool) -> dict:
+def run_chat(raw_dfs: dict[str, pd.DataFrame], messages: list[dict], first_time: bool,
+             email: str | None = None) -> dict:
     """Port of run_chat() request handling. `messages` = full history, last item is the new user turn."""
     valid = [df for df in raw_dfs.values() if isinstance(df, pd.DataFrame)]
     if not valid:
@@ -367,7 +418,7 @@ def run_chat(raw_dfs: dict[str, pd.DataFrame], messages: list[dict], first_time:
     df_combined = pd.concat(valid, ignore_index=True)
     df_context = f"Here is sample business data:\n{df_combined.head(30).to_json(orient='records')}"
 
-    raw = ask_chatgpt(messages, df_context=df_context, first_time=first_time)
+    raw = ask_chatgpt(messages, df_context=df_context, first_time=first_time, email=email)
     reply = re.sub(r"```(json)?", "", raw, flags=re.DOTALL).strip("` \n")
     chart = try_plot_instruction(reply, df_combined)
     return {"reply": reply, "chart": chart}

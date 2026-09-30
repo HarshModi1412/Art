@@ -275,9 +275,11 @@ def run_due(hour: int | None = None) -> dict:
 
     hour = pd.Timestamp.now().hour if hour is None else int(hour)
     sent, skipped = 0, 0
+    from backend.core import billing
     for account in (auth.load_users() or {}):
         prefs = get_prefs(account)
-        if not prefs["enabled"] or prefs["hour"] != hour:
+        # A lapsed trial gets no digest: nothing runs on an account with no plan.
+        if not prefs["enabled"] or prefs["hour"] != hour or _safe(billing.is_locked, account):
             skipped += 1
             continue
         if (_safe(send_digest, account) or {}).get("sent"):

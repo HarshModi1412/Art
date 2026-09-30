@@ -307,7 +307,11 @@ def read_aesthetic(email: str) -> dict:
     all of them, which is what makes a feed look like one brand) and a
     per-shot-type reading (what makes an unboxing shot different from a
     packshot, which is what makes each post look different from the last).
-    image_prompt then asks for the slice it needs."""
+    image_prompt then asks for the slice it needs.
+
+    This is the one piece of writing that stays OFF the seller's ChatGPT plan,
+    by the owner's decision: nothing below passes `email` to aiprovider, so it
+    reads and writes on the app's own chain, Gemini first, as it always has."""
     from backend.core import aicaps
     aicaps.check(email, "vision")
     from backend.core import aiprovider, media
@@ -488,6 +492,10 @@ def distil_aesthetic(email: str, brand: dict | None = None) -> str:
     surface and background, then framing and lens, then grade, then the two or
     three hardest rules. If a model truncates, it truncates the least important
     end.
+
+    This IS image-prompt writing, so it runs on the seller's own ChatGPT plan
+    when they connected one (the essay it compresses does not; see
+    read_aesthetic).
     """
     from backend.core import aiprovider
 
@@ -519,7 +527,7 @@ def distil_aesthetic(email: str, brand: dict | None = None) -> str:
         "clause must be something a photographer either did or did not do. Never "
         "use praise or marketing words. Do not mention the essay, the brand's "
         "name, or these instructions.",
-        essay[:7000], sensitivity="public", max_tokens=400, fallback="")
+        essay[:7000], sensitivity="public", max_tokens=400, fallback="", email=email)
 
     directive = (out.get("text") or "").strip()
     if not directive:
@@ -613,7 +621,7 @@ def read_product_shots(email: str, product_id: str, limit: int = 3) -> dict:
     shots = [s for s in (mat.get("shots") or []) if s][:limit]
     if not shots:
         return {"ok": False, "reason": "No product photos uploaded yet."}
-    if not aiprovider.vision_ready():
+    if not aiprovider.vision_ready() and not aiprovider.plan_ready(email):
         return {"ok": False, "reason": "No vision-capable AI is connected."}
 
     seen = []
@@ -625,7 +633,7 @@ def read_product_shots(email: str, product_id: str, limit: int = 3) -> dict:
         r = aiprovider.describe_image(
             data, ctype, system=PRODUCT_SYSTEM,
             user="Describe this product exactly as photographed.",
-            sensitivity="public", max_tokens=260)
+            sensitivity="public", max_tokens=260, email=email)
         if r["text"]:
             seen.append(r["text"])
 
@@ -641,7 +649,7 @@ def read_product_shots(email: str, product_id: str, limit: int = 3) -> dict:
             "concrete detail. Drop anything the readings contradict each other "
             "on rather than picking a side. 80-130 words, plain prose.",
             "\n\n---\n\n".join(seen),
-            sensitivity="public", max_tokens=340, fallback=seen[0])
+            sensitivity="public", max_tokens=340, fallback=seen[0], email=email)
         desc = merged["text"] or seen[0]
 
     save_material(email, product_id, {"seen": desc.strip()[:1500]})
@@ -986,15 +994,16 @@ def openai_ready() -> bool:
     return bool(os.environ.get("OPENAI_API_KEY"))
 
 
-def generate_caption(brief: dict) -> dict:
-    """Copy for one post, through the content writer's provider chain (Puter
-    first when configured, then the free tiers, then OpenAI). Falls back to a
+def generate_caption(brief: dict, email: str | None = None) -> dict:
+    """Copy for one post: on the seller's own ChatGPT plan when they connected
+    one, otherwise through the content writer's provider chain (Puter first
+    when configured, then the free tiers, then OpenAI). Falls back to a
     written-by-hand template when nothing is reachable, so Studio is never a
     dead screen."""
     from backend.core import aiprovider, writer
     res = aiprovider.generate(writer.WRITER_SYSTEM, caption_prompt(brief),
                               sensitivity="public", max_tokens=600, temperature=0.8,
-                              fallback="", role="writer")
+                              fallback="", role="writer", email=email)
     data = writer._json(res.get("text", "")) if res.get("text") else {}
     if data.get("caption"):
         return {
@@ -1039,12 +1048,17 @@ def _fallback_caption(brief: dict) -> dict:
 # Engines without it can still draw a picture, but asking one for a "re-shoot"
 # would quietly hand back a different wallet, so the caller must not offer it
 # for that job.
+# The OpenAI engine is named for OpenAI's image API, not "ChatGPT", because it
+# never runs on the seller's ChatGPT plan: OpenAI does not allow image
+# generation through Sign in with ChatGPT. It runs on the seller's own OpenAI
+# API key when they added one in Account, otherwise on ours.
 IMAGE_ENGINES = [
-    {"id": "openai", "label": "ChatGPT (OpenAI)",
+    {"id": "openai", "label": "OpenAI (GPT Image)",
      "model_env": "OPENAI_IMAGE_MODEL", "model_default": "gpt-image-1",
      "free": False, "reshoot": True, "cost": "about Rs 3.70 an image",
      "note": "The default. Best all-round quality, and its edit call holds on "
-             "to your product's real details. Paid per image."},
+             "to your product's real details. Paid per image, on your own OpenAI "
+             "API key if you added one, never on your ChatGPT plan."},
     {"id": "gemini", "label": "Google Gemini",
      "model_env": "GEMINI_IMAGE_MODEL", "model_default": "gemini-2.5-flash-image",
      "free": True, "reshoot": True, "cost": "free tier, then paid",
@@ -1098,7 +1112,7 @@ def image_engine(preferred: str = "", for_reshoot: bool = False) -> dict:
     """The engine that will draw, honouring the seller's choice when they made
     one and it is actually usable.
 
-    ChatGPT is the default. It was Hugging Face until the credits ran out, and
+    OpenAI is the default. It was Hugging Face until the credits ran out, and
     before that Cloudflare — the ordering is a running answer to "what is both
     good and available", not a permanent judgement."""
     options = image_engines(for_reshoot)
@@ -1221,6 +1235,8 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
         own_openai = None
     on_own_key = bool(own_openai and eng["engine"] == "openai")
 
+    # Image generation is a Pro Max feature, on the seller's own key too.
+    aicaps.require_generation(email, "image")
     if not on_own_key:
         #   * the monthly picture allowance (30 by default) — the product limit
         #     the seller watches, the one that sends them to "upload your own
@@ -1649,7 +1665,7 @@ def make_post(email: str, product_id: str, angle: str = "",
     material = get_material(email, product_id)
     brief = build_brief(brand, product, material, angle)
 
-    copy = generate_caption(brief)
+    copy = generate_caption(brief, email)
     own = [s for s in (material.get("shots") or []) if s] or \
           [s for s in [product.get("image_url")] + list(product.get("images") or []) if s]
 

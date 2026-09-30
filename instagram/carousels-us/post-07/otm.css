@@ -1,0 +1,98 @@
+/* One Tap Manager carousel system · shared by every post project.
+   Edit here, then run export.ps1: it copies this file into each project. */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1080px; height: 1350px; overflow: hidden; background: #F7F5EF; }
+:root {
+  --navy: #101828; --night: #111827; --indigo: #1E3A8A; --marigold: #F5A623;
+  --paper: #F7F5EF; --beige: #EFECE3; --mint: #34D399; --lblue: #A9C1F5;
+  --body: #475467; --grey: #7B8190; --grey-dark: #8C94A6;
+  --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
+  --hand: "Caveat", "Segoe Print", cursive;
+}
+#root { position: relative; width: 1080px; height: 1350px; font-family: var(--sans); color: var(--navy); }
+.clip { position: absolute; inset: 0; overflow: hidden; }
+.hidden-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.scene { position: absolute; inset: 0; }
+
+/* ---------- backgrounds ---------- */
+.paper {
+  background-color: var(--paper);
+  background-image: repeating-linear-gradient(to bottom, transparent 0 55px, rgba(16, 24, 40, 0.06) 55px 56px);
+}
+.bg-paper { background: var(--paper); }
+.bg-night { background: var(--night); color: var(--paper); }
+.bg-indigo { background: var(--indigo); color: var(--paper); }
+.margin-line { position: absolute; top: 0; bottom: 0; left: 120px; width: 3px; background: var(--marigold); }
+
+/* ---------- type ---------- */
+.count {
+  position: absolute; top: 64px; right: 76px; font-family: var(--mono); font-weight: 500;
+  font-size: 26px; color: var(--grey); letter-spacing: 0.02em;
+}
+.bg-night .count, .bg-indigo .count { color: var(--grey-dark); }
+.col {
+  position: absolute; left: 164px; right: 92px; top: 0; bottom: 0;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.kicker { font-family: var(--mono); font-weight: 700; font-size: 26px; letter-spacing: 0.14em; color: var(--grey); }
+.bg-night .kicker { color: var(--grey-dark); }
+.h1 { font-weight: 800; letter-spacing: -0.035em; line-height: 1.04; text-wrap: balance; }
+.lede { font-weight: 500; color: var(--body); letter-spacing: -0.01em; text-wrap: pretty; }
+.center { text-align: center; }
+
+/* hand-drawn highlighter behind a word */
+.hl { position: relative; display: inline-block; isolation: isolate; }
+.hl > i {
+  position: absolute; left: -10px; right: -12px; top: 18%; bottom: 4%; z-index: -1;
+  background: var(--marigold); opacity: 0.7; transform-origin: 0 50%;
+  border-radius: 10px 22px 12px 26px / 18px 10px 22px 12px; transform: rotate(-1.2deg);
+}
+.hl.low > i { top: 52%; bottom: 0; }
+
+/* thin-line icons */
+.icon path, .icon line, .icon polyline, .icon circle, .icon rect {
+  fill: none; stroke: var(--indigo); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round;
+}
+.icon.light path, .icon.light line, .icon.light polyline, .icon.light circle, .icon.light rect { stroke: var(--paper); stroke-width: 2.8; }
+
+/* "Check it free" box */
+.check { margin-top: 52px; background: var(--beige); border-radius: 22px; padding: 38px 40px 40px; }
+.check h3 { font-weight: 800; font-size: 34px; letter-spacing: -0.02em; margin-bottom: 20px; }
+.check p { font-family: var(--mono); font-weight: 500; font-size: 27px; line-height: 1.45; color: var(--navy); }
+.check p + p { margin-top: 16px; }
+
+/* ---------- tags & stickers ---------- */
+.ai-tag {
+  position: absolute; left: 34px; bottom: 28px; font-weight: 600; font-size: 17px;
+  letter-spacing: 0.1em; color: #9E978A; z-index: 5;
+}
+.ai-tag.on-dark { color: #8C94A6; }
+.tag {
+  position: absolute; left: -46px; top: -20px; background: var(--beige); border-radius: 6px;
+  padding: 10px 16px; font-family: var(--mono); font-weight: 700; font-size: 20px; white-space: nowrap;
+  letter-spacing: 0.12em; color: #5F6572; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+.sticker {
+  position: absolute; left: 80px; top: 80px; background: var(--indigo); color: #fff;
+  border-radius: 7px; padding: 13px 20px; font-family: var(--mono); font-weight: 700;
+  font-size: 24px; letter-spacing: 0.12em; white-space: nowrap;
+}
+
+/* ---------- phone frame around a real screenshot (1170x2532) ---------- */
+.phone {
+  position: absolute; background: #000; padding: 12px; border-radius: 52px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12), 0 40px 80px rgba(0, 0, 0, 0.4);
+}
+.phone img { display: block; width: 100%; height: auto; border-radius: 40px; }
+
+/* ---------- 1T logo with tap ring ---------- */
+.logo-wrap { position: absolute; left: 50%; width: 320px; height: 320px; margin-left: -160px; }
+.logo-wrap svg { position: absolute; inset: 0; }
+.logo {
+  position: absolute; left: 60px; top: 60px; width: 200px; height: 200px; background: var(--indigo);
+  border-radius: 46px; display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-weight: 800; font-size: 100px; letter-spacing: -0.06em; color: var(--paper);
+}
+.follow { font-weight: 500; font-size: 30px; color: var(--grey); }
+.hand { font-family: var(--hand); font-weight: 700; color: var(--indigo); }

@@ -97,9 +97,21 @@ check("an unknown comparison 404s", c.get("/compare/nothing").status_code == 404
 print("\n== the facts are the app's facts ==")
 about = c.get("/about").text
 mx = pricing.PLANS["pro"]
-check("Max price comes from pricing.py", f"₹{mx['price_inr']}" in about)
-check("the plan is called Max, never Pro or Semi Pro",
-      "Max" in about and "Semi Pro" not in about and ">Pro<" not in about)
+check("Pro price comes from pricing.py, in dollars by default",
+      pricing.price_label(pricing.PLANS["pro"], "USD") in about and "$10" in about)
+check("Pro Max price is shown too", "$12.99" in about)
+check("the plans are Pro and Pro Max, never Max alone or Semi Pro",
+      "Pro Max" in about and "Semi Pro" not in about and ">Max<" not in about)
+about_in = c.get("/about", headers={"CF-IPCountry": "IN"}).text
+check("an Indian visitor sees rupees", "₹700" in about_in and "₹1,299" in about_in
+      and "$10" not in about_in)
+check("?region=in switches to rupees and remembers it",
+      "₹700" in c.get("/pricing?region=in").text)
+c.cookies.clear()
+check("the Hindi page is always rupees", "₹700" in c.get("/hi").text)
+pr = c.get("/pricing").text
+check("pricing names the 7-day trial", "7-day free trial" in pr)
+check("pricing schema is in USD for a US visitor", '"priceCurrency": "USD"' in pr and '"price": "12.99"' in pr)
 cmp = c.get("/compare/shopify-apps").text
 total = pricing.stack_comparison()["typical_total_inr"]
 check("the Shopify stack total is pricing.py's", geo._inr(total) in cmp, geo._inr(total))
@@ -121,7 +133,8 @@ check("win-back is honest about WhatsApp", "click-to-chat" in c.get("/features/w
 check("no page calls itself the best",
       not any(re.search(r"\b(the best (app|software|tool|choice|option)|best (app|software) for|#1|number one)\b",
                         c.get(p).text, re.I) for p in geo.paths()))
-check("stock reordering says it is Max", "Max plan" in c.get("/features/stock-reorder").text)
+check("stock reordering says it is on Pro", "Pro plan" in c.get("/features/stock-reorder").text)
+check("AI photos say they are Pro Max", "on Pro Max at" in c.get("/features/ai-product-photos").text)
 
 print("\n== reorder point calculator ==")
 calc = "/guides/when-to-reorder-stock"
@@ -147,10 +160,20 @@ hi = c.get("/hi").text
 check("/hi is Hindi", '<html lang="hi-IN">' in hi)
 main._LANDING_CACHE.clear()
 land = c.get("/").text
-for code in ("en-IN", "hi-IN", "x-default"):
+land_in = c.get("/in").text
+for code, path in geo.HREFLANG:
+    tag = f'hreflang="{code}" href="http://testserver{path}"'
     check(f"/hi carries hreflang {code}", f'hreflang="{code}"' in hi)
-    check(f"/ carries hreflang {code}", f'hreflang="{code}"' in land)
-check("the home page links the Hindi page", 'href="/hi"' in land)
+    check(f"/ carries hreflang {code} -> {path}", tag in land, tag)
+    check(f"/in carries hreflang {code} -> {path}", tag in land_in, tag)
+check("/ is the US page", '<html lang="en-US">' in land and "$12.99" in land and "₹" not in land.split("regionNote")[0])
+check("/in is the India page", '<html lang="en-IN">' in land_in and "₹1,299" in land_in)
+check("/in is its own canonical", '<link rel="canonical" href="http://testserver/in" />' in land_in)
+check("/ is its own canonical", '<link rel="canonical" href="http://testserver/" />' in land)
+check("the US home links the India home", 'href="/in"' in land)
+check("the India home links the Hindi page", 'href="/hi"' in land_in)
+check("the India home links back to the US home", 'href="/" hreflang="en-US"' in land_in)
+check("the sitemap lists /in", "/in</loc>" in c.get("/sitemap.xml").text)
 check("only /hi carries hreflang among the guides",
       all('hreflang="hi-IN"' not in c.get(p).text for p in geo.paths() if p != "/hi"))
 
@@ -163,8 +186,9 @@ check("example output only in languages the app writes", langs <= set(i18n.LANGU
 check("the nav links the guides", '<a href="/guides">Guides</a>' in land)
 app_ld = next(g for g in ld_blocks(land)[0]["@graph"] if g["@type"] == "SoftwareApplication")
 check("schema lists the features", len(app_ld.get("featureList", [])) >= 6)
-check("every feature card links its page",
-      all(f'class="f-more" href="{p}"' in land for p in geo.paths() if p.startswith("/features/")
+check("every feature card links its page (India-only features on /in)",
+      all(f'class="f-more" href="{p}"' in land + land_in for p in geo.paths()
+          if p.startswith("/features/")
           and p not in ("/features/review-analysis", "/features/online-store")))
 
 print("\n== the new paths can never be a shop address ==")
@@ -206,8 +230,9 @@ os.environ.pop("BRAND_PROFILES")
 main._LANDING_CACHE.clear()
 
 print("\n== landing links the guides ==")
-land = c.get("/").text
-check("footer links every guide", all(f'href="{p}"' in land for p in geo.paths()))
+land = c.get("/").text + c.get("/in").text
+check("the two home pages link every guide between them",
+      all(f'href="{p}"' in land for p in geo.paths()))
 check("points AI agents at llms.txt", 'href="/llms.txt"' in land)
 
 print("\n== Bing and IndexNow ==")

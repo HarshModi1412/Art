@@ -39,6 +39,21 @@ services:
     envVars:
       - key: OPENAI_API_KEY
         sync: false               # set manually in the dashboard — never store secrets in git
+      # ---------------------------------------------------------------------
+      # Sign in with ChatGPT, and AI writing on each seller's own ChatGPT plan.
+      # ---------------------------------------------------------------------
+      # Nothing happens until CHATGPT_CLIENT_ID is set: no button, and every AI
+      # call behaves as before. The client ID comes from OpenAI's partner
+      # programme (openai.com/form/sign-in-with-chatgpt-interest), not from a
+      # dashboard. See docs/sign-in-with-chatgpt.md.
+      - key: CHATGPT_CLIENT_ID
+        sync: false               # oaiapp_... issued by OpenAI
+      - key: CHATGPT_CLIENT_SECRET
+        sync: false               # only if OpenAI issued a confidential client
+      - key: CHATGPT_REDIRECT_URI
+        sync: false               # exactly as registered, e.g. https://onetapmanager.com/api/auth/chatgpt/callback
+      - key: CHATGPT_PLAN_USAGE
+        sync: false               # unset/on = ask for the seller's plan; off = sign-in only
       - key: SUPABASE_URL
         sync: false               # https://<project>.supabase.co
       - key: SUPABASE_SECRET_KEY

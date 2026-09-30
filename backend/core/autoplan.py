@@ -1046,8 +1046,12 @@ def run_due() -> dict:
     """Every account whose planning moment has come. Safe to call often."""
     from backend.core import auth
     ran, skipped, failed = 0, 0, 0
+    from backend.core import billing
     for account in (auth.load_users() or {}):
         try:
+            if billing.is_locked(account):   # trial over, nothing paid
+                skipped += 1
+                continue
             res = run_if_due(account)
         except Exception as e:  # noqa: BLE001
             log.warning("autoplan failed for %s: %s", account, e)

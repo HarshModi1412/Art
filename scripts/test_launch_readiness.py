@@ -221,7 +221,7 @@ check("the app's login card links to signup", 'href="/?signup=1"' in SMART_HTML)
 check("the landing page opens signup when asked", 'get("signup") === "1"' in LANDING)
 check("and still loads with the flag", c.get("/?signup=1").status_code == 200)
 check("the final landing button opens signup, not the login page",
-      "onclick=\"openSignup('free')\">Open One Tap Manager free" in LANDING)
+      "onclick=\"openSignup('free')\">Start your 7-day free trial" in LANDING)
 
 # ============================================================================
 print("\n== R6, R12: the first screen for a seller with no data ==")

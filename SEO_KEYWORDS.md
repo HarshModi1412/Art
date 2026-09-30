@@ -7,11 +7,25 @@ research, not measured figures. Check them in Google Keyword Planner (India) or
 Semrush before spending money on ads, and replace the tiers with real numbers
 once Search Console has a month of data.
 
-## Pages and their keywords
+## The US is the primary market (September 2026)
+
+`/` is now the US home page (`landing-us.html`, en-US, prices in USD) and the
+India home moved to `/in`. hreflang ties `/` (en-US), `/in` (en-IN) and `/hi`
+(hi-IN) together, with `/` as x-default. The guide and feature pages below are
+one set of URLs that price in the visitor's currency (dollars for Googlebot and
+US visitors). Their copy is still largely written for India; see "US pages still
+to write" at the end.
+
+| Page | Main US searches it targets |
+|---|---|
+| `/` | shop management app for small business, inventory reorder alerts for small online store, customer win-back email for Shopify, AI product photos from your own photo, instagram content planner for small business, one tap manager |
+| `/pricing` | one tap manager pricing, shopify inventory app price, flat price ecommerce software no transaction fee |
+
+## Pages and their keywords (India)
 
 | Page | Main searches it targets |
 |---|---|
-| `/` | shop management app, shop management software, business management app for small business india, one tap manager |
+| `/in` | shop management app, shop management software, business management app for small business india, one tap manager |
 | `/hi` | dukan ka hisab kitab app, stock register app, GST bill kaise banaye, purane customer wapas kaise laye (Hindi and Hinglish) |
 | `/pricing` | one tap manager pricing, free business management app, flat price ecommerce software no transaction fee |
 | `/about` | one tap manager, what is one tap manager, one tap manager review |
@@ -63,3 +77,19 @@ once Search Console has a month of data.
   top-of-funnel searches
 - `/guides/reduce-returns-size-issues`
 - A Tamil or Kannada home page, then hreflang it like `/hi`
+
+## US pages still to write
+
+The guide and feature pages price in dollars for US visitors, but their words
+are still written for India (GST, WhatsApp, lakh, "jewellery"). The US wins,
+in order:
+
+- `/features/*` US copy: US spelling, email in place of WhatsApp, Shopify and
+  Amazon US first, no GST or COD. Either one set of pages written for both
+  markets, or `/in/features/*` for the India copy with hreflang pairs.
+- `/compare/shopify-apps` for the US: named apps (inventory, retention email,
+  reviews) with their US prices checked at source on the day of writing.
+- `/guides/reorder-point-formula`, `/guides/win-back-email-examples`,
+  `/guides/ai-product-photos-for-small-brands`: US top-of-funnel searches.
+- Verify volumes in Google Keyword Planner (United States) or Semrush before
+  choosing between them.

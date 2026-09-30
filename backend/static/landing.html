@@ -4,16 +4,17 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
 <title>One Tap Manager: Shop Management App for Small Indian Sellers</title>
-<meta name="description" content="Shop management app for Indian clothing, jewellery and perfume sellers: sales analytics, low stock alerts, GST invoices, WhatsApp win-back and a free online store. Free plan, and never a cut of your sales." />
+<meta name="description" content="Shop management app for Indian clothing, jewellery and perfume sellers: sales analytics, stock alerts, GST invoices, WhatsApp win-back. 7-day free trial." />
 <meta name="robots" content="index, follow" />
-<link rel="canonical" href="__BASE_URL__/" />
+<link rel="canonical" href="__BASE_URL__/in" />
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <link rel="icon" href="/logo.png" type="image/png" sizes="512x512" />
 <link rel="apple-touch-icon" href="/logo.png" />
 <link rel="alternate" type="text/plain" href="/llms.txt" title="Summary for AI assistants" />
-<!-- The Hindi page links back with the same three lines (core/geo.py HREFLANG);
-     hreflang is ignored unless both sides agree. -->
-<link rel="alternate" hreflang="en-IN" href="__BASE_URL__/" />
+<!-- The India home. The US home (/) and the Hindi page (/hi) list the same
+     four lines (core/geo.py HREFLANG); hreflang is ignored unless all agree. -->
+<link rel="alternate" hreflang="en-US" href="__BASE_URL__/" />
+<link rel="alternate" hreflang="en-IN" href="__BASE_URL__/in" />
 <link rel="alternate" hreflang="hi-IN" href="__BASE_URL__/hi" />
 <link rel="alternate" hreflang="x-default" href="__BASE_URL__/" />
 
@@ -26,8 +27,8 @@
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="One Tap Manager" />
 <meta property="og:title" content="One Tap Manager: run your shop the way a big brand runs theirs" />
-<meta property="og:description" content="It reads your sales, tells you the three things worth doing this morning, and then does most of them for you. Free to start, no card." />
-<meta property="og:url" content="__BASE_URL__/" />
+<meta property="og:description" content="It reads your sales, tells you the three things worth doing this morning, and then does most of them for you. 7-day free trial, no card." />
+<meta property="og:url" content="__BASE_URL__/in" />
 <meta property="og:image" content="__BASE_URL__/og-image.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
@@ -72,15 +73,17 @@
       "name": "One Tap Manager",
       "applicationCategory": "BusinessApplication",
       "operatingSystem": "Web browser",
-      "url": "__BASE_URL__/",
+      "url": "__BASE_URL__/in",
       "inLanguage": ["en-IN", "hi-IN", "ta-IN", "kn-IN"],
       "featureList": ["Sales analytics from a CSV or Excel file", "Customer win-back messages on WhatsApp and email", "Low stock alerts and supplier purchase orders", "GST tax invoices and a monthly tax file for your accountant", "AI product photos from your own product photo", "Instagram week planner and scheduler", "Customer review and complaint analysis", "Your own online store with no commission"],
       "publisher": { "@id": "__BASE_URL__/#org" },
       "offers": [
-        { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "INR",
-          "description": "Sales analytics, customer segments, win-back campaigns, complaint analysis, the morning digest and your own selling website." },
-        { "@type": "Offer", "name": "Max", "price": "999", "priceCurrency": "INR",
-          "description": "Adds stock and supplier ordering, purchase orders and a custom domain." }
+        { "@type": "Offer", "name": "Free trial", "price": "0", "priceCurrency": "INR",
+          "description": "Every Pro Max feature for 7 days. No card needed." },
+        { "@type": "Offer", "name": "Pro", "price": "700", "priceCurrency": "INR",
+          "description": "Everything except AI image generation: analytics, win-back, stock and suppliers, GST invoices, Instagram planning, your own website." },
+        { "@type": "Offer", "name": "Pro Max", "price": "1299", "priceCurrency": "INR",
+          "description": "Everything in Pro, plus AI product photos and short product clips." }
       ]
     }
   ]
@@ -450,7 +453,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 
 <nav class="nav">
   <div class="nav-inner">
-    <a class="brand" href="/"><span class="brand-mark">1T</span> One Tap Manager</a>
+    <a class="brand" href="/in"><span class="brand-mark">1T</span> One Tap Manager</a>
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#how">How it works</a>
@@ -459,6 +462,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
       <a href="#faq">Questions</a>
       <a href="/guides">Guides</a>
       <a href="/hi" lang="hi" hreflang="hi">हिंदी</a>
+      <a href="/" hreflang="en-US">US site ($)</a>
       <a class="btn btn-primary" href="/smart">Open the app</a>
     </div>
   </div>
@@ -478,12 +482,12 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
       <b>One Tap Manager is that team.</b> It reads your sales, tells you the three
       things worth doing this morning, and then does most of them for you.</p>
     <div class="hero-ctas">
-      <button class="btn btn-primary" onclick="openSignup('free')">Start free, no card needed</button>
+      <button class="btn btn-primary" onclick="openSignup('free')">Start the 7-day free trial</button>
       <a class="btn btn-ghost" href="#opportunity">What you are losing without it</a>
     </div>
-    <p class="hero-note">Upload one sales file and the first answers are on screen in about two
-      minutes. Your own selling website is included, because we are not going to charge you for a
-      shop and then charge you again to understand it.</p>
+    <p class="hero-note">No card for the trial. Upload one sales file and the first answers are on
+      screen in about two minutes. Then ₹700 a month, with your own selling website included,
+      because we are not going to charge you for a shop and then charge you again to understand it.</p>
   </div>
   <div class="tickets" aria-label="Examples of what One Tap Manager tells a seller to do">
     <p class="tickets-label">Examples of the cards you get, made up and using round numbers,
@@ -744,9 +748,9 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
   <div class="wrap">
     <div class="section-head" style="text-align:center; margin-inline:auto;">
       <span class="eyebrow">Pricing</span>
-      <h2>One flat number. Never a cut of your sales.</h2>
-      <p><b>Everything is free during launch.</b> No card, no trial clock. Below is exactly what it
-      costs afterwards, written down now so the day we switch it on is a non-event.</p>
+      <h2>Try everything for 7 days. Then one flat price.</h2>
+      <p>The trial is the whole of Pro Max, with no card. After 7 days, pick the plan that fits.
+      No setup fee, and never a cut of your sales.</p>
     </div>
 
     <!-- What it replaces. The honest comparison, with the app categories named. -->
@@ -764,68 +768,67 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
           <tr><td>Reviews &amp; reputation</td><td>₹1,200</td></tr>
           <tr><td>Order management</td><td>₹800</td></tr>
           <tr class="stack-sum"><td>Four to six apps, every month</td><td>₹7,600</td></tr>
-          <tr class="stack-ours"><td>One Tap Manager Max: all of it, plus your own selling website</td><td>₹999</td></tr>
+          <tr class="stack-ours"><td>One Tap Manager Pro: all of it, plus your own selling website</td><td>₹700</td></tr>
         </tbody>
       </table>
-      <p class="stack-note">Your storefront is included at every tier. We are not going to charge you
-      for the website and then charge you again to understand it.</p>
     </div>
 
-    <div class="plans">
+    <div class="plans plans-3">
       <div class="plan">
-        <h3>Free</h3>
-        <div class="price">₹0 <span>forever</span></div>
-        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">The numbers and the actions, forever.</div>
+        <h3>Free trial</h3>
+        <div class="price">₹0 <span>for 7 days</span></div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Every Pro Max feature. No card needed.</div>
+        <ul>
+          <li>Everything in Pro Max for 7 days</li>
+          <li>AI product photos and clips included</li>
+          <li>Upload a sales file or connect a channel</li>
+          <li>When it ends, choose Pro or Pro Max. Your data is kept.</li>
+        </ul>
+        <button class="btn btn-ghost" onclick="openSignup('free')">Start the free trial</button>
+      </div>
+      <div class="plan">
+        <h3>Pro</h3>
+        <div class="price">₹700 <span>/ month</span></div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Runs the whole shop. Everything except AI image generation.</div>
         <ul>
           <li>Sales analytics, category and sub-category trends</li>
           <li>Who your best customers are, and who has gone quiet</li>
-          <li><b>Your own selling website and orders</b>, no badge</li>
-          <li><b>Win-back campaigns, unlimited.</b> Messages, coupons and Excel, as often as you like</li>
-          <li>Complaint analysis and the fix-first plan</li>
-          <li>Market position and reputation reports</li>
-          <li>The morning digest, by email and WhatsApp</li>
-          <li>Up to 250 products</li>
-          <li>50 AI Analyst or Chatbot uses a day</li>
+          <li><b>Win-back campaigns.</b> Messages, coupons and Excel</li>
+          <li><b>Stock and suppliers:</b> when to buy again, how much, and the order form ready to send</li>
+          <li>GST invoices and the monthly tax file</li>
+          <li>Instagram week planner, captions and scheduling</li>
+          <li><b>Your own selling website</b> and custom domain</li>
+          <li>Unlimited AI writing, analyst and chatbot</li>
+          <li data-chatgpt-plan hidden>Use your ChatGPT plan for AI writing (ChatGPT Plus or Pro) <a href="https://help.openai.com/articles/20001542" target="_blank" rel="noopener">Learn more</a></li>
         </ul>
-        <button class="btn btn-ghost" onclick="openSignup('free')">Start free</button>
+        <button class="btn btn-ghost" onclick="openSignup('free')">Start with the free trial</button>
       </div>
       <div class="plan pro">
-        <div class="badge">FREE DURING LAUNCH</div>
-        <h3>Max</h3>
-        <div class="price">₹999 <span>/ month</span></div>
-        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Runs the shop, not just the reporting.</div>
+        <div class="badge">MOST COMPLETE</div>
+        <h3>Pro Max</h3>
+        <div class="price">₹1,299 <span>/ month</span></div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Everything in Pro, plus AI product photos and clips.</div>
         <ul>
-          <li>Everything in Free</li>
-          <li><b>Stock and suppliers:</b> when to buy again, how much, and the order form ready to send</li>
-          <li>PDF purchase orders, sent to your suppliers</li>
-          <li>Position Strategy checklists</li>
-          <li>Unlimited AI, unlimited products, unlimited outlets</li>
-          <li>Your own custom domain</li>
+          <li>Everything in Pro</li>
+          <li><b>AI product photos</b> made from your own product photo, in your brand's look</li>
+          <li>A picture for every planned Instagram post</li>
+          <li>Short AI product clips</li>
+          <li data-chatgpt-plan hidden>Use your ChatGPT plan for AI writing (ChatGPT Plus or Pro) <a href="https://help.openai.com/articles/20001542" target="_blank" rel="noopener">Learn more</a></li>
         </ul>
-        <button class="btn btn-primary" onclick="openSignup('free')">Try it free now</button>
+        <button class="btn btn-primary" onclick="openSignup('free')">Start the free trial</button>
       </div>
     </div>
-
-    <!-- Usage plan. Offered as a real alternative, not a downsell. -->
-    <div class="usage-plan">
-      <div>
-        <span class="eyebrow">Or don't subscribe to Max at all</span>
-        <h3>Buy credits. Spend them only on the heavy things.</h3>
-        <p>Analytics, win-back campaigns, complaint analysis, position reports, the daily digest,
-        your website and your orders are free on every plan, no credits needed. Some sellers only
-        need Max's supply side occasionally, for a season, a launch or a festival, so there is a second
-        way to pay for just that: a pack of credits that <b>never expires</b>. A purchase order sent
-        to your supplier is 5 credits, an AI run once your free 50 a day are used is 1.</p>
-        <p class="stack-note">Deliberately not priced per order and never a percentage of your
-        sales. You already pay that tax to your app stack; it is the thing sellers complain about
-        loudest, and we are not going to be another one.</p>
-      </div>
-      <div class="credit-packs">
-        <div class="credit-pack"><b>100 credits</b><span>₹299</span><i>≈ 20 purchase orders</i></div>
-        <div class="credit-pack best"><b>300 credits</b><span>₹749</span><i>17% cheaper each</i></div>
-        <div class="credit-pack"><b>1000 credits</b><span>₹1,999</span><i>for a busy season</i></div>
-      </div>
-    </div>
+    <!-- OpenAI asks a partner's pricing to say which plans let you use your
+         ChatGPT plan. The lines above stay hidden until this server can
+         actually offer it, so nobody is sold a feature still awaiting approval. -->
+    <script>
+      fetch("/api/auth/providers").then(function (r) { return r.json(); }).then(function (p) {
+        if (!(p && p.chatgpt && p.chatgpt.plan_usage)) return;
+        document.querySelectorAll("[data-chatgpt-plan]").forEach(function (el) { el.hidden = false; });
+      }).catch(function () {});
+    </script>
+    <p class="stack-note" style="text-align:center; margin-top:18px;">Prices in rupees, billed monthly.
+      Cancel from the Account tab any time; your plan runs to the end of the month you paid for.</p>
   </div>
 </section>
 
@@ -860,16 +863,16 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
         <p>One Tap Manager is not related to the other apps called One Tap or OneTap, or to Google One Tap sign-in. It is the shop manager for small Indian sellers, at onetapmanager.com (one word in the address, three words in the name).</p>
       </div>
       <div class="faq-item">
-        <h3>Is there a free plan, and what does it include?</h3>
-        <p>Yes, and it stays free with no time limit. The Free plan gives you sales analytics, customer segments, automatic win-back messages, complaint analysis, a daily morning summary and your own selling website. You only pay if you want the extras in the Max plan.</p>
+        <h3>Is there a free plan?</h3>
+        <p>There is a 7-day free trial with every feature, and no card is needed to start it. There is no free plan after the trial: to keep using the app, you choose Pro or Pro Max. Your data is kept either way.</p>
       </div>
       <div class="faq-item">
         <h3>How much does One Tap Manager cost?</h3>
-        <p>The Free plan is free forever. The Max plan is a flat ₹999 a month and adds stock and supplier ordering, purchase orders and a custom domain. We never take a percentage of your sales. Occasional heavy jobs like AI-generated product photos use credits you buy only if you need them.</p>
+        <p>Every account starts with a 7-day free trial of Pro Max, with no card. After that, Pro is ₹700 a month and includes everything except AI image generation. Pro Max is ₹1,299 a month and adds AI product photos and short product clips. We never take a percentage of your sales.</p>
       </div>
       <div class="faq-item">
         <h3>Do I need a card or bank details to start?</h3>
-        <p>No. You sign up with just an email and a password and start on the Free plan right away. You only add a payment method if you later choose the Max plan.</p>
+        <p>No. You sign up with just an email and a password and the 7-day trial starts right away. You only add a payment method when you choose a plan.</p>
       </div>
       <div class="faq-item">
         <h3>How long does it take to set up?</h3>
@@ -893,7 +896,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
       </div>
       <div class="faq-item">
         <h3>Will it tell me when to reorder stock?</h3>
-        <p>On the Max plan, yes. It learns how fast each item sells and how long each supplier takes, warns you before you run out, and hands you the purchase order for that supplier already filled in.</p>
+        <p>Yes, on both Pro and Pro Max. It learns how fast each item sells and how long each supplier takes, warns you before you run out, and hands you the purchase order for that supplier already filled in.</p>
       </div>
       <div class="faq-item">
         <h3>Is my data safe and private?</h3>
@@ -919,18 +922,18 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
     },
     {
       "@type": "Question",
-      "name": "Is there a free plan, and what does it include?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Yes, and it stays free with no time limit. The Free plan gives you sales analytics, customer segments, automatic win-back messages, complaint analysis, a daily morning summary and your own selling website. You only pay if you want the extras in the Max plan." }
+      "name": "Is there a free plan?",
+      "acceptedAnswer": { "@type": "Answer", "text": "There is a 7-day free trial with every feature, and no card is needed to start it. There is no free plan after the trial: to keep using the app, you choose Pro or Pro Max. Your data is kept either way." }
     },
     {
       "@type": "Question",
       "name": "How much does One Tap Manager cost?",
-      "acceptedAnswer": { "@type": "Answer", "text": "The Free plan is free forever. The Max plan is a flat ₹999 a month and adds stock and supplier ordering, purchase orders and a custom domain. We never take a percentage of your sales. Occasional heavy jobs like AI-generated product photos use credits you buy only if you need them." }
+      "acceptedAnswer": { "@type": "Answer", "text": "Every account starts with a 7-day free trial of Pro Max, with no card. After that, Pro is ₹700 a month and includes everything except AI image generation. Pro Max is ₹1,299 a month and adds AI product photos and short product clips. We never take a percentage of your sales." }
     },
     {
       "@type": "Question",
       "name": "Do I need a card or bank details to start?",
-      "acceptedAnswer": { "@type": "Answer", "text": "No. You sign up with just an email and a password and start on the Free plan right away. You only add a payment method if you later choose the Max plan." }
+      "acceptedAnswer": { "@type": "Answer", "text": "No. You sign up with just an email and a password and the 7-day trial starts right away. You only add a payment method when you choose a plan." }
     },
     {
       "@type": "Question",
@@ -960,7 +963,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
     {
       "@type": "Question",
       "name": "Will it tell me when to reorder stock?",
-      "acceptedAnswer": { "@type": "Answer", "text": "On the Max plan, yes. It learns how fast each item sells and how long each supplier takes, warns you before you run out, and hands you the purchase order for that supplier already filled in." }
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes, on both Pro and Pro Max. It learns how fast each item sells and how long each supplier takes, warns you before you run out, and hands you the purchase order for that supplier already filled in." }
     },
     {
       "@type": "Question",
@@ -976,7 +979,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
   <div class="wrap" style="text-align:center;">
     <h2 style="font-size:30px;">The insight you're missing is already in your files.</h2>
     <p style="color:var(--ink-soft); max-width:52ch; margin:10px auto 26px;">Upload one month of sales. If One Tap Manager doesn't show you something you didn't know, it cost you nothing.</p>
-    <button class="btn btn-primary" onclick="openSignup('free')">Open One Tap Manager free</button>
+    <button class="btn btn-primary" onclick="openSignup('free')">Start your 7-day free trial</button>
   </div>
 </section>
 
@@ -1003,7 +1006,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
     <nav class="foot-links" aria-label="Features"><b>Features:</b> <a href="/features/sales-analytics">Sales analytics</a> · <a href="/features/win-back">Customer win-back</a> · <a href="/features/stock-reorder">Low stock alerts</a> · <a href="/features/gst-invoices">GST invoices</a> · <a href="/features/ai-product-photos">AI product photos</a> · <a href="/features/instagram-planner">Instagram planner</a> · <a href="/features/review-analysis">Review analysis</a> · <a href="/features/online-store">Online store</a> · <a href="/pricing">Pricing</a></nav>
     <nav class="foot-links" aria-label="Who it is for"><b>For:</b> <a href="/for/clothing-sellers">Clothing sellers and boutiques</a> · <a href="/for/jewellery-sellers">Jewellery sellers</a> · <a href="/for/perfume-sellers">Perfume and attar sellers</a> · <a href="/for/instagram-sellers">Instagram sellers</a> · <a href="/hi" lang="hi">हिंदी</a></nav>
     <nav class="foot-links" aria-label="Guides"><b>Guides:</b> <a href="/about">What is One Tap Manager?</a> · <a href="/compare/shopify-apps">Shopify alternative</a> · <a href="/compare/odoo">Odoo alternative</a> · <a href="/compare/billing-apps">Billing app or shop manager</a> · <a href="/guides/win-back-old-customers">Win back old customers</a> · <a href="/guides/when-to-reorder-stock">When to reorder stock</a> · <a href="/guides/sales-up-profit-down">Sales up, profit down</a> · <a href="/guides/gst-rate-clothes-jewellery-perfume">GST on clothes, jewellery and perfume</a> · <a href="/guides/analyse-sales-excel">Analyse sales in Excel</a> · <a href="/guides">All guides</a></nav>
-    <div class="foot-links"><a href="/smart">Open the app</a> · <a href="#faq">Common questions</a> · <a href="/legal">All legal pages</a></div>
+    <div class="foot-links"><a href="/smart">Open the app</a> · <a href="/" hreflang="en-US">US site ($)</a> · <a href="#faq">Common questions</a> · <a href="/legal">All legal pages</a></div>
   </div>
 </footer>
 
@@ -1012,7 +1015,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 <div class="su-backdrop" id="signupModal" style="display:none;">
   <div class="su-card">
     <button class="su-close" onclick="closeSignup()" aria-label="Close sign up">Close</button>
-    <span class="eyebrow" id="suEyebrow">FREE DURING LAUNCH · NO CARD NEEDED</span>
+    <span class="eyebrow" id="suEyebrow">7-DAY FREE TRIAL · NO CARD NEEDED</span>
     <h3 id="suTitle">Create your One Tap Manager account</h3>
     <p class="su-sub">Pick an email and create a password. You will use these same
       details to log in to the app.</p>
@@ -1108,8 +1111,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
 function openSignup(plan) {
   suPlan = plan;
-  document.getElementById("suEyebrow").textContent = "FREE DURING LAUNCH · NO CARD NEEDED";
-  document.getElementById("suTitle").textContent = "Create your free account";
+  document.getElementById("suEyebrow").textContent = "7-DAY FREE TRIAL · NO CARD NEEDED";
+  document.getElementById("suTitle").textContent = "Start your 7-day free trial";
   document.getElementById("suError").style.display = "none";
   document.getElementById("signupModal").style.display = "flex";
   document.getElementById("suEmail").focus();
@@ -1169,7 +1172,6 @@ async function submitSignup() {
       body: JSON.stringify({
         email: email,
         password: pw,
-        plan: suPlan,
         // Recorded so there is an answer to "what did they agree to, and when",
         // which is what demonstrable consent means. The marketing box is sent
         // separately and is genuinely optional.

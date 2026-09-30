@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1350" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=block"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1080px; height: 1350px; overflow: hidden; background: #F7F5EF;
+      }
+      :root {
+        --navy: #101828; --marigold: #F5A623; --paper: #F7F5EF; --indigo: #1E3A8A;
+        --beige: #EFECE3; --body: #475467; --grey: #7B8190; --night: #111827;
+        --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+        --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
+      }
+      #root { position: relative; width: 1080px; height: 1350px; font-family: var(--sans); color: var(--navy); }
+      .clip { position: absolute; inset: 0; overflow: hidden; }
+
+      /* ---------- shared flat-slide paper ---------- */
+      .paper {
+        background-color: var(--paper);
+        background-image: repeating-linear-gradient(to bottom, transparent 0 63px, rgba(16, 24, 40, 0.06) 63px 64px);
+      }
+      .margin-line { position: absolute; top: 0; bottom: 0; left: 120px; width: 3px; background: var(--marigold); }
+      .count {
+        position: absolute; top: 64px; right: 76px; font-family: var(--mono); font-weight: 500;
+        font-size: 26px; color: var(--grey); letter-spacing: 0.02em;
+      }
+      .col {
+        position: absolute; left: 164px; right: 92px; top: 0; bottom: 0;
+        display: flex; flex-direction: column; justify-content: center;
+      }
+      .kicker {
+        font-family: var(--mono); font-weight: 700; font-size: 26px; letter-spacing: 0.14em; color: var(--grey);
+      }
+      .h1 { font-weight: 800; letter-spacing: -0.035em; line-height: 1.04; color: var(--navy); }
+      .lede { font-weight: 500; color: var(--body); letter-spacing: -0.01em; }
+      .hl { position: relative; display: inline-block; isolation: isolate; }
+      .hl > i {
+        position: absolute; left: -10px; right: -12px; top: 18%; bottom: 4%; z-index: -1;
+        background: var(--marigold); opacity: 0.7; transform-origin: 0 50%;
+        border-radius: 10px 22px 12px 26px / 18px 10px 22px 12px; transform: rotate(-1.2deg);
+      }
+      .icon path, .icon line, .icon polyline, .icon circle, .icon rect {
+        fill: none; stroke: var(--indigo); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round;
+      }
+      .check {
+        margin-top: 52px; background: var(--beige); border-radius: 22px; padding: 38px 40px 40px;
+      }
+      .check h3 { font-weight: 800; font-size: 34px; letter-spacing: -0.02em; margin-bottom: 20px; }
+      .check p {
+        font-family: var(--mono); font-weight: 500; font-size: 27px; line-height: 1.45; color: var(--navy);
+      }
+      .check p + p { margin-top: 16px; }
+
+      /* ---------- slide 1 ---------- */
+      #s1 { background: #EFE4CF; }
+      #s1 svg { position: absolute; inset: 0; }
+      .s1-text { position: absolute; left: 0; right: 0; top: 78px; text-align: center; }
+      .s1-text .big { font-weight: 800; font-size: 90px; line-height: 1.02; letter-spacing: -0.04em; color: var(--navy); }
+      .s1-text .kyun { color: var(--marigold); }
+      .s1-text .sub { margin-top: 22px; font-weight: 500; font-size: 34px; color: #6E6A62; letter-spacing: -0.01em; }
+      .ai-tag {
+        position: absolute; left: 34px; bottom: 28px; font-family: var(--sans); font-weight: 600;
+        font-size: 17px; letter-spacing: 0.1em; color: #B7AE9F;
+      }
+
+      /* ---------- slide 2 ---------- */
+      #s2 .h1 { font-size: 118px; }
+      #s2 .lede { margin-top: 48px; font-size: 44px; line-height: 1.32; max-width: 800px; }
+      #s2 .joke { position: absolute; left: 164px; bottom: 104px; font-size: 30px; font-weight: 500; color: var(--grey); }
+
+      /* ---------- slides 3-5 ---------- */
+      .step .icon { margin-top: 38px; }
+      .step .h1 { margin-top: 34px; font-size: 78px; }
+      .step .lede { margin-top: 26px; font-size: 35px; line-height: 1.36; }
+
+      /* ---------- slide 6 ---------- */
+      #s6 { background: var(--night); }
+      #s6 .top { position: absolute; left: 92px; right: 92px; top: 92px; }
+      #s6 .mono-big {
+        font-family: var(--mono); font-weight: 800; font-size: 86px; line-height: 1.04;
+        letter-spacing: -0.035em; color: var(--marigold);
+      }
+      #s6 .line2 { margin-top: 30px; font-weight: 700; font-size: 44px; line-height: 1.2; color: var(--paper); letter-spacing: -0.02em; }
+      #s6 .line3 { margin-top: 20px; font-weight: 500; font-size: 33px; line-height: 1.35; color: #A9C1F5; }
+      .phone {
+        position: absolute; left: 50%; top: 500px; width: 380px; height: 794px; margin-left: -190px;
+        background: #000; border-radius: 52px; padding: 12px;
+        box-shadow: 0 0 0 2px #2B3445, 0 40px 80px rgba(0, 0, 0, 0.45);
+      }
+      .phone img { display: block; width: 356px; height: 770px; border-radius: 40px; }
+      .tag {
+        position: absolute; left: -46px; top: -20px; background: var(--beige); border-radius: 6px;
+        padding: 10px 16px; font-family: var(--mono); font-weight: 700; font-size: 20px;
+        letter-spacing: 0.12em; color: #5F6572; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+      }
+
+      /* ---------- slide 7 ---------- */
+      #s7 { background: var(--paper); }
+      .sticker {
+        position: absolute; left: 80px; top: 80px; background: var(--indigo); color: #fff;
+        border-radius: 7px; padding: 13px 20px; font-family: var(--mono); font-weight: 700;
+        font-size: 24px; letter-spacing: 0.12em;
+      }
+      .logo-wrap { position: absolute; left: 50%; top: 250px; width: 320px; height: 320px; margin-left: -160px; }
+      .logo-wrap svg { position: absolute; inset: 0; }
+      .logo {
+        position: absolute; left: 60px; top: 60px; width: 200px; height: 200px; background: var(--indigo);
+        border-radius: 46px; display: flex; align-items: center; justify-content: center;
+        font-family: var(--mono); font-weight: 800; font-size: 100px; letter-spacing: -0.06em; color: var(--paper);
+      }
+      .s7-text { position: absolute; left: 70px; right: 70px; top: 650px; text-align: center; }
+      .s7-text .h1 { font-size: 92px; }
+      .s7-text .next { margin-top: 46px; font-weight: 600; font-size: 38px; color: var(--navy); letter-spacing: -0.015em; }
+      .s7-text .follow { margin-top: 22px; font-weight: 500; font-size: 30px; color: var(--grey); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="30" data-width="1080" data-height="1350">
+
+      <!-- ================= SLIDE 1 · cover ================= -->
+      <section id="s1" class="clip" data-start="0" data-duration="4" data-track-index="0">
+        <svg viewBox="0 0 1080 1350" width="1080" height="1350" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="wall" cx="12%" cy="22%" r="95%">
+              <stop offset="0" stop-color="#FBF5E8" />
+              <stop offset="0.5" stop-color="#EFE5D1" />
+              <stop offset="1" stop-color="#DCCBAE" />
+            </radialGradient>
+            <linearGradient id="desk" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#B07B4C" />
+              <stop offset="0.35" stop-color="#94613A" />
+              <stop offset="1" stop-color="#6B4124" />
+            </linearGradient>
+            <linearGradient id="deskLight" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#FFE9C4" stop-opacity="0.35" />
+              <stop offset="0.6" stop-color="#FFE9C4" stop-opacity="0" />
+            </linearGradient>
+            <linearGradient id="brassV" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#FBE3A0" />
+              <stop offset="0.4" stop-color="#D4A23C" />
+              <stop offset="1" stop-color="#855A14" />
+            </linearGradient>
+            <linearGradient id="brassH" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#6E4A12" />
+              <stop offset="0.28" stop-color="#E2B95C" />
+              <stop offset="0.42" stop-color="#FFF1BF" />
+              <stop offset="0.65" stop-color="#C38F2B" />
+              <stop offset="1" stop-color="#5E3E0E" />
+            </linearGradient>
+            <linearGradient id="bowl" x1="0" y1="0" x2="1" y2="0.3">
+              <stop offset="0" stop-color="#FFF0BC" />
+              <stop offset="0.3" stop-color="#E0B04E" />
+              <stop offset="1" stop-color="#7C5212" />
+            </linearGradient>
+            <filter id="shadowBlur" x="-20%" y="-20%" width="140%" height="140%">
+              <feColorMatrix type="matrix" values="0 0 0 0 0.25  0 0 0 0 0.17  0 0 0 0 0.08  0 0 0 1 0" />
+              <feGaussianBlur stdDeviation="14" />
+            </filter>
+            <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="22" /></filter>
+            <filter id="paperShadow" x="-30%" y="-30%" width="160%" height="160%">
+              <feDropShadow dx="1.2" dy="2.2" stdDeviation="1.4" flood-color="#3A1208" flood-opacity="0.35" />
+            </filter>
+            <filter id="grain" x="0" y="0" width="100%" height="100%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" stitchTiles="stitch" />
+              <feColorMatrix type="saturate" values="0" />
+            </filter>
+            <clipPath id="wallClip"><rect x="0" y="0" width="1080" height="1046" /></clipPath>
+            <path id="heartP" d="M0 4.2 C-1.2 2.2 -6.2 -0.6 -6.2 -3.9 C-6.2 -6.9 -2.6 -8.1 0 -5.2 C2.6 -8.1 6.2 -6.9 6.2 -3.9 C6.2 -0.6 1.2 2.2 0 4.2 Z" />
+          </defs>
+
+          <!-- wall + window light -->
+          <rect x="0" y="0" width="1080" height="1046" fill="url(#wall)" />
+          <polygon points="-60,380 330,300 400,980 -60,1060" fill="#FFF8EA" opacity="0.45" filter="url(#soft)" />
+
+          <!-- cast shadow of the scale on the wall (light from left) -->
+          <g clip-path="url(#wallClip)" opacity="0.2">
+            <use href="#scale" transform="translate(96 -6)" filter="url(#shadowBlur)" />
+          </g>
+
+          <!-- desk -->
+          <rect x="0" y="1044" width="1080" height="306" fill="url(#desk)" />
+          <rect x="0" y="1044" width="1080" height="306" fill="url(#deskLight)" />
+          <g stroke="#5A3418" stroke-width="2" fill="none" opacity="0.28">
+            <path d="M0 1082 C260 1076 520 1092 1080 1080" />
+            <path d="M0 1128 C300 1138 640 1118 1080 1132" />
+            <path d="M0 1190 C220 1180 700 1204 1080 1188" />
+            <path d="M0 1262 C360 1276 620 1250 1080 1270" />
+            <path d="M0 1320 C300 1312 760 1334 1080 1318" />
+          </g>
+          <rect x="0" y="1040" width="1080" height="8" fill="#5B3A1F" opacity="0.35" />
+          <ellipse cx="620" cy="1122" rx="210" ry="20" fill="#2E1606" opacity="0.35" filter="url(#soft)" />
+
+          <!-- the taraazu -->
+          <g id="scale">
+            <!-- plinth -->
+            <path d="M420 1086 L660 1086 L700 1120 L380 1120 Z" fill="url(#brassH)" />
+            <ellipse cx="540" cy="1120" rx="160" ry="16" fill="#7A5214" />
+            <ellipse cx="540" cy="1086" rx="120" ry="12" fill="#F0CF7C" />
+            <!-- pillar -->
+            <rect x="527" y="612" width="26" height="476" rx="6" fill="url(#brassH)" />
+            <ellipse cx="540" cy="720" rx="22" ry="7" fill="url(#brassH)" />
+            <ellipse cx="540" cy="930" rx="24" ry="8" fill="url(#brassH)" />
+            <ellipse cx="540" cy="1060" rx="30" ry="9" fill="url(#brassH)" />
+            <!-- indicator frame -->
+            <path d="M508 604 L508 528 Q540 486 572 528 L572 604" fill="none" stroke="url(#brassH)" stroke-width="8" stroke-linecap="round" />
+            <rect x="512" y="596" width="56" height="20" rx="6" fill="url(#brassV)" />
+
+            <!-- beam (rotates) -->
+            <g id="beam">
+              <rect x="222" y="593" width="636" height="14" rx="7" fill="url(#brassV)" />
+              <polygon points="535,600 545,600 540,506" fill="#8A5E16" />
+              <circle cx="540" cy="600" r="17" fill="url(#brassV)" stroke="#7A5214" stroke-width="2" />
+              <circle cx="230" cy="600" r="10" fill="url(#brassV)" />
+              <circle cx="850" cy="600" r="10" fill="url(#brassV)" />
+            </g>
+
+            <!-- left pan : hearts -->
+            <g id="panL">
+              <circle cx="230" cy="612" r="7" fill="none" stroke="#8A5E16" stroke-width="3" />
+              <g stroke="#6E4E22" stroke-width="2.2">
+                <line x1="230" y1="618" x2="114" y2="928" />
+                <line x1="230" y1="618" x2="346" y2="928" />
+              </g>
+              <ellipse cx="230" cy="928" rx="120" ry="15" fill="#9C6E22" />
+              <g id="pile" filter="url(#paperShadow)"></g>
+              <line x1="230" y1="618" x2="230" y2="930" stroke="#6E4E22" stroke-width="2.2" />
+              <path d="M110 928 Q230 1004 350 928 Q230 950 110 928 Z" fill="url(#bowl)" />
+              <path d="M110 928 Q230 950 350 928" fill="none" stroke="#FCE6A6" stroke-width="3" />
+            </g>
+
+            <!-- right pan : parcels -->
+            <g id="panR">
+              <circle cx="850" cy="612" r="7" fill="none" stroke="#8A5E16" stroke-width="3" />
+              <g stroke="#6E4E22" stroke-width="2.2">
+                <line x1="850" y1="618" x2="734" y2="928" />
+                <line x1="850" y1="618" x2="966" y2="928" />
+              </g>
+              <ellipse cx="850" cy="928" rx="120" ry="15" fill="#9C6E22" />
+              <g filter="url(#paperShadow)">
+                <!-- parcel A -->
+                <polygon points="764,874 836,874 848,864 776,864" fill="#DDB482" />
+                <polygon points="836,874 848,864 848,922 836,934" fill="#A4733F" />
+                <rect x="764" y="874" width="72" height="60" fill="#C8965F" />
+                <line x1="800" y1="874" x2="800" y2="934" stroke="#7A5627" stroke-width="3" />
+                <line x1="764" y1="904" x2="836" y2="904" stroke="#7A5627" stroke-width="3" />
+                <line x1="806" y1="864" x2="800" y2="874" stroke="#7A5627" stroke-width="3" />
+                <!-- parcel B -->
+                <polygon points="852,868 930,868 942,858 864,858" fill="#D9AE78" />
+                <polygon points="930,868 942,858 942,922 930,934" fill="#9F6E3A" />
+                <rect x="852" y="868" width="78" height="66" fill="#C1905A" />
+                <line x1="891" y1="868" x2="891" y2="934" stroke="#7A5627" stroke-width="3" />
+                <line x1="852" y1="900" x2="930" y2="900" stroke="#7A5627" stroke-width="3" />
+                <line x1="897" y1="858" x2="891" y2="868" stroke="#7A5627" stroke-width="3" />
+                <!-- parcel C (on top) -->
+                <g transform="rotate(-4 846 838)">
+                  <polygon points="808,818 880,818 892,808 820,808" fill="#E0B887" />
+                  <polygon points="880,818 892,808 892,856 880,866" fill="#A87A45" />
+                  <rect x="808" y="818" width="72" height="48" fill="#CC9C65" />
+                  <line x1="844" y1="818" x2="844" y2="866" stroke="#7A5627" stroke-width="3" />
+                  <line x1="808" y1="842" x2="880" y2="842" stroke="#7A5627" stroke-width="3" />
+                  <line x1="850" y1="808" x2="844" y2="818" stroke="#7A5627" stroke-width="3" />
+                  <ellipse cx="840" cy="809" rx="9" ry="5" fill="none" stroke="#7A5627" stroke-width="3" transform="rotate(-20 840 809)" />
+                  <ellipse cx="858" cy="809" rx="9" ry="5" fill="none" stroke="#7A5627" stroke-width="3" transform="rotate(20 858 809)" />
+                </g>
+              </g>
+              <line x1="850" y1="618" x2="850" y2="930" stroke="#6E4E22" stroke-width="2.2" />
+              <path d="M730 928 Q850 1004 970 928 Q850 950 730 928 Z" fill="url(#bowl)" />
+              <path d="M730 928 Q850 950 970 928" fill="none" stroke="#FCE6A6" stroke-width="3" />
+            </g>
+          </g>
+
+          <!-- falling hearts -->
+          <g id="falling" filter="url(#paperShadow)">
+            <g class="fh"><use href="#heartP" fill="#D62839" transform="scale(3.1)" /></g>
+            <g class="fh"><use href="#heartP" fill="#C1121F" transform="scale(2.8)" /></g>
+            <g class="fh"><use href="#heartP" fill="#E23A45" transform="scale(3.3)" /></g>
+            <g class="fh"><use href="#heartP" fill="#CC2233" transform="scale(2.6)" /></g>
+            <g class="fh"><use href="#heartP" fill="#D93040" transform="scale(3)" /></g>
+          </g>
+
+          <!-- phone-photo grain -->
+          <rect x="0" y="0" width="1080" height="1350" filter="url(#grain)" opacity="0.09" style="mix-blend-mode: multiply" />
+        </svg>
+
+        <div class="s1-text">
+          <div class="big r1">Followers zyada.<br />Orders kam.</div>
+          <div class="big kyun r1">Kyun?</div>
+          <div class="sub r1">Swipe. Answer slide 3 pe hai.</div>
+        </div>
+        <div class="ai-tag">AI GENERATED</div>
+      </section>
+
+      <!-- ================= SLIDE 2 ================= -->
+      <section id="s2" class="clip paper" data-start="4" data-duration="3.5" data-track-index="0">
+        <div class="margin-line"></div>
+        <div class="count">2/7</div>
+        <div class="col">
+          <div class="h1 r">Likes se<br /><span class="hl"><i></i>kiraya nahi</span><br /><span class="hl"><i></i>bharta</span>.</div>
+          <div class="lede r">Landlord UPI pe heart accept nahi karta. Maine try kiya hai.</div>
+        </div>
+        <div class="joke r">(Joke. Please don't pay rent in hearts.)</div>
+      </section>
+
+      <!-- ================= SLIDE 3 ================= -->
+      <section id="s3" class="clip paper step" data-start="7.5" data-duration="5" data-track-index="0">
+        <div class="margin-line"></div>
+        <div class="count">3/7</div>
+        <div class="col">
+          <div class="kicker r">NUMBER 1 OF 3</div>
+          <svg class="icon r" width="104" height="96" viewBox="0 0 104 96">
+            <path pathLength="1" d="M52 8 L94 26 L94 72 L52 90 L10 72 L10 26 Z" />
+            <path pathLength="1" d="M10 26 L52 44 L94 26 M52 44 L52 90" />
+            <path pathLength="1" d="M31 17 L73 35 L73 52" />
+          </svg>
+          <div class="h1 r">Kaunsa maal khatam hone wala hai.</div>
+          <div class="lede r">Bestseller khatam hone ke baad pata chalta hai ki bestseller tha.</div>
+          <div class="check r">
+            <h3>Check it free:</h3>
+            <p>Stock left ÷ roz kitna bikta hai = kitne din chalega.</p>
+            <p>Supplier ke din + 3 se kam? Aaj order karo.</p>
+            <p>Example: 12 ÷ 2 = 6 din. Supplier 4 + 3 = 7. 6 &lt; 7: aaj order.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SLIDE 4 ================= -->
+      <section id="s4" class="clip paper step" data-start="12.5" data-duration="4.5" data-track-index="0">
+        <div class="margin-line"></div>
+        <div class="count">4/7</div>
+        <div class="col">
+          <div class="kicker r">NUMBER 2 OF 3</div>
+          <svg class="icon r" width="120" height="96" viewBox="0 0 120 96">
+            <circle pathLength="1" cx="40" cy="26" r="16" />
+            <path pathLength="1" d="M12 88 C12 64 24 54 40 54 C56 54 68 64 68 88" />
+            <path pathLength="1" d="M82 58 C82 34 112 34 112 58 C112 76 96 84 84 80" />
+            <polyline pathLength="1" points="92,72 83,80 92,89" />
+          </svg>
+          <div class="h1 r">Kaun wapas nahi aaya.</div>
+          <div class="lede r">Purana customer naya follower dhoondhne se sasta hai. Usse tum pe bharosa pehle se hai.</div>
+          <div class="check r">
+            <h3>Check it free:</h3>
+            <p>Last 60 din mein 1 baar kharida, phir 45 din se kuch nahi? Ye list banao.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SLIDE 5 ================= -->
+      <section id="s5" class="clip paper step" data-start="17" data-duration="4.5" data-track-index="0">
+        <div class="margin-line"></div>
+        <div class="count">5/7</div>
+        <div class="col">
+          <div class="kicker r">NUMBER 3 OF 3</div>
+          <svg class="icon r" width="300" height="96" viewBox="0 0 300 96">
+            <!-- rupee -->
+            <path pathLength="1" d="M14 16 L66 16 M14 34 L66 34 M24 16 C52 16 58 28 58 34 C58 46 46 54 24 54 L60 86" />
+            <!-- not equal -->
+            <path pathLength="1" d="M118 38 L182 38 M118 60 L182 60 M168 18 L132 80" />
+            <!-- heart -->
+            <path pathLength="1" d="M262 84 C244 68 226 56 226 38 C226 26 234 18 244 18 C252 18 258 23 262 30 C266 23 272 18 280 18 C290 18 298 26 298 38 C298 56 280 68 262 84 Z" />
+          </svg>
+          <div class="h1 r">Kya bikta hai vs kya bas like hota hai.</div>
+          <div class="lede r">Viral reel wala product? Ho sakta hai 2 hi bike.</div>
+          <div class="check r">
+            <h3>Check it free:</h3>
+            <p>Har product: is mahine kitne bike × margin. Likes ignore karo.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SLIDE 6 ================= -->
+      <section id="s6" class="clip" data-start="21.5" data-duration="4.5" data-track-index="0">
+        <div class="top">
+          <div class="mono-big r">10 minute.<br />Har Monday.</div>
+          <div class="line2 r">Teen numbers. Ek notebook bhi chalega.</div>
+          <div class="line3 r">Ya One Tap Manager teeno ek screen pe dikha deta hai, free.</div>
+        </div>
+        <div class="phone">
+          <img src="assets/app-sales-top.png" alt="One Tap Manager sales analytics screen" />
+          <div class="tag">SAMPLE SHOP DATA</div>
+        </div>
+      </section>
+
+      <!-- ================= SLIDE 7 ================= -->
+      <section id="s7" class="clip" data-start="26" data-duration="4" data-track-index="0">
+        <div class="sticker">DUKAAN DOCTOR · EP 01</div>
+        <div class="logo-wrap">
+          <svg viewBox="0 0 320 320" width="320" height="320">
+            <circle id="ring" cx="160" cy="160" r="152" fill="none" stroke="#F5A623" stroke-width="4"
+              pathLength="1" stroke-dasharray="1" stroke-dashoffset="0" transform="rotate(-90 160 160)" />
+          </svg>
+          <div class="logo">1T</div>
+        </div>
+        <div class="s7-text">
+          <div class="h1 r">Save karo.<br /><span class="hl"><i></i>Monday</span> ko<br />kaam aayega.</div>
+          <div class="next r">Next Tuesday: agla dukaan problem.</div>
+          <div class="follow r">Follow @onetapmanager</div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      // ---- build the heart pile (seeded, deterministic) ----
+      (function buildPile() {
+        let seed = 1412;
+        const rnd = () => {
+          seed = (seed * 1664525 + 1013904223) % 4294967296;
+          return seed / 4294967296;
+        };
+        const reds = ["#D62839", "#C1121F", "#E23A45", "#B5172B", "#DA3342", "#C8243A"];
+        const pile = document.getElementById("pile");
+        let out = "";
+        for (let k = 0; k < 8; k++) {
+          const count = 11 - k;
+          const width = 196 - k * 22;
+          const y = 924 - k * 17;
+          for (let j = 0; j < count; j++) {
+            const x = 230 + (count === 1 ? 0 : (j / (count - 1) - 0.5) * width) + (rnd() - 0.5) * 14;
+            const yy = y + (rnd() - 0.5) * 10;
+            const s = 2.5 + rnd() * 0.9;
+            const rot = (rnd() - 0.5) * 80;
+            const c = reds[Math.floor(rnd() * reds.length)];
+            out += `<use href="#heartP" fill="${c}" transform="translate(${x.toFixed(1)} ${yy.toFixed(1)}) rotate(${rot.toFixed(0)}) scale(${s.toFixed(2)})" />`;
+          }
+        }
+        pile.innerHTML = out;
+      })();
+
+      const tl = gsap.timeline({ paused: true });
+
+      // ---------- slide 1: the weighing ----------
+      const TILT = 12, L = 310;
+      const dy = L * Math.sin((TILT * Math.PI) / 180);
+      const dx = L * (1 - Math.cos((TILT * Math.PI) / 180));
+      tl.fromTo(".r1", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.55, stagger: 0.14, ease: "power3.out" }, 0.1);
+      tl.fromTo("#beam", { rotation: -2, svgOrigin: "540 600" }, { rotation: TILT, svgOrigin: "540 600", duration: 1.3, ease: "back.out(2.2)" }, 0.35);
+      tl.fromTo("#panL", { x: -0.3, y: 10.8 }, { x: dx, y: -dy, duration: 1.3, ease: "back.out(2.2)" }, 0.35);
+      tl.fromTo("#panR", { x: 0.3, y: -10.8 }, { x: -dx, y: dy, duration: 1.3, ease: "back.out(2.2)" }, 0.35);
+      const falls = [
+        { from: [178, 752, 0], to: [118, 968, 210] },
+        { from: [262, 738, 25], to: [318, 1000, -150] },
+        { from: [318, 764, -20], to: [412, 880, 120] },
+        { from: [146, 726, 40], to: [66, 858, -120] },
+        { from: [228, 748, -10], to: [196, 1022, 170] },
+      ];
+      document.querySelectorAll(".fh").forEach((el, i) => {
+        const f = falls[i];
+        tl.fromTo(el, { x: f.from[0], y: f.from[1], rotation: f.from[2], opacity: 0 },
+          { x: f.to[0], y: f.to[1], rotation: f.to[2], opacity: 1, duration: 2.9 - i * 0.08, ease: "power1.in" }, 1.05 + i * 0.1);
+      });
+
+      // ---------- flat slides: shared entrance ----------
+      function enter(id, t) {
+        const sc = document.getElementById(id);
+        tl.fromTo(sc.querySelectorAll(".r"), { opacity: 0, y: 34 }, { opacity: 1, y: 0, duration: 0.55, stagger: 0.12, ease: "power3.out" }, t + 0.1);
+        tl.fromTo(sc.querySelectorAll(".count, .margin-line"), { opacity: 0 }, { opacity: 1, duration: 0.4 }, t);
+        const hl = sc.querySelectorAll(".hl > i");
+        if (hl.length) tl.fromTo(hl, { scaleX: 0 }, { scaleX: 1, duration: 0.45, stagger: 0.22, ease: "power2.inOut" }, t + 0.75);
+        const strokes = sc.querySelectorAll(".icon [pathLength]");
+        if (strokes.length) {
+          tl.fromTo(strokes, { strokeDasharray: 1, strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.7, stagger: 0.12, ease: "power2.out" }, t + 0.3);
+        }
+      }
+      enter("s2", 4);
+      enter("s3", 7.5);
+      enter("s4", 12.5);
+      enter("s5", 17);
+
+      // ---------- slide 6 ----------
+      tl.fromTo("#s6 .r", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.55, stagger: 0.14, ease: "power3.out" }, 21.6);
+      tl.fromTo("#s6 .phone", { opacity: 0, y: 160 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 22.0);
+      tl.fromTo("#s6 .tag", { opacity: 0, scale: 0.6, rotation: -8 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.45, ease: "back.out(2.5)" }, 22.7);
+
+      // ---------- slide 7 ----------
+      tl.fromTo("#s7 .sticker", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, 26.05);
+      tl.fromTo("#s7 .logo", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.6, ease: "back.out(2)" }, 26.15);
+      tl.fromTo("#ring", { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.9, ease: "power2.inOut" }, 26.35);
+      tl.fromTo("#s7 .r", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.55, stagger: 0.14, ease: "power3.out" }, 26.5);
+      tl.fromTo("#s7 .hl > i", { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: "power2.inOut" }, 27.1);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

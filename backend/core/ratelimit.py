@@ -51,6 +51,7 @@ LIMITS: dict[str, int] = {
     "/api/login": 20,
     "/api/register": 10,
     "/api/auth/google": 20,
+    "/api/auth/chatgpt": 20,
     "/api/password-reset": 6,
     "/api/password-reset/request": 6,
     "/api/store/password-reset": 6,

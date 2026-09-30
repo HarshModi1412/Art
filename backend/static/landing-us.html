@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+<title>Shop Management App for Small Online Sellers | One Tap Manager</title>
+<meta name="description" content="Inventory reorder alerts, sales analytics, win-back emails and AI product photos for small Shopify and Amazon sellers. 7-day free trial, then $10 a month." />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<link rel="canonical" href="__BASE_URL__/" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/logo.png" type="image/png" sizes="512x512" />
+<link rel="apple-touch-icon" href="/logo.png" />
+<link rel="alternate" type="text/plain" href="/llms.txt" title="Summary for AI assistants" />
+<!-- One set of hreflang lines shared by the US home (/), the India home (/in)
+     and the Hindi page (/hi); core/geo.py HREFLANG is the source. hreflang is
+     ignored unless every page in the set lists the same alternates. -->
+<link rel="alternate" hreflang="en-US" href="__BASE_URL__/" />
+<link rel="alternate" hreflang="en-IN" href="__BASE_URL__/in" />
+<link rel="alternate" hreflang="hi-IN" href="__BASE_URL__/hi" />
+<link rel="alternate" hreflang="x-default" href="__BASE_URL__/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="One Tap Manager" />
+<meta property="og:title" content="One Tap Manager: run your shop the way a big brand runs theirs" />
+<meta property="og:description" content="It reads your sales, tells you the three things worth doing this morning, and then does most of them for you. 7-day free trial, no card." />
+<meta property="og:url" content="__BASE_URL__/" />
+<meta property="og:image" content="__BASE_URL__/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:alt" content="One Tap Manager: three example cards telling a seller what to restock, who to win back, and what to fix." />
+<meta property="og:locale" content="en_US" />
+<meta property="og:locale:alternate" content="en_IN" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<!-- Structured data. Every claim here is repeated on the page. No
+     aggregateRating and no review markup: there are no customers to quote yet. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "__BASE_URL__/#org",
+      "name": "One Tap Manager",
+      "alternateName": ["OneTapManager", "onetapmanager"],
+      "url": "__BASE_URL__/",
+      "logo": { "@type": "ImageObject", "url": "__BASE_URL__/logo.png", "width": 512, "height": 512 },
+      "sameAs": ["__SAME_AS__"],
+      "description": "Operations, marketing and analytics software for small online sellers.",
+      "areaServed": [{ "@type": "Country", "name": "United States" }, { "@type": "Country", "name": "India" }]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "__BASE_URL__/#website",
+      "url": "__BASE_URL__/",
+      "name": "One Tap Manager",
+      "alternateName": ["OneTapManager", "onetapmanager"],
+      "inLanguage": "en-US",
+      "publisher": { "@id": "__BASE_URL__/#org" }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "One Tap Manager",
+      "applicationCategory": "BusinessApplication",
+      "applicationSubCategory": "Inventory and marketing software for small sellers",
+      "operatingSystem": "Web browser",
+      "url": "__BASE_URL__/",
+      "inLanguage": "en-US",
+      "featureList": ["Sales analytics from Shopify, Amazon or a CSV file", "Customer win-back emails for buyers who stopped coming back", "Low stock alerts and supplier purchase orders", "AI product photos made from your own product photo", "Instagram week planner and scheduler", "Customer review and complaint analysis"],
+      "publisher": { "@id": "__BASE_URL__/#org" },
+      "offers": [
+        { "@type": "Offer", "name": "Free trial", "price": "0", "priceCurrency": "USD",
+          "description": "Every Pro Max feature for 7 days. No card needed." },
+        { "@type": "Offer", "name": "Pro", "price": "10.00", "priceCurrency": "USD",
+          "priceSpecification": { "@type": "UnitPriceSpecification", "price": "10.00", "priceCurrency": "USD", "billingDuration": "P1M" },
+          "description": "Everything except AI image generation: analytics, win-back, stock and suppliers, Instagram planning, review analysis." },
+        { "@type": "Offer", "name": "Pro Max", "price": "12.99", "priceCurrency": "USD",
+          "priceSpecification": { "@type": "UnitPriceSpecification", "price": "12.99", "priceCurrency": "USD", "billingDuration": "P1M" },
+          "description": "Everything in Pro, plus AI product photos and short product clips." }
+      ]
+    }
+  ]
+}
+</script>
+
+<style>
+.h1-brand { display:block; font-size:0.44em; line-height:1.25; letter-spacing:0; font-weight:700; color: var(--ink); margin-bottom:0.35em; }
+:root {
+  --paper: #F7F5EF;
+  --paper-2: #EFECE3;
+  --ink: #101828;
+  --ink-soft: #475467;
+  --line: #DCD8CC;
+  /* The accent is the indigo that was already in this palette. It replaced a
+     violet (#6D28D9) that was doing the same job, because purple accents and
+     purple gradients are the visual signature of a page nobody designed, and a
+     seller deciding whether to trust us with their sales file reads that
+     signature before they read a word. Indigo on warm paper is the palette a
+     printed ledger has, which is the right association for this product.
+     Contrast on --paper #F7F5EF: 8.9:1, so it passes for body text, not just
+     for headings. */
+  --accent: #1E3A8A;
+  --accent-ink: #16306F;
+  --indigo: #1E3A8A;
+  --marigold: #F5A623;
+  --card-dark: #111827;
+  --card-dark-border: #273449;
+  --card-text: #E5E7EB;
+  --card-muted: #9CA3AF;
+  --green: #34D399;
+  /* System stacks, on purpose. Nothing is fetched from a third party, so no
+     visitor's IP address reaches a font CDN before they have had any say, and
+     nothing blocks the first paint. The Indic families are the ones already
+     installed on Indian devices, kept so the Hindi copy renders properly. */
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Bengali", "Noto Sans Telugu", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.6; }
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.02em; line-height: 1.15; }
+a { color: inherit; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+
+/* pricing: the comparison and the usage plan */
+.stack-compare { max-width: 720px; margin: 0 auto 40px; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 26px 28px; }
+.stack-compare h3 { font-size: 20px; margin: 0 0 6px; }
+.stack-note { font-size: 13px; color: var(--ink-soft); margin: 0 0 16px; line-height: 1.55; }
+.stack-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.stack-table td { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.stack-table td:last-child { text-align: right; font-family: var(--font-mono); font-size: 14px; white-space: nowrap; }
+.stack-table tr:last-child td { border-bottom: 0; }
+.stack-sum td { font-weight: 700; border-top: 2px solid var(--ink); padding-top: 14px; }
+.stack-ours td { font-weight: 700; color: var(--accent); font-size: 16px; }
+.stack-ours td:last-child { font-size: 17px; }
+.usage-plan { display: grid; grid-template-columns: 1.35fr .65fr; gap: 34px; align-items: start; max-width: 940px; margin: 44px auto 0; padding: 28px 30px; background: #fff; border: 1px solid var(--line); border-radius: 16px; }
+.usage-plan h3 { font-size: 22px; margin: 10px 0 12px; }
+.usage-plan p { font-size: 15px; color: var(--ink-soft); margin: 0 0 12px; line-height: 1.6; }
+.credit-packs { display: grid; gap: 10px; }
+.credit-pack { display: grid; gap: 2px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; }
+.credit-pack.best { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.credit-pack b { font-size: 15px; }
+.credit-pack span { font-family: var(--font-mono); font-size: 18px; }
+.credit-pack i { font-style: normal; font-size: 12.5px; color: var(--ink-soft); }
+@media (max-width: 820px) { .usage-plan { grid-template-columns: 1fr; } }
+
+/* nav */
+.nav { position: sticky; top: 0; z-index: 10; background: rgba(247,245,239,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1120px; margin: 0 auto; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 800; font-size: 18px; text-decoration: none; }
+/* Flat, not a gradient. A two-stop diagonal gradient on a logo mark and again on
+   the primary button is the tell of a template, and it is the first thing the
+   brief here ruled out. One solid ink colour reads as deliberate. */
+.brand-mark { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: #fff; display: grid; place-items: center; font-family: var(--font-mono); font-size: 13px; }
+.nav-links { display: flex; gap: 26px; align-items: center; font-size: 14.5px; }
+.nav-links a { text-decoration: none; color: var(--ink-soft); }
+.nav-links a:hover { color: var(--ink); }
+/* BUG THIS FIXES: the rule above and .btn-primary have the same specificity, and
+   this one comes later in the stylesheet, so it won that tie and painted the
+   page's main call to action in #475467 on a #1E3A8A button. That is about
+   1.5:1, which is not "a bit low", it is unreadable, and it was the button
+   asking people to open the app. Stated explicitly so the tie cannot come
+   back. */
+.nav-links a.btn-primary { color: #fff; }
+.nav-links a.btn-primary:hover { color: #fff; }
+/* 8px corners, not pills. A fully rounded button is the other template tell, and
+   a rectangle with a small radius is what every interface a seller already trusts
+   (their bank, their billing app) uses. */
+.btn { display: inline-block; text-decoration: none; border-radius: 8px; padding: 11px 22px; font-weight: 600; font-size: 15px; border: 1px solid transparent; cursor: pointer; font-family: var(--font-body); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+.btn-ghost { border: 1.5px solid var(--ink); color: var(--ink); background: none; }
+.btn-ghost:hover { background: var(--ink); color: var(--paper); }
+/* A visible focus ring on everything that takes focus, so the page is usable
+   without a mouse. The default outline is removed by nothing here, but browsers
+   draw it thin on coloured backgrounds, so it is made explicit. */
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.skip-link { position: absolute; left: -9999px; }
+.skip-link:focus { left: 12px; top: 12px; z-index: 100; background: #fff; color: var(--ink); padding: 10px 14px; border: 2px solid var(--accent); border-radius: 8px; text-decoration: none; }
+
+
+/* where we sit */
+.cmp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 28px 0 22px; }
+.cmp-col { border: 1px solid var(--line); border-radius: 12px; padding: 20px; background: #fff; }
+.cmp-col p { font-size: 14px; line-height: 1.6; color: var(--ink-soft); margin: 0 0 12px; }
+.cmp-col p b { color: var(--ink); }
+.cmp-h { font-weight: 700; font-size: 15px; margin-bottom: 12px; }
+.cmp-us { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.cmp-us .cmp-h { color: var(--accent); }
+.cmp-line { border-left: 3px solid var(--accent); padding: 12px 18px; font-size: 15px;
+  line-height: 1.6; margin-bottom: 16px; }
+.cmp-honest { background: #f7f7f9; border-radius: 12px; padding: 16px 18px; font-size: 14px;
+  line-height: 1.6; color: var(--ink-soft); }
+.cmp-honest b { color: var(--ink); }
+@media (max-width: 860px) { .cmp { grid-template-columns: 1fr; } }
+
+/* hero */
+/* BUG THIS FIXES: this element is `class="wrap hero"`, and .hero used the
+   `padding` SHORTHAND, which reset the 24px side gutter .wrap had given it to
+   zero. On a desktop nothing showed, because the 1120px max-width kept the text
+   away from the edge anyway. On a phone the headline ran right up against both
+   edges of the screen, which is the one place it was certain to be read.
+   padding-block sets only the vertical padding, so the gutter survives. */
+.hero { display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; padding-block: 72px 80px; }
+.hero h1 { font-size: 46px; margin: 14px 0 18px; }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero .hero-kw { font-family: var(--font-body); font-size: 16px; font-weight: 600; line-height: 1.45; letter-spacing: 0; color: var(--ink); max-width: 52ch; margin: 0 0 14px; }
+.hero p.lead { font-size: 18px; color: var(--ink-soft); max-width: 46ch; margin: 0 0 28px; }
+.hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.hero-note { font-size: 13px; color: var(--ink-soft); margin-top: 12px; }
+
+/* signature: dark insight tickets floating on light paper */
+/* BUG THIS FIXES: the three cards were absolutely positioned at top: 0, 128px
+   and 258px, which only worked while each one happened to be under 128px tall.
+   Any copy edit, any narrower viewport, any font a device substitutes, and the
+   second card slid under the first with half its sentence hidden. It was doing
+   exactly that on the live page.
+
+   Now they are a flex column and each card takes the height its own text needs,
+   so they cannot collide whatever the copy says. The scattered look that made
+   the design worth having is kept with the rotations and the alternating
+   indents, which are decoration rather than layout. */
+.tickets { display: flex; flex-direction: column; gap: 14px; }
+.ticket {
+  width: 92%;
+  background: var(--card-dark); color: var(--card-text);
+  border: 1px solid var(--card-dark-border); border-radius: 14px;
+  padding: 18px 20px; box-shadow: 0 24px 48px -18px rgba(16,24,40,.45);
+}
+.ticket .t-tag { font-family: var(--font-mono); font-size: 11px; color: var(--marigold); letter-spacing: .1em; }
+/* Not a heading. These are illustrations beside the hero, not sections of
+   the document, and they sat at h4 directly under the h1, skipping two
+   levels. Someone navigating by heading was offered three entries that
+   lead nowhere. Same look, correct semantics. */
+.ticket .t-title { margin: 6px 0; font-size: 16px; font-weight: 700;
+  font-family: var(--font-display); line-height: 1.25; color: var(--card-text); }
+.ticket p { margin: 0; font-size: 13.5px; color: var(--card-muted); }
+.ticket .t-metric { font-family: var(--font-mono); color: var(--green); font-size: 13px; margin-top: 10px; }
+.ticket:nth-of-type(1) { transform: rotate(-1.6deg); align-self: flex-start; }
+.ticket:nth-of-type(2) { transform: rotate(1.2deg); align-self: flex-end; }
+.ticket:nth-of-type(3) { transform: rotate(-0.8deg); align-self: flex-start; margin-left: 5%; }
+/* The rotation is decoration. Anyone who has asked their system not to animate
+   or tilt things has asked for a reason, so it goes away for them. */
+@media (prefers-reduced-motion: reduce) {
+  .ticket { transform: none !important; }
+}
+
+/* sections */
+section { padding-block: 72px; }   /* the side gutter belongs to .wrap inside */
+.section-head { max-width: 640px; margin-bottom: 40px; }
+.section-head h2 { font-size: 32px; margin: 10px 0 10px; }
+.section-head p { color: var(--ink-soft); margin: 0; }
+.alt { background: var(--paper-2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+
+/* problem strip */
+.miss { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.miss-card { border-left: 3px solid var(--marigold); padding: 4px 0 4px 18px; }
+.miss-card h3 { font-size: 17px; margin: 0 0 6px; }
+.miss-card p { font-size: 14.5px; color: var(--ink-soft); margin: 0 0 8px; }
+.miss-card p:last-child { margin-bottom: 0; }
+.miss-worth { font-size: 13.5px !important; border-top: 1px dashed var(--line);
+  padding-top: 8px; color: var(--ink) !important; }
+.tickets-label { font-size: 12px; color: var(--card-muted); margin: 0 0 10px; max-width: 46ch; line-height: 1.5; }
+
+/* features */
+.features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+.feature { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 24px; }
+/* These used to be emoji. An emoji as an interface icon renders differently on
+   every device, cannot be styled, is read aloud by a screen reader as its own
+   long name in the middle of a heading, and looks like a placeholder nobody came
+   back to. Replaced with a drawn line icon in the accent colour, marked
+   aria-hidden because the heading beside it already says what the card is. */
+.feature .f-icon { width: 26px; height: 26px; color: var(--accent); }
+.feature .f-icon svg { width: 26px; height: 26px; display: block; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.feature h3 { font-size: 18px; margin: 10px 0 8px; }
+.feature p { font-size: 14.5px; color: var(--ink-soft); margin: 0; }
+.feature .f-more { display: inline-flex; align-items: center; min-height: 44px; margin-top: 2px; font-size: 14px; font-weight: 600; color: var(--accent); }
+.cmp-links { display: block; margin-top: 6px; }
+.cmp-links a, .faq-item p a { display: inline-block; padding: 10px 0; color: var(--accent); font-weight: 600; }
+.f-also { margin: 18px 0 0; font-size: 15px; color: var(--ink-soft); }
+.f-also a { color: var(--accent); font-weight: 600; display: inline-block; padding: 11px 0; }
+
+/* how it works */
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; counter-reset: step; }
+.step { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+.step::before { counter-increment: step; content: counter(step, decimal-leading-zero); font-family: var(--font-mono); color: var(--accent); font-size: 13px; }
+.step h3 { font-size: 16px; margin: 8px 0 6px; }
+.step p { font-size: 13.5px; color: var(--ink-soft); margin: 0; }
+
+/* story wall */
+.stories-note {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #fff; border: 1px dashed var(--marigold); border-radius: 8px;
+  padding: 7px 16px; font-size: 13.5px; color: var(--ink-soft); margin-top: 14px;
+}
+.stories { columns: 3; column-gap: 18px; margin-top: 36px; }
+.story { break-inside: avoid; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; margin-bottom: 18px; }
+.story .s-chip { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: 2px 9px; display: inline-block; }
+.story p.s-body { margin: 12px 0 12px; font-size: 15px; }
+.story .s-who { font-size: 13px; color: var(--ink-soft); }
+.story .s-lang { font-family: var(--font-mono); font-size: 11px; color: var(--marigold); float: right; }
+
+/* pricing */
+.plans { display: grid; grid-template-columns: repeat(2, minmax(0, 420px)); gap: 22px; justify-content: center; }
+.plans-3 { grid-template-columns: repeat(3, minmax(0, 360px)); }
+@media (max-width: 1024px) { .plans-3 { grid-template-columns: 1fr; } }
+.plan { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 30px; position: relative; }
+.plan.pro { border: 2px solid var(--accent); box-shadow: 0 24px 48px -24px rgba(30,58,138,.30); }
+.plan .badge { position: absolute; top: -13px; left: 30px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 3px 12px; }
+.plan h3 { margin: 0 0 4px; font-size: 20px; }
+.plan .price { font-family: var(--font-display); font-size: 38px; font-weight: 800; margin: 10px 0 2px; }
+.plan .price span { font-size: 15px; font-weight: 500; color: var(--ink-soft); font-family: var(--font-body); }
+.plan ul { list-style: none; padding: 0; margin: 20px 0 26px; }
+.plan li { padding: 7px 0; font-size: 14.5px; border-bottom: 1px dashed var(--line); }
+.plan li::before { content: "✓  "; color: var(--green); font-weight: 700; }
+/* A minus sign, not an em dash: the row means "not included", and the screen
+   reader should say something sensible rather than a dash used as punctuation. */
+.plan li.no::before { content: "\2212  "; color: var(--line); }
+.plan li.no { color: #98A2B3; }
+.plan .btn { width: 100%; text-align: center; }
+
+/* footer */
+footer { border-top: 1px solid var(--line); padding: 36px 0 48px; font-size: 13.5px; color: var(--ink-soft); }
+.foot { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+/* Every link in the footer gets a real tap target, not just the legal row.
+   These are the links people go looking for on a phone. */
+.foot a { color: var(--accent-ink); display: inline-block; padding: 10px 6px; }
+.foot .foot-links { margin: -10px -6px; }
+/* A 22px-tall link is a miss on a phone, and these are the links somebody goes
+   looking for when they want to know what happens to their data. Padding gives
+   them a 40px target without changing how the row looks. */
+.foot-legal { display: flex; gap: 2px; flex-wrap: wrap; align-items: center;
+  margin: -10px 0; }
+.foot-legal a { display: inline-block; padding: 10px 8px; }
+
+@media (max-width: 900px) {
+  .hero { grid-template-columns: 1fr; padding-top: 40px; }
+  .hero h1 { font-size: 34px; }
+  /* On a phone the tilt costs legibility for nothing, and the cards need the
+     full width. */
+  .ticket { width: 100%; transform: none !important; margin-left: 0 !important; }
+  .miss, .features, .steps { grid-template-columns: 1fr; }
+  .stories { columns: 1; }
+  .plans { grid-template-columns: 1fr; }
+  .nav-links a:not(.btn) { display: none; }
+}
+@media (min-width: 901px) and (max-width: 1100px) { .stories { columns: 2; } }
+
+/* ============================================================================
+   POLISH LAYER — refined, restrained scroll motion for the marketing page.
+   The .pol-reveal class is ONLY added by JavaScript, and only to sections that
+   are off-screen when the page loads, so with no JS (or reduced motion) every
+   section is fully visible and nothing here can ever hide content.
+   ============================================================================ */
+.pol-reveal { opacity: 0; transform: translateY(20px);
+  transition: opacity .7s cubic-bezier(.22,1,.36,1), transform .7s cubic-bezier(.32,.72,0,1);
+  will-change: opacity, transform; }
+.pol-reveal.pol-in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pol-reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+}
+</style>
+<style>
+/* iOS design language for the public page. Same tokens as the app (Smart CafeX/ios.css),
+   so the site and the workspace read as one product. Content and structure are unchanged. */
+:root {
+  --paper: #f5f5f7; --paper-2: #ffffff; --ink: #1d1d1f; --ink-soft: #55555b; --line: rgba(60,60,67,.14);
+  --accent: #0062c9; --accent-ink: #004fa3; --indigo: #0062c9; --marigold: #ff9f0a;
+  --card-dark: #1c1c1e; --card-dark-border: #2c2c2e; --card-text: #f5f5f7; --card-muted: #a1a1a6; --green: #30d158;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", Inter, Roboto, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Inter, Roboto, "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Bengali", sans-serif;
+  --shadow-card: 0 0 0 .5px rgba(0,0,0,.04), 0 2px 10px rgba(0,0,0,.05);
+  --ease: cubic-bezier(.2,.8,.2,1); --spring: cubic-bezier(.34,1.56,.64,1);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #0c0c0f; --paper-2: #141416; --ink: #f5f5f7; --ink-soft: #a9a9b0; --line: rgba(255,255,255,.12);
+          --accent: #6cb3ff; --accent-ink: #94c8ff; --card-dark: #1c1c1e; --shadow-card: 0 0 0 .5px rgba(255,255,255,.07); }
+  .stack-compare, .feature, .step, .story, .plan, .cmp-col, .stories-note, .credit-pack, .usage-plan { background: #1c1c1e !important; }
+  .cmp-honest { background: #141416 !important; }
+  .btn-primary, .plan .badge { background: #0a72e0 !important; border-color: #0a72e0 !important; color: #fff !important; }
+  .nav { background: rgba(22,22,24,.72) !important; }
+  .brand-mark { color: #fff; }
+}
+body { font-size: 17px; line-height: 1.5; letter-spacing: -.011em; -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { letter-spacing: -.035em; font-weight: 700; }
+.eyebrow { font-family: var(--font-body); font-weight: 600; letter-spacing: .06em; font-size: 13px; }
+
+.nav { background: rgba(245,245,247,.72); -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px); }
+.nav-inner { padding-block: 12px; }
+.brand { font-weight: 700; letter-spacing: -.02em; }
+.brand-mark { border-radius: 10px; background: linear-gradient(160deg, #4aa3ff, #0a63d8); font-family: var(--font-body); font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 1px 3px rgba(0,60,160,.35); }
+
+.btn { border-radius: 999px; padding: 12px 24px; font-weight: 600; letter-spacing: -.01em; transition: background .2s var(--ease), transform .3s var(--spring); }
+.btn:active { transform: scale(.96); }
+.btn-primary { background: #0071e3; border-color: #0071e3; }
+.btn-primary:hover { background: #0064cc; border-color: #0064cc; }
+.btn-ghost { border: 0; background: rgba(118,118,128,.12); color: var(--accent); }
+.btn-ghost:hover { background: rgba(118,118,128,.2); color: var(--accent-ink); }
+
+.hero { padding-block: 88px 96px; }
+.hero h1 { font-size: clamp(38px, 6vw, 64px); font-weight: 700; letter-spacing: -.045em; line-height: 1.04; }
+.hero p.lead { font-size: 21px; line-height: 1.4; color: var(--ink-soft); }
+section { padding-block: 96px; }
+.section-head h2 { font-size: clamp(30px, 4.2vw, 46px); letter-spacing: -.04em; }
+.section-head p { font-size: 19px; }
+.alt { background: var(--paper-2); border: 0; }
+
+.feature, .step, .story, .plan, .cmp-col, .stack-compare, .usage-plan {
+  border: 0; border-radius: 24px; box-shadow: var(--shadow-card); background: #fff;
+}
+.feature { padding: 30px; transition: transform .35s var(--spring), box-shadow .25s; }
+.feature:hover { transform: translateY(-4px); box-shadow: 0 2px 6px rgba(0,0,0,.05), 0 16px 36px rgba(0,0,0,.10); }
+.feature .f-icon { width: 48px; height: 48px; border-radius: 13px; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(160deg, #4aa3ff, #0a63d8); box-shadow: inset 0 1px 0 rgba(255,255,255,.3); margin-bottom: 6px; }
+.feature .f-icon svg { width: 25px; height: 25px; stroke-width: 1.8; }
+.feature:nth-child(4n+2) .f-icon { background: linear-gradient(160deg, #5ad39a, #1f9a5f); }
+.feature:nth-child(4n+3) .f-icon { background: linear-gradient(160deg, #ffb340, #e07b00); }
+.feature:nth-child(4n+4) .f-icon { background: linear-gradient(160deg, #ff7ab0, #d62e78); }
+.feature h3 { font-size: 21px; }
+.step { border-radius: 22px; }
+.step::before { font-family: var(--font-body); font-weight: 700; }
+.miss-card { border-left-width: 0; padding-left: 0; }
+.ticket { border-radius: 22px; border: 0; box-shadow: 0 30px 60px -20px rgba(0,0,0,.45); }
+.plan.pro { border: 0; box-shadow: 0 0 0 2px var(--accent), 0 30px 60px -28px rgba(0,113,227,.45); }
+.plan .badge { border-radius: 999px; background: #0071e3; }
+.plan li { border-bottom-style: solid; border-color: var(--line); }
+.plan .price { letter-spacing: -.04em; }
+.story .s-chip { border-radius: 999px; font-family: var(--font-body); font-weight: 600; }
+.stories-note { border-radius: 999px; border-style: solid; border-color: var(--line); }
+.cmp-us { box-shadow: 0 0 0 2px var(--accent); }
+.cmp-honest { border-radius: 18px; }
+footer { border-top: 1px solid var(--line); }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid rgba(0,113,227,.45); outline-offset: 3px; border-radius: 8px; }
+@media (max-width: 900px) { section { padding-block: 64px; } .hero { padding-block: 40px 56px; } .hero p.lead { font-size: 18px; } }
+</style>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<script src="/oops.js" defer></script>
+<script src="/consent.js" defer></script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to the main content</a>
+
+<!-- Shown only to a visitor whose browser says India (timezone or language),
+     so they can switch to rupee pricing. Search engines see the US page. -->
+<div id="regionNote" style="display:none; background:var(--paper-2); border-bottom:1px solid var(--line); font-size:14px; text-align:center; padding:0 16px;">
+  Selling in India? <a href="/in?region=in" style="color:var(--accent); font-weight:600; display:inline-block; padding:11px 4px;">See the India site and prices in ₹</a>
+</div>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/"><span class="brand-mark">1T</span> One Tap Manager</a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#stories">What it finds</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">Questions</a>
+      <a href="/guides">Guides</a>
+      <a href="/in" hreflang="en-IN">India</a>
+      <a class="btn btn-primary" href="/smart">Open the app</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="wrap hero" id="main">
+  <div>
+    <span class="eyebrow">For small online sellers · clothing, jewelry, fragrance</span>
+    <h1><span class="h1-brand">One Tap Manager</span> Run your shop the way a big brand runs theirs. <em>On your own, before lunch.</em></h1>
+    <!-- The H1 is the brand and the promise. This line carries the words a
+         seller searches for, so the page says plainly what it is, in text. -->
+    <h2 class="hero-kw">Shop management app for small Shopify, Amazon and Instagram sellers: sales analytics, low stock alerts, customer win-back emails and AI product photos, in one place.</h2>
+    <p class="lead">Big brands do not sell better products than you. They sell with a team:
+      someone reading the numbers, someone chasing the customers who stopped buying,
+      someone deciding what to reorder, someone shooting and posting every day.
+      <b>One Tap Manager is that team.</b> It reads your sales, tells you the three
+      things worth doing this morning, and then does most of them for you.</p>
+    <div class="hero-ctas">
+      <button class="btn btn-primary" onclick="openSignup('free')">Start your 7-day free trial</button>
+      <a class="btn btn-ghost" href="#opportunity">What you are losing without it</a>
+    </div>
+    <p class="hero-note">No card needed for the trial. Connect Shopify or Amazon, or upload one
+      sales file, and the first answers are on screen in about two minutes. Then it is $10 a
+      month, and never a cut of your sales.</p>
+  </div>
+  <div class="tickets" aria-label="Examples of what One Tap Manager tells a seller to do">
+    <p class="tickets-label">Examples of the cards you get, made up and using round numbers,
+      because we would rather show you the shape than invent a customer.</p>
+    <div class="ticket">
+      <div class="t-tag">EXAMPLE · STOCK</div>
+      <p class="t-title">Four things are about to run out</p>
+      <p>Your best-selling tee in M lasts three more days at the rate it is going. The purchase
+        order for that supplier is already written. Check it and send it.</p>
+      <div class="t-metric">order 40 · supplier already on file</div>
+    </div>
+    <div class="ticket">
+      <div class="t-tag">EXAMPLE · CUSTOMERS</div>
+      <p class="t-title">38 buyers have not come back in 45 days</p>
+      <p>They spent $2,300 with you. One email to these 38 beats a discount for everybody,
+        and we count how many actually came back, so you know if it worked.</p>
+      <div class="t-metric">the email is written · you press send</div>
+    </div>
+    <div class="ticket">
+      <div class="t-tag">EXAMPLE · REVIEWS</div>
+      <p class="t-title">“Runs small” is your loudest complaint</p>
+      <p>Said again and again in your reviews, and getting worse. A size chart on three product
+        pages is the whole fix.</p>
+      <div class="t-metric">fix this first · 3 pages to edit</div>
+    </div>
+  </div>
+</header>
+
+<!-- WHAT IT COSTS TO NOT HAVE THIS. Numbers are labelled as illustrative and
+     the arithmetic is shown, because an unlabelled figure on a launch page is a lie. -->
+<section class="alt" id="opportunity">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">The opportunity</span>
+      <h2>The money is already in your shop. It leaves quietly.</h2>
+      <p>Not because you are doing anything wrong, but because one person cannot watch
+        everything at once. A brand with eight people watches all of it. Here is what
+        goes out the door while nobody is looking, and what closing it is worth.</p>
+    </div>
+    <div class="miss">
+      <div class="miss-card">
+        <h3>The customers who just stop buying</h3>
+        <p>They do not complain. They do not unsubscribe. They simply do not come back, and
+          you find out months later. Getting one of them back costs an email; finding
+          a new one costs an ad.</p>
+        <p class="miss-worth">If 40 past buyers who spent $60 each are sitting
+          uncontacted, that is <b>$2,400</b> of goodwill you already paid for.</p>
+      </div>
+      <div class="miss-card">
+        <h3>The bestseller that was out of stock</h3>
+        <p>Every day your best item is sold out is a sale that goes to somebody
+          else, and a customer who learns you run out.</p>
+        <p class="miss-worth">One popular item, out for six days a month, at $35 a
+          sale and two sales a day: <b>$420 a month</b>, gone without a trace.</p>
+      </div>
+      <div class="miss-card">
+        <h3>The week you did not post</h3>
+        <p>The brands growing on Instagram are not more talented. They are more regular.
+          Four posts a week, every week, is the whole trick, and it is the first thing
+          to go when you are packing orders.</p>
+        <p class="miss-worth">Posting is the cheapest customer you will ever get.
+          <b>Skipping it costs nothing today and everything in a year.</b></p>
+      </div>
+    </div>
+    <div class="cmp-line" style="margin-top:26px;">
+      <b>None of this is a knowledge problem.</b> Every big brand knows these three
+      things. They have people to act on them. That is the only difference, and it is
+      the difference this closes, for one person, in the time it takes to drink a coffee.
+    </div>
+    <p class="stack-note" style="margin-top:14px;">The figures above are worked examples
+      with the arithmetic shown, not results from a customer. We are new and would rather
+      you check our math than trust our marketing.</p>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">What you get</span>
+      <h2>The team you cannot afford to hire, in one screen</h2>
+      <p>Each of these is a job somebody does at a bigger company. None of them needs
+        you to learn anything.</p>
+    </div>
+    <div class="features">
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 20V11"/><path d="M11 20V5"/><path d="M16 20v-7"/><path d="M21 20v-4"/></svg></div><h3>The one who reads the numbers</h3><p>What sold, what it earned you, which days quietly lose money, and what next month looks like, from Shopify, Amazon or the sales file you already have. Plain sentences, not a wall of charts.</p><a class="f-more" href="/features/sales-analytics">Sales analytics</a></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M18 19c0-2.3-1-4-2.6-4.8"/></svg></div><h3>The one who watches your customers</h3><p>Who buys often, who spends most, and who has gone quiet. The email to bring the quiet ones back is written for you, and we count how many actually returned.</p><a class="f-more" href="/features/win-back">Customer win-back</a></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3.5 8 12 3.5 20.5 8v8L12 20.5 3.5 16z"/><path d="M3.5 8 12 12.5 20.5 8"/><path d="M12 12.5v8"/></svg></div><h3>The one who orders stock</h3><p>It knows how fast each thing sells and how long your supplier takes, so it tells you to reorder before you sell out, and hands you the purchase order for that supplier, filled in.</p><a class="f-more" href="/features/stock-reorder">Low stock alerts and reordering</a></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.4"/></svg></div><h3>The one who shoots your photos</h3><p>Upload five pictures you are proud of. It reads your light, your colors, your framing, and then every picture it makes for you looks like your brand, using your own product photo as the starting point so the item is really yours. On Pro Max.</p><a class="f-more" href="/features/ai-product-photos">AI product photos</a></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="7" y="2.8" width="10" height="18.4" rx="2.2"/><path d="M10.6 5.4h2.8"/><circle cx="12" cy="18" r="1"/></svg></div><h3>The one who posts every day</h3><p>A whole week of Instagram planned as one story rather than seven unrelated posts: the tease, the reveal, the proof, the close. Captions written, times chosen. You approve, it schedules and publishes.</p><a class="f-more" href="/features/instagram-planner">Instagram planner</a></div>
+      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5h14v10H9l-4 4z"/><path d="M9 9h6"/><path d="M9 12h4"/></svg></div><h3>The one who reads your reviews</h3><p>Every review and complaint, grouped by what people actually say, and ranked by what it is costing you. The fix worth doing first is at the top.</p><a class="f-more" href="/features/review-analysis">Review analysis</a></div>
+    </div>
+    <div class="cmp-line" style="margin-top:24px;">
+      <b>The new part is the photos and the posting.</b> Reading numbers has been possible for
+      years. A tool that looks at your own photographs, works out what your brand looks like, and
+      then shoots and writes a month of posts in that style: that has only been possible for about
+      a year, and almost nobody has put it in front of a one-person business yet.
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="alt" id="how">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Four steps</span>
+      <h2>From spreadsheet to plan in minutes</h2>
+    </div>
+    <div class="steps">
+      <div class="step"><h3>Bring in your sales</h3><p>Connect Shopify or Amazon, or export a CSV from your POS or spreadsheet and drop it in.</p></div>
+      <div class="step"><h3>Confirm columns</h3><p>One Tap Manager works out which column is the date, the amount, the customer and the product. You confirm, and it flags any it had to guess.</p></div>
+      <div class="step"><h3>See the analysis</h3><p>Charts, trends and customer groups, with a sentence under each saying what it means.</p></div>
+      <div class="step"><h3>Act on what it found</h3><p>The three things worth doing this week, each with the work already started.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- WHAT IT FINDS. The software's own findings, not quotes: no quote marks,
+     no bylines, no first person, because there are no customers to quote. -->
+<section id="stories">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">What it finds</span>
+      <h2>The kind of thing it tells you in week one</h2>
+      <p>One Tap Manager is new. Rather than invent customers, here are the
+        findings it is built to produce, written the way it writes them.</p>
+      <div class="stories-note">Worked examples of the software's own output.
+        Not quotes, not customers, and not results we are claiming.</div>
+    </div>
+    <div class="stories">
+      <div class="story">
+        <span class="s-chip">EXAMPLE FINDING</span><span class="s-lang">SALES</span>
+        <p class="s-body">Tuesdays run 41% below your weekly average. A bundle
+          offer on Tuesdays is the smallest change that moves it.</p>
+        <div class="s-who">What the Sales Analytics screen says, in plain words.</div>
+      </div>
+      <div class="story">
+        <span class="s-chip">EXAMPLE FINDING</span><span class="s-lang">CUSTOMERS</span>
+        <p class="s-body">38 past buyers have not ordered in 45 days. The email to
+          send them is ready, and we will count how many come back.</p>
+        <div class="s-who">What the Customers screen says.</div>
+      </div>
+      <div class="story">
+        <span class="s-chip">EXAMPLE FINDING</span><span class="s-lang">PRODUCTS</span>
+        <p class="s-body">Just 3 products bring in 62% of your revenue. That is a
+          risk. Start building a fourth, slowly.</p>
+        <div class="s-who">What the Sub-Category Analysis screen says.</div>
+      </div>
+      <div class="story">
+        <span class="s-chip">EXAMPLE FINDING</span><span class="s-lang">SEASONS</span>
+        <p class="s-body">Your best month was November, at $9,400. Remember what was
+          happening then, and plan to do it again before Black Friday.</p>
+        <div class="s-who">What the Sales Analytics screen says about seasons.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHERE WE SIT: Shopify's customer, Odoo's depth. -->
+<section id="where-we-sit">
+  <div class="wrap">
+    <h2>Built for Shopify's customer. Built to Odoo's standard.</h2>
+    <p class="lead" style="max-width:60ch">Two kinds of software already serve
+      small sellers, and each gets half of it right.</p>
+
+    <div class="cmp">
+      <div class="cmp-col">
+        <div class="cmp-h">Shopify</div>
+        <p><b>Right customer.</b> A person who sells things, set up in an
+           afternoon, no consultant.</p>
+        <p><b>Thin where it counts.</b> The storefront is the product; the
+           operations are apps. Inventory is an app. Win-back email is an app.
+           Reports are an app. Each is billed separately every month, and none of
+           them talk to each other.</p>
+      </div>
+      <div class="cmp-col">
+        <div class="cmp-h">Odoo</div>
+        <p><b>Right depth.</b> Everything is joined up. Buying, stock and sales are
+           one system, so a delivery moves your stock without you typing it twice.</p>
+        <p><b>Wrong customer.</b> Built for a business with someone employed to
+           set it up. A jewelry seller with 40 designs will not get through the
+           setup, and the screens assume you were trained on them.</p>
+      </div>
+      <div class="cmp-col cmp-us">
+        <div class="cmp-h">One Tap Manager</div>
+        <p><b>Joined-up insides.</b> Products, stock, suppliers, orders and customers
+           are one thing, not six. A sale moves your stock, shows up in your numbers
+           and in your customer list, without you entering anything twice.</p>
+        <p><b>Shopify's front door.</b> Sign up, connect a channel or upload a CSV,
+           and the first screen tells you what to do this morning rather than asking
+           you to set up a system first.</p>
+      </div>
+    </div>
+
+    <div class="cmp-line">
+      <b>The difference in one sentence:</b> Shopify tells you what happened
+      and sells you an app to work out what to do. We tell you what to do, and
+      the doing is already wired to the same data.
+      <span class="cmp-links"><a href="/compare/shopify-apps">The Shopify comparison</a> ·
+      <a href="/compare/odoo">The Odoo comparison</a></span>
+    </div>
+
+    <div class="cmp-honest">
+      <b>What we are not, yet.</b> We do not do payroll, full accounting, sales tax
+      filing or several warehouses. If you need those, keep your accounting software;
+      One Tap Manager works next to it. If you sell 40 to 400 products and want to know
+      what to do next, that gap costs you nothing.
+    </div>
+  </div>
+</section>
+
+<!-- PRICING. Mirrors backend/core/pricing.py; the tests check they agree. -->
+<section class="alt" id="pricing">
+  <div class="wrap">
+    <div class="section-head" style="text-align:center; margin-inline:auto;">
+      <span class="eyebrow">Pricing</span>
+      <h2>Try everything for 7 days. Then one flat price.</h2>
+      <p>The trial is the whole of Pro Max, with no card. After 7 days, pick the plan that fits.
+        No setup fee, no contract, and never a percentage of your sales.</p>
+    </div>
+
+    <div class="plans plans-3">
+      <div class="plan">
+        <h3>Free trial</h3>
+        <div class="price">$0 <span>for 7 days</span></div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Every Pro Max feature. No card needed.</div>
+        <ul>
+          <li>Everything in Pro Max for 7 days</li>
+          <li>AI product photos and clips included</li>
+          <li>Connect Shopify or Amazon, or upload a CSV</li>
+          <li>When it ends, choose Pro or Pro Max. Your data is kept.</li>
+        </ul>
+        <button class="btn btn-ghost" onclick="openSignup('free')">Start the free trial</button>
+      </div>
+      <div class="plan">
+        <h3>Pro</h3>
+        <div class="price">$10 <span>/ month</span></div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Runs the whole shop. Everything except AI image generation.</div>
+        <ul>
+          <li>Sales analytics, category and sub-category trends</li>
+          <li>Who your best customers are, and who has gone quiet</li>
+          <li><b>Win-back emails</b>, written for you, with the results counted</li>
+          <li><b>Stock and suppliers:</b> when to reorder, how much, and the purchase order ready to send</li>
+          <li>Instagram week planner, captions and scheduling</li>
+          <li>Review, complaint and positioning reports</li>
+          <li>Unlimited AI writing, analyst and chatbot</li>
+          <li data-chatgpt-plan hidden>Use your ChatGPT plan for AI writing (ChatGPT Plus or Pro) <a href="https://help.openai.com/articles/20001542" target="_blank" rel="noopener">Learn more</a></li>
+        </ul>
+        <button class="btn btn-ghost" onclick="openSignup('free')">Start with the free trial</button>
+      </div>
+      <div class="plan pro">
+        <div class="badge">MOST COMPLETE</div>
+        <h3>Pro Max</h3>
+        <div class="price">$12.99 <span>/ month</span></div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Everything in Pro, plus AI product photos and clips.</div>
+        <ul>
+          <li>Everything in Pro</li>
+          <li><b>AI product photos</b> made from your own product photo, in your brand's look</li>
+          <li>A picture for every planned Instagram post</li>
+          <li>Short AI product clips</li>
+          <li data-chatgpt-plan hidden>Use your ChatGPT plan for AI writing (ChatGPT Plus or Pro) <a href="https://help.openai.com/articles/20001542" target="_blank" rel="noopener">Learn more</a></li>
+        </ul>
+        <button class="btn btn-primary" onclick="openSignup('free')">Start the free trial</button>
+      </div>
+    </div>
+    <!-- OpenAI asks a partner's pricing to say which plans let you use your
+         ChatGPT plan. The lines above stay hidden until this server can
+         actually offer it, so nobody is sold a feature still awaiting approval. -->
+    <script>
+      fetch("/api/auth/providers").then(function (r) { return r.json(); }).then(function (p) {
+        if (!(p && p.chatgpt && p.chatgpt.plan_usage)) return;
+        document.querySelectorAll("[data-chatgpt-plan]").forEach(function (el) { el.hidden = false; });
+      }).catch(function () {});
+    </script>
+    <p class="stack-note" style="text-align:center; margin-top:18px;">Prices in US dollars, billed
+      monthly. Cancel from the Account tab any time; your plan runs to the end of the month you paid for.</p>
+  </div>
+</section>
+
+<!-- FAQ. Every answer is repeated verbatim in the FAQPage schema below. No em
+     dashes: the house rule is commas and full stops. -->
+<style>
+  .faq { padding: 8px 0 4px; }
+  .faq h2 { font-size: 30px; margin: 8px 0 24px; }
+  .faq-list { display: grid; gap: 14px; max-width: 820px; }
+  .faq-item { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px 24px; }
+  .faq-item h3 { font-size: 18px; margin: 0 0 8px; }
+  .faq-item p { margin: 0; color: var(--ink-soft); font-size: 15px; line-height: 1.65; }
+  .faq-item p a { color: var(--accent); font-weight: 600; }
+</style>
+<section class="faq" id="faq" aria-labelledby="faqHeading">
+  <div class="wrap">
+    <span class="eyebrow">Questions</span>
+    <h2 id="faqHeading">Questions sellers ask before they start</h2>
+    <div class="faq-list">
+      <div class="faq-item">
+        <h3>What is One Tap Manager?</h3>
+        <p>One Tap Manager is shop management software for small online sellers. It reads the sales you already have, from Shopify, Amazon, Instagram or a spreadsheet, and every morning it tells you the few things worth doing: what to reorder, which customers to win back, and what to post. Then it does most of that work for you, from the purchase order to the Instagram captions.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Is One Tap Manager the same as other One Tap apps?</h3>
+        <p>No. One Tap Manager is not related to the other apps called One Tap or OneTap, or to Google One Tap sign-in. It is the shop manager for small online sellers, at onetapmanager.com (one word in the address, three words in the name).</p>
+      </div>
+      <div class="faq-item">
+        <h3>How much does One Tap Manager cost?</h3>
+        <p>Every account starts with a 7-day free trial of Pro Max, with no card. After that, Pro is $10 a month and includes everything except AI image generation. Pro Max is $12.99 a month and adds AI product photos and short product clips. There is no setup fee and we never take a percentage of your sales.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Is there a free plan?</h3>
+        <p>There is a 7-day free trial with every feature, and no card is needed to start it. There is no free plan after the trial: to keep using the app, you choose Pro or Pro Max. Your data is kept either way.</p>
+      </div>
+      <div class="faq-item">
+        <h3>What is the difference between Pro and Pro Max?</h3>
+        <p>Pro runs the whole shop: sales analytics, customer groups, win-back emails, stock and reorder alerts, purchase orders, the Instagram planner and review analysis, with unlimited AI writing. Pro Max adds AI image generation: product photos made from your own product photo, a picture for every planned post, and short product clips.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Do I need a credit card to start?</h3>
+        <p>No. You sign up with an email and a password, or with Google, and the 7-day trial starts right away. You only add a card when you choose a plan.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Does it work with Shopify and Amazon?</h3>
+        <p>Yes. You can connect a Shopify store with an access token from a custom app in your Shopify admin, or Amazon Seller Central with Selling Partner API keys, and the orders flow into the same analytics. You can also upload a CSV or Excel export from any POS or spreadsheet.</p>
+      </div>
+      <div class="faq-item">
+        <h3>How long does it take to set up?</h3>
+        <p>About two minutes. Connect your store, or export a month of sales as a CSV file and drop it in. One Tap Manager works out which column is the date, the amount, the customer and the product, you confirm any it had to guess, and the first insights are on screen.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Who is One Tap Manager for?</h3>
+        <p>Small online sellers of clothing, jewelry, fragrance and similar products, selling on Shopify, Amazon, Instagram or their own site. It is built for one owner running the whole business, not a team of analysts.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Can it run my Instagram for me?</h3>
+        <p>Yes. It plans a whole week as one story rather than seven unrelated posts, writes the captions and picks the times. You approve, and it schedules and publishes them. On Pro Max it also makes the pictures, starting from your own product photos.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Will it tell me when to reorder stock?</h3>
+        <p>Yes, on both Pro and Pro Max. It learns how fast each item sells and how long each supplier takes, warns you before you sell out, and hands you the purchase order for that supplier already filled in.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Is my data safe and private?</h3>
+        <p>Your sales data is yours. Third-party credentials and your uploaded data are encrypted, and the companies that store data for us are named in the <a href="/legal/privacy">privacy policy</a> rather than hidden behind vague wording. You can ask for your data back or deleted at any time.</p>
+      </div>
+    </div>
+  </div>
+</section>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What is One Tap Manager?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "One Tap Manager is shop management software for small online sellers. It reads the sales you already have, from Shopify, Amazon, Instagram or a spreadsheet, and every morning it tells you the few things worth doing: what to reorder, which customers to win back, and what to post. Then it does most of that work for you, from the purchase order to the Instagram captions."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is One Tap Manager the same as other One Tap apps?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. One Tap Manager is not related to the other apps called One Tap or OneTap, or to Google One Tap sign-in. It is the shop manager for small online sellers, at onetapmanager.com (one word in the address, three words in the name)."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How much does One Tap Manager cost?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Every account starts with a 7-day free trial of Pro Max, with no card. After that, Pro is $10 a month and includes everything except AI image generation. Pro Max is $12.99 a month and adds AI product photos and short product clips. There is no setup fee and we never take a percentage of your sales."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is there a free plan?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "There is a 7-day free trial with every feature, and no card is needed to start it. There is no free plan after the trial: to keep using the app, you choose Pro or Pro Max. Your data is kept either way."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the difference between Pro and Pro Max?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Pro runs the whole shop: sales analytics, customer groups, win-back emails, stock and reorder alerts, purchase orders, the Instagram planner and review analysis, with unlimited AI writing. Pro Max adds AI image generation: product photos made from your own product photo, a picture for every planned post, and short product clips."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need a credit card to start?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. You sign up with an email and a password, or with Google, and the 7-day trial starts right away. You only add a card when you choose a plan."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it work with Shopify and Amazon?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. You can connect a Shopify store with an access token from a custom app in your Shopify admin, or Amazon Seller Central with Selling Partner API keys, and the orders flow into the same analytics. You can also upload a CSV or Excel export from any POS or spreadsheet."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How long does it take to set up?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "About two minutes. Connect your store, or export a month of sales as a CSV file and drop it in. One Tap Manager works out which column is the date, the amount, the customer and the product, you confirm any it had to guess, and the first insights are on screen."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Who is One Tap Manager for?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Small online sellers of clothing, jewelry, fragrance and similar products, selling on Shopify, Amazon, Instagram or their own site. It is built for one owner running the whole business, not a team of analysts."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can it run my Instagram for me?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. It plans a whole week as one story rather than seven unrelated posts, writes the captions and picks the times. You approve, and it schedules and publishes them. On Pro Max it also makes the pictures, starting from your own product photos."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Will it tell me when to reorder stock?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, on both Pro and Pro Max. It learns how fast each item sells and how long each supplier takes, warns you before you sell out, and hands you the purchase order for that supplier already filled in."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is my data safe and private?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Your sales data is yours. Third-party credentials and your uploaded data are encrypted, and the companies that store data for us are named in the privacy policy rather than hidden behind vague wording. You can ask for your data back or deleted at any time."
+      }
+    }
+  ]
+}
+</script>
+
+<!-- FINAL CTA -->
+<section>
+  <div class="wrap" style="text-align:center;">
+    <h2 style="font-size:30px;">The insight you're missing is already in your sales data.</h2>
+    <p style="color:var(--ink-soft); max-width:52ch; margin:10px auto 26px;">Connect your store or upload one month of sales. If One Tap Manager does not show you something you did not know within the 7-day trial, it cost you nothing.</p>
+    <button class="btn btn-primary" onclick="openSignup('free')">Start your 7-day free trial</button>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div><b>One Tap Manager</b> (onetapmanager.com) · Shop management software for small online sellers · © 2026 One Tap Manager</div>
+    <div>Every figure on this page is a worked example, labelled as one. There are no
+      customer quotes here, because we do not have customers yet.</div>
+    <nav class="foot-legal" aria-label="Legal and support">
+      <a href="/legal/privacy">Privacy</a> ·
+      <a href="/legal/terms">Terms</a> ·
+      <a href="/legal/refunds">Refunds</a> ·
+      <a href="/legal/cookies">Cookies</a> ·
+      <a href="/legal/grievance">Complaints</a> ·
+      <span data-cookie-settings></span>
+    </nav>
+    <nav class="foot-links" aria-label="Features"><b>Features:</b> <a href="/features/sales-analytics">Sales analytics</a> · <a href="/features/win-back">Customer win-back</a> · <a href="/features/stock-reorder">Low stock alerts</a> · <a href="/features/ai-product-photos">AI product photos</a> · <a href="/features/instagram-planner">Instagram planner</a> · <a href="/features/review-analysis">Review analysis</a> · <a href="/pricing">Pricing</a></nav>
+    <nav class="foot-links" aria-label="Who it is for"><b>For:</b> <a href="/for/clothing-sellers">Clothing sellers and boutiques</a> · <a href="/for/jewellery-sellers">Jewelry sellers</a> · <a href="/for/perfume-sellers">Fragrance sellers</a> · <a href="/for/instagram-sellers">Instagram sellers</a></nav>
+    <nav class="foot-links" aria-label="Guides"><b>Guides:</b> <a href="/about">What is One Tap Manager?</a> · <a href="/compare/shopify-apps">Shopify apps compared</a> · <a href="/compare/odoo">Odoo alternative</a> · <a href="/guides/win-back-old-customers">Win back old customers</a> · <a href="/guides/when-to-reorder-stock">When to reorder stock</a> · <a href="/guides/sales-up-profit-down">Sales up, profit down</a> · <a href="/guides/analyse-sales-excel">Analyze sales in Excel</a> · <a href="/guides">All guides</a></nav>
+    <div class="foot-links"><a href="/smart">Open the app</a> · <a href="#faq">Common questions</a> · <a href="/in" hreflang="en-IN">India site (₹)</a> · <a href="/legal">All legal pages</a></div>
+  </div>
+</footer>
+
+
+<!-- SIGNUP MODAL -->
+<div class="su-backdrop" id="signupModal" style="display:none;">
+  <div class="su-card">
+    <button class="su-close" onclick="closeSignup()" aria-label="Close sign up">Close</button>
+    <span class="eyebrow" id="suEyebrow">7-DAY FREE TRIAL · NO CARD NEEDED</span>
+    <h3 id="suTitle">Create your One Tap Manager account</h3>
+    <p class="su-sub">Pick an email and create a password. You will use these same
+      details to log in to the app.</p>
+    <!-- A real form element, so Enter submits from any field and a password
+         manager recognises it. It used to be three loose inputs and an onclick,
+         which worked with a mouse and not much else. -->
+    <form id="suForm" novalidate>
+      <label for="suEmail">Email address
+        <input type="email" id="suEmail" name="email" placeholder="you@yourshop.com"
+               autocomplete="email" required aria-describedby="suEmailHint" />
+      </label>
+      <div class="su-hint" id="suEmailHint">We use this to sign you in and to send your
+        morning summary. Nothing else.</div>
+      <label for="suPassword">Create a password <span class="su-hint">(at least 6 characters)</span>
+        <input type="password" id="suPassword" name="password" placeholder="Choose a password"
+               autocomplete="new-password" minlength="6" required />
+      </label>
+      <label for="suPassword2">Confirm password <span class="su-hint">(typed twice, so a slip cannot lock you out)</span>
+        <input type="password" id="suPassword2" name="password2" placeholder="Type it again"
+               autocomplete="new-password" minlength="6" required />
+      </label>
+      <div class="su-hint" style="margin:8px 0 4px;">Your password is stored as a salted
+        hash, so we never hold the password itself.</div>
+
+      <!-- Consent, unticked, and separate from the account details.
+           Rule 4(9) of the Consumer Protection (E-commerce) Rules 2020 forbids
+           recording consent from a pre-ticked box, and the 2023 Dark Patterns
+           Guidelines treat a bundled "by continuing you agree" as the same
+           trick. So it is one explicit box, off by default, and the form does
+           not submit without it. The marketing opt-in below is a SEPARATE box,
+           because bundling the two would make the first one meaningless. -->
+      <label class="su-check" for="suAgree">
+        <input type="checkbox" id="suAgree" name="agree" />
+        <span>I have read the <a href="/legal/privacy" target="_blank" rel="noopener">privacy
+          policy</a> and agree to the <a href="/legal/terms" target="_blank" rel="noopener">terms
+          of use</a>.</span>
+      </label>
+      <label class="su-check" for="suMarketing">
+        <input type="checkbox" id="suMarketing" name="marketing" />
+        <span>Send me occasional product emails. Optional, and you can stop them
+          from any email or from Settings.</span>
+      </label>
+
+      <button class="btn btn-primary su-submit" id="suSubmit" type="submit">Create account and open the app</button>
+      <div class="su-error" id="suError" style="display:none;" role="alert"></div>
+    </form>
+    <p class="su-foot">Already have an account? <a href="/smart">Log in from the app</a></p>
+  </div>
+</div>
+
+<style>
+/* A scrollable flex column with auto vertical margins on the card: it
+   centers itself when there's room and, once content (or a phone keyboard
+   shrinking the viewport) makes it taller than the screen, the backdrop
+   scrolls instead of clipping the top of the card with no way back to it. */
+.su-backdrop { position: fixed; inset: 0; background: rgba(16,24,40,.55); backdrop-filter: blur(3px); z-index: 50; display: flex; flex-direction: column; align-items: center; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 20px; box-sizing: border-box; }
+/* The signup card follows the colour tokens. It used to be hard-coded white
+   while dark mode turned the page's text light, so on a phone in dark mode the
+   title and labels were near-white on white and every field showed black text
+   on a near-black box: the one form a new seller has to fill in, unreadable. */
+.su-card { position: relative; background: var(--paper-2); color: var(--ink); border: 1px solid var(--line); border-radius: 18px; padding: 30px 32px; width: 100%; max-width: 420px; box-shadow: 0 32px 64px -24px rgba(16,24,40,.4); margin: auto 0; flex: none; }
+.su-card h3 { font-size: 22px; margin: 8px 0 6px; }
+.su-sub { font-size: 14px; color: var(--ink-soft); margin: 0 0 18px; }
+.su-card label { display: block; font-size: 13.5px; font-weight: 600; margin: 12px 0 0; }
+.su-hint { font-weight: 400; color: var(--ink-soft); }
+.su-card input { width: 100%; margin-top: 5px; padding: 11px 13px; border: 1.5px solid var(--line); border-radius: 10px; font: inherit; font-size: 15px; background: var(--paper); color: var(--ink); }
+.su-card input::placeholder { color: var(--ink-soft); }
+.su-card input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+.su-submit { width: 100%; margin-top: 20px; }
+.su-error { margin-top: 12px; font-size: 13.5px; color: #DC2626; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 9px 12px; }
+.su-foot { font-size: 13px; color: var(--ink-soft); margin: 16px 0 0; text-align: center; }
+/* A word, not a glyph. "✕" is read aloud as "multiplication x" by some screen
+   readers and as nothing at all by others, and the aria-label was carrying the
+   whole meaning. */
+.su-close { position: absolute; top: 12px; right: 14px; background: none; border: 1px solid var(--line); border-radius: 6px; font-size: 12.5px; padding: 4px 9px; color: var(--ink-soft); cursor: pointer; font-family: inherit; }
+.su-close:hover { color: var(--ink); border-color: var(--ink); }
+.su-check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; font-weight: 400; margin: 12px 0 0; line-height: 1.5; color: var(--ink-soft); cursor: pointer; }
+.su-check input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--accent); }
+.su-check a { color: var(--accent-ink); }
+</style>
+
+<script>
+let suPlan = "free";
+// /smart's login card links here as /?signup=1, so someone who reached the
+// app before they had an account gets the signup form in one tap instead of a
+// login form with no way in. Run once the page has parsed, so the modal exists.
+document.addEventListener("DOMContentLoaded", function () {
+  try {
+    if (new URLSearchParams(location.search).get("signup") === "1"
+        && document.getElementById("signupModal")) openSignup("free");
+  } catch (e) { /* a bad query string must not break the page */ }
+});
+
+function openSignup(plan) {
+  suPlan = plan;
+  document.getElementById("suEyebrow").textContent = "7-DAY FREE TRIAL · NO CARD NEEDED";
+  document.getElementById("suTitle").textContent = "Start your 7-day free trial";
+  document.getElementById("suError").style.display = "none";
+  document.getElementById("signupModal").style.display = "flex";
+  document.getElementById("suEmail").focus();
+}
+function closeSignup() { document.getElementById("signupModal").style.display = "none"; }
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSignup(); });
+document.getElementById("signupModal").addEventListener("click", (e) => { if (e.target.id === "signupModal") closeSignup(); });
+// On a phone, the keyboard covers whichever field is focused unless we pull
+// it into view ourselves — scrollIntoView after a short delay so it runs
+// once the keyboard has finished animating in, not before.
+document.querySelectorAll("#suForm input").forEach((inp) => {
+  inp.addEventListener("focus", () => {
+    setTimeout(() => inp.scrollIntoView({ block: "center", behavior: "smooth" }), 300);
+  });
+});
+// One submit handler on the form, so Enter works from every field rather than
+// from the two it happened to be wired to.
+document.getElementById("suForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  submitSignup();
+});
+
+async function submitSignup() {
+  const btn = document.getElementById("suSubmit");
+  const err = document.getElementById("suError");
+  const fail = (msg, focus) => {
+    err.textContent = msg;
+    err.style.display = "block";
+    if (focus) document.getElementById(focus).focus();
+  };
+  err.style.display = "none";
+  const email = document.getElementById("suEmail").value.trim();
+  const pw = document.getElementById("suPassword").value;
+  const pw2 = document.getElementById("suPassword2").value;
+  if (!email || email.indexOf("@") < 1) {
+    return fail("That does not look like an email address. Check it and try again.", "suEmail");
+  }
+  if (pw.length < 6) {
+    return fail("The password needs at least 6 characters.", "suPassword");
+  }
+  if (pw !== pw2) {
+    return fail("The two passwords are different. Type the same one in both boxes.", "suPassword2");
+  }
+  // Consent is checked here rather than with the `required` attribute so the
+  // message explains what is being agreed to instead of the browser's bare
+  // "please tick this box".
+  if (!document.getElementById("suAgree").checked) {
+    return fail("Please tick the box to say you have read the privacy policy and "
+                + "agree to the terms. We cannot create an account without that.",
+                "suAgree");
+  }
+  btn.disabled = true; btn.textContent = "Creating your account";
+  try {
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: email,
+        password: pw,
+        // Recorded so there is an answer to "what did they agree to, and when",
+        // which is what demonstrable consent means. The marketing box is sent
+        // separately and is genuinely optional.
+        consent: { terms: true, privacy: true, at: new Date().toISOString() },
+        marketing_opt_in: document.getElementById("suMarketing").checked,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "Could not create the account");
+    // hand the session to the app so they land already logged in (shared
+    // localStorage keys, so they are logged in across Classic and Smart)
+    localStorage.setItem("cx_token", data.token);
+    localStorage.setItem("cx_email", data.email);
+    btn.textContent = "Account created, opening the app";
+    setTimeout(() => (window.location.href = "/smart"), 600);
+  } catch (e) {
+    btn.disabled = false; btn.textContent = "Create account and open the app";
+    fail(e.message);
+  }
+}
+</script>
+
+<script>
+/* Refined scroll reveals — progressive enhancement, failsafe, motion-safe.
+   Only sections below the fold at load are animated; anything already on screen
+   is left untouched (no flash). If IntersectionObserver is missing, motion is
+   reduced, or anything goes wrong, every section simply stays visible. */
+(function () {
+  try {
+    var mq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
+    if ((mq && mq.matches) || !('IntersectionObserver' in window)) return;
+    var targets = [].slice.call(document.querySelectorAll('section, header.hero'));
+    var revealed = [];
+    targets.forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.top < window.innerHeight * 0.9) return;   // already in/near view — leave it
+      el.classList.add('pol-reveal');
+      revealed.push(el);
+    });
+    if (!revealed.length) return;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('pol-in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    revealed.forEach(function (el) { io.observe(el); });
+    // Belt-and-suspenders: never leave anything hidden.
+    setTimeout(function () { revealed.forEach(function (el) { el.classList.add('pol-in'); }); }, 1800);
+  } catch (err) {
+    // On any failure, make sure nothing is left hidden.
+    [].slice.call(document.querySelectorAll('.pol-reveal')).forEach(function (el) { el.classList.add('pol-in'); });
+  }
+})();
+</script>
+
+
+<script>
+(function () {
+  try {
+    var tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || "");
+    var lang = (navigator.language || "").toLowerCase();
+    if (tz === "Asia/Kolkata" || tz === "Asia/Calcutta" || /-in$/.test(lang) || /^hi\b/.test(lang)) {
+      var n = document.getElementById("regionNote");
+      if (n) n.style.display = "block";
+    }
+  } catch (e) { /* a guess must never break the page */ }
+})();
+</script>
+</body>
+</html>

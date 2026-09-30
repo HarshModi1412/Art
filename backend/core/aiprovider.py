@@ -45,9 +45,33 @@ This distinction is the whole reason `sensitivity` is a required argument rather
 than an optional flag. Getting it wrong leaks a seller's revenue into somebody
 else's training set, and that is not a mistake you can take back, so the caller
 is made to state it every time.
+
+THE SELLER'S OWN CHATGPT PLAN, AHEAD OF ALL OF THE ABOVE
+--------------------------------------------------------
+A caller that passes `email` is writing for one seller. If that seller signed
+in with ChatGPT and let this app use their plan (chatgpt_auth.py), the text is
+written on THEIR ChatGPT Plus or Pro usage first (chatgpt_plan.py), and the
+chain above is only the fallback: when they are not connected, when their
+account cannot share its plan, or when OpenAI is having a bad minute.
+
+Running out is the one case that does NOT fall back silently. With a person
+waiting on the answer (an HTTP request, see request_context) it raises
+chatgpt_plan.LimitReached, and the browser offers "Manage usage" on ChatGPT or
+"Use One Tap Manager AI this time", which repeats the request with the header
+X-AI-Route: app. With nobody waiting (the Monday planner) the chain writes, and
+the pause shows on the seller's Account tab.
+
+Both sensitivities may go to the seller's plan: it is their own data going to
+their own ChatGPT account, under the data controls they chose there.
+
+The brand aesthetic (studio.read_aesthetic) is kept OFF the seller's plan on
+purpose, by the owner's decision: it passes no `email`, so it runs on the chain
+exactly as before.
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import json
 import logging
 import os
@@ -56,6 +80,81 @@ import urllib.error
 import urllib.request
 
 log = logging.getLogger("aiprovider")
+
+# Whether a person is waiting on this call, and whether they asked for the
+# app's own AI for this one request. Set per HTTP request by main.py; absent in
+# the scheduler's threads, which is what makes them "nobody waiting".
+_request: contextvars.ContextVar = contextvars.ContextVar("ai_request", default=None)
+
+
+@contextlib.contextmanager
+def request_context(*, interactive: bool, route: str = "auto"):
+    """Wrap one request. `route` is "app" when the seller chose "Use One Tap
+    Manager AI this time" on the limit screen, and "auto" otherwise."""
+    token = _request.set({"interactive": bool(interactive),
+                          "route": "app" if route == "app" else "auto"})
+    try:
+        yield
+    finally:
+        _request.reset(token)
+
+
+def _interactive() -> bool:
+    ctx = _request.get()
+    return bool(ctx and ctx.get("interactive"))
+
+
+def _route() -> str:
+    ctx = _request.get()
+    return (ctx or {}).get("route") or "auto"
+
+
+def plan_text(email: str | None, instructions: str, user: str = "", *,
+              image: tuple[bytes, str] | None = None,
+              messages: list[dict] | None = None) -> str | None:
+    """Text from the seller's own ChatGPT plan, or None to fall back.
+
+    Raises chatgpt_plan.LimitReached only when a person is waiting, so they can
+    be shown the limit screen; everywhere else a spent plan means "fall back"."""
+    if not email or _route() == "app":
+        return None
+    try:
+        from backend.core import chatgpt_plan
+    except Exception:  # noqa: BLE001 — a broken import must not stop the chain
+        return None
+    try:
+        if not chatgpt_plan.ready(email):
+            return None
+        out = chatgpt_plan.run(email, instructions, user, image=image, messages=messages)
+    except chatgpt_plan.LimitReached:
+        _STATS.setdefault("chatgpt", {"ok": 0, "err": 0})["err"] += 1
+        if _interactive():
+            raise
+        log.info("seller's ChatGPT plan is at its limit, writing with the app's AI")
+        return None
+    except chatgpt_plan.Unavailable as e:
+        _STATS.setdefault("chatgpt", {"ok": 0, "err": 0})["err"] += 1
+        log.info("seller's ChatGPT plan unavailable (%s), writing with the app's AI", e)
+        return None
+    except Exception as e:  # noqa: BLE001 — never let the plan path break writing
+        _STATS.setdefault("chatgpt", {"ok": 0, "err": 0})["err"] += 1
+        log.warning("seller's ChatGPT plan failed unexpectedly: %s", e)
+        return None
+    text = (out.get("text") or "").strip()
+    if text:
+        _STATS.setdefault("chatgpt", {"ok": 0, "err": 0})["ok"] += 1
+    return text or None
+
+
+def plan_ready(email: str | None) -> bool:
+    """Would this seller's writing go to their ChatGPT plan first right now?"""
+    if not email or _route() == "app":
+        return False
+    try:
+        from backend.core import chatgpt_plan
+        return chatgpt_plan.ready(email)
+    except Exception:  # noqa: BLE001
+        return False
 
 TIMEOUT = 30
 _STATS: dict[str, dict] = {}
@@ -242,14 +341,25 @@ def house_style(text: str) -> str:
 
 def generate(system: str, user: str, *, sensitivity: str,
              max_tokens: int = 400, temperature: float = 0.7,
-             fallback: str = "", role: str = "") -> dict:
+             fallback: str = "", role: str = "", email: str | None = None) -> dict:
     """Write some text. Returns {text, provider, free, error}.
 
-    Never raises. A caller that cannot show text is worse than a caller that
+    Never raises, with one exception: chatgpt_plan.LimitReached, when the
+    seller's own ChatGPT plan is spent and a person is waiting (see the module
+    docstring). A caller that cannot show text is worse than a caller that
     shows slightly duller text, so exhausting the chain returns `fallback`
-    rather than an exception."""
+    rather than an exception.
+
+    `email` is the seller this is written for. Pass it wherever there is one:
+    it is what lets the seller's own ChatGPT plan do the writing. `max_tokens`
+    and `temperature` apply to the chain only; the plan's route refuses both."""
     if sensitivity not in ("public", "private"):
         raise ValueError("sensitivity must be 'public' or 'private'")
+
+    planned = plan_text(email, system, user)
+    if planned:
+        return {"text": house_style(planned), "provider": "chatgpt",
+                "free": False, "plan": True, "error": ""}
 
     errors = []
     for p in _order(sensitivity):
@@ -329,7 +439,7 @@ def _vision_order(sensitivity: str) -> list[Provider]:
 
 def describe_image(image_bytes: bytes, content_type: str, *, system: str,
                    user: str, sensitivity: str = "public",
-                   max_tokens: int = 500) -> dict:
+                   max_tokens: int = 500, email: str | None = None) -> dict:
     """Look at a picture and write about it.
 
     The image is sent inline as a base64 data URL rather than as a link.
@@ -337,12 +447,22 @@ def describe_image(image_bytes: bytes, content_type: str, *, system: str,
     exist or would mean making a seller's product photos world-readable to
     describe them. Inline costs more tokens and is the only correct option.
 
-    Returns {text, provider, error} and never raises, on the same principle as
-    generate(): a missing description degrades the prompt, it should not break
-    the upload the seller just made."""
+    With `email`, the seller's own ChatGPT plan reads it first (image input is
+    allowed on that route; image OUTPUT is not). The brand aesthetic reading
+    deliberately passes no email and so never touches their plan.
+
+    Returns {text, provider, error} and never raises (bar the seller's spent
+    plan, as generate()), on the same principle as generate(): a missing
+    description degrades the prompt, it should not break the upload the seller
+    just made."""
     import base64
     if not image_bytes:
         return {"text": "", "provider": "", "error": "no image"}
+
+    planned = plan_text(email, system, user,
+                        image=(image_bytes, content_type or "image/jpeg"))
+    if planned:
+        return {"text": planned, "provider": "chatgpt", "plan": True, "error": ""}
 
     b64 = base64.b64encode(image_bytes).decode()
     data_url = f"data:{content_type or 'image/jpeg'};base64,{b64}"

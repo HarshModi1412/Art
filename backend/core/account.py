@@ -3,9 +3,9 @@ The Account tab, backed in one place.
 
 Everything the app asks a seller to set up once — where they are, where and in
 what currency they sell, the address their mail goes out from, their Instagram,
-their payment gateway, and (optionally) their own AI keys — is read and written
-through here, so the Account screen is one call rather than six and there is one
-place that knows what "set up" means.
+their payment gateway, their ChatGPT plan and (optionally) their own AI keys —
+is read and written through here, so the Account screen is one call rather than
+six and there is one place that knows what "set up" means.
 
 Secrets never come back to the browser. For every credential the seller only
 ever learns whether it is connected and its last four characters; the values
@@ -18,6 +18,11 @@ from backend.core import (currency, localtime, seller_mail, secrets_store,
 
 # A seller can bring their own AI keys instead of the platform's shared ones.
 # When present, these are preferred; when absent, the app's own keys are used.
+#
+# The OpenAI key is for PICTURES only now. Writing runs on the seller's ChatGPT
+# plan through Sign in with ChatGPT (chatgpt_auth.py), which needs no key at
+# all; OpenAI does not allow image generation on a ChatGPT plan, so a seller who
+# wants their own bill for pictures still needs an API key for that part.
 AI_CONNECTORS = {"openai": "ai_openai", "gemini": "ai_gemini"}
 
 
@@ -98,6 +103,8 @@ def summary(email: str) -> dict:
         "payments": store_payments.provider_status(email),
         # their own AI keys, optional
         "ai_keys": ai_status(email),
+        # Sign in with ChatGPT, and whether their writing runs on their plan
+        "chatgpt": _chatgpt_status(email),
         # the credit balance they watch and can top up: this month's grant plus
         # any packs they bought, and what each generation spends.
         "credits": _credits_status(email),
@@ -107,29 +114,56 @@ def summary(email: str) -> dict:
 
 
 def _plan_status(email: str) -> dict:
-    """Current tier and the upgrade offer, so the Account tab can show either
-    'you're on Max' or an 'Upgrade to Max' card without a second call."""
+    """Current tier, where the 7-day trial stands, and both paid plans priced
+    in the seller's billing currency, so the Account tab renders in one call."""
     try:
         from backend.core import billing, pricing
-        pid = billing.get_plan(email)
-        max_plan = pricing.get_plan("pro")
+        summary = billing.plan_summary(email)
+        ccy = summary["currency"]
+        pid = summary["plan"]
+        chatgpt = pricing.chatgpt_plan_line()
+        offers = [{
+            "product": p["id"],
+            "name": p["name"],
+            "price": pricing.price(p, ccy),
+            "price_label": pricing.price_label(p, ccy),
+            "price_inr": p["price_inr"],
+            "period": p["period"],
+            "tagline": p["tagline"],
+            "includes": p["includes"],
+            # OpenAI asks partner apps to show, on the plan comparison, which of
+            # their plans let a seller use their ChatGPT plan: every paid one.
+            "chatgpt_plan": chatgpt,
+            "current": p["id"] == pid and billing.paid_active(email),
+        } for p in (pricing.PLANS["pro"], pricing.PLANS["promax"])]
         return {
             "id": pid,
             "name": pricing.get_plan(pid)["name"],
-            "is_pro": pid == "pro",
+            "effective": summary["effective_plan"],
+            "is_paid": billing.paid_active(email),
+            "is_pro": billing.paid_active(email),
+            "locked": summary["locked"],
+            "trial": summary["trial"],
+            "paid_until": summary["paid_until"],
+            "cancelled": summary["cancelled"],
+            "currency": ccy,
             "launch_mode": pricing.launch_mode(),
-            # what buying premium gets them — the product id the pay flow expects
-            "upgrade": {
-                "product": "pro",
-                "name": max_plan["name"],
-                "price_inr": max_plan["price_inr"],
-                "period": max_plan["period"],
-                "tagline": max_plan["tagline"],
-                "includes": max_plan["includes"],
-            },
+            "offers": offers,
+            # the older single-offer shape, kept for any screen still reading it
+            "upgrade": offers[1],
         }
     except Exception:  # noqa: BLE001 — the tab must render even if pricing is off
-        return {"id": "free", "name": "Free", "is_pro": False}
+        return {"id": "free", "name": "Free trial", "is_pro": False, "offers": []}
+
+
+def _chatgpt_status(email: str) -> dict:
+    """The ChatGPT card. Lazily imported and fenced, like the others: a problem
+    reaching OpenAI must not blank the Account tab."""
+    try:
+        from backend.core import chatgpt_auth
+        return chatgpt_auth.status(email)
+    except Exception:  # noqa: BLE001
+        return {"enabled": False}
 
 
 def _credits_status(email: str) -> dict:
@@ -168,9 +202,17 @@ def reset(email: str) -> dict:
     """Start over: wipe settings, storefront, products, tasks and every uploaded
     file — but keep the login and any purchased credits. The seller stays signed
     in and lands on an empty workspace."""
-    from backend.core import cache
+    from backend.core import cache, chatgpt_auth, google_auth
     _sweep_tables(email, _PER_EMAIL_TABLES)
+    # The sign-in links are part of the login, which Reset promises to keep.
+    # Without this, a seller who signed up with Google or ChatGPT was asked for
+    # a password they never set the next time they pressed that button.
+    kept_chatgpt = chatgpt_auth.keep_through_reset(email)
+    kept_google = google_auth.identity(email)
     user_store.purge(email)          # per-account state + all stored DataFrames
+    chatgpt_auth.restore_after_reset(email, kept_chatgpt)
+    if kept_google:
+        user_store.set_key(email, google_auth.IDENTITY_KEY, kept_google)
     try:
         cache.clear(email)
     except Exception:  # noqa: BLE001
@@ -182,12 +224,15 @@ def delete(email: str) -> dict:
     """Remove the account and everything belonging to it — settings, storefront,
     products, data, purchase ledger, sessions and the login itself. Irreversible;
     the caller signs the seller out afterwards because the session is now gone."""
-    from backend.core import auth, billing, cache
+    from backend.core import auth, billing, cache, chatgpt_auth
     _sweep_tables(email, _PER_EMAIL_TABLES)
     try:
         billing.purge_account(email)     # the purchase / credit ledger
     except Exception:  # noqa: BLE001
         pass
+    # End this app's use of their ChatGPT plan at OpenAI and drop the sign-in
+    # link, before the state that holds the tokens is gone. Never raises.
+    chatgpt_auth.forget_account(email)
     user_store.purge(email)
     try:
         auth.delete_account(email)       # users + sessions + usage logs

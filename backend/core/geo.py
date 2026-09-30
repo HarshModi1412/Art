@@ -47,6 +47,7 @@ GET form the server answers, for the same reason.
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import math
 import os
@@ -56,8 +57,8 @@ from backend.core import pricing
 from backend.core.legal_html import _CSS as _BASE_CSS, esc
 
 PRODUCT = "One Tap Manager"
-ONE_LINE = ("One Tap Manager is shop management software for small Indian clothing, "
-            "jewellery and perfume sellers.")
+ONE_LINE = ("One Tap Manager is shop management software for small online sellers of "
+            "clothing, jewelry and fragrance, in the United States and India.")
 # Bump UPDATED whenever the words on these pages change. It is shown on every
 # page and sent as dateModified, and recency is one of the few signals AI
 # search tools are measured to weigh.
@@ -114,9 +115,10 @@ def same_as_json() -> str:
     return json.dumps(profiles())
 
 
-# The English and Hindi home pages point at each other. hreflang only counts
-# when both sides carry the same set, so both read it from here.
-HREFLANG = [("en-IN", "/"), ("hi-IN", "/hi"), ("x-default", "/")]
+# The US home (/), the India home (/in) and the Hindi page (/hi) point at each
+# other. hreflang only counts when every side carries the same set; the two
+# static home pages copy these four lines, and a test checks they agree.
+HREFLANG = [("en-US", "/"), ("en-IN", "/in"), ("hi-IN", "/hi"), ("x-default", "/")]
 
 
 def hreflang_links(base: str) -> str:
@@ -142,76 +144,109 @@ def _inr(n: int) -> str:
     return "₹" + ",".join(parts + [tail])
 
 
+# The currency this render is priced in. render() sets it from the visitor's
+# region (region.py); a crawler with no region gets dollars, the primary market.
+_CCY: contextvars.ContextVar[str] = contextvars.ContextVar("geo_ccy", default="USD")
+
+
+def _ccy() -> str:
+    return _CCY.get()
+
+
 def _plans() -> dict:
-    free, mx = pricing.PLANS["free"], pricing.PLANS["pro"]
+    P = pricing.PLANS
     return {
-        "free": free, "max": mx,
-        "packs": list(pricing.CREDIT_PACKS.values()),
+        "free": P["free"], "pro": P["pro"], "promax": P["promax"],
+        "packs": pricing.packs_for(_ccy()),
         "launch": pricing.launch_mode(),
+        "trial_days": pricing.TRIAL_DAYS,
     }
 
 
+def _price(plan_id: str, ccy: str | None = None) -> str:
+    return pricing.price_label(pricing.PLANS[plan_id], ccy or _ccy())
+
+
 def _max_price() -> str:
-    return _inr(_plans()["max"]["price_inr"])
+    """The price of Pro, the plan that runs the shop. The name is kept from when
+    the paid plan was called Max, so older call sites still read right."""
+    return _price("pro")
 
 
 def _price_line() -> str:
     p = _plans()
-    line = (f"There is a Free plan at ₹0 with no time limit, and {p['max']['name']} costs "
-            f"{_max_price()} a month. There is no fee on your sales.")
+    line = (f"Every account starts with a {p['trial_days']}-day free trial of every feature, "
+            f"with no card. After that, Pro costs {_price('pro')} a month and Pro Max, which "
+            f"adds AI product photos and clips, costs {_price('promax')} a month. There is no "
+            f"fee on your sales.")
     if p["launch"]:
-        line += " During the launch period every feature is free on every account."
+        line += " Right now every feature is open on every account."
     return line
 
 
 def _price_line_hi() -> str:
-    line = (f"Free प्लान ₹0 का है और इसकी कोई समय-सीमा नहीं है। Max प्लान {_max_price()} "
-            "महीना है। आपकी बिक्री पर कोई कमीशन नहीं लगता।")
-    if _plans()["launch"]:
-        line += " लॉन्च के दौरान हर खाते पर हर सुविधा मुफ़्त है।"
+    line = (f"हर खाता {pricing.TRIAL_DAYS} दिन के फ़्री ट्रायल से शुरू होता है, जिसमें हर सुविधा "
+            f"मिलती है और कार्ड की ज़रूरत नहीं। उसके बाद Pro {_price('pro', 'INR')} महीना और "
+            f"Pro Max (AI फ़ोटो सहित) {_price('promax', 'INR')} महीना है। आपकी बिक्री पर कोई "
+            "कमीशन नहीं लगता।")
     return line
 
 
 def _max_only() -> str:
-    """How a Max-only feature is described, honest about launch mode."""
-    s = f"on the Max plan at {_max_price()} a month"
-    if _plans()["launch"]:
-        s += " (free on every account during the launch period)"
-    return s
+    """How a paid-plan feature is described (every feature but AI pictures)."""
+    return (f"on the Pro plan at {_price('pro')} a month, and in the "
+            f"{pricing.TRIAL_DAYS}-day free trial")
+
+
+def _promax_only() -> str:
+    """How AI image and video generation is described: Pro Max only."""
+    return (f"on Pro Max at {_price('promax')} a month, and in the "
+            f"{pricing.TRIAL_DAYS}-day free trial")
 
 
 # In plain words. pricing.py's own "includes" lists are written for the app's
 # pricing screen and carry terms (RFM, EOQ) that Brand.md keeps off public pages.
 # Prices and plan names still come from pricing.py.
 _INCLUDES = {
-    "free": ("Sales and sub-category analytics, customer groups and the list of customers "
-             "slipping away, unlimited win-back messages, complaint and review analysis, GST "
-             "invoices, a daily summary email, your own selling website with no badge, up to "
-             "250 products, 50 AI uses a day"),
-    "max": ("Everything in Free, plus when to buy again and how much, purchase orders sent "
-            "to your suppliers, the position strategy plan, unlimited AI, products and "
-            "outlets, and your own custom domain"),
+    "free": (f"Every Pro Max feature for {pricing.TRIAL_DAYS} days, with no card. When it ends, "
+             "you choose Pro or Pro Max to keep going, and your data is kept"),
+    "pro": ("Sales and sub-category analytics, customer groups and the list of customers "
+            "slipping away, win-back messages, stock, reorder levels, suppliers and purchase "
+            "orders, the Instagram planner, complaint and review analysis, your own selling "
+            "website and domain, and unlimited AI writing. Everything except AI image generation"),
+    "promax": ("Everything in Pro, plus AI product photos made from your own product photo, "
+               "a picture for every planned post, and short AI product clips"),
 }
 
 
 def _plan_table() -> str:
     p = _plans()
     rows = "".join(
-        f"<tr><td><b>{esc(pl['name'])}</b></td><td>{esc(_inr(pl['price_inr']))}"
-        f"{' a month' if pl['period'] == 'month' else ', forever'}</td>"
+        f"<tr><td><b>{esc(pl['name'])}</b></td><td>{esc(_price(key))}"
+        f"{' for ' + str(p['trial_days']) + ' days' if key == 'free' else ' a month'}</td>"
         f"<td>{esc(_INCLUDES[key])}</td></tr>"
-        for key, pl in (("free", p["free"]), ("max", p["max"])))
+        for key, pl in (("free", p["free"]), ("pro", p["pro"]), ("promax", p["promax"])))
     packs = "".join(
-        f"<li>{esc(c['name'])} for {esc(_inr(c['price_inr']))}</li>" for c in p["packs"])
-    extra = (f"<p>Prefer not to subscribe? Credit packs never expire:</p><ul>{packs}</ul>"
+        f"<li>{esc(c['name'])} for {esc(c['price_label'])}</li>" for c in p["packs"])
+    extra = (f"<p>Credit packs top up the monthly AI credits and never expire:</p><ul>{packs}</ul>"
              if packs else "")
+    note = ("Prices in rupees." if _ccy() == "INR" else
+            'Prices in US dollars. <a href="/pricing?region=in">Prices in rupees for India</a>.')
     return (f'<div class="scroll"><table><thead><tr><th>Plan</th><th>Price</th>'
             f"<th>What you get</th></tr></thead><tbody>{rows}</tbody></table></div>"
+            f'<p class="meta">{note}</p>'
             f"{extra}"
             f'<p><a href="/pricing">Full pricing and what each plan includes</a></p>')
 
 
 def _stack_table() -> str:
+    if _ccy() != "INR":
+        # The app-stack prices were gathered in rupees for India. The US listings
+        # have not been checked at source, so no dollar figures are claimed.
+        return ("<p>Sellers on Shopify usually pay separately, every month, for an analytics "
+                "app, an inventory and reorder app, a retention email app and a reviews app, "
+                "each on its own bill and none of them sharing data. One Tap Manager does all "
+                "four jobs on one flat plan, and never takes a percentage of your sales.</p>")
     c = pricing.stack_comparison()
     rows = "".join(f"<tr><td>{esc(r['category'])}</td><td>{esc(_inr(r['typical_inr']))}</td></tr>"
                    for r in c["rows"])
@@ -219,7 +254,7 @@ def _stack_table() -> str:
             f"<th>Typical monthly cost</th></tr></thead><tbody>{rows}"
             f"<tr><td><b>Total, before any percentage-of-sales fees</b></td>"
             f"<td><b>{esc(_inr(c['typical_total_inr']))}</b></td></tr>"
-            f"<tr><td><b>{PRODUCT} Max, all of the above</b></td>"
+            f"<tr><td><b>{PRODUCT} Pro, all of the above</b></td>"
             f"<td><b>{esc(_inr(c['ours_inr']))}</b></td></tr></tbody></table></div>"
             f'<p class="meta">{esc(c["note"])} Your own stack may cost more or less; '
             f"these are typical prices, not a quote.</p>")
@@ -380,101 +415,111 @@ def _core_pages() -> dict[str, dict]:
         "/about": {
             "kind": "product",
             "title": "What is One Tap Manager?",
-            "seo_title": "What is One Tap Manager? Shop manager app for Indian sellers",
-            "description": ONE_LINE + " What it does, who it is for, what it costs, and how "
-                           "it differs from other apps called One Tap.",
-            "answer": (ONE_LINE + " It reads the sales you already make on Amazon, Shopify, "
-                       "Instagram or your own counter, tells you the few things worth doing "
-                       "today, and then does most of that work: the message to customers who "
-                       "stopped buying, the order to your supplier, the week of Instagram posts. "
-                       + _price_line()),
+            "seo_title": "What is One Tap Manager? Shop management app for small sellers",
+            "description": ("What One Tap Manager is, what it does for small online sellers, what "
+                            "it costs, and how it differs from other apps called One Tap."),
+            "answer": (ONE_LINE + " It reads the sales you already make on Shopify, Amazon, "
+                       "Instagram or in a spreadsheet, tells you the few things worth doing "
+                       "today, and then does most of that work: the email to customers who "
+                       "stopped buying, the purchase order to your supplier, the week of "
+                       "Instagram posts. " + _price_line()),
             "sections": [
                 ("Key facts", '<div class="scroll"><table><tbody>'
                     f"<tr><th>Name</th><td>{PRODUCT} (one word in the web address: onetapmanager.com)</td></tr>"
-                    "<tr><th>What it is</th><td>Web app for running a small online or offline shop</td></tr>"
-                    "<tr><th>Made for</th><td>Small Indian D2C sellers of clothing, jewellery and perfume</td></tr>"
-                    "<tr><th>Where it works</th><td>India, in any browser, on phone or computer</td></tr>"
-                    "<tr><th>Languages</th><td>English, Hindi, Tamil and Kannada</td></tr>"
-                    f"<tr><th>Price</th><td>Free plan at ₹0; Max at {esc(_max_price())} a month; no cut of sales</td></tr>"
-                    "<tr><th>Sign up</th><td>Email or Google account, no card needed</td></tr>"
+                    "<tr><th>What it is</th><td>Web app for running a small online shop</td></tr>"
+                    "<tr><th>Made for</th><td>Small sellers of clothing, jewelry and fragrance, "
+                    "on Shopify, Amazon, Instagram or their own site</td></tr>"
+                    "<tr><th>Where it works</th><td>United States and India, in any browser, on "
+                    "phone or computer</td></tr>"
+                    "<tr><th>Languages</th><td>English, plus Hindi, Tamil and Kannada</td></tr>"
+                    f"<tr><th>Price</th><td>{pricing.TRIAL_DAYS}-day free trial; Pro at "
+                    f"{esc(_price('pro'))} a month; Pro Max at {esc(_price('promax'))} a month; "
+                    "no cut of sales</td></tr>"
+                    "<tr><th>Sign up</th><td>Email or Google account, no card for the trial</td></tr>"
                     "</tbody></table></div>"),
                 ("What does One Tap Manager do?", _module_list()),
                 ("Where does the data come from?", _SOURCES),
                 ("How is it different from other One Tap apps?",
                  "<p>It is not related to the attendance, maintenance, clipboard or business "
                  "card apps called One Tap or OneTap, or to Google One Tap sign-in. "
-                 f"{PRODUCT} is the shop manager for Indian sellers at onetapmanager.com.</p>"),
+                 f"{PRODUCT} is the shop manager for small online sellers at onetapmanager.com.</p>"),
                 ("What does it not do?",
                  "<p>It is not accounting software: there is no double-entry ledger, payroll, "
-                 "manufacturing or multi-warehouse stock. It gives your accountant a GSTR-1 file "
-                 "and tax invoices, and leaves the books to them.</p>"),
+                 "sales tax filing, manufacturing or multi-warehouse stock. It works next to your "
+                 "accounting software and leaves the books to it. For sellers in India it also "
+                 "writes GST invoices and a GSTR-1 file for the accountant.</p>"),
                 ("How much does it cost?", _plan_table()),
             ],
             "faqs": [
                 ("Is One Tap Manager free?",
-                 "Yes. The Free plan has no time limit and includes sales analytics, customer "
-                 "groups, win-back messages, complaint analysis, a daily summary and your own "
-                 f"selling website. Max costs {_max_price()} a month and adds "
-                 "supplier ordering, unlimited AI and a custom domain."),
+                 f"There is a {pricing.TRIAL_DAYS}-day free trial with every feature and no card. "
+                 f"After that, Pro costs {_price('pro')} a month and Pro Max, which adds AI "
+                 f"product photos and clips, costs {_price('promax')} a month."),
                 ("Does One Tap Manager take a percentage of my sales?",
                  "No. It never charges per order or a percentage of sales, on any plan."),
                 ("Does One Tap Manager have reviews?",
                  "Not yet. It is new, and it will not publish reviews or customer numbers it does "
                  "not have. Every figure on this site is labelled as a worked example."),
                 ("Who makes One Tap Manager?",
-                 "It is built in India for Indian sellers. The operator's legal details are on "
-                 "the legal pages at onetapmanager.com/legal."),
+                 "A small independent team. The operator's legal details are on the legal pages "
+                 "at onetapmanager.com/legal."),
             ],
         },
         "/pricing": {
             "kind": "product",
-            "title": f"One Tap Manager pricing: a Free plan, and Max at {_max_price()} a month",
-            "seo_title": f"One Tap Manager Pricing: Free Plan, Max at {_max_price()}/month",
-            "description": f"One Tap Manager costs ₹0 on the Free plan and {_max_price()} a month "
-                           "on Max, with credit packs that never expire and no commission on "
-                           "your sales.",
-            "answer": (_price_line() + " You start without a card, on the Free plan, and only "
-                       "pay if you want what Max adds: supplier ordering, unlimited AI and your "
-                       "own domain. Credit packs that never expire cover a busy month without a "
-                       "subscription."),
+            "title": (f"One Tap Manager pricing: {pricing.TRIAL_DAYS}-day free trial, Pro at "
+                      f"{_price('pro')} and Pro Max at {_price('promax')} a month"),
+            # The shell appends " | One Tap Manager", so the brand is not repeated here.
+            "seo_title": (f"Pricing: Pro {_price('pro')}/mo, Pro Max {_price('promax')}/mo, "
+                          f"{pricing.TRIAL_DAYS}-Day Free Trial"),
+            "description": (f"One Tap Manager starts with a {pricing.TRIAL_DAYS}-day free trial, "
+                            f"no card. Pro is {_price('pro')} a month, Pro Max with AI product "
+                            f"photos is {_price('promax')} a month. No commission on your sales."),
+            "answer": (_price_line() + " Pro runs the whole shop: analytics, customer win-back, "
+                       "stock and purchase orders, the Instagram planner and review analysis. "
+                       "Pro Max adds AI image generation: product photos made from your own "
+                       "product photo, and short clips."),
             "sections": [
                 ("What does each plan include?", _plan_table()),
-                ("What is free forever?",
-                 "<ul><li>Sales analytics and sub-category analysis</li>"
-                 "<li>Customer groups and the list of customers slipping away</li>"
-                 "<li>Win-back messages, unlimited, with the Excel file</li>"
-                 "<li>Complaint and review analysis with the fix-first plan</li>"
-                 "<li>GST tax invoices and the GSTR-1 file</li>"
-                 "<li>The daily summary by email</li>"
-                 "<li>Your own selling website, no badge, up to 250 products</li>"
-                 "<li>50 AI uses a day</li></ul>"
-                 "<p>These stay free when the launch period ends. Only the Max rows move behind "
-                 "the subscription.</p>"),
+                ("How does the free trial work?",
+                 f"<ul><li>It lasts {pricing.TRIAL_DAYS} days from the day you sign up, and the "
+                 "start date is saved on your account.</li>"
+                 "<li>It includes every Pro Max feature, AI product photos and clips too.</li>"
+                 "<li>No card is needed to start it.</li>"
+                 "<li>When it ends, the app asks you to choose Pro or Pro Max. Nothing is "
+                 "deleted: your data, products and settings wait for you.</li></ul>"),
+                ("What is the difference between Pro and Pro Max?",
+                 "<p>One thing: AI image generation. Pro includes everything else, with "
+                 "unlimited AI writing. Pro Max adds AI product photos, a picture for every "
+                 "planned Instagram post and short product clips. Your own photos work on "
+                 "both.</p>"),
                 ("Why is there no commission?",
                  "<p>Most selling software takes a slice of every order, through a transaction "
                  "fee or a percentage. Sellers already pay that to marketplaces and payment "
-                 "gateways, and it grows exactly when the shop does well. One Tap Manager charges "
-                 "a flat price, or nothing, and never a share of sales. Razorpay, if you use it on "
-                 "your website, charges its own payment fee; we add nothing on top.</p>"),
+                 "processors, and it grows exactly when the shop does well. One Tap Manager "
+                 "charges a flat monthly price and never a share of sales.</p>"),
                 ("What does it replace?", _stack_table()),
                 ("What happens if I stop paying?",
-                 "<p>Moving from Max back to Free never deletes anything. Your data, products, "
-                 "invoices and website stay; only the Max actions, such as sending a new purchase "
-                 "order, stop until you upgrade again or use credits. See the "
+                 "<p>Nothing is deleted. A cancelled plan runs to the end of the month you paid "
+                 "for, and then the app waits for you: your data, products and settings stay "
+                 "until you choose a plan again or ask for them to be deleted. See the "
                  '<a href="/legal/refunds">refund policy</a> for payments.</p>'),
             ],
             "faqs": [
-                ("Is One Tap Manager really free?",
-                 "Yes. The Free plan has no time limit and needs no card. It includes analytics, "
-                 "win-back messages, complaint analysis, GST invoices and your own website."),
-                ("How much is the Max plan?",
-                 f"{_max_price()} a month, flat, per outlet. It adds stock reordering, purchase "
-                 "orders to suppliers, unlimited AI and products, and a custom domain."),
+                ("Is there a free plan?",
+                 f"There is a {pricing.TRIAL_DAYS}-day free trial with every feature and no card. "
+                 "After the trial there is no free plan: you choose Pro or Pro Max."),
+                ("How much is Pro?",
+                 f"{_price('pro')} a month, flat. It includes everything except AI image "
+                 "generation."),
+                ("How much is Pro Max?",
+                 f"{_price('promax')} a month, flat. It is everything in Pro plus AI product "
+                 "photos and short product clips."),
                 ("Do you take a percentage of my sales?",
                  "No. Never, on any plan, and no per-order fee."),
-                ("Can I pay only when I need something?",
-                 "Yes. Credit packs never expire, and a credit can buy an extra AI use or a "
-                 "purchase order without a subscription."),
+                ("Can I cancel any time?",
+                 "Yes, from the Account tab. The plan stays on until the end of the month you "
+                 "paid for and does not renew."),
             ],
             "schema": _software_schema,
         },
@@ -495,8 +540,7 @@ def _feature_pages() -> dict[str, dict]:
                        "buyers are, and what next month looks like. Upload a CSV or Excel export "
                        "from Amazon, Flipkart, Meesho, Shopify, your billing software or a "
                        "spreadsheet, confirm which column is which, and the first answers appear "
-                       "in about two minutes. Sales analytics is on the Free plan, with no time "
-                       "limit."),
+                       f"in about two minutes. Sales analytics is {_max_only()}."),
             "sections": [
                 ("What does it show you?",
                  "<ul><li><b>The totals</b>: money in, orders, customers and the average order, "
@@ -528,8 +572,8 @@ def _feature_pages() -> dict[str, dict]:
                  "disagree.</p>"),
                 ("Can I ask questions about my own numbers?",
                  "<p>Yes. The AI analyst answers questions about your own sales in plain words, "
-                 "such as which product fell most since last month. The Free plan includes 50 AI "
-                 "uses a day; Max is unlimited.</p>"),
+                 "such as which product fell most since last month. It is unlimited on Pro and "
+                 "Pro Max.</p>"),
                 ("What does it not do?",
                  "<p>It does not know what each product cost you, so it reports sales, not profit "
                  "per product. If sales are rising and profit is not, the guide to "
@@ -537,8 +581,9 @@ def _feature_pages() -> dict[str, dict]:
                  "shows how to check.</p>"),
             ],
             "faqs": [
-                ("Is the sales analytics free?",
-                 "Yes. Sales and sub-category analytics are on the Free plan with no time limit."),
+                ("Can I try the sales analytics free?",
+                 f"Yes. Every feature is free for the first {pricing.TRIAL_DAYS} days, with no "
+                 f"card. After that, sales analytics is part of Pro at {_price('pro')} a month."),
                 ("Which files can I upload?",
                  "CSV or Excel files from Amazon, Flipkart, Meesho, Shopify, billing software or "
                  "your own spreadsheet. The app works out which column is which."),
@@ -559,8 +604,8 @@ def _feature_pages() -> dict[str, dict]:
             "answer": ("One Tap Manager finds the customers who used to buy from you and have gone "
                        "quiet, writes the message to bring them back, sends it by email or opens "
                        "WhatsApp with it already typed, and then counts how many actually bought "
-                       "again. It works from the sales you already have, and win-back is unlimited "
-                       "on the Free plan."),
+                       "again. It works from the sales you already have, and win-back is "
+                       f"{_max_only()}."),
             "sections": [
                 ("How does it find customers who stopped buying?",
                  "<p>It groups every customer by how recently they bought, how often and how much "
@@ -590,8 +635,9 @@ def _feature_pages() -> dict[str, dict]:
                 ("Do I need the WhatsApp Business API?",
                  "No. Without it, the app gives you a link per customer that opens WhatsApp with "
                  "the message typed. Connecting a provider later lets it send on its own."),
-                ("Is win-back free?",
-                 "Yes. Win-back messages are unlimited on the Free plan, including the Excel file."),
+                ("Which plan includes win-back?",
+                 f"Pro and Pro Max, with the Excel file. It is also in the "
+                 f"{pricing.TRIAL_DAYS}-day free trial."),
                 ("Will it annoy my customers?",
                  "It only messages customers who have gone quiet, and leaves each one alone for "
                  "45 days after contacting them."),
@@ -637,9 +683,8 @@ def _feature_pages() -> dict[str, dict]:
                 ("Is there a free way to work out a reorder point?",
                  "Yes. The reorder point calculator in the guide to when to reorder stock is free "
                  "and needs no sign-up."),
-                ("Is stock reordering on the Free plan?",
-                 f"No. It is {_max_only()}. A single purchase order can also be bought with "
-                 "credits, without a subscription."),
+                ("Which plan includes stock reordering?",
+                 f"It is {_max_only()}. Pro Max includes it too."),
                 ("Does stock go down on its own?",
                  "Yes, for orders on your One Tap website. Sales you upload from other channels "
                  "count towards how fast each item sells."),
@@ -723,8 +768,8 @@ def _feature_pages() -> dict[str, dict]:
                  "show the label clearly.</li>"
                  "<li>Clothing: lay it flat or hang it, and add a close shot of the fabric.</li></ul>"),
                 ("What does it cost?",
-                 "<p>The Free plan includes 50 AI uses a day and Max is unlimited. Heavy jobs can "
-                 "use credits, which never expire.</p>"),
+                 f"<p>AI product photos and clips are {_promax_only()}. On Pro you can still "
+                 "use your own photos in every post.</p>"),
             ],
             "faqs": [
                 ("Is the product in the picture really mine?",
@@ -785,8 +830,8 @@ def _feature_pages() -> dict[str, dict]:
                  "Yes. Captions are written in your brand's voice from the brand profile, and you "
                  "can edit any of them before they go out."),
                 ("Is it free?",
-                 "Planning and writing use AI, and the Free plan includes 50 AI uses a day. Max "
-                 "is unlimited."),
+                 f"Planning and writing are {_max_only()}. AI pictures for the posts are "
+                 f"{_promax_only()}."),
             ],
         },
         "/features/review-analysis": {
@@ -800,7 +845,7 @@ def _feature_pages() -> dict[str, dict]:
                        "One Tap Manager finds the complaints, groups them into themes such as "
                        "sizing, quality or delivery, ranks them by how often they come up and how "
                        "much they hurt, and tells you which one to fix first. It also shows what "
-                       "customers praise, in their own words. It is on the Free plan."),
+                       f"customers praise, in their own words. It is {_max_only()}."),
             "sections": [
                 ("How does it read reviews?",
                  "<p>A review is a complaint when its rating is three stars or lower, or, when "
@@ -823,8 +868,8 @@ def _feature_pages() -> dict[str, dict]:
                  "are not required."),
                 ("Does it work without star ratings?",
                  "Yes. It reads the wording to decide which reviews are complaints."),
-                ("Is it free?",
-                 "Yes. Complaint and review analysis are on the Free plan."),
+                ("Which plan includes it?",
+                 f"Complaint and review analysis are {_max_only()}."),
             ],
         },
         "/features/online-store": {
@@ -836,8 +881,9 @@ def _feature_pages() -> dict[str, dict]:
             "answer": ("Every One Tap Manager account includes its own selling website: products, "
                        "a cart, cash on delivery and Razorpay payments, with no badge and no fee "
                        "on your sales. Orders take items out of stock, count in your sales "
-                       "numbers and add the buyer to your customer list for win-back. The Free "
-                       "plan covers up to 250 products; Max adds your own domain."),
+                       "numbers and add the buyer to your customer list for win-back. It is "
+                       f"{_max_only()}, with your own domain. Card payments on the store go "
+                       "through Razorpay, which serves sellers in India."),
             "sections": [
                 ("What is included?",
                  "<ul><li>Themes that change the layout and type, not only the colour.</li>"
@@ -858,13 +904,13 @@ def _feature_pages() -> dict[str, dict]:
                  "Shopify does better.</p>"),
             ],
             "faqs": [
-                ("Is the online store really free?",
-                 "Yes. It is on the Free plan, with no badge, for up to 250 products."),
+                ("Is the online store included?",
+                 f"Yes. It is part of Pro and Pro Max, with no badge and no fee on your orders."),
                 ("Do you take a commission on orders?",
                  "No. Razorpay charges its usual payment fee if you use it; One Tap Manager adds "
                  "nothing."),
                 ("Can I use my own domain?",
-                 "Yes, on the Max plan."),
+                 "Yes, on Pro and Pro Max."),
             ],
         },
     }
@@ -916,8 +962,8 @@ def _for_pages() -> dict[str, dict]:
                  "stock by size and colour, customers, win-back, GST invoices and Instagram, in "
                  "one app."),
                 ("Do I need a website to use it?",
-                 "No. You can start from a sales file. A selling website with cart, COD and "
-                 "Razorpay is included on the Free plan if you want one."),
+                 "No. You can start from a sales file. A selling website with a cart is "
+                 "included on Pro and Pro Max if you want one."),
                 ("I sell mostly on Instagram. Does it work for me?",
                  "Yes. Connect your Instagram Business or Creator account to schedule posts. "
                  "For sales, record Instagram orders in a spreadsheet and upload it, or send "
@@ -1020,8 +1066,9 @@ def _for_pages() -> dict[str, dict]:
                 ("Can it post on Instagram for me?",
                  "Yes. The Social Media Manager plans, writes and schedules a week of posts, "
                  "and publishes them to your Instagram Business or Creator account."),
-                ("Is there a free plan?",
-                 "Yes. The Free plan has no time limit."),
+                ("Is there a free trial?",
+                 f"Yes. Every feature is free for {pricing.TRIAL_DAYS} days, with no card. Then "
+                 f"Pro is {_price('pro')} a month."),
             ],
         },
         "/for/instagram-sellers": {
@@ -1114,9 +1161,10 @@ def _compare_pages() -> dict[str, dict]:
                 ("Are the app prices exact?",
                  "No. They are typical monthly prices for each kind of app. Check your own "
                  "bills for the real figure."),
-                ("Is there a free Shopify alternative in India?",
-                 "One Tap Manager's Free plan includes a selling website with cart, COD and "
-                 "Razorpay for up to 250 products, with no badge and no fee on sales."),
+                ("Is there a cheaper Shopify alternative in India?",
+                 f"One Tap Manager Pro, at {_price('pro', 'INR')} a month in India, includes a "
+                 "selling website with cart, COD and Razorpay, with no badge and no fee on sales, "
+                 f"after a {pricing.TRIAL_DAYS}-day free trial."),
             ],
         },
         "/compare/odoo": {
@@ -1148,7 +1196,7 @@ def _compare_pages() -> dict[str, dict]:
                  "<tr><th>Instagram posts and product photos</th><td>Not its focus</td>"
                  "<td>Built in</td></tr>"
                  "<tr><th>Price</th><td>See odoo.com; depends on apps and users</td>"
-                 f"<td>Free plan; Max at {esc(_max_price())} a month</td></tr>"
+                 f"<td>{pricing.TRIAL_DAYS}-day free trial; Pro at {esc(_price('pro'))} a month</td></tr>"
                  "</tbody></table></div>"),
                 ("What does joined up mean here?",
                  "<p>An order on your website takes the item out of stock, uses up the materials "
@@ -1519,7 +1567,7 @@ def _hindi_pages() -> dict[str, dict]:
                  "<li><b>पुराने ग्राहक</b>: कौन लौटकर नहीं आया, उसके लिए संदेश तैयार, और कितने "
                  "वापस आए इसकी गिनती।</li>"
                  "<li><b>स्टॉक</b>: साइज़ और रंग के हिसाब से स्टॉक; वेबसाइट पर ऑर्डर आते ही स्टॉक "
-                 "अपने आप घटता है; Max में कम स्टॉक की चेतावनी और सप्लायर को ऑर्डर।</li>"
+                 "अपने आप घटता है; कम स्टॉक की चेतावनी और सप्लायर को ऑर्डर।</li>"
                  "<li><b>GST बिल</b>: HSN कोड और सही दर के साथ टैक्स इनवॉइस, और आपके CA के लिए "
                  "GSTR-1 फ़ाइल।</li>"
                  "<li><b>शिकायतें</b>: रिव्यू पढ़कर बताता है कि सबसे पहले कौन-सी शिकायत ठीक करनी है।</li>"
@@ -1527,8 +1575,8 @@ def _hindi_pages() -> dict[str, dict]:
                  "<li><b>अपनी ऑनलाइन दुकान</b>: कार्ट, कैश ऑन डिलीवरी और Razorpay के साथ, मुफ़्त।</li></ul>"),
                 ("रोमन में",
                  "<p lang=\"en\">Dukan ka hisab-kitab, stock register, GST bill aur purane customer "
-                 "ko WhatsApp message: sab ek app mein. App Hindi mein bhi chalta hai. Free plan "
-                 "hamesha free hai, aur aapki bikri par koi commission nahi.</p>"),
+                 "ko WhatsApp message: sab ek app mein. App Hindi mein bhi chalta hai. 7 din ka "
+                 "free trial, phir Pro ₹700 mahina, aur aapki bikri par koi commission nahi.</p>"),
                 ("कपड़ों, गहनों और परफ़्यूम पर GST",
                  "<ul><li>कपड़े: ₹2,500 तक के एक पीस पर 5%, उससे ऊपर 18% (22 सितंबर 2025 से)।</li>"
                  "<li>सोने-चाँदी के गहने: 3%। नकली (इमिटेशन) गहनों पर भी आम तौर पर 3%, पर अपने "
@@ -1536,10 +1584,13 @@ def _hindi_pages() -> dict[str, dict]:
                  "<li>परफ़्यूम और इत्र: 18%।</li></ul>"),
                 ("कितना खर्च?",
                  '<div class="scroll"><table><tbody>'
-                 "<tr><th>Free</th><td>₹0, हमेशा के लिए: रिपोर्ट, पुराने ग्राहकों को संदेश, "
-                 "शिकायतों का विश्लेषण, GST बिल, अपनी वेबसाइट, 250 प्रोडक्ट तक</td></tr>"
-                 f"<tr><th>Max</th><td>{esc(_max_price())} महीना: स्टॉक दोबारा मँगाने की चेतावनी, "
-                 "सप्लायर को ऑर्डर, असीमित AI और अपना डोमेन</td></tr>"
+                 f"<tr><th>फ़्री ट्रायल</th><td>₹0, {pricing.TRIAL_DAYS} दिन: Pro Max की हर सुविधा, "
+                 "कार्ड की ज़रूरत नहीं</td></tr>"
+                 f"<tr><th>Pro</th><td>{esc(_price('pro', 'INR'))} महीना: रिपोर्ट, पुराने ग्राहकों को "
+                 "संदेश, स्टॉक और सप्लायर को ऑर्डर, GST बिल, Instagram, अपनी वेबसाइट, असीमित AI "
+                 "लेखन। AI फ़ोटो नहीं।</td></tr>"
+                 f"<tr><th>Pro Max</th><td>{esc(_price('promax', 'INR'))} महीना: Pro की हर चीज़, "
+                 "साथ में AI प्रोडक्ट फ़ोटो और छोटे वीडियो</td></tr>"
                  "</tbody></table></div>"),
             ],
             "faqs": [
@@ -1648,19 +1699,26 @@ def _org(base: str) -> dict:
 
 
 def _software_schema(base: str) -> list[dict]:
-    """The product and its two prices, from pricing.py. Used on /pricing."""
+    """The product and its prices in the render's currency, from pricing.py."""
     p = _plans()
+    ccy = _ccy()
+
+    def offer(key: str) -> dict:
+        pl = p[key]
+        o = {"@type": "Offer", "name": pl["name"], "price": f"{pricing.price(pl, ccy):.2f}",
+             "priceCurrency": ccy, "description": _INCLUDES[key]}
+        if key != "free":
+            o["priceSpecification"] = {"@type": "UnitPriceSpecification",
+                                       "price": f"{pricing.price(pl, ccy):.2f}",
+                                       "priceCurrency": ccy, "billingDuration": "P1M"}
+        return o
+
     return [{
         "@type": "SoftwareApplication", "@id": f"{base}/#app", "name": PRODUCT,
         "applicationCategory": "BusinessApplication", "operatingSystem": "Web browser",
         "url": f"{base}/", "publisher": {"@id": f"{base}/#org"},
-        "inLanguage": ["en-IN", "hi-IN", "ta-IN", "kn-IN"],
-        "offers": [
-            {"@type": "Offer", "name": p["free"]["name"], "price": "0", "priceCurrency": "INR",
-             "description": _INCLUDES["free"]},
-            {"@type": "Offer", "name": p["max"]["name"], "price": str(p["max"]["price_inr"]),
-             "priceCurrency": "INR", "description": _INCLUDES["max"]},
-        ],
+        "inLanguage": "en-IN" if ccy == "INR" else "en-US",
+        "offers": [offer("free"), offer("pro"), offer("promax")],
     }]
 
 
@@ -1681,10 +1739,11 @@ def _shell(path: str, base: str, title: str, description: str, body: str, ld: li
            alternates: bool = False, og_type: str = "article") -> str:
     graph = _json_ld({"@context": "https://schema.org", "@graph": ld})
     L = _LABELS[lang]
-    other = "/" if lang == "hi" else "/hi"
+    other = "/in" if lang == "hi" else "/hi"
     alt = hreflang_links(base) if alternates else ""
+    html_lang = "hi-IN" if lang == "hi" else ("en-IN" if _ccy() == "INR" else "en")
     return f"""<!DOCTYPE html>
-<html lang="{'hi-IN' if lang == 'hi' else 'en-IN'}">
+<html lang="{html_lang}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1700,7 +1759,7 @@ def _shell(path: str, base: str, title: str, description: str, body: str, ld: li
 <meta property="og:description" content="{esc(description)}" />
 <meta property="og:url" content="{esc(base + path)}" />
 <meta property="og:image" content="{esc(base)}/og-image.png" />
-<meta property="og:locale" content="{'hi_IN' if lang == 'hi' else 'en_IN'}" />
+<meta property="og:locale" content="{'hi_IN' if lang == 'hi' else ('en_IN' if _ccy() == 'INR' else 'en_US')}" />
 <meta property="article:modified_time" content="{UPDATED}" />
 <script type="application/ld+json">{graph}</script>
 <style>{_CSS}</style>
@@ -1708,7 +1767,7 @@ def _shell(path: str, base: str, title: str, description: str, body: str, ld: li
 <body>
 <a class="skip" href="#doc">{L['skip']}</a>
 <div class="wrap">
-<header class="top"><a href="/">{PRODUCT}</a>
+<header class="top"><a href="{'/in' if lang == 'hi' else '/'}">{PRODUCT}</a>
 <nav aria-label="Site"><a href="/guides#features">{L['features']}</a><a href="/pricing">{L['pricing']}</a><a href="/guides">{L['guides']}</a><a href="{other}" lang="{'en' if lang == 'hi' else 'hi'}">{L['hindi']}</a></nav></header>
 <main id="doc">
 {body}
@@ -1728,7 +1787,19 @@ def _others(path: str, d: dict) -> str:
     return f'<nav class="more" aria-label="{L["more"]}"><h2>{L["more"]}</h2><ul>{items}</ul></nav>'
 
 
-def render(path: str, base: str, params: dict | None = None) -> str | None:
+def render(path: str, base: str, params: dict | None = None,
+           ccy: str = "USD") -> str | None:
+    """One page, priced in `ccy` (the visitor's region; the Hindi page is
+    always rupees)."""
+    ccy = "INR" if (path == "/hi" or str(ccy).upper() == "INR") else "USD"
+    token = _CCY.set(ccy)
+    try:
+        return _render(path, base, params)
+    finally:
+        _CCY.reset(token)
+
+
+def _render(path: str, base: str, params: dict | None = None) -> str | None:
     d = _pages().get(path)
     if not d:
         return None
@@ -1741,15 +1812,16 @@ def render(path: str, base: str, params: dict | None = None) -> str | None:
     sections = "".join(
         f'<h2 id="{_slug(h)}">{esc(h)}</h2>{html(params) if callable(html) else html}'
         for h, html in d["sections"])
-    body = (f'<p class="crumbs"><a href="/">{PRODUCT}</a> / <a href="/guides">{L["guides"]}</a></p>'
+    home = "/in" if lang == "hi" else "/"
+    body = (f'<p class="crumbs"><a href="{home}">{PRODUCT}</a> / <a href="/guides">{L["guides"]}</a></p>'
             f"<h1>{esc(d['title'])}</h1>"
             f'<p class="meta">{L["updated"]} <time datetime="{UPDATED}">{_date(UPDATED, lang)}</time></p>'
             f'<div class="answer"><p>{esc(d["answer"])}</p></div>'
             f"{sections}"
             f'<section class="faq"><h2>{L["faq"]}</h2>{faqs}</section>'
-            f'<p><a class="cta" href="/?signup=1">{L["cta"]}</a></p>'
+            f'<p><a class="cta" href="{home}?signup=1">{L["cta"]}</a></p>'
             f"{_others(path, d)}")
-    in_lang = "hi-IN" if lang == "hi" else "en-IN"
+    in_lang = "hi-IN" if lang == "hi" else ("en-IN" if _ccy() == "INR" else "en-US")
     ld = [
         _org(base),
         {"@type": "WebPage", "@id": url, "url": url, "name": d["title"],
@@ -1758,7 +1830,7 @@ def render(path: str, base: str, params: dict | None = None) -> str | None:
          "isPartOf": {"@id": f"{base}/#website"}, "about": {"@id": f"{base}/#org"},
          "publisher": {"@id": f"{base}/#org"}},
         {"@type": "BreadcrumbList", "itemListElement": [
-            {"@type": "ListItem", "position": 1, "name": PRODUCT, "item": f"{base}/"},
+            {"@type": "ListItem", "position": 1, "name": PRODUCT, "item": f"{base}{home}"},
             {"@type": "ListItem", "position": 2, "name": "Guides", "item": f"{base}/guides"},
             {"@type": "ListItem", "position": 3, "name": d["title"], "item": url}]},
         {"@type": "FAQPage", "mainEntity": [
@@ -1780,7 +1852,15 @@ def render(path: str, base: str, params: dict | None = None) -> str | None:
                   lang=lang, robots=robots, alternates=(path == "/hi"))
 
 
-def hub(base: str) -> str:
+def hub(base: str, ccy: str = "USD") -> str:
+    token = _CCY.set("INR" if str(ccy).upper() == "INR" else "USD")
+    try:
+        return _hub(base)
+    finally:
+        _CCY.reset(token)
+
+
+def _hub(base: str) -> str:
     pages = _pages()
     groups = ""
     for kind, (anchor, heading, _) in KINDS.items():
@@ -1793,13 +1873,13 @@ def hub(base: str) -> str:
             f'<p class="meta">Last updated <time datetime="{UPDATED}">{_human(UPDATED)}</time></p>'
             f'<div class="answer"><p>{esc(ONE_LINE)} {esc(_price_line())}</p></div>'
             f'<div class="hub">{groups}</div>'
-            f'<p><a class="cta" href="/?signup=1">Start free, no card needed</a></p>')
+            f'<p><a class="cta" href="/?signup=1">Start the {pricing.TRIAL_DAYS}-day free trial</a></p>')
     ld = [_org(base),
           {"@type": "CollectionPage", "@id": f"{base}/guides", "url": f"{base}/guides",
            "name": f"{PRODUCT} guides", "dateModified": UPDATED,
            "hasPart": [{"@type": "WebPage", "url": base + p, "name": d["title"]}
                        for p, d in pages.items()]}]
-    return _shell("/guides", base, "Guides for Indian sellers: features, pricing and how-tos",
+    return _shell("/guides", base, "Guides for small online sellers: features, pricing and how-tos",
                   ONE_LINE + " Every feature, who it is for, comparisons and practical guides.",
                   body, ld, og_type="website")
 
@@ -1827,13 +1907,16 @@ def llms_txt(base: str) -> str:
         f"> {ONE_LINE} It reads a seller's own sales, says what to do today, and does most "
         f"of it: win-back messages, supplier purchase orders, Instagram posts.", "",
         f"- Website: {base}/",
-        f"- Price: Free plan at ₹0 with no time limit; {p['max']['name']} at "
-        f"{_max_price()} a month; credit packs that never expire. No fee on sales.",
+        f"- Price: {p['trial_days']}-day free trial of every feature, no card. Then Pro at "
+        f"{_price('pro', 'USD')} ({_price('pro', 'INR')} in India) a month, or Pro Max, which adds "
+        f"AI product photos and clips, at {_price('promax', 'USD')} ({_price('promax', 'INR')} in "
+        f"India) a month. No fee on sales.",
+        "- Markets: United States (primary, priced in USD) and India (priced in INR, at /in)",
         "- Languages: English, Hindi, Tamil, Kannada",
         "- Not related to other apps named One Tap or OneTap, or to Google One Tap sign-in.",
     ]
     if p["launch"]:
-        lines.append("- During the launch period every feature is free on every account.")
+        lines.append("- Right now every feature is open on every account.")
     pages = _pages()
     for kind, (_, heading, _) in KINDS.items():
         if kind == "hi":
@@ -1848,5 +1931,6 @@ def llms_txt(base: str) -> str:
         lines += ["", "## Official profiles", ""] + [f"- {u}" for u in profiles()]
     lines += ["", "## Optional", "",
               f"- [Legal pages]({base}/legal): privacy, terms, refunds, grievance contact",
-              f"- [Start free]({base}/?signup=1)", ""]
+              f"- [Start the free trial]({base}/?signup=1)",
+              f"- [India home page, prices in rupees]({base}/in)", ""]
     return "\n".join(lines)

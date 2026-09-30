@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1350" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=block" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="otm.css" />
+    <style>
+      /* slide 1 */
+      .s1-text { position: absolute; left: 90px; right: 90px; top: 862px; }
+      .s1-text .big { font-weight: 800; font-size: 66px; line-height: 1.06; letter-spacing: -0.035em; color: var(--paper); }
+      .s1-text .gold { margin-top: 28px; color: var(--marigold); }
+      .plate {
+        font-family: var(--mono); font-weight: 700; font-size: 14px; letter-spacing: 0.04em; fill: #2B2B2B;
+      }
+      /* slide 2 */
+      .s2 .col { justify-content: flex-start; padding-top: 200px; }
+      .s2 .h1 { font-size: 100px; }
+      .s2 .lede { margin-top: 44px; font-size: 50px; line-height: 1.28; color: var(--navy); }
+      /* slide 3 */
+      .s3 .wrap { position: absolute; left: 100px; right: 100px; top: 168px; }
+      .s3 .rows { margin-top: 44px; }
+      .s3 .row { display: flex; align-items: center; gap: 30px; height: 84px; }
+      .s3 .row span { font-family: var(--mono); font-weight: 500; font-size: 38px; color: var(--paper); }
+      .s3 .rule { margin: 38px 0 40px; height: 2px; background: rgba(247, 245, 239, 0.4); }
+      .s3 .yours { font-weight: 800; font-size: 60px; letter-spacing: -0.03em; }
+      .s3 .one { margin-top: 6px; font-family: var(--mono); font-weight: 800; font-size: 164px; line-height: 1.05; letter-spacing: -0.05em; color: var(--marigold); }
+      /* slide 4 */
+      .s4 .phone { left: 358px; top: 46px; width: 364px; }
+      .s4 .txt { position: absolute; left: 100px; right: 100px; top: 860px; }
+      .s4 .lead { text-wrap: balance; font-weight: 700; font-size: 50px; line-height: 1.15; letter-spacing: -0.025em; }
+      .s4 .list { margin-top: 26px; font-weight: 500; font-size: 36px; line-height: 1.48; color: var(--lblue); }
+      /* slide 5 */
+      .s5 .mid { position: absolute; left: 90px; right: 90px; top: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+      .s5 .zero { font-family: var(--mono); font-weight: 800; font-size: 400px; line-height: 0.95; letter-spacing: -0.06em; color: var(--mint); }
+      .s5 .cut { margin-top: 30px; font-weight: 800; font-size: 66px; letter-spacing: -0.03em; }
+      .s5 .fine { margin-top: 34px; max-width: 820px; font-weight: 500; font-size: 36px; line-height: 1.42; color: var(--lblue); text-wrap: balance; }
+      /* slide 6 */
+      .s6 .logo-wrap { top: 250px; }
+      .s6 .txt { position: absolute; left: 70px; right: 70px; top: 660px; text-align: center; }
+      .s6 .h1 { font-size: 76px; }
+      .s6 .h1 + .h1 { margin-top: 18px; }
+      .s6 .follow { margin-top: 48px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="1080" data-height="1350">
+
+      <!-- ===== 1 Â· six jobs, one empty chair ===== -->
+      <section class="clip bg-night" data-start="0" data-duration="1" data-track-index="0">
+        <svg class="scene" viewBox="0 0 1080 1350" width="1080" height="1350" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="brick" width="120" height="56" patternUnits="userSpaceOnUse">
+              <rect width="120" height="56" fill="#D9D4CA" />
+              <rect x="2" y="2" width="116" height="24" rx="2" fill="#F3F1EC" />
+              <rect x="-58" y="30" width="116" height="24" rx="2" fill="#F0EDE7" />
+              <rect x="62" y="30" width="116" height="24" rx="2" fill="#F5F3EE" />
+            </pattern>
+            <linearGradient id="oak" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#DDAE74" /><stop offset="1" stop-color="#B27A45" />
+            </linearGradient>
+            <linearGradient id="oakLight" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#FFF1D6" stop-opacity="0.35" /><stop offset="0.7" stop-color="#FFF1D6" stop-opacity="0" />
+            </linearGradient>
+            <linearGradient id="wallShade" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.25" /><stop offset="1" stop-color="#6B5B45" stop-opacity="0.22" />
+            </linearGradient>
+            <linearGradient id="chairWood" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#C08650" /><stop offset="0.5" stop-color="#9C6536" /><stop offset="1" stop-color="#7A4A24" />
+            </linearGradient>
+            <linearGradient id="plateFace" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#F8F1E0" /><stop offset="1" stop-color="#E9DEC6" />
+            </linearGradient>
+            <linearGradient id="mugBody" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#FFFFFF" /><stop offset="0.6" stop-color="#ECEAE6" /><stop offset="1" stop-color="#CFCBC4" />
+            </linearGradient>
+            <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0.5" stop-color="#111827" stop-opacity="0" />
+              <stop offset="0.565" stop-color="#111827" stop-opacity="0.6" />
+              <stop offset="0.625" stop-color="#111827" stop-opacity="1" />
+            </linearGradient>
+            <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10" /></filter>
+            <filter id="softer" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" /></filter>
+            <filter id="grain" x="0" y="0" width="100%" height="100%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="3" stitchTiles="stitch" /><feColorMatrix type="saturate" values="0" />
+            </filter>
+          </defs>
+
+          <!-- white brick wall, window light from the left -->
+          <rect x="0" y="0" width="1080" height="470" fill="url(#brick)" />
+          <rect x="0" y="0" width="1080" height="470" fill="url(#wallShade)" />
+          <rect x="0" y="0" width="1080" height="470" fill="#3A3024" opacity="0.10" />
+          <g fill="#FFF7E4" opacity="0.75" filter="url(#softer)">
+            <polygon points="330,70 510,50 530,210 350,228" />
+            <polygon points="530,48 710,28 730,188 550,208" />
+            <polygon points="354,244 534,226 554,386 374,404" />
+            <polygon points="554,224 734,204 754,364 574,384" />
+          </g>
+
+          <!-- empty chair, behind the plates -->
+          <g>
+            <rect x="436" y="226" width="18" height="260" rx="8" fill="url(#chairWood)" />
+            <rect x="626" y="226" width="18" height="260" rx="8" fill="url(#chairWood)" />
+            <path d="M424 236 Q540 196 656 236 L656 262 Q540 224 424 262 Z" fill="url(#chairWood)" />
+            <rect x="444" y="346" width="192" height="14" rx="6" fill="#8E5A2E" />
+            <rect x="488" y="250" width="10" height="100" rx="4" fill="#9C6536" />
+            <rect x="535" y="244" width="10" height="106" rx="4" fill="#9C6536" />
+            <rect x="582" y="250" width="10" height="100" rx="4" fill="#9C6536" />
+            <path d="M424 236 Q540 196 656 236" fill="none" stroke="#D9A46C" stroke-width="3" opacity="0.7" />
+          </g>
+
+          <!-- oak desk -->
+          <rect x="0" y="462" width="1080" height="420" fill="url(#oak)" />
+          <rect x="0" y="462" width="1080" height="420" fill="url(#oakLight)" />
+          <g stroke="#8E5A2B" stroke-width="2" fill="none" opacity="0.22">
+            <path d="M0 492 C300 486 620 500 1080 488" /><path d="M0 530 C260 540 700 522 1080 534" />
+            <path d="M0 578 C360 570 640 588 1080 574" /><path d="M0 634 C300 646 720 626 1080 640" />
+            <path d="M0 700 C280 692 760 708 1080 696" />
+          </g>
+          <rect x="0" y="458" width="1080" height="8" fill="#6B4A2A" opacity="0.35" />
+          <rect x="0" y="466" width="1080" height="16" fill="#3A2512" opacity="0.10" filter="url(#softer)" />
+
+          <!-- six name plates -->
+          <g id="plates"></g>
+
+          <!-- cold coffee, right edge -->
+          <ellipse cx="880" cy="706" rx="46" ry="12" fill="none" stroke="#6B3F1E" stroke-width="3" opacity="0.35" />
+          <ellipse cx="1050" cy="746" rx="104" ry="16" fill="#3A2512" opacity="0.3" filter="url(#soft)" />
+          <path d="M978 628 C942 628 936 692 980 698" fill="none" stroke="#E4E1DB" stroke-width="14" />
+          <rect x="976" y="588" width="150" height="158" fill="url(#mugBody)" />
+          <ellipse cx="1051" cy="746" rx="75" ry="14" fill="#D5D1CA" />
+          <ellipse cx="1051" cy="588" rx="75" ry="16" fill="#F4F2EE" />
+          <ellipse cx="1051" cy="592" rx="66" ry="12" fill="#2E1B0C" />
+          <ellipse cx="1034" cy="590" rx="22" ry="4" fill="#5A3A20" opacity="0.6" />
+
+          <!-- red notebook tied with string, left edge -->
+          <ellipse cx="80" cy="700" rx="160" ry="18" fill="#3A2512" opacity="0.3" filter="url(#soft)" />
+          <polygon points="-40,628 190,612 214,676 -40,694" fill="#EFE6D2" />
+          <polygon points="-40,612 186,596 210,660 -40,678" fill="#B3261E" />
+          <polygon points="-40,612 186,596 190,604 -40,620" fill="#CF4638" opacity="0.8" />
+          <path d="M186 596 L210 660" stroke="#7E1712" stroke-width="3" />
+          <path d="M60 604 L78 670 M-40 640 L200 626" stroke="#E8D8B0" stroke-width="3" fill="none" />
+          <path d="M70 636 C58 620 44 628 56 640 C44 650 60 660 72 646" fill="none" stroke="#E8D8B0" stroke-width="3" />
+
+          <!-- fade into navy -->
+          <rect x="0" y="0" width="1080" height="1350" fill="url(#fade)" />
+          <rect x="0" y="0" width="1080" height="1350" filter="url(#grain)" opacity="0.08" style="mix-blend-mode: multiply" />
+        </svg>
+        <div class="s1-text">
+          <div class="big">You're the CEO.<br />The accountant.<br />The photographer.<br />The packer.</div>
+          <div class="big gold">Salary? One cold coffee.</div>
+        </div>
+        <div class="ai-tag on-dark">AI GENERATED</div>
+      </section>
+
+      <!-- ===== 2 ===== -->
+      <section class="clip paper s2" data-start="1" data-duration="1" data-track-index="0">
+        <div class="margin-line"></div>
+        <div class="count">2/6</div>
+        <div class="col">
+          <div class="h1">Big brands don't make better products.</div>
+          <div class="lede">They just <span class="hl low"><i></i>have people</span>. People who read the numbers, then act on them.</div>
+        </div>
+      </section>
+
+      <!-- ===== 3 ===== -->
+      <section class="clip bg-night s3" data-start="2" data-duration="1" data-track-index="0">
+        <div class="count">3/6</div>
+        <div class="wrap">
+          <div class="kicker">A BIG BRAND'S BACK OFFICE</div>
+          <div class="rows">
+            <div class="row">
+              <svg class="icon light" width="48" height="48" viewBox="0 0 48 48"><path d="M6 6 L6 42 L42 42" /><path d="M14 34 L14 26 M24 34 L24 16 M34 34 L34 22" /></svg>
+              <span>Data analyst</span>
+            </div>
+            <div class="row">
+              <svg class="icon light" width="48" height="48" viewBox="0 0 48 48"><path d="M24 4 L42 12 L42 34 L24 44 L6 34 L6 12 Z" /><path d="M6 12 L24 20 L42 12 M24 20 L24 44" /></svg>
+              <span>Inventory manager</span>
+            </div>
+            <div class="row">
+              <svg class="icon light" width="48" height="48" viewBox="0 0 48 48"><circle cx="18" cy="14" r="8" /><path d="M4 42 C4 30 10 25 18 25 C24 25 28 28 30 33" /><path d="M38 44 C33 40 29 37 29 32 C29 29 31 27 33.5 27 C35.5 27 37 28.5 38 30 C39 28.5 40.5 27 42.5 27 C45 27 47 29 47 32 C47 37 43 40 38 44 Z" /></svg>
+              <span>Customer manager</span>
+            </div>
+            <div class="row">
+              <svg class="icon light" width="48" height="48" viewBox="0 0 48 48"><rect x="13" y="3" width="22" height="42" rx="5" /><path d="M21 38 L27 38" /></svg>
+              <span>Social media manager</span>
+            </div>
+            <div class="row">
+              <svg class="icon light" width="48" height="48" viewBox="0 0 48 48"><rect x="3" y="13" width="42" height="28" rx="5" /><path d="M16 13 L19 7 L29 7 L32 13" /><circle cx="24" cy="27" r="8" /></svg>
+              <span>Photographer</span>
+            </div>
+            <div class="row">
+              <svg class="icon light" width="48" height="48" viewBox="0 0 48 48"><rect x="3" y="3" width="42" height="42" rx="7" /><path d="M31 16 C29 13.5 26.5 13 24 13 C20 13 17.5 15 17.5 18 C17.5 25 31 22 31 29.5 C31 33 28 35 24 35 C20.5 35 18 34 16.5 31.5 M24 9 L24 39" /></svg>
+              <span>Accountant</span>
+            </div>
+          </div>
+          <div class="rule"></div>
+          <div class="yours">Your back office:</div>
+          <div class="one">1 person.</div>
+        </div>
+      </section>
+
+      <!-- ===== 4 ===== -->
+      <section class="clip bg-indigo s4" data-start="3" data-duration="1" data-track-index="0">
+        <div class="phone">
+          <img src="assets/app-today.png" alt="One Tap Manager today screen" />
+          <div class="tag">SAMPLE SHOP DATA</div>
+        </div>
+        <div class="txt">
+          <div class="lead">One Tap Manager is that team. One app.</div>
+          <div class="list">
+            Tells you what to do today.<br />
+            Writes your customer messages.<br />
+            Fills in your supplier orders.<br />
+            Plans your week of posts.
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 5 ===== -->
+      <section class="clip bg-night s5" data-start="4" data-duration="1" data-track-index="0">
+        <div class="count">5/6</div>
+        <div class="mid">
+          <div class="zero">$0</div>
+          <div class="cut">Our cut of your sales.</div>
+          <div class="fine">Try it free for 7 days. Then $10 or $12.99 a month, flat. Never per order, never a percentage.</div>
+        </div>
+      </section>
+
+      <!-- ===== 6 ===== -->
+      <section class="clip bg-paper s6" data-start="5" data-duration="1" data-track-index="0">
+        <div class="sticker">SHOP DOCTOR Â· EVERY TUESDAY</div>
+        <div class="logo-wrap">
+          <svg viewBox="0 0 320 320" width="320" height="320"><circle cx="160" cy="160" r="152" fill="none" stroke="#F5A623" stroke-width="4" /></svg>
+          <div class="logo">1T</div>
+        </div>
+        <div class="txt">
+          <div class="h1">One shop problem every week.</div>
+          <div class="h1"><span class="hl"><i></i>Roasted. Fixed. Free.</span></div>
+          <div class="follow">Follow @onetapmanager</div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      // six cream name plates in one row; plates 3 and 4 meet at x=540 (the chair)
+      (function buildPlates() {
+        const names = ["CEO", "ACCOUNTANT", "PHOTOGRAPHER", "PACKING", "CUSTOMER SERVICE", "INSTAGRAM"];
+        const w = 158, gap = 6, x0 = 51, top = 484, h = 64;
+        let out = "";
+        names.forEach((n, i) => {
+          const x = x0 + i * (w + gap);
+          out += `<ellipse cx="${x + w / 2 + 26}" cy="${top + h + 4}" rx="${w / 2 + 6}" ry="9" fill="#4A2E14" opacity="0.28" filter="url(#softer)" />`;
+          out += `<rect x="${x}" y="${top}" width="${w}" height="${h}" rx="3" fill="url(#plateFace)" stroke="#CDBF9F" stroke-width="1" />`;
+          out += `<rect x="${x}" y="${top - 5}" width="${w}" height="7" rx="2" fill="#FCF8EE" />`;
+          out += `<text class="plate" x="${x + w / 2}" y="${top + h / 2 + 5}" text-anchor="middle">${n}</text>`;
+        });
+        document.getElementById("plates").innerHTML = out;
+      })();
+      const tl = gsap.timeline({ paused: true });
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

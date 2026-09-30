@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1350" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=block" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="otm.css" />
+    <style>
+      /* slide 1 */
+      .s1 .txt { position: absolute; left: 80px; right: 80px; top: 1060px; }
+      .s1 .big { font-weight: 800; font-size: 84px; line-height: 1.08; letter-spacing: -0.035em; color: var(--paper); }
+      .s1 .gold { color: var(--marigold); }
+      /* slide 2 */
+      .s2 .veil { position: absolute; inset: 0; background: rgba(247, 245, 239, 0.8); }
+      .s2 .head { position: absolute; left: 70px; right: 70px; top: 66px; font-size: 70px; }
+      .s2 .note { position: absolute; font-size: 58px; line-height: 1; white-space: nowrap; }
+      .s2 svg.arrows { position: absolute; inset: 0; }
+      /* slide 3 */
+      .s3 .wash { position: absolute; left: 0; right: 0; top: 0; height: 440px; background: linear-gradient(to bottom, rgba(255, 251, 243, 0.92) 0%, rgba(255, 251, 243, 0.75) 55%, rgba(255, 251, 243, 0) 100%); }
+      .s3 .txt { position: absolute; left: 80px; right: 80px; top: 70px; }
+      .s3 .h1 { font-size: 66px; }
+      .s3 .lede { margin-top: 18px; font-size: 36px; line-height: 1.32; color: var(--navy); }
+      .s3 .phone { left: 336px; top: 392px; width: 408px; box-shadow: 18px 26px 40px rgba(60, 40, 15, 0.35); }
+      .s3 .tag { left: auto; right: -228px; top: 70px; }
+      /* slide 4 */
+      .s4 .logo-wrap { top: 300px; }
+      .s4 .txt { position: absolute; left: 90px; right: 90px; top: 720px; text-align: center; }
+      .s4 .h1 { font-size: 88px; }
+      .s4 .follow { margin-top: 44px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="1080" data-height="1350">
+
+      <!-- the desk, drawn once: wood, the chaos, and the calm version -->
+      <svg class="hidden-defs" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="9" dy="12" stdDeviation="8" flood-color="#3B2410" flood-opacity="0.32" />
+          </filter>
+          <filter id="shadowSm" x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="4" dy="6" stdDeviation="4" flood-color="#3B2410" flood-opacity="0.28" />
+          </filter>
+          <filter id="g10" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="21" stitchTiles="stitch" /><feColorMatrix type="saturate" values="0" />
+          </filter>
+          <linearGradient id="fade10" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0.64" stop-color="#111827" stop-opacity="0" />
+            <stop offset="0.72" stop-color="#111827" stop-opacity="0.7" />
+            <stop offset="0.77" stop-color="#111827" stop-opacity="1" />
+          </linearGradient>
+          <pattern id="rib10" width="9" height="20" patternUnits="userSpaceOnUse">
+            <line x1="4.5" y1="0" x2="4.5" y2="20" stroke="#000" stroke-opacity="0.08" stroke-width="2" />
+          </pattern>
+          <linearGradient id="gold10" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#FCE7A8" /><stop offset="0.5" stop-color="#D4A640" /><stop offset="1" stop-color="#8E6414" />
+          </linearGradient>
+          <g id="phoneDark">
+            <rect x="-75" y="-150" width="150" height="300" rx="24" fill="#15171C" />
+            <rect x="-66" y="-140" width="132" height="280" rx="17" fill="#23272F" />
+            <polygon points="-66,-60 66,-140 66,-90 -66,-10" fill="#FFFFFF" opacity="0.05" />
+          </g>
+          <g id="sticky">
+            <rect x="-56" y="-56" width="112" height="112" rx="3" fill="#F8D548" />
+            <rect x="-56" y="-56" width="112" height="22" fill="#000" opacity="0.05" />
+            <path d="M-40 -14 C-26 -22 -14 -8 0 -16 C12 -22 24 -10 38 -18 M-40 8 C-28 0 -16 14 -2 6 C10 0 20 12 30 6 M-40 30 C-30 24 -20 34 -8 28" fill="none" stroke="#2A3558" stroke-width="3" stroke-linecap="round" opacity="0.75" />
+          </g>
+
+          <g id="wood10">
+            <rect x="0" y="0" width="1080" height="1350" fill="#D8B88C" />
+            <g id="planks"></g>
+          </g>
+
+          <g id="clutter">
+            <!-- three phones, blank dark screens -->
+            <g filter="url(#shadow)">
+              <use href="#phoneDark" transform="translate(130 232) rotate(-12)" />
+              <use href="#phoneDark" transform="translate(302 204) rotate(5)" />
+              <use href="#phoneDark" transform="translate(474 252) rotate(16)" />
+            </g>
+            <!-- calculator -->
+            <g filter="url(#shadow)" transform="rotate(-6 156 580)">
+              <rect x="64" y="440" width="184" height="280" rx="18" fill="#2B2F36" />
+              <rect x="84" y="462" width="144" height="54" rx="6" fill="#A3AE9F" />
+              <g id="keys" fill="#E8E7E2"></g>
+            </g>
+            <!-- open red notebook, blue handwriting -->
+            <g filter="url(#shadow)" transform="rotate(3 546 580)">
+              <rect x="296" y="424" width="500" height="312" rx="10" fill="#B3261E" />
+              <rect x="310" y="436" width="234" height="288" rx="4" fill="#F6F0E0" />
+              <rect x="548" y="436" width="234" height="288" rx="4" fill="#F8F3E5" />
+              <rect x="536" y="436" width="24" height="288" fill="#000" opacity="0.07" />
+              <g id="ink" fill="none" stroke="#2B4BA0" stroke-width="2.6" stroke-linecap="round" opacity="0.7"></g>
+            </g>
+            <!-- folded dusty-rose sweater -->
+            <g filter="url(#shadow)" transform="rotate(8 942 546)">
+              <rect x="836" y="444" width="212" height="204" rx="20" fill="#D3A1A0" />
+              <rect x="836" y="444" width="212" height="204" rx="20" fill="url(#rib10)" />
+              <path d="M836 512 L1048 512" stroke="#B98583" stroke-width="3" opacity="0.6" />
+              <path d="M896 444 Q942 476 988 444" fill="none" stroke="#B98583" stroke-width="4" />
+            </g>
+            <!-- crumpled receipts -->
+            <g filter="url(#shadowSm)">
+              <polygon points="70,790 150,772 190,806 176,868 110,884 64,850" fill="#F7F5F0" />
+              <path d="M90 800 L150 850 M160 790 L110 860 M72 830 L180 830" stroke="#C9C4B8" stroke-width="2" />
+              <polygon points="170,840 250,826 290,870 266,920 196,928 164,886" fill="#EFECE4" />
+              <path d="M186 850 L262 910 M240 836 L200 916" stroke="#C4BEB0" stroke-width="2" />
+              <polygon points="232,760 296,752 318,792 290,830 240,826" fill="#F4F1EA" />
+            </g>
+            <!-- small tray of gold earrings -->
+            <g filter="url(#shadow)">
+              <rect x="356" y="776" width="244" height="164" rx="26" fill="#EDE7DC" />
+              <rect x="370" y="790" width="216" height="136" rx="18" fill="#E2D9CA" />
+            </g>
+            <g fill="none" stroke="url(#gold10)" stroke-width="6">
+              <circle cx="416" cy="836" r="22" /><circle cx="470" cy="842" r="22" />
+              <circle cx="530" cy="828" r="15" /><circle cx="556" cy="866" r="15" />
+            </g>
+            <circle cx="420" cy="892" r="7" fill="url(#gold10)" /><circle cx="448" cy="896" r="7" fill="url(#gold10)" />
+            <!-- white mug, top view -->
+            <g filter="url(#shadow)">
+              <rect x="808" y="800" width="54" height="26" rx="12" fill="#ECE9E3" />
+              <circle cx="762" cy="814" r="66" fill="#F7F6F2" />
+              <circle cx="762" cy="814" r="54" fill="#3A2210" />
+              <ellipse cx="748" cy="800" rx="20" ry="9" fill="#6B4726" opacity="0.5" />
+            </g>
+            <!-- ~20 sticky notes -->
+            <g filter="url(#shadowSm)">
+              <use href="#sticky" transform="translate(660 110) rotate(-8)" />
+              <use href="#sticky" transform="translate(780 90) rotate(6)" />
+              <use href="#sticky" transform="translate(900 120) rotate(-4)" />
+              <use href="#sticky" transform="translate(1010 96) rotate(10)" />
+              <use href="#sticky" transform="translate(700 232) rotate(9)" />
+              <use href="#sticky" transform="translate(826 216) rotate(-11)" />
+              <use href="#sticky" transform="translate(950 250) rotate(5)" />
+              <use href="#sticky" transform="translate(640 350) rotate(-5)" />
+              <use href="#sticky" transform="translate(768 346) rotate(12)" />
+              <use href="#sticky" transform="translate(900 370) rotate(-7)" />
+              <use href="#sticky" transform="translate(1024 360) rotate(4)" />
+              <use href="#sticky" transform="translate(1022 230) rotate(-13)" />
+              <use href="#sticky" transform="translate(600 40) rotate(14)" />
+              <use href="#sticky" transform="translate(890 720) rotate(-9)" />
+              <use href="#sticky" transform="translate(1006 772) rotate(7)" />
+              <use href="#sticky" transform="translate(940 880) rotate(-3)" />
+              <use href="#sticky" transform="translate(52 960) rotate(10)" />
+              <use href="#sticky" transform="translate(650 950) rotate(-12)" />
+              <use href="#sticky" transform="translate(36 380) rotate(-10)" />
+              <use href="#sticky" transform="translate(600 690) rotate(6)" />
+            </g>
+            <!-- red strings between pins -->
+            <g id="strings" stroke="#C8102E" stroke-width="2.6" stroke-linecap="round" opacity="0.95"></g>
+            <g id="pins"></g>
+          </g>
+
+          <g id="calm">
+            <!-- potted plant, top view -->
+            <g filter="url(#shadow)">
+              <circle cx="180" cy="590" r="92" fill="#C56A3C" />
+              <circle cx="180" cy="590" r="76" fill="#4A3526" />
+            </g>
+            <g fill="#4E8A4A">
+              <ellipse cx="180" cy="530" rx="22" ry="58" />
+              <ellipse cx="236" cy="570" rx="22" ry="58" transform="rotate(70 236 570)" />
+              <ellipse cx="220" cy="640" rx="22" ry="58" transform="rotate(130 220 640)" />
+              <ellipse cx="142" cy="642" rx="22" ry="58" transform="rotate(-130 142 642)" />
+              <ellipse cx="124" cy="568" rx="22" ry="58" transform="rotate(-70 124 568)" />
+            </g>
+            <g fill="#6DAE5F">
+              <ellipse cx="200" cy="548" rx="14" ry="40" transform="rotate(35 200 548)" />
+              <ellipse cx="156" cy="604" rx="14" ry="40" transform="rotate(-150 156 604)" />
+              <ellipse cx="204" cy="616" rx="14" ry="40" transform="rotate(145 204 616)" />
+            </g>
+            <!-- white mug -->
+            <g filter="url(#shadow)">
+              <rect x="934" y="566" width="54" height="26" rx="12" fill="#ECE9E3" />
+              <circle cx="888" cy="580" r="66" fill="#F7F6F2" />
+              <circle cx="888" cy="580" r="54" fill="#3A2210" />
+              <ellipse cx="874" cy="566" rx="20" ry="9" fill="#6B4726" opacity="0.5" />
+            </g>
+            <!-- red notebook, closed, in the corner -->
+            <g filter="url(#shadow)" transform="rotate(-9 940 1170)">
+              <rect x="812" y="1040" width="250" height="330" rx="10" fill="#B3261E" />
+              <rect x="1010" y="1040" width="14" height="330" fill="#8E1B14" />
+              <rect x="812" y="1040" width="250" height="10" fill="#CC4133" opacity="0.7" />
+            </g>
+          </g>
+        </defs>
+      </svg>
+
+      <!-- ===== 1 · the evidence board ===== -->
+      <section class="clip s1" data-start="0" data-duration="1" data-track-index="0">
+        <svg class="scene" viewBox="0 0 1080 1350" width="1080" height="1350">
+          <use href="#wood10" /><use href="#clutter" />
+          <rect width="1080" height="1350" fill="url(#fade10)" />
+          <rect width="1080" height="1350" filter="url(#g10)" opacity="0.08" style="mix-blend-mode: multiply" />
+        </svg>
+        <div class="txt">
+          <div class="big">What is this?</div>
+          <div class="big gold">Wrong answers only.</div>
+        </div>
+        <div class="ai-tag on-dark">AI GENERATED</div>
+      </section>
+
+      <!-- ===== 2 · the "system", labeled ===== -->
+      <section class="clip s2" data-start="1" data-duration="1" data-track-index="0">
+        <svg class="scene" viewBox="0 0 1080 1350" width="1080" height="1350"><use href="#wood10" /><use href="#clutter" /></svg>
+        <div class="veil"></div>
+        <div class="h1 head">This is a normal seller's 'system'.</div>
+        <svg class="arrows" viewBox="0 0 1080 1350" width="1080" height="1350">
+          <defs>
+            <marker id="tip" viewBox="0 0 20 20" refX="10" refY="10" markerWidth="11" markerHeight="11" orient="auto-start-reverse">
+              <path d="M2 3 L12 10 L2 17" fill="none" stroke="#1E3A8A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            </marker>
+          </defs>
+          <g fill="none" stroke="#1E3A8A" stroke-width="4.5" stroke-linecap="round" marker-end="url(#tip)">
+            <path d="M232 470 C236 440 262 420 290 392" />
+            <path d="M840 496 C852 470 864 450 872 420" />
+            <path d="M496 832 C506 800 520 780 540 742" />
+            <path d="M790 996 C792 960 786 930 774 896" />
+          </g>
+        </svg>
+        <div class="note hand" style="left:70px; top:484px; transform: rotate(-3deg)">Orders: 3 DM threads</div>
+        <div class="note hand" style="left:660px; top:508px; transform: rotate(2deg)">Stock: memory</div>
+        <div class="note hand" style="left:250px; top:846px; transform: rotate(-2deg)">Money: the red notebook</div>
+        <div class="note hand" style="left:560px; top:1008px; transform: rotate(2deg)">Customers: Mom knows</div>
+      </section>
+
+      <!-- ===== 3 · after ===== -->
+      <section class="clip s3" data-start="2" data-duration="1" data-track-index="0">
+        <svg class="scene" viewBox="0 0 1080 1350" width="1080" height="1350">
+          <use href="#wood10" /><use href="#calm" />
+          <rect width="1080" height="1350" filter="url(#g10)" opacity="0.08" style="mix-blend-mode: multiply" />
+        </svg>
+        <div class="wash"></div>
+        <div class="txt">
+          <div class="h1">After: one screen. Today's to-dos.</div>
+          <div class="lede">The chaos was never your fault. There was just no system.</div>
+        </div>
+        <div class="phone">
+          <img src="assets/app-today.png" alt="One Tap Manager today screen" />
+          <div class="tag">SAMPLE SHOP DATA</div>
+        </div>
+        <div class="ai-tag">AI GENERATED</div>
+      </section>
+
+      <!-- ===== 4 ===== -->
+      <section class="clip bg-paper s4" data-start="3" data-duration="1" data-track-index="0">
+        <div class="logo-wrap">
+          <svg viewBox="0 0 320 320" width="320" height="320"><circle cx="160" cy="160" r="152" fill="none" stroke="#F5A623" stroke-width="4" /></svg>
+          <div class="logo">1T</div>
+        </div>
+        <div class="txt">
+          <div class="h1">Best wrong answer gets pinned.</div>
+          <div class="follow">Follow @onetapmanager</div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      (function buildDesk() {
+        let seed = 77;
+        const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
+        // oak planks, top-down
+        const tones = ["#DDBE93", "#D4B284", "#E0C49B", "#D8B98C", "#CFAD7F", "#DCBD90", "#D3B183", "#DFC296", "#D6B687"];
+        let p = "";
+        for (let i = 0; i < 9; i++) {
+          const y = i * 150;
+          p += `<rect x="0" y="${y}" width="1080" height="150" fill="${tones[i]}" />`;
+          for (let k = 0; k < 4; k++) {
+            const gy = y + 20 + k * 32 + rnd() * 10;
+            p += `<path d="M0 ${gy.toFixed(0)} C300 ${(gy + (rnd() - 0.5) * 16).toFixed(0)} 700 ${(gy + (rnd() - 0.5) * 16).toFixed(0)} 1080 ${gy.toFixed(0)}" stroke="#9E7A4C" stroke-width="1.6" fill="none" opacity="0.22" />`;
+          }
+          p += `<rect x="0" y="${y + 148}" width="1080" height="3" fill="#8A6538" opacity="0.35" />`;
+        }
+        document.getElementById("planks").innerHTML = p;
+
+        // calculator keys
+        let keys = "";
+        for (let r = 0; r < 5; r++) for (let c = 0; c < 4; c++) {
+          const orange = c === 3 && r > 2;
+          keys += `<rect x="${86 + c * 36}" y="${534 + r * 36}" width="28" height="26" rx="6" fill="${orange ? "#F29C38" : "#E8E7E2"}" />`;
+        }
+        document.getElementById("keys").innerHTML = keys;
+
+        // unreadable handwriting in the notebook
+        let ink = "";
+        [[326, 470], [564, 470]].forEach(([x0, y0]) => {
+          for (let l = 0; l < 9; l++) {
+            const y = y0 + l * 28, len = 150 + rnd() * 50;
+            let d = `M${x0} ${y}`;
+            for (let s = 0; s < len; s += 14) d += ` q7 ${(-7 - rnd() * 4).toFixed(1)} 14 0`;
+            ink += `<path d="${d}" />`;
+          }
+        });
+        document.getElementById("ink").innerHTML = ink;
+
+        // pins and red strings
+        const pin = { phA: [130, 232], phB: [302, 204], phC: [474, 252], note: [546, 580], stA: [660, 110], stB: [950, 250], calc: [156, 590], rec: [180, 840], tray: [480, 856], mug: [762, 814], swt: [942, 546], stC: [940, 880], stD: [36, 380] };
+        const links = [["phA", "calc"], ["phB", "note"], ["phC", "stA"], ["note", "stB"], ["note", "mug"], ["note", "calc"], ["rec", "tray"], ["tray", "mug"], ["mug", "swt"], ["swt", "stB"], ["stC", "mug"], ["phC", "note"], ["stD", "phA"], ["rec", "calc"]];
+        document.getElementById("strings").innerHTML = links.map(([a, b]) => `<line x1="${pin[a][0]}" y1="${pin[a][1]}" x2="${pin[b][0]}" y2="${pin[b][1]}" />`).join("");
+        document.getElementById("pins").innerHTML = Object.values(pin).map(([x, y]) =>
+          `<circle cx="${x + 2}" cy="${y + 3}" r="9" fill="#000" opacity="0.25" /><circle cx="${x}" cy="${y}" r="9" fill="#D7263D" /><circle cx="${x - 3}" cy="${y - 3}" r="3" fill="#FFB3BD" />`).join("");
+      })();
+      const tl = gsap.timeline({ paused: true });
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

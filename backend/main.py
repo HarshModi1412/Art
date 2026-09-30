@@ -42,6 +42,7 @@ from backend.core import sitebuilder, storefront
 from backend.core import messaging, password_reset, today as today_mod
 from backend.core import winback_proof
 from backend.core import loginguard, google_auth, winback_auto, publisher
+from backend.core import chatgpt_auth, chatgpt_plan
 from backend.core import ratelimit
 from backend.core import geo
 from backend.core import onboarding
@@ -56,6 +57,7 @@ from backend.core import videotools
 from backend.core import errors
 from backend.core import health
 from backend.core import aicaps
+from backend.core import region
 from backend.core import legal
 from backend.core import legal_html
 from backend.core import studio
@@ -199,7 +201,7 @@ if _ORIGINS:
         allow_credentials=True,
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-Session-Id",
-                       "X-Admin-Token"],
+                       "X-Admin-Token", "X-AI-Route"],
         max_age=600,
     )
 
@@ -305,6 +307,42 @@ log = logging.getLogger("onetap")
 # The window has to be the request. Anything longer needs a TTL and can serve
 # one Render instance's stale copy to another; anything shorter does not help.
 # ---------------------------------------------------------------------------
+# Declared BEFORE _state_scope on purpose: Starlette wraps middleware in
+# reverse order of declaration, so this runs INSIDE the request's read cache
+# and its billing read is shared with the route instead of costing one more.
+# What a seller whose trial has ended (and who has not paid) can still reach:
+# signing in and out, their account, the plans, paying, and deleting their data.
+_OPEN_WHEN_LOCKED = ("/api/login", "/api/register", "/api/auth/", "/api/logout",
+                     "/api/forgot", "/api/reset", "/api/pricing", "/api/pay/",
+                     "/api/me", "/api/account", "/api/legal", "/api/languages",
+                     "/api/feedback", "/api/icons")
+
+
+@app.middleware("http")
+async def _trial_gate(request, call_next):
+    """Nothing is free after the 7-day trial. Every other seller API answers a
+    lapsed, unpaid account with one 402 ("trial_ended"), which the app turns
+    into the plan picker. One gate here rather than a check in 300 routes, so a
+    new route cannot forget it. Public pages, the storefront and shoppers are
+    never touched: only a request carrying a seller's own token is checked."""
+    path = request.url.path
+    auth_header = request.headers.get("authorization") or ""
+    if (path.startswith("/api/") and auth_header and not pricing.launch_mode()
+            and not path.startswith(_OPEN_WHEN_LOCKED)):
+        from starlette.concurrency import run_in_threadpool
+        try:
+            email = await run_in_threadpool(optional_user, auth_header)
+            locked = bool(email) and await run_in_threadpool(billing.is_locked_cached, email)
+        except Exception as e:  # noqa: BLE001 - a billing hiccup must not lock anyone out
+            errors.record(e, where="trial_gate")
+            locked = False
+        if locked:
+            return JSONResponse(status_code=402,
+                                content={"detail": billing.paywall("analytics", email),
+                                         "code": "trial_ended"})
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def _state_scope(request, call_next):
     # The weekly social auto-planner's ticker starts with the first request
@@ -312,6 +350,24 @@ async def _state_scope(request, call_next):
     # spawns a thread. It is one flag check after that.
     autoplan.ensure_scheduler()
     with user_store.request_scope():
+        return await call_next(request)
+
+
+@app.middleware("http")
+async def _ai_route(request, call_next):
+    """Tell the AI layer whether a person is waiting on this request.
+
+    That is what decides what a spent ChatGPT plan does: with somebody waiting,
+    they get the limit screen and choose; with nobody (the scheduler's own
+    threads, and the cron's calls to /api/admin/, which plan every seller's
+    week in one request) the app's AI writes instead, so one seller's spent
+    plan can never stop anyone's week being planned. X-AI-Route: app is the
+    browser repeating a request after the seller pressed "Use One Tap Manager
+    AI this time". Reads no account state, so where it sits among the
+    middlewares does not change what test_perf_resilience counts."""
+    route = "app" if (request.headers.get("x-ai-route") or "").strip().lower() == "app" else "auto"
+    waiting = not request.url.path.startswith("/api/admin/")
+    with aiprovider.request_context(interactive=waiting, route=route):
         return await call_next(request)
 
 
@@ -723,8 +779,18 @@ def login(body: LoginBody, request: Request):
     return {"token": token, "email": email, "usage": _usage(email), "plan": billing.get_plan(email)}
 
 
+def _start_trial(email: str, request: Request) -> None:
+    """Save the trial start date and billing currency at signup, before the
+    account is handed back. Never fails a signup."""
+    try:
+        reg = region.detect(request)
+        billing.start_trial(email, region.currency_for(reg), reg)
+    except Exception as e:  # noqa: BLE001
+        errors.record(e, where="billing.start_trial")
+
+
 @app.post("/api/register")
-def register(body: RegisterBody):
+def register(body: RegisterBody, request: Request):
     """Signup from the landing page. Free during launch, no card.
 
     The consent the form collected is written to its own append-only record
@@ -734,11 +800,14 @@ def register(body: RegisterBody):
     without this application running.
     """
     try:
-        auth.register(body.email, body.password, body.plan)
+        # Every signup starts on the trial. The plan is never taken from the
+        # browser: sending "promax" here used to create a paid account for free.
+        auth.register(body.email, body.password, "free")
     except ValueError as e:
         raise HTTPException(400, str(e))
     token = auth.login(body.email, body.password)
     email = body.email.strip().lower()
+    _start_trial(email, request)
     # The setup journey's record is made here, at sign-up, so "new account"
     # means signed up after the journey shipped, not "has no data yet".
     try:
@@ -766,9 +835,14 @@ class GoogleBody(BaseModel):
 @app.get("/api/auth/providers")
 def auth_providers():
     """What the sign-in screen may offer. The client id is public by design —
-    it is in the page source of every site that uses Google sign-in."""
+    it is in the page source of every site that uses Google sign-in. ChatGPT's
+    is not needed by the browser at all (the server builds OpenAI's URL), so
+    only whether it is on is said."""
     return {"google": {"enabled": google_auth.configured(),
-                       "client_id": google_auth.client_id()}}
+                       "client_id": google_auth.client_id()},
+            "chatgpt": {"enabled": chatgpt_auth.configured(),
+                        "plan_usage": chatgpt_auth.plan_usage_offered(),
+                        "help_url": chatgpt_auth.HELP_URL}}
 
 
 @app.post("/api/auth/google")
@@ -815,16 +889,251 @@ def auth_google(body: GoogleBody, request: Request):
         # written down anywhere — the seller uses "Forgot password" if they
         # later want to sign in without Google.
         auth.register(email, secrets.token_urlsafe(24), "free")
+        _start_trial(email, request)
         try:
             onboarding.create_for_new_account(email)
         except Exception:  # noqa: BLE001 - a signup must never fail on this
             pass
+        # The login card says "By continuing, you agree to the Terms and the
+        # Privacy Policy" under these buttons, so that agreement is recorded
+        # the same way the signup form's is. Marketing is never implied.
+        legal.record_consent(email, terms=True, privacy=True, marketing=False,
+                             source="google")
 
     google_auth.remember(email, claims)
     loginguard.succeeded(email, ip)
     token = auth.start_session(email)
     return {"token": token, "email": email, "usage": _usage(email),
             "plan": billing.get_plan(email), "new_account": existing is None}
+
+
+# ---------------------------------------------------------------------------
+# Sign in with ChatGPT
+# ---------------------------------------------------------------------------
+# Unlike Google, this is a full-page redirect: the browser goes to OpenAI and
+# comes back to /api/auth/chatgpt/callback, where the code is exchanged and the
+# ID token checked, all on this server (see backend/core/chatgpt_auth.py). The
+# app keeps its own session token in the browser, so the callback hands back a
+# one-time ticket in the URL FRAGMENT, which no server ever sees, and the page
+# trades it for a session at /api/auth/chatgpt/finish. No OpenAI code, token or
+# verifier is ever given to browser JavaScript.
+_SIWC_COOKIE = "cx_siwc"
+_SIWC_PATH = "/api/auth/chatgpt"
+
+
+class ChatGPTStartBody(BaseModel):
+    intent: str = "signin"     # "signin" from the login card, "connect" from Account
+    reconsent: bool = False    # ask for the plan again after an earlier "no"
+
+
+class ChatGPTFinishBody(BaseModel):
+    ticket: str
+    password: str = ""         # only when joining an existing password account
+
+
+def _siwc_back(fragment: str) -> RedirectResponse:
+    """Back to the workspace with a result the page understands, and the
+    attempt's cookie gone either way."""
+    resp = RedirectResponse(f"/smart#{fragment}", status_code=303)
+    resp.delete_cookie(_SIWC_COOKIE, path=_SIWC_PATH)
+    return resp
+
+
+def _siwc_owner(sub: str, users: dict) -> str | None:
+    """The account this ChatGPT identity already opens, if that account still
+    exists. A row left behind by a deleted account points at nobody."""
+    try:
+        owner = chatgpt_auth.index_get(sub)
+    except Exception as e:  # noqa: BLE001 — a lookup failure must not block sign-in
+        errors.record(e, where="chatgpt_auth.index_get")
+        owner = None
+    return owner if owner and owner in users else None
+
+
+def _siwc_link(email: str, claims: dict, tokens: dict) -> bool:
+    """Join this ChatGPT identity to `email` and keep the plan tokens, if the
+    seller granted them. True when their writing will now use their plan."""
+    chatgpt_auth.remember(email, claims)
+    plan = chatgpt_auth.save_tokens(email, tokens, claims)
+    if plan:
+        chatgpt_plan.after_new_grant(email)
+    cache.clear(email)
+    return plan
+
+
+@app.post("/api/auth/chatgpt/start")
+def auth_chatgpt_start(body: ChatGPTStartBody, request: Request,
+                       authorization: str | None = Header(default=None)):
+    """Begin Sign in with ChatGPT. Answers with the OpenAI address to send the
+    browser to, and sets the HttpOnly cookie that ties the callback to this
+    browser and to this attempt.
+
+    "connect" is a signed-in seller adding ChatGPT from the Account tab. Their
+    account comes from their session token, never from anything in the body."""
+    if not chatgpt_auth.configured():
+        raise HTTPException(404, "Sign in with ChatGPT is not set up on this server.")
+    intent = "connect" if body.intent == "connect" else "signin"
+    email = require_user(authorization) if intent == "connect" else ""
+    redirect = chatgpt_auth.redirect_uri(_public_base_url(request))
+    try:
+        tx_id, url = chatgpt_auth.begin(intent, redirect, email=email,
+                                        reconsent=bool(body.reconsent))
+    except chatgpt_auth.SiwcError as e:
+        raise HTTPException(503, str(e))
+    resp = JSONResponse({"url": url})
+    resp.set_cookie(_SIWC_COOKIE, tx_id, max_age=chatgpt_auth.TX_TTL, httponly=True,
+                    secure=not publicurl.is_local(request.url.hostname or ""),
+                    samesite="lax", path=_SIWC_PATH)
+    return resp
+
+
+@app.get("/api/auth/chatgpt/callback")
+def auth_chatgpt_callback(request: Request, code: str | None = None,
+                          state: str | None = None, error: str | None = None,
+                          client_id: str | None = None):
+    """Where OpenAI sends the browser back. The attempt is matched by its
+    cookie AND its state before anything else is looked at, an error included."""
+    try:
+        tx = chatgpt_auth.consume(request.cookies.get(_SIWC_COOKIE) or "", state or "")
+    except chatgpt_auth.SiwcError as e:
+        return _siwc_back(f"cx_chatgpt_error={e.code}")
+    if error:
+        if error == "invalid_scope":
+            # The client ID was not approved for the plan scopes. The seller
+            # sees a plain failure; whoever runs the server needs the reason.
+            errors.record(RuntimeError(
+                "OpenAI refused the ChatGPT plan scopes (invalid_scope). If this "
+                "client ID is approved for sign-in only, set CHATGPT_PLAN_USAGE=off."),
+                where="GET /api/auth/chatgpt/callback")
+        return _siwc_back("cx_chatgpt_error=" + ("access_denied" if error == "access_denied"
+                                                else "failed"))
+    # A callback naming a different client is not ours to act on.
+    if not code or (client_id and client_id != chatgpt_auth.client_id()):
+        return _siwc_back("cx_chatgpt_error=failed")
+    try:
+        tokens = chatgpt_auth.exchange_code(code, tx)
+        claims = chatgpt_auth.verify_id_token(tokens["id_token"], tx["nonce"])
+    except chatgpt_auth.SiwcError as e:
+        return _siwc_back(f"cx_chatgpt_error={e.code}")
+
+    users = auth.load_users()
+    owner = _siwc_owner(claims["sub"], users)
+
+    if tx["intent"] == "connect":
+        email = tx["email"]
+        if email not in users:
+            return _siwc_back("cx_chatgpt_error=expired")
+        if owner and owner != email:
+            # One ChatGPT account opens one shop. Moving it silently would
+            # lock the other account out of its own sign-in.
+            return _siwc_back("cx_chatgpt_error=linked_elsewhere")
+        plan = _siwc_link(email, claims, tokens)
+        return _siwc_back(f"cx_chatgpt=connected&plan={1 if plan else 0}")
+
+    # --- signing in from the login card ---
+    if owner:
+        _siwc_link(owner, claims, tokens)
+        return _siwc_back("cx_chatgpt=" + chatgpt_auth.issue_ticket(
+            "session", {"email": owner, "new": False}))
+    email = claims["email"]
+    if not email or not claims["email_verified"]:
+        # Without a verified address there is nothing safe to match or create on.
+        return _siwc_back("cx_chatgpt_error=email_unverified")
+    existing = users.get(email)
+    if existing is not None:
+        if (chatgpt_auth.identity(email) or {}).get("sub") == claims["sub"]:
+            _siwc_link(email, claims, tokens)          # and repairs the index row
+            return _siwc_back("cx_chatgpt=" + chatgpt_auth.issue_ticket(
+                "session", {"email": email, "new": False}))
+        # The google_auth.link_policy "verify" case: an account exists that we
+        # cannot prove belongs to this person, so its password is asked for once.
+        return _siwc_back("cx_chatgpt_link=" + chatgpt_auth.issue_ticket(
+            "link", {"email": email, "claims": claims, "tokens": tokens}))
+
+    # No account with this address: create one, exactly as the Google path does.
+    auth.register(email, secrets.token_urlsafe(24), "free")
+    _start_trial(email, request)
+    try:
+        onboarding.create_for_new_account(email)
+    except Exception:  # noqa: BLE001 - a signup must never fail on this
+        pass
+    legal.record_consent(email, terms=True, privacy=True, marketing=False,
+                         source="chatgpt")
+    _siwc_link(email, claims, tokens)
+    return _siwc_back("cx_chatgpt=" + chatgpt_auth.issue_ticket(
+        "session", {"email": email, "new": True}))
+
+
+@app.post("/api/auth/chatgpt/finish")
+def auth_chatgpt_finish(body: ChatGPTFinishBody, request: Request):
+    """Trade the one-time ticket from the callback for a session. For a ticket
+    that joins an existing password account, the password is checked first,
+    with the same throttling as the login form."""
+    rec = chatgpt_auth.take_ticket(body.ticket)
+    if not rec:
+        raise HTTPException(400, "That sign-in has expired. Press Continue with ChatGPT again.")
+    p = rec["payload"]
+    email = p["email"]
+    if rec["kind"] == "link":
+        ip = loginguard.client_ip(request)
+        allowed, wait = loginguard.check(email, ip)
+        if not allowed:
+            raise HTTPException(429, "Too many attempts. Try again in a few minutes.")
+        if wait:
+            time.sleep(min(wait, 8.0))
+        users = auth.load_users()
+        stored = users.get(email)
+        if stored is None or not body.password or \
+                not auth.verify_password(body.password.strip(), stored):
+            loginguard.failed(email, ip)
+            again = stored is not None and chatgpt_auth.return_ticket(body.ticket, rec)
+            raise HTTPException(401, "That password does not match the existing account."
+                                + ("" if again else " Press Continue with ChatGPT to start again."))
+        owner = _siwc_owner(p["claims"]["sub"], users)
+        if owner and owner != email:
+            raise HTTPException(409, "That ChatGPT account already signs in to a different "
+                                     "One Tap Manager account.")
+        loginguard.succeeded(email, ip)
+        _siwc_link(email, p["claims"], p["tokens"])
+    elif rec["kind"] != "session":
+        raise HTTPException(400, "That sign-in has expired. Press Continue with ChatGPT again.")
+    token = auth.start_session(email)
+    return {"token": token, "email": email, "usage": _usage(email),
+            "plan": billing.get_plan(email), "new_account": bool(p.get("new")),
+            "chatgpt": chatgpt_auth.status(email)}
+
+
+@app.get("/api/account/chatgpt")
+def account_chatgpt(authorization: str | None = Header(default=None)):
+    """The Account tab's ChatGPT card: who is connected, whether their writing
+    runs on their plan, and whether that plan is paused at its limit."""
+    return chatgpt_auth.status(require_user(authorization))
+
+
+@app.post("/api/account/chatgpt/disconnect")
+def account_chatgpt_disconnect(authorization: str | None = Header(default=None)):
+    """Stop using the seller's ChatGPT plan: the session is ended at OpenAI and
+    the tokens are dropped. Signing in with ChatGPT keeps working."""
+    email = require_user(authorization)
+    out = chatgpt_auth.disconnect(email)
+    cache.clear(email)
+    return {**out, "chatgpt": chatgpt_auth.status(email)}
+
+
+@app.post("/api/account/chatgpt/retry")
+def account_chatgpt_retry(authorization: str | None = Header(default=None)):
+    """"Try again" after a limit or a refusal: the seller may have raised the
+    limit for this app in ChatGPT, or upgraded. The next request finds out."""
+    email = require_user(authorization)
+    chatgpt_plan.retry_now(email)
+    return {"chatgpt": chatgpt_auth.status(email)}
+
+
+@app.post("/api/account/chatgpt/welcomed")
+def account_chatgpt_welcomed(authorization: str | None = Header(default=None)):
+    """The "You're using your ChatGPT plan" note was seen. It shows once."""
+    chatgpt_auth.mark_welcomed(require_user(authorization))
+    return {"ok": True}
 
 
 @app.post("/api/forgot")
@@ -867,6 +1176,30 @@ async def _cap_reached(request: Request, exc: aicaps.CapReached):
     return JSONResponse(status_code=429,
                         content={"detail": str(exc),
                                  "code": "monthly_image_cap" if monthly else "daily_cap"})
+
+
+@app.exception_handler(chatgpt_plan.LimitReached)
+async def _chatgpt_limit(request: Request, exc: chatgpt_plan.LimitReached):
+    """The seller's own ChatGPT usage is spent, or the limit they set for this
+    app in ChatGPT. A 429 with its own code, so the browser draws the ChatGPT
+    limit screen: "Manage usage" (ChatGPT's page, where the reset time and
+    credits are) first, "Use One Tap Manager AI this time" second. One handler,
+    so every writing route says it the same way and none turns it into a 500."""
+    return JSONResponse(status_code=429,
+                        content={"detail": str(exc), "code": "chatgpt_limit",
+                                 "chatgpt": exc.public()})
+
+
+@app.exception_handler(aicaps.PlanRequired)
+async def _plan_required(request: Request, exc: aicaps.PlanRequired):
+    """AI image or video generation on a plan without it (Pro, or a lapsed
+    trial). A 402 with the same paywall body every other gate sends, so the
+    browser opens the plans rather than showing a cap message. Registered
+    separately because Starlette picks the most specific handler."""
+    email = optional_user(request.headers.get("authorization"))
+    return JSONResponse(status_code=402,
+                        content={"detail": billing.paywall(exc.feature, email),
+                                 "code": "plan_required"})
 
 
 def _require_admin(x_admin_token: str | None) -> None:
@@ -997,15 +1330,16 @@ def _usage(email: str) -> dict:
         "positioning_credits": billing.credit_balance(email, "positioning_report"),
         "plan": billing.get_plan(email),
         "launch_mode": pricing.launch_mode(),
+        "billing": billing.plan_summary(email),
     }
 
 
-def _paywall(product_id: str, message: str = "") -> HTTPException:
+def _paywall(product_id: str, message: str = "", email: str | None = None) -> HTTPException:
     """402 with a structured detail the frontend recognises to open the pricing
     modal. The body names BOTH ways past it — the tier that includes this, and
     what it costs in credits — because a seller who works in bursts should not
     be told a monthly subscription is their only option."""
-    detail = billing.paywall(product_id)
+    detail = billing.paywall(product_id, email)
     if message:
         detail["message"] = message
     return HTTPException(status_code=402, detail=detail)
@@ -1108,9 +1442,13 @@ def icon_set():
 
 
 @app.get("/api/pricing")
-def get_pricing():
-    """Public catalog + launch-mode flag — drives both landing page and in-app pricing UI."""
-    return pricing.public_catalog()
+def get_pricing(request: Request, authorization: str | None = Header(default=None)):
+    """Public catalog in the right currency: a signed-in seller's billing
+    currency, else the visitor's region (region.py). Drives the landing page
+    and the in-app plan picker."""
+    email = optional_user(authorization)
+    ccy = billing.billing_currency(email) if email else region.detect_currency(request)
+    return pricing.public_catalog(ccy)
 
 
 @app.get("/api/connectors")
@@ -1268,7 +1606,7 @@ async def analyze_complaints_endpoint(product_type: str | None = None,
     if not pricing.launch_mode():
         email = require_user(authorization)
         if not billing.check_and_consume(email, "complaints"):
-            raise _paywall("complaints")
+            raise _paywall("complaints", email=email)
     pt = _resolve_product_type(authorization, product_type)
     f = files[0]
     content = await f.read()
@@ -1829,7 +2167,8 @@ def content_current_suggestion(authorization: str | None = Header(default=None))
     lazily on first Details open."""
     email = require_user(authorization)
     stored = user_store.get_key(email, "content_current_suggestion", None) or {}
-    return {"suggestion": stored, "openai": content_gen.is_openai_available()}
+    return {"suggestion": stored, "openai": content_gen.is_openai_available(),
+            "chatgpt": aiprovider.plan_ready(email)}
 
 
 @app.post("/api/content/suggestion/generate")
@@ -1840,7 +2179,8 @@ def content_suggestion_generate(insight_id: str,
     full = smart.get_or_generate_content(email, insight_id, force=False)
     if not full:
         raise HTTPException(404, "That suggestion is no longer active, refresh the panel.")
-    return {"suggestion": full, "openai": content_gen.is_openai_available()}
+    return {"suggestion": full, "openai": content_gen.is_openai_available(),
+            "chatgpt": aiprovider.plan_ready(email)}
 
 
 class ContentEditBody(BaseModel):
@@ -2460,7 +2800,7 @@ async def analyze_positioning(lang: str = "en", product_type: str | None = None,
     if not pricing.launch_mode():
         email = require_user(authorization)
         if not billing.check_and_consume(email, "positioning"):
-            raise _paywall("positioning")
+            raise _paywall("positioning", email=email)
     f = files[0]
     ext = os.path.splitext(f.filename or "")[1].lower()
     if ext not in SUPPORTED_EXTENSIONS:
@@ -2522,7 +2862,7 @@ def generate_winback(x_session_id: str | None = Header(default=None),
     # charging per campaign taxes the exact behaviour that proves the
     # product works and creates the habit worth renewing.
     if not billing.check_and_consume(email, "winback_campaign"):
-        raise _paywall("winback_campaign")
+        raise _paywall("winback_campaign", email=email)
 
     # template + market-basket-analysis based — no OpenAI call, no rate limit needed
     results = templates.build_winback_messages(customers)
@@ -2711,21 +3051,11 @@ def export_winback_edited(body: WinbackExportBody,
 # AI features (login + rate limit, same as original)
 # ---------------------------------------------------------
 def _consume_ai_use(email: str, feature: str) -> None:
-    """Daily free quota first, then paid top-up credits, else paywall.
-    Launch mode and Pro are unlimited."""
+    """Paid plans and a live trial are unlimited; a lapsed trial is not."""
     if pricing.launch_mode() or billing.is_unlimited(email):
         auth.check_usage_limit(email, feature)  # still log usage for analytics; never blocks here
         return
-    if auth.check_usage_limit(email, feature):
-        return
-    if billing.spend_credits(email, pricing.credits_for("ai_use")):
-        return
-    quota = pricing.ai_quota(billing.get_plan(email))
-    raise _paywall(
-        "ai_use",
-        f"You've used today's {quota} free AI runs. Max removes the daily limit "
-        f"— or spend credits, which never expire.",
-    )
+    raise _paywall("ai_use", email=email)
 
 
 @app.post("/api/analyst")
@@ -2738,7 +3068,7 @@ def run_analyst(x_session_id: str | None = Header(default=None),
     _consume_ai_use(email, "analyst_ai")
     named = {sess.file_names[fid]: df for fid, df in sess.raw_dfs.items()}
     try:
-        results = ai.run_business_analyst(named)
+        results = ai.run_business_analyst(named, email=email)
     except RuntimeError as e:
         raise HTTPException(500, str(e))
     return {"results": results, "usage": _usage(email)}
@@ -2754,9 +3084,15 @@ def chat(body: ChatBody, x_session_id: str | None = Header(default=None),
     sess.chat_messages.append({"role": "user", "content": body.message})
     first = not sess.used_initial_prompt
     try:
-        result = ai.run_chat(sess.raw_dfs, sess.chat_messages, first_time=first)
+        result = ai.run_chat(sess.raw_dfs, sess.chat_messages, first_time=first, email=email)
     except RuntimeError as e:
         raise HTTPException(500, str(e))
+    except chatgpt_plan.LimitReached:
+        # The question stays unanswered, so it must not stay in the history:
+        # "Use One Tap Manager AI this time" sends it again, and it would
+        # otherwise be asked twice in a row.
+        sess.chat_messages.pop()
+        raise
     sess.used_initial_prompt = True
     sess.chat_messages.append({"role": "assistant", "content": result["reply"]})
     return {**result, "usage": _usage(email)}
@@ -2789,8 +3125,11 @@ class VerifyBody(BaseModel):
 def create_order(body: OrderBody, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
     current = billing.get_plan(email)
-    if body.product == current:
-        raise HTTPException(400, f"You are already on {pricing.get_plan(current)['name']}.")
+    until = billing.paid_until(email)
+    if (pricing.normalize_plan(body.product) == current and billing.paid_active(email)
+            and until and (until - _dt.datetime.now(_dt.timezone.utc)).days > 7):
+        raise HTTPException(400, f"You are already on {pricing.get_plan(current)['name']}. "
+                                 f"You can renew in the last week of the month.")
     try:
         return billing.create_order(email, body.product)
     except ValueError as e:
@@ -5609,6 +5948,7 @@ def robots(request: Request):
 # its own sitemap at /s/<handle>/sitemap.xml.
 PUBLIC_PAGES = [
     ("/", "1.0", "weekly"),
+    ("/in", "0.8", "weekly"),
     ("/legal", "0.5", "monthly"),
     ("/legal/privacy", "0.4", "monthly"),
     ("/legal/terms", "0.4", "monthly"),
@@ -5636,12 +5976,13 @@ PUBLIC_PAGES = [
 # time somebody forgot it.
 _LEGAL_SRC = os.path.join(os.path.dirname(__file__), "core", "legal.py")
 _LANDING_SRC = os.path.join(STATIC_DIR, "landing.html")
+_LANDING_US_SRC = os.path.join(STATIC_DIR, "landing-us.html")
 _GEO_SRC = os.path.join(os.path.dirname(__file__), "core", "geo.py")
 
 
 def _lastmod(path: str) -> str:
     """The date the source behind this URL last actually changed."""
-    src = (_LANDING_SRC if path == "/"
+    src = (_LANDING_US_SRC if path == "/" else _LANDING_SRC if path == "/in"
            else _GEO_SRC if path in geo.paths() else _LEGAL_SRC)
     try:
         return _dt.date.fromtimestamp(os.path.getmtime(src)).isoformat()
@@ -6156,22 +6497,51 @@ def _pretty_shop(path: str):
 _LANDING_CACHE: dict[str, str] = {}
 
 
-@app.get("/")
-def landing(request: Request):
-    base = _public_base_url(request)
-    cached = _LANDING_CACHE.get(base)
+def _landing_html(filename: str, base: str) -> str:
+    key = filename + "|" + base
+    cached = _LANDING_CACHE.get(key)
     if cached is None:
-        with open(os.path.join(STATIC_DIR, "landing.html"), encoding="utf-8") as fh:
+        with open(os.path.join(STATIC_DIR, filename), encoding="utf-8") as fh:
             cached = (fh.read().replace("__BASE_URL__", base)
                       .replace('["__SAME_AS__"]', geo.same_as_json()))
-        # One entry per host, so a seller domain and the app's own host do not
-        # keep evicting each other. Bounded, because this is a public endpoint
-        # and Host is attacker-controlled.
-        if len(_LANDING_CACHE) > 8:
+        # One entry per page and host, so a seller domain and the app's own host
+        # do not keep evicting each other. Bounded, because this is a public
+        # endpoint and Host is attacker-controlled.
+        if len(_LANDING_CACHE) > 16:
             _LANDING_CACHE.clear()
-        _LANDING_CACHE[base] = cached
-    return Response(content=cached, media_type="text/html",
+        _LANDING_CACHE[key] = cached
+    return cached
+
+
+def _landing_response(filename: str, request: Request) -> Response:
+    resp = Response(content=_landing_html(filename, _public_base_url(request)),
+                    media_type="text/html",
                     headers={"Cache-Control": "public, max-age=300"})
+    _remember_region(request, resp)
+    return resp
+
+
+def _remember_region(request: Request, resp: Response) -> None:
+    """A visible "Prices in ₹ / $" choice (?region=in|us) sticks for a year,
+    so /api/pricing and the plan picker agree with the page they came from."""
+    chosen = region.explicit_choice(request)
+    if chosen:
+        resp.set_cookie(region.COOKIE, chosen, max_age=365 * 86400,
+                        samesite="lax", secure=request.url.scheme == "https")
+
+
+@app.get("/")
+def landing(request: Request):
+    """The US home page: the primary market from September 2026. The India
+    home is /in; hreflang ties the two (and /hi) together, and each page
+    offers the other with a visible link rather than an IP redirect, so a
+    crawler and a traveller both see the page the URL names."""
+    return _landing_response("landing-us.html", request)
+
+
+@app.get("/in")
+def landing_india(request: Request):
+    return _landing_response("landing.html", request)
 
 
 @app.get("/app")
@@ -6196,17 +6566,25 @@ def app_page():
 def _geo_page(path: str, request: Request) -> Response:
     # Query parameters only matter to a page with a calculator (the reorder
     # point guide); every other page ignores them.
-    html = geo.render(path, _public_base_url(request), dict(request.query_params))
+    # Prices follow the visitor's region (dollars unless they are in India), so
+    # the page varies by the same inputs region.detect reads.
+    html = geo.render(path, _public_base_url(request), dict(request.query_params),
+                      ccy=region.detect_currency(request))
     if not html:
         raise HTTPException(404, "No such page.")
-    return Response(content=html, media_type="text/html",
-                    headers={"Cache-Control": "public, max-age=3600"})
+    resp = Response(content=html, media_type="text/html", headers=_GEO_HEADERS)
+    _remember_region(request, resp)
+    return resp
+
+
+_GEO_HEADERS = {"Cache-Control": "public, max-age=3600",
+                "Vary": "CF-IPCountry, Accept-Language, Cookie"}
 
 
 @app.get("/guides", response_class=Response)
 def geo_guides(request: Request):
-    return Response(content=geo.hub(_public_base_url(request)), media_type="text/html",
-                    headers={"Cache-Control": "public, max-age=3600"})
+    return Response(content=geo.hub(_public_base_url(request), region.detect_currency(request)),
+                    media_type="text/html", headers=_GEO_HEADERS)
 
 
 @app.get("/about", response_class=Response)
@@ -6657,6 +7035,10 @@ def social_home(authorization: str | None = Header(default=None)):
         "radar": social.radar(email),
         "working": social.whats_working(email),
         "ai": aiprovider.status(),
+        # Whether this seller's captions are written on their own ChatGPT plan,
+        # so the header can say so and link to ChatGPT's usage page. Fenced: a
+        # problem there must not take the Social screen down.
+        "chatgpt": _safe_chatgpt_status(email),
         "offer_cap": social.OFFER_CAP_PERCENT,
         "catalogue_size": len(_social_catalogue(email)),
         "autoplan": _safe_autoplan_status(email),
@@ -6666,6 +7048,14 @@ def social_home(authorization: str | None = Header(default=None)):
         # planning works perfectly well with Instagram disconnected.
         "instagram": _safe_instagram_status(email),
     }
+
+
+def _safe_chatgpt_status(email: str) -> dict:
+    try:
+        return chatgpt_auth.status(email)
+    except Exception as e:  # noqa: BLE001
+        errors.record(e, where="chatgpt_auth.status", email=email)
+        return {"enabled": False}
 
 
 def _safe_instagram_status(email: str) -> dict:
@@ -6870,8 +7260,14 @@ def ai_write(body: AiWriteBody, authorization: str | None = Header(default=None)
     """The ✨ on any text field: write it, or improve what is there, in the
     brand's voice and from the seller's own facts only."""
     email = require_user(authorization)
+    # On the seller's own ChatGPT plan the usage is theirs and OpenAI meters it,
+    # so neither our daily spend guard nor their credit balance is touched, the
+    # same rule as their own OpenAI key for pictures. If the plan cannot write
+    # this one and our AI does, it is counted as ours below.
+    on_plan = aiprovider.plan_ready(email)
     try:
-        aicaps.check(email, "text")
+        if not on_plan:
+            aicaps.check(email, "text")
     except aicaps.CapReached:
         raise
     except Exception:  # noqa: BLE001 — the cap is a guard, not a dependency
@@ -6879,7 +7275,7 @@ def ai_write(body: AiWriteBody, authorization: str | None = Header(default=None)
     res = writer.write_field(email, body.kind or "general", body.label or "",
                              body.current or "", body.context or {}, body.instruction or "")
     try:
-        if res.get("ai"):
+        if res.get("ai") and res.get("provider") != "chatgpt":
             aicaps.consume(email, "text")
             from backend.core import credits
             credits.spend(email, "text")

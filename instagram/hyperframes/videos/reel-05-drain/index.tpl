@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!--HEAD-->
+    <style>
+      .coin { position: absolute; left: 0; top: 0; width: 150px; height: 150px; margin: -75px 0 0 -75px; border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #FCE7A8, #D8A844 55%, #9A6C1C); box-shadow: inset 0 0 0 7px #B88A2E, 0 12px 24px rgba(60, 40, 10, 0.3);
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+      .coin b { font-family: var(--mono); font-weight: 700; font-size: 30px; color: #3B2A0A; letter-spacing: -0.03em; }
+      .rcpt { position: absolute; left: 160px; top: 318px; width: 760px; background: var(--paper2); padding: 90px 42px 60px; font-family: var(--mono); font-weight: 500; font-size: 34px; color: var(--ink); box-shadow: 0 20px 50px rgba(16, 24, 40, 0.2); }
+      .rcpt .row { display: flex; justify-content: space-between; height: 64px; align-items: center; white-space: nowrap; }
+      .rcpt .rule { border-top: 4px dashed rgba(16, 24, 40, 0.35); margin: 14px 0; height: 0; }
+      .slot { position: absolute; left: 130px; top: 300px; width: 820px; height: 26px; border-radius: 13px; background: #2B2F36; z-index: 3; }
+      .price { position: absolute; left: 72px; font-family: var(--mono); font-weight: 700; letter-spacing: -0.05em; line-height: 1; color: var(--marigold); }
+    </style>
+  </head>
+  <body>
+    <!--STAGE-->
+    <script src="reward.js"></script>
+    <script>
+      const tl = L.init();
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+      const at = T.at, H = T.hook, EC = at("EC");
+      const L1 = at("L1"), L2 = at("L2"), L3 = at("L3"), L4 = at("L4"), L5 = at("L5");
+      const tRip = at("L3e") + 0.6;
+
+      // ================= HOOK · a gold necklace slips down the sink drain, fingers pinch it out =================
+      const chainD = "M200 440 C360 520 420 640 360 780 C300 900 420 980 540 1000";
+      const hook = L.scene(0, at("L1.2") + 1.0, { bg: "#E8E2D6", vignette: false });
+      const shake = L.div("fill", hook.cam);
+      shake.innerHTML = `<svg width="1080" height="1920" viewBox="0 0 1080 1920">
+        <defs>
+          <radialGradient id="steel" cx=".5" cy=".45" r=".7"><stop offset="0" stop-color="#E3E7EB"/><stop offset=".7" stop-color="#B8BFC7"/><stop offset="1" stop-color="#8E97A1"/></radialGradient>
+          <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FCE7A8"/><stop offset=".5" stop-color="#D4A640"/><stop offset="1" stop-color="#9A6C1C"/></linearGradient>
+          <mask id="tail" maskUnits="userSpaceOnUse" x="0" y="0" width="1080" height="1920"><path id="tailM" d="${chainD}" fill="none" stroke="#fff" stroke-width="40" pathLength="1" style="stroke-dasharray:1 2;stroke-dashoffset:0"/></mask>
+          <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="6" dy="8" stdDeviation="4" flood-color="#3B2A0A" flood-opacity=".35"/></filter>
+        </defs>
+        <rect width="1080" height="1920" fill="#E8E2D6"/>
+        <g fill="#D3CBBC">${Array.from({ length: 40 }, (_, k) => `<circle cx="${(k * 137) % 1080}" cy="${(k * 263) % 1920}" r="${2 + (k % 3)}"/>`).join("")}</g>
+        <rect x="80" y="350" width="920" height="1230" rx="90" fill="#8E97A1"/>
+        <rect x="100" y="370" width="880" height="1190" rx="80" fill="url(#steel)"/>
+        <g stroke="#FFFFFF" stroke-opacity=".25" stroke-width="3">${Array.from({ length: 12 }, (_, k) => `<line x1="140" y1="${420 + k * 95}" x2="940" y2="${440 + k * 95}"/>`).join("")}</g>
+        <rect x="470" y="250" width="140" height="120" rx="30" fill="#C9CFD6" stroke="#8E97A1" stroke-width="6"/>
+        <g id="water" fill="none" stroke="#FFFFFF" stroke-linecap="round" opacity=".6"><path d="M540 380 C545 520 530 640 520 760" stroke-width="10"/><path d="M510 800 C470 860 500 930 540 990" stroke-width="5" opacity=".6"/></g>
+        <g id="chain" filter="url(#sh)" mask="url(#tail)">
+          <path id="links" d="${chainD}" fill="none" stroke="url(#gold)" stroke-width="16" stroke-linecap="round" style="stroke-dasharray:18 7"/>
+          <path id="holes" d="${chainD}" fill="none" stroke="#7A5616" stroke-width="5" stroke-linecap="round" style="stroke-dasharray:7 18;stroke-dashoffset:-6"/>
+        </g>
+        <g id="pendant"><ellipse cx="0" cy="0" rx="20" ry="26" fill="url(#gold)" stroke="#9A6C1C" stroke-width="3"/><circle cx="0" cy="-30" r="7" fill="none" stroke="#D4A640" stroke-width="4"/></g>
+        <circle cx="540" cy="1000" r="74" fill="#6F7780"/><circle cx="540" cy="1000" r="58" fill="#2A2D31"/>
+        <g stroke="#8E97A1" stroke-width="7">${Array.from({ length: 6 }, (_, k) => { const a = (k / 6) * Math.PI; return `<line x1="${540 + Math.cos(a) * 52}" y1="${1000 + Math.sin(a) * 52}" x2="${540 - Math.cos(a) * 52}" y2="${1000 - Math.sin(a) * 52}"/>`; }).join("")}</g>
+        <g id="hand" filter="url(#sh)"><path d="M0 0 C-10 -40 -30 -80 -20 -120 C-12 -150 18 -150 26 -120 C36 -80 30 -40 40 0 Z" fill="#C68B5E"/><ellipse cx="3" cy="-128" rx="16" ry="12" fill="#E7B99A"/><path d="M60 20 C40 -20 30 -70 50 -100 C64 -120 92 -110 92 -80 C92 -40 90 -10 100 20 Z" fill="#B97D52"/><ellipse cx="66" cy="-100" rx="14" ry="10" fill="#E2B08F"/></g>
+      </svg>`;
+      const hs = shake.querySelector("svg");
+      const links = hs.querySelector("#links"), holes = hs.querySelector("#holes"), tailM = hs.querySelector("#tailM"), pendant = hs.querySelector("#pendant"), hand = hs.querySelector("#hand");
+      // the chain slides toward the drain: its links move along the path, its tail shortens
+      const tPinch = 2.5;
+      tl.fromTo(links, { strokeDashoffset: 0 }, { strokeDashoffset: -260, duration: tPinch, ease: "power1.in" }, 0);
+      tl.fromTo(holes, { strokeDashoffset: -6 }, { strokeDashoffset: -266, duration: tPinch, ease: "power1.in" }, 0);
+      tl.fromTo(tailM, { strokeDashoffset: 0 }, { strokeDashoffset: -0.45, duration: tPinch, ease: "power1.in" }, 0);
+      const probe = L.s(L.svg(hook, "visibility:hidden"), "path", { d: chainD });
+      const len = probe.getTotalLength();
+      const ease = gsap.parseEase("power1.in");
+      let pinchPt;
+      for (let f = 0; f <= Math.round(tPinch * 30); f++) {
+        const t = f / 30, s = 0.45 * ease(t / tPinch) * len;
+        const p = probe.getPointAtLength(s);
+        tl.set(pendant, { x: p.x - 8, y: p.y - 14, rotation: 20 }, t);
+        if (f === Math.round(tPinch * 30)) pinchPt = probe.getPointAtLength(s + 60);
+      }
+      // two fingers come in and pinch it out; the lift toward the camera
+      tl.fromTo(hand, { x: 1100, y: 1500 }, { x: pinchPt.x - 30, y: pinchPt.y + 130, duration: 0.45, ease: "power2.out" }, 2.05);
+      const lift = [hs.querySelector("#chain"), pendant, hand];
+      tl.to(lift, { scale: 1.07, transformOrigin: `${pinchPt.x}px ${pinchPt.y}px`, duration: 0.4, ease: "power2.out" }, tPinch);
+      tl.to(hs.querySelector("#water"), { opacity: 0.35, duration: 0.3 }, tPinch);
+      gsap.set(hook.cam, { scale: 1.3, transformOrigin: "400px 760px" });
+      L.handheld(shake, 0, H - 0.05, 5, 31);
+      tl.to(shake, { x: 0, y: 0, rotation: 0, duration: 0.05 }, H - 0.05);
+      tl.fromTo(shake, { filter: "blur(5px)" }, { filter: "blur(0px)", duration: 0.4 }, 0);
+      L.aiChip(hook);
+      L.flash(H);
+      L.drain(hook, H + 0.07, 0.6);
+      L.ink(L.svg(hook.cam), chainD, H + 0.1, 0.6, { w: 8 });
+      tl.to(hook, { autoAlpha: 0, duration: 0.6 }, at("L1.2") + 0.2);
+
+      // ================= BEAT 1 to 3 · paper: links become coins, down the drain; the receipt =================
+      const pp = L.scene(H + 0.3, tRip + 0.7, { bg: "paper" });
+      L.fadeIn(pp, H + 0.3, 0.5);
+      pp.parentNode.insertBefore(pp, hook);
+      const ink = L.svg(pp.cam);
+      const DR = { x: 540, y: 1120 };
+      const drainC = L.s(ink, "circle", { cx: DR.x, cy: DR.y, r: 92, fill: "#101828" });
+      L.pop(drainC, H + 0.5, { from: 0.2 });
+      const drainRim = ink.lastElementChild;
+      L.ink(ink, `M${DR.x - 120} ${DR.y + 10} C${DR.x - 110} ${DR.y - 70} ${DR.x + 110} ${DR.y - 70} ${DR.x + 124} ${DR.y + 6}`, H + 0.6, 0.4, { w: 6 });
+      const prices = ["$49", "$49", "$20", "$18.75"];
+      const cal = `<svg width="34" height="30" viewBox="0 0 34 30"><rect x="2" y="5" width="30" height="23" rx="4" fill="none" stroke="#3B2A0A" stroke-width="3"/><path d="M2 12 H32 M10 1 V8 M24 1 V8" stroke="#3B2A0A" stroke-width="3"/></svg>`;
+      const coinStarts = [0.12, 0.2, 0.28, 0.36].map((s) => probe.getPointAtLength(s * len));
+      const coins = prices.map((p, i) => L.div("coin", pp.cam, "visibility:hidden", `${cal}<b>${p}</b>`));
+      const drop = L.series("L1.2", at("L1.3e") - 0.2, 4);
+      coins.forEach((c, i) => {
+        const t = drop[i] - 0.5, st = coinStarts[i];
+        tl.set(c, { visibility: "visible" }, t);
+        tl.fromTo(c, { x: st.x, y: st.y, rotationY: 90, scale: 0.4 }, { rotationY: 0, scale: 1, duration: 0.3, ease: "back.out(2)" }, t);
+        const land = { x: 140 + i * 90, y: DR.y - 20 };
+        tl.to(c, { x: DR.x - 260 + i * 40, y: DR.y, rotation: 360, duration: 0.45, ease: "power1.in" }, t + 0.3);
+        // spiral into the drain
+        for (let f = 1; f <= 15; f++) {
+          const p = f / 15, a = Math.PI + p * Math.PI * 3, r = 260 * (1 - p) - i * 10 * (1 - p);
+          tl.set(c, { x: DR.x + Math.cos(a) * r, y: DR.y + Math.sin(a) * r * 0.45, scale: 1 - p * 0.8, rotation: 360 + p * 540 }, t + 0.75 + f / 30);
+        }
+        tl.set(c, { visibility: "hidden" }, t + 0.75 + 16 / 30);
+      });
+      tl.to([drainC, ink.querySelector("path:last-of-type")], { autoAlpha: 0, duration: 0.3 }, L2 - 0.3);
+      // Beat 2 · the receipt prints down from a slot, line by line with the voice
+      const slot = L.div("slot", pp.cam);
+      L.fadeIn(slot, at("L1e") + 0.3, 0.3);
+      tl.fromTo(slot, { scaleX: 0 }, { scaleX: 1, duration: 0.35, ease: "power3.out" }, at("L1e") + 0.3);
+      const rc = L.div("rcpt", pp.cam);
+      L.chip(rc, "STARTING PRICES · SEPT 2026", "left:42px;top:28px");
+      const rows = [["Analytics app", "$49.00"], ["Inventory app", "$49.00"], ["Win-back email app", "$20.00"], ["Instagram planner", "$18.75"]];
+      rows.forEach(([a, b]) => L.div("row", rc, "", `<span>${a}</span><span>${b}</span>`));
+      L.div("rule", rc);
+      L.div("row", rc, "color:var(--leak);font-weight:700", `<span>Total per month</span><span>$136.75</span>`);
+      L.div("", rc, "height:560px");
+      const rowBottom = (k) => 90 + 64 * (k + 1);
+      const fullH = 90 + 64 * 5 + 32 + 560 + 60;
+      const ins = (b) => `inset(0px 0px ${b}px 0px)`;
+      rc.style.clipPath = ins(fullH);
+      let prev = fullH;
+      const step = (to, t, d, e) => { tl.fromTo(rc, { clipPath: ins(prev) }, { clipPath: ins(to), duration: d, ease: e, immediateRender: false }, t); prev = to; };
+      L.series("L2", at("L2.1e"), 4).forEach((t, k) => step(fullH - rowBottom(k), t, 0.25, "steps(4)"));
+      step(fullH - (rowBottom(4) + 32), at("L2.2:thirty") - 0.3, 0.3, "steps(4)");
+      // Beat 3 · it keeps printing past the bottom; the camera tilts down with it
+      step(0, L3, 1.2, "none");
+      tl.to(pp.cam, { y: -430, duration: 1.2, ease: "power2.inOut" }, L3 + 0.2);
+      const yr = L.div("abs", pp.cam, "left:200px;top:1170px;width:680px");
+      L.div("", yr, "font-family:var(--mono);font-weight:600;font-size:44px;color:var(--ink)", "$136.75 &times; 12 =");
+      L.counter(yr, "position:relative;display:block;margin-top:10px;font-family:var(--mono);font-weight:700;font-size:150px;letter-spacing:-.05em;color:var(--leak);line-height:1", "", 136.75, 1641, at("L3:sixteen") - 0.2, 0.9, (v) => "$" + Math.round(v).toLocaleString("en-US"), { steps: 24, ease: "power2.out" });
+      L.div("", yr, "font-weight:800;font-size:56px;color:var(--leak);margin-top:6px", "a year");
+      L.div("label", yr, "margin-top:14px;font-size:28px", "before platform fees");
+      L.rise(yr, at("L3:sixteen") - 0.4, { y: 30 });
+
+      // ================= BEAT 4 + 5 · night: four coins become one =================
+      const nt = L.scene(tRip, EC, { bg: "night" });
+      L.ripple(nt, tRip, 540, 700);
+      const NDR = { x: 540, y: 1790 };
+      const nsv = L.svg(nt.cam);
+      L.s(nsv, "ellipse", { cx: NDR.x, cy: NDR.y, rx: 140, ry: 44, fill: "#05070B" });
+      L.s(nsv, "ellipse", { cx: NDR.x, cy: NDR.y, rx: 140, ry: 44, fill: "none", stroke: "#F5A623", "stroke-width": 5 });
+      const C0 = { x: 540, y: 560 };
+      ["M470 1760 C380 1400 300 900 470 620", "M520 1760 C480 1300 420 900 520 640", "M560 1760 C640 1300 700 900 560 640", "M610 1760 C720 1400 800 900 610 620"].forEach((d, i) => L.dotted(nsv, d, L4 + i * 0.12, 0.6, { w: 4, dash: "2 14", color: "rgba(245,166,35,.55)" }));
+      // a blurred receipt behind, crumpling and dropping out
+      const ncoins = prices.map((p, i) => L.div("coin", nt.cam, "visibility:hidden", `${cal}<b>${p}</b>`));
+      ncoins.forEach((c, i) => {
+        const t = L4 + i * 0.15;
+        tl.set(c, { visibility: "visible" }, t);
+        tl.fromTo(c, { x: NDR.x + (i - 1.5) * 50, y: NDR.y, scale: 0.3 }, { x: C0.x + [-230, -80, 80, 230][i], y: C0.y + [60, -40, -40, 60][i], scale: 0.9, duration: 0.5, ease: "power3.out" }, t);
+        for (let f = 1; f <= 12; f++) {
+          const a = (i / 4) * Math.PI * 2 + (f / 12) * Math.PI * 2, r = 220 * (1 - f / 16);
+          tl.set(c, { x: C0.x + Math.cos(a) * r, y: C0.y + Math.sin(a) * r * 0.6 }, L4 + 0.65 + f / 30);
+        }
+        tl.to(c, { x: C0.x, y: C0.y, scale: 0.4, autoAlpha: 0, duration: 0.2, ease: "power2.in" }, L4 + 1.05);
+      });
+      const big = L.div("abs", nt.cam, `left:${C0.x - 160}px;top:${C0.y - 160}px;width:320px;height:320px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#3D5FC4,#1E3A8A 60%,#142A66);box-shadow:inset 0 0 0 12px #F5A623,0 0 60px rgba(245,166,35,.45);display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:130px;letter-spacing:-.06em;color:var(--paper)`, "1T");
+      L.pop(big, L4 + 1.1, { from: 0.3, dur: 0.5 });
+      L.drift(big, L4 + 1.6, EC, { period: 4, y: -10, x: 0, r: 2 });
+      const tPrice = at("L4.1:twelve");
+      L.slam(L.div("price", nt.cam, "top:790px;font-size:210px", "$12.99"), tPrice);
+      L.rise(L.div("abs on-night", nt.cam, "left:78px;top:1010px;font-weight:800;font-size:60px;letter-spacing:-.02em", "a month"), tPrice + 0.3);
+      L.rise(L.div("abs on-night", nt.cam, "left:78px;top:1096px;font-weight:600;font-size:40px;color:var(--sky)", "Pro Max · all four jobs"), tPrice + 0.5);
+      L.rise(L.div("abs on-night", nt.cam, "left:78px;top:1152px;font-weight:600;font-size:34px;color:var(--sky);opacity:.85", "Pro: $10 a month"), tPrice + 0.65);
+      L.stamp(nt.cam, "FLAT", at("L4.2"), { x: 410, y: 984, color: "indigo", size: 50, r: 8, css: "color:#A9C1F5" });
+      // Beat 5 · the promise
+      L.chip(nt.cam, "7-DAY FREE TRIAL", "left:78px;top:1240px;font-size:26px", L5).classList.add("dark");
+      const promise = L.div("abs on-night", nt.cam, "left:78px;top:1300px;font-weight:800;font-size:66px;letter-spacing:-.03em;white-space:nowrap", `<span class="green">0%</span> of your sales. <span class="hl"><i></i>Ever.</span>`);
+      L.wipeIn(promise, at("L5.2"), 0.6);
+      L.hl(promise, at("L5.2:sales") + 0.1);
+
+      // ================= end card =================
+      L.flip(nt, EC - 0.45);
+      const ecScene = L.endCard(EC - 0.45, "Comment PRICE.", { anim: EC });
+      gsap.set(ecScene.cam, { y: 30 }); // a little room for the Attention Legend card above the logo
+
+      // ================= ATTENTION SPAN LEADERBOARD =================
+      // Opens as a full-screen "ATTENTION TEST" card (the pre-roll) that lands as the meter.
+      // Top 100% at the start; one tier per story beat; Top 0.01% for watching to the very end.
+      const focusSecs = Math.round(T.total);
+      const tBar = L.attentionTest({ top: 140, secs: focusSecs });
+      L.attention({
+        start: tBar,
+        enter: "fade",
+        top: 140,
+        times: [H + 0.1, L2, L3, L4, at("L4.1:twelve"), L5, EC + 0.6],
+        labels: [
+          { t: 1.25, until: 2.45, text: `${focusSecs}s OF FOCUS · TOP 0.01%`, color: "#A9C1F5" },
+          { t: at("L4.1:twelve") + 1.5, until: L5 - 0.1, text: "DON'T BREAK THE STREAK", color: "#F08A63" },
+          { t: EC - 1.25, until: EC - 0.05, text: "HOLD YOUR FOCUS", color: "#FFD66B" },
+        ],
+        countdown: EC - 0.9,
+      });
+      L.legend(EC + 0.6, { hold: T.total - EC, top: 264, sub: `${focusSecs} seconds of unbroken focus. Rank resets next reel. Follow and go longer.` });
+      L.captions({ hide: [["L2", "L3e+0.5"], ["L4.1:twelve", "L5e+0.6"]] });
+      L.done();
+    </script>
+  </body>
+</html>

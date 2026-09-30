@@ -13,12 +13,14 @@ brand's own voice from Product Studio, and each place only says WHAT it needs.
 
 WHO WRITES
 ----------
-`aiprovider.generate(..., role="writer")`, which tries Puter first when
-PUTER_AUTH_TOKEN is set (github.com/heyputer/puter — its gateway reaches
-Claude, GPT and Gemini with one token, and the writer role asks for the
-stronger copy model), then the rest of the chain. With no provider reachable
-every function returns a usable hand-written template and says so, and the
-browser can fall back to puter.js on the seller's own Puter account.
+`aiprovider.generate(..., role="writer", email=...)`. The seller's own ChatGPT
+plan goes first when they signed in with ChatGPT and allowed it (see
+chatgpt_plan.py). Otherwise it tries Puter first when PUTER_AUTH_TOKEN is set
+(github.com/heyputer/puter — its gateway reaches Claude, GPT and Gemini with one
+token, and the writer role asks for the stronger copy model), then the rest of
+the chain. With no provider reachable every function returns a usable
+hand-written template and says so, and the browser can fall back to puter.js on
+the seller's own Puter account.
 
 THE RULES (the part that makes it a writer rather than a text generator)
 ------------------------------------------------------------------------
@@ -131,11 +133,11 @@ def _json(text: str) -> dict:
         return {}
 
 
-def _call(user: str, *, max_tokens: int = 500, sensitivity: str = "public",
-          temperature: float = 0.7) -> dict:
+def _call(user: str, *, email: str = "", max_tokens: int = 500,
+          sensitivity: str = "public", temperature: float = 0.7) -> dict:
     return aiprovider.generate(WRITER_SYSTEM, user, sensitivity=sensitivity,
                                max_tokens=max_tokens, temperature=temperature,
-                               fallback="", role="writer")
+                               fallback="", role="writer", email=email or None)
 
 
 def _result(text: str, res: dict, prompt_user: str, template: bool = False) -> dict:
@@ -199,7 +201,8 @@ def write_field(email: str, kind: str, label: str = "", current: str = "",
             + f"Write {FIELD_KINDS[kind]}\n"
             + (f"\nWhat is there now (improve it, keep every fact):\n{current}\n" if current.strip() else "")
             + (f"\nAlso: {instruction}\n" if instruction else ""))
-    res = _call(user, max_tokens=450 if kind not in ("story", "policy", "product_description") else 700)
+    res = _call(user, email=email,
+                max_tokens=450 if kind not in ("story", "policy", "product_description") else 700)
     text = _clean(res.get("text", ""))
     if text:
         return _result(text, res, user)
@@ -273,7 +276,7 @@ def product_copy(email: str, product: dict, notes: str = "") -> dict:
               '{"description": "2 short paragraphs, 60-110 words", '
               '"highlights": ["3-5 key points, each under 8 words"], '
               '"seo": "a 140-160 character meta description"}')
-    res = _call(user, max_tokens=700)
+    res = _call(user, email=email, max_tokens=700)
     data = _json(res.get("text", ""))
     if data.get("description"):
         hl = data.get("highlights") or []
@@ -339,7 +342,7 @@ def site_copy(email: str, brief: str) -> dict:
                "No store terms were given — do not promise shipping, returns or timings.\n")
             + "\nWrite all the words on their website. Return JSON only, with these keys:\n{\n"
             + spec + "\n}")
-    res = _call(user, max_tokens=1400, temperature=0.75)
+    res = _call(user, email=email, max_tokens=1400, temperature=0.75)
     data = _json(res.get("text", ""))
     if data.get("hero_heading"):
         out = {k: (_clean(str(v)) if not isinstance(v, list) else v)
@@ -387,7 +390,8 @@ def po_cancel_email(email: str, po: dict, reason: str = "") -> str:
               "already been made or dispatched so it can be settled. Polite, brief, "
               "Indian business English, no grovelling. Return the email body only, no subject.")
     res = aiprovider.generate(WRITER_SYSTEM, user, sensitivity="private",
-                              max_tokens=400, temperature=0.4, fallback="", role="writer")
+                              max_tokens=400, temperature=0.4, fallback="", role="writer",
+                              email=email)
     body = _clean(res.get("text", ""))
     if body:
         return body
@@ -425,7 +429,8 @@ def po_email(email: str, po: dict) -> dict:
               "Indian business English. Sign off as the team at the buyer's brand.\n"
               'Return JSON only: {"subject": "...", "body": "..."}')
     res = aiprovider.generate(WRITER_SYSTEM, user, sensitivity="private",
-                              max_tokens=600, temperature=0.4, fallback="", role="writer")
+                              max_tokens=600, temperature=0.4, fallback="", role="writer",
+                              email=email)
     data = _json(res.get("text", ""))
     if data.get("subject") and data.get("body"):
         return {"subject": _clean(str(data["subject"]))[:200],

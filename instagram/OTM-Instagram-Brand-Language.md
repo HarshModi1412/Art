@@ -23,7 +23,7 @@ If my prompt gives exact on-screen words, use them letter for letter, no edits,
 no extra words, no spelling changes.
 If my prompt and the file disagree on anything visual, the file wins, except
 the exact on-screen words I give you.
-Never show a human face. Never invent a customer, review, number or result.
+Never show a human face. The seller may appear from behind (back of the head, bun with a pencil) in reel hooks, but her face, profile, eyes or mouth are never visible. Never invent a customer, review, number or result.
 Never put purple, violet, neon or rainbow gradients anywhere.
 Never use an em dash in any text you write.
 Ask me before changing anything the prompt specifies.
@@ -318,6 +318,12 @@ We never show a face. Instead we have a recurring cast of hands and objects that
 - Shot from POV (first person, looking down) or from over-the-shoulder behind the head, which is always cropped out of frame above the collarbone.
 - Real reference: photograph your own (or a helper's) hands wearing exactly this and attach the photos to every hands prompt.
 
+**THE SELLER FROM BEHIND** (the star of every reel hook, added 25 September 2026)
+- An Indian woman in her early 30s, seen **only from behind, from above, or from the shoulders down**. Her face, profile, eyes and mouth are never visible.
+- Black hair in a loose, messy bun with a **yellow HB pencil stuck through it**. This is her signature, so keep it in every reel.
+- The mustard-yellow cotton kurta with cream piping, the thin gold bangle on her right wrist, the red-and-yellow kalava thread on her left.
+- Her job in the hooks: something is about to land on her (a box, a tower of khatas, a pile of returns, a mountain of receipts, her own phone). It's always light, soft and harmless. Slapstick, never injury.
+
 **THE KHATA** (the comedy side-character: the old red ledger that is "about to retire")
 - A classic Indian bahi-khata: a long, narrow ledger bound in **deep red cloth** (close to `#A11D21`), with a **white-and-yellow cotton string** tied around it, with worn, frayed corners.
 - Inside: cream, slightly yellowed pages with faint blue ruled lines, and handwritten entries in **blue ballpoint** mixing Hindi and English ("Kurti M - 3", "Priya didi 1200 udhaar", crossings out, sums circled).
@@ -382,7 +388,7 @@ No human faces anywhere in frame, no heads, only hands and forearms if people ap
 ### 7.6 Master negative prompt (paste into every negative prompt field, or at the end as "Avoid:")
 
 ```
-Avoid: any human face, head, eyes, lips or hair; extra fingers, fused fingers,
+Avoid: any human face, profile, eyes or lips (the back of the seller's head is allowed only in reel hooks); extra fingers, fused fingers,
 missing fingers, deformed hands, long acrylic nails, plastic-looking skin;
 any written text, letters, words, numbers, captions, watermarks, logos, brand
 names, app icons, user-interface elements drawn on screens (screens must be

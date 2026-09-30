@@ -1,76 +1,81 @@
 """
 Pricing catalog — single source of truth for the One Tap Manager offer.
 
-TWO WAYS TO PAY, offered side by side
--------------------------------------
-1. SUBSCRIPTION — two tiers, flat monthly, per outlet:
+THREE TIERS, flat monthly, priced in the buyer's currency
+---------------------------------------------------------
+       Free trial  7 days      every Pro Max feature, no card. When it ends
+                               nothing stays free: the app locks until a plan
+                               is bought. Data is kept, never deleted.
+       Pro         ₹700  $10     everything except AI image and video generation
+       Pro Max     ₹1,299 $12.99 everything in Pro, plus AI product photos and clips
 
-       Free  ₹0      the numbers AND the actions, forever: analytics, campaigns,
-                      reports, digest, your own site with no badge, 250 products
-       Max   ₹999    the operations: supply, purchase orders, unlimited AI,
-                      custom domain, multi-outlet
+   The US is the primary market (September 2026), so USD is the default and
+   INR is for buyers in India. The two prices are set separately, not converted:
+   see currency.py for why nothing here ever runs an exchange rate. Which
+   currency a buyer sees is decided in region.py.
 
-   The old middle "Semi Pro" tier (₹499) is gone — everything it used to
-   unlock is now part of Free, permanently, not just during launch. "pro" is
-   kept as the internal id for the paid tier (stored plan values, gating
-   ranks) so nothing has to migrate; only its display name changed to Max.
+   Internal ids: "free" (the trial, and an expired trial), "pro", "promax".
+   "pro" used to be the id of the old ₹999 "Max" tier, and stored rows with it
+   now read as the new Pro. "max" and "chain" alias forward to Pro Max.
 
-2. USAGE — no monthly commitment. Buy a pack of credits, spend them on the
-   handful of things still gated behind Max, and they never expire.
-   Deliberately NOT a percentage of sales and NOT priced per order: sellers
-   already pay that tax to their app stack, and it is the thing they complain
-   about loudest.
+   The trial start date is written at signup (billing.start_trial). An account
+   made before this pricing existed has no date, so its 7 days start the first
+   time the app checks it, not retroactively.
 
-Everything a seller has already paid for stays theirs — downgrading never
-deletes data, it only stops new gated actions.
+CREDIT PACKS
+------------
+Kept for accounts billed in rupees, as a top-up for the monthly credit meter
+(credits.py). They have no dollar price yet, so a USD account is not offered
+them.
+
+Everything a seller has already paid for stays theirs — downgrading or a
+lapsed trial never deletes data, it only stops new actions.
 
 LAUNCH MODE
 -----------
-While LAUNCH_MODE is on (default) NOTHING is gated: every account behaves as
-Max and the UI labels paid rows "Free during launch". The permanent free tier
-below is already written down, so flipping LAUNCH_MODE=false later is a
-non-event rather than a surprise bill — a seller on Free keeps everything
-marked free_forever.
+LAUNCH_MODE=true still turns every gate off (every account behaves as Pro Max,
+no trial clock). It now defaults to OFF, because the offer is "7-day trial,
+then paid". Set it to true on a deployment only for a demo or a free period.
 """
 import os
 
 # ---------------------------------------------------------------------------
 # tiers
 # ---------------------------------------------------------------------------
-PLAN_ORDER = ["free", "pro"]
+TRIAL_DAYS = 7
+PLAN_ORDER = ["free", "pro", "promax"]
+PAID_PLANS = ("pro", "promax")
 
 PLANS: dict[str, dict] = {
     "free": {
         "id": "free",
-        "name": "Free",
+        "name": "Free trial",
         "price_inr": 0,
-        "period": "forever",
-        "tagline": "The numbers and the actions — permanently free.",
+        "price_usd": 0,
+        "period": f"{TRIAL_DAYS} days",
+        "trial_days": TRIAL_DAYS,
+        "tagline": f"Every Pro Max feature for {TRIAL_DAYS} days. No card needed.",
         "limits": {
-            "ai_per_day": 50,
-            "products": 250,
-            "outlets": 1,
+            "ai_per_day": 0,             # 0 = unlimited, the trial is Pro Max
+            "products": 0,
+            "outlets": 0,
             "site_badge": False,
-            "custom_domain": False,
+            "custom_domain": True,
         },
         "includes": [
-            "Sales analytics, category and sub-category trends",
-            "RFM segments and the at-risk customer list",
-            "Your own selling website + orders, no badge",
-            "Win-back campaigns — unlimited, messages and Excel included",
-            "Complaint analysis and the fix-first plan",
-            "Market position and reputation reports",
-            "The daily digest by email (and WhatsApp when you connect it)",
-            "Product catalogue up to 250 products",
-            "50 AI Analyst or Chatbot uses a day",
+            f"Everything in Pro Max for {TRIAL_DAYS} days",
+            "AI product photos and clips included in the trial",
+            "No card needed to start",
+            "After the trial, pick Pro or Pro Max to keep going. Your data is kept.",
         ],
     },
     "pro": {
         "id": "pro",
-        "name": "Max",
-        "price_inr": 999,
+        "name": "Pro",
+        "price_inr": 700,
+        "price_usd": 10.00,
         "period": "month",
-        "tagline": "Runs the shop, not just the reporting.",
+        "tagline": "Runs the whole shop. Everything except AI image generation.",
         "limits": {
             "ai_per_day": 0,             # 0 = unlimited
             "products": 0,
@@ -79,71 +84,88 @@ PLANS: dict[str, dict] = {
             "custom_domain": True,
         },
         "includes": [
-            "Everything in Free",
-            "Supply Management — reorder points, EOQ, safety stock, waste log",
-            "PDF purchase orders sent to your suppliers",
-            "Position Strategy checklists",
-            "Unlimited AI, unlimited products, unlimited outlets",
-            "Your own custom domain",
+            "Sales analytics, category and sub-category trends",
+            "Customer groups and the at-risk customer list",
+            "Win-back campaigns, messages and Excel included",
+            "Stock, reorder levels, suppliers and PDF purchase orders",
+            "Instagram week planner, captions and scheduling",
+            "Review, complaint and positioning reports",
+            "Your own selling website and custom domain",
+            "Unlimited AI writing, analyst and chatbot",
+        ],
+    },
+    "promax": {
+        "id": "promax",
+        "name": "Pro Max",
+        "price_inr": 1299,
+        "price_usd": 12.99,
+        "period": "month",
+        "tagline": "Everything in Pro, plus AI product photos and clips.",
+        "limits": {
+            "ai_per_day": 0,
+            "products": 0,
+            "outlets": 0,
+            "site_badge": False,
+            "custom_domain": True,
+        },
+        "includes": [
+            "Everything in Pro",
+            "AI product photos made from your own product photo",
+            "AI pictures for every planned Instagram post",
+            "Short AI product clips",
         ],
     },
 }
 
-# Legacy plan names that existing rows in user.csv may still carry.
-# "semipro" is the retired middle tier: its feature set now lives in "free",
-# so any account still stamped semipro normalizes straight there. "max" is
-# the new public name for "pro", aliased forward in case anything ever sends
-# the display name instead of the internal id.
+# Legacy plan names that stored rows may still carry. "semipro" was the retired
+# ₹499 tier. "max" and "chain" were the old top tier, which included image
+# generation, so they alias to Pro Max rather than down to Pro.
 PLAN_ALIASES = {
-    "chain": "pro", "pro_monthly": "pro", "chain_monthly": "pro", "paid": "pro",
-    "max": "pro",
+    "chain": "promax", "chain_monthly": "promax", "max": "promax",
+    "pro_max": "promax", "pro-max": "promax", "promax_monthly": "promax",
+    "pro_monthly": "pro", "paid": "pro",
     "semipro": "free", "semi_pro": "free", "semipro_monthly": "free",
 }
 
 # ---------------------------------------------------------------------------
 # feature gating
 # ---------------------------------------------------------------------------
-# feature -> the lowest plan that may use it.
+# feature -> the lowest plan that may use it. Nothing is on "free": the Free
+# tier is the trial, and a live trial is treated as Pro Max (billing.py).
 FEATURE_MIN_PLAN: dict[str, str] = {
-    "analytics": "free",
-    "subcategory": "free",
-    "rfm_list": "free",
-    "winback_list": "free",
-    "mapping": "free",
-    "upload": "free",
-    "storefront": "free",
-    "orders": "free",
-    "products": "free",
-    "content": "free",
-
-    "winback_campaign": "free",
-    # the free tier gets 50 AI runs a day; more of them is still a thing a
-    # credit can buy outright, so a burst of work never needs Max
-    "ai_use": "free",
-    "complaints": "free",
-    "positioning": "free",
-    "digest": "free",
-
+    "analytics": "pro",
+    "subcategory": "pro",
+    "rfm_list": "pro",
+    "winback_list": "pro",
+    "mapping": "pro",
+    "upload": "pro",
+    "storefront": "pro",
+    "orders": "pro",
+    "products": "pro",
+    "content": "pro",
+    "winback_campaign": "pro",
+    "ai_use": "pro",
+    "complaints": "pro",
+    "positioning": "pro",
+    "digest": "pro",
     "supply": "pro",
     "purchase_orders": "pro",
     "position_strategy": "pro",
     "custom_domain": "pro",
+
+    # AI image and video generation is the one thing Pro Max adds.
+    "image_generation": "promax",
+    "video_generation": "promax",
 }
 
-# Never gate these, on any plan, in any mode.
+# Never gated, on any plan: nothing, since the trial ended the free tier. Kept
+# as a name because billing.can_use_free still reads it.
 FREE_FOREVER = [f for f, p in FEATURE_MIN_PLAN.items() if p == "free"]
 
-# Gated features a credit can buy outright, for sellers on the usage plan.
-# feature -> credits it costs. Win-back campaigns, positioning reports and
-# complaint analysis moved to FEATURE_MIN_PLAN's "free" tier above, so they
-# are free-forever now and no longer need a credit price. Only the two
-# things still gated behind Max keep one: extra AI runs past the free daily
-# quota, and purchase orders (the rest of Max's supply-chain feature is not
-# a one-off action, so it isn't credit-buyable).
-CREDIT_COST: dict[str, int] = {
-    "ai_use": 1,
-    "purchase_orders": 5,
-}
+# Gated features a credit can buy outright. Every feature now comes with a
+# paid plan, so no feature is sold by the credit any more; the packs only top
+# up the credit meter in credits.py.
+CREDIT_COST: dict[str, int] = {}
 
 # ---------------------------------------------------------------------------
 # usage-based packs (no monthly commitment)
@@ -166,8 +188,26 @@ CREDIT_PACKS: dict[str, dict] = {
 
 
 def launch_mode() -> bool:
-    """Nothing gated while true. Flip with env var LAUNCH_MODE=false."""
-    return os.environ.get("LAUNCH_MODE", "true").strip().lower() not in ("false", "0", "no")
+    """Nothing gated while true. Off by default; set LAUNCH_MODE=true to open
+    everything up for a demo or a free period."""
+    return os.environ.get("LAUNCH_MODE", "false").strip().lower() in ("true", "1", "yes", "on")
+
+
+def price(plan_or_pack: dict, ccy: str) -> float:
+    """The price of a plan or pack in the buyer's currency. USD or INR only;
+    anything else is billed in USD, the primary market's currency."""
+    if str(ccy).upper() == "INR":
+        return plan_or_pack.get("price_inr") or 0
+    return plan_or_pack.get("price_usd") or 0
+
+
+def price_label(plan_or_pack: dict, ccy: str) -> str:
+    """'$12.99', '$10', '₹1,299'. Whole dollars drop the cents."""
+    from backend.core import currency
+    amount = price(plan_or_pack, ccy)
+    code = "INR" if str(ccy).upper() == "INR" else "USD"
+    decimals = 0 if float(amount).is_integer() else 2
+    return currency.fmt(amount, code, decimals=decimals)
 
 
 def normalize_plan(plan: str | None) -> str:
@@ -239,46 +279,87 @@ REPLACES = [
 
 
 def stack_comparison() -> dict:
+    """The rupee comparison with the Shopify app stack. Rupees only: the US
+    app prices have not been checked at source, so no dollar version is shown."""
     total = sum(r["typical_inr"] for r in REPLACES)
+    ours = PLANS["pro"]["price_inr"]
     return {
         "rows": REPLACES,
         "typical_total_inr": total,
-        "ours_inr": PLANS["pro"]["price_inr"],
-        "saving_inr": total - PLANS["pro"]["price_inr"],
+        "ours_inr": ours,
+        "saving_inr": total - ours,
         "note": "Typical monthly cost of separate Shopify apps in each category, "
                 "before any percentage-of-sales charges.",
     }
 
 
-def public_catalog() -> dict:
+def chatgpt_plan_line() -> dict | None:
+    """The "Use your ChatGPT plan" line for the plan cards, or None.
+
+    OpenAI's guidelines for Sign in with ChatGPT require a partner app's pricing
+    to show which of its plans support ChatGPT plan usage, with a "Learn more"
+    link to OpenAI's help centre. Every plan here supports it, for AI writing.
+    It is only shown once the server can actually offer it, so nobody is sold a
+    feature that is still waiting for OpenAI's approval."""
+    try:
+        from backend.core import chatgpt_auth
+        if not chatgpt_auth.plan_usage_offered():
+            return None
+        return {"text": "Use your ChatGPT plan for AI writing (ChatGPT Plus or Pro)",
+                "learn_more": chatgpt_auth.HELP_URL}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _priced(p: dict, ccy: str) -> dict:
+    return {**p, "price": price(p, ccy), "price_label": price_label(p, ccy)}
+
+
+def packs_for(ccy: str) -> list[dict]:
+    """Credit packs on sale in this currency. Rupees only for now."""
+    if str(ccy).upper() != "INR":
+        return []
+    return [_priced(c, "INR") for c in CREDIT_PACKS.values()]
+
+
+def public_catalog(ccy: str = "USD") -> dict:
+    ccy = "INR" if str(ccy).upper() == "INR" else "USD"
+    packs = packs_for(ccy)
+    chatgpt = chatgpt_plan_line()
     return {
         "launch_mode": launch_mode(),
-        "model": "both",
-        "plans": [PLANS[p] for p in PLAN_ORDER],
-        "credit_packs": list(CREDIT_PACKS.values()),
+        "model": "trial_then_subscription",
+        "currency": ccy,
+        "symbol": "₹" if ccy == "INR" else "$",
+        "trial_days": TRIAL_DAYS,
+        "plans": [{**_priced(PLANS[p], ccy), "chatgpt_plan": chatgpt} for p in PLAN_ORDER],
+        "credit_packs": packs,
         "credit_cost": CREDIT_COST,
-        "free_daily_ai_uses": PLANS["free"]["limits"]["ai_per_day"],
-        "stack": stack_comparison(),
+        "stack": stack_comparison() if ccy == "INR" else None,
         # kept so older frontend code that reads `products` keeps working
         "products": [
             {"id": p["id"], "name": p["name"], "price_inr": p["price_inr"],
+             "price_usd": p["price_usd"], "price": price(p, ccy),
+             "price_label": price_label(p, ccy),
              "kind": "subscription", "description": p["tagline"]}
-            for p in (PLANS["pro"],)
+            for p in (PLANS["pro"], PLANS["promax"])
         ] + [
             {"id": c["id"], "name": c["name"], "price_inr": c["price_inr"],
+             "price": c["price"], "price_label": c["price_label"],
              "kind": "one_time", "credits": c["credits"], "description": c["description"]}
-            for c in CREDIT_PACKS.values()
+            for c in packs
         ],
     }
 
 
 def get_product(product_id: str) -> dict | None:
-    """Anything buyable: a plan or a credit pack."""
+    """Anything buyable: a paid plan or a credit pack. The trial is not."""
     if product_id in CREDIT_PACKS:
-        return {**CREDIT_PACKS[product_id], "kind": "one_time"}
+        return {**CREDIT_PACKS[product_id], "price_usd": None, "kind": "one_time"}
     pid = normalize_plan(product_id)
-    if product_id in PLANS or product_id in PLAN_ALIASES:
+    if (product_id in PLANS or product_id in PLAN_ALIASES) and pid in PAID_PLANS:
         p = PLANS[pid]
         return {"id": p["id"], "name": p["name"], "price_inr": p["price_inr"],
-                "credits": 0, "kind": "subscription", "description": p["tagline"]}
+                "price_usd": p["price_usd"], "credits": 0, "kind": "subscription",
+                "description": p["tagline"]}
     return None
