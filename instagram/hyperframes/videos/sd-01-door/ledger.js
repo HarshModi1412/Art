@@ -21,7 +21,7 @@
     else {
       const [ref, word] = base.split(":");
       const lm = ref.match(/^L(\d+)(?:\.(\d+))?(e?)$/i);
-      const Ln = T.lines[+lm[1] - 1];
+      const Ln = T.lines.find((l) => l.id === "L" + +lm[1]); // L0 is the optional intro line
       const C = lm[2] ? Ln.chunks[+lm[2] - 1] : null;
       if (word) {
         const want = word.replace(/>$/, "").toLowerCase();

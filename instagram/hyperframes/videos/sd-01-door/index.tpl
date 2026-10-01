@@ -213,7 +213,10 @@
         ],
         countdown: EC - 0.9,
       });
-      L.legend(EC + 0.6, { hold: T.total - EC, top: 264, sub: `${focusSecs} seconds of unbroken focus. Rank resets next Friday. Follow and go longer.` });
+      L.legend(EC + 0.6, { hold: T.total - EC, top: 264, confetti: { n: 36, rain: 0 }, sub: `${focusSecs} seconds of unbroken focus. Rank resets next Friday. Follow and go longer.` });
+      // reference-reel style word card cut into the hook
+      L.flashCard("IT SAYS<br/>PULL.", 0.3, 0.36, { size: 190 });
+
       L.captions({ hide: [["L3:want", "L3e+0.3"], ["L4.2", "L5e+0.4"], ["L7.2", "L7e+0.5"]] });
       L.done();
     </script>

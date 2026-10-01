@@ -262,6 +262,18 @@
     return layer;
   };
 
+  // ---------- full-frame color word card cut into a hook (the reference-reel format) ----------
+  // o: { bg, color, size, mono, punch }. Sits under the meter (760) and captions (800).
+  L.flashCard = function (text, t, dur, o = {}) {
+    const tl = L.tl;
+    const c = L.div("fill", L.stage, `z-index:740;visibility:hidden;background:${o.bg || "#C4320A"};display:grid;place-items:center`,
+      `<div style="font-family:${o.mono ? "var(--mono)" : "var(--sans)"};font-weight:900;font-size:${o.size ?? 230}px;letter-spacing:-.04em;line-height:1.02;color:${o.color || "#FFFFFF"};text-align:center;padding:0 60px">${text}</div>`);
+    tl.set(c, { visibility: "visible" }, t);
+    tl.fromTo(c.querySelector("div"), { scale: o.punch ?? 1.45 }, { scale: 1, duration: 0.18, ease: "expo.out", immediateRender: false }, t);
+    tl.set(c, { visibility: "hidden" }, t + dur);
+    return c;
+  };
+
   // ---------- pre-roll: an "ATTENTION TEST" card that bounces, then morphs into the meter ----------
   // Needs T.pre (script.json "preroll"). Runs on absolute time 0 .. T.pre + 0.62 over the frozen
   // first frame; the card lands exactly on the meter's box. Returns the content time to pass

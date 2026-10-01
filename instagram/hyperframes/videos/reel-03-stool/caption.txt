@@ -1,4 +1,4 @@
-REEL 3 · "The step stool"  (v2 · "Attention test" intro + the Attention Span Leaderboard)
+REEL 3 · "The step stool"  (v3 · tuned for the attention test)
 Reel · about 33 s · Week 2, Thursday · Comment word: WEEK
 (Holiday post: works any time from October to early December.)
 
@@ -24,6 +24,7 @@ Holiday posts ready? Yes, no, or 'starting tomorrow, for real'? And what rank di
 
 ========== BEFORE YOU POST ==========
 
+- v3: tuned for the attention test: a spoken line over the hook from the first frame, a full-frame word card, a music bed under the voice, and a still, silent last ~3 s after the CTA (it takes the notebook's weakest 20% of seconds). To trim that tail for posting, lower endCardDur in script.json (6.2 now) and re-render.
 - It opens on a 1 second "ATTENTION TEST" card (loud voice + boom) that bounces, then zips up into the leaderboard bar. Good cover frame: the first frame.
 - The attention leaderboard is a game: everyone who watches to the end reaches Top 0.01%. The final card says so in small print ("a game, not a real ranking"). Keep that line.
 - The voice-over is a temporary AI voice (Kokoro "af_heart"). Record your own to replace it, or keep it.

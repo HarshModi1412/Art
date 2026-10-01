@@ -1,9 +1,9 @@
-﻿REEL 5 · "Money down the drain"  (v2 · "Attention test" intro + the Attention Span Leaderboard)
-Reel · about 34 s · Week 3, Monday · Comment word: PRICE
+﻿REEL 5 · "Money down the drain"  (v4 · tuned for the TRIBE attention test)
+Reel · about 31 s · Week 3, Monday · Comment word: PRICE
 
 ========== CAPTION ==========
 
-Most tools grow their fee as you grow. You sell more, they take more. That's backwards.
+Stop. That's $1,641 a year going down the drain, one monthly app charge at a time.
 
 What a small seller's app stack can cost at starting prices: analytics $49, inventory planning $49, win-back email $20, an Instagram planner $18.75. That's $136.75 a month, before any fees your selling platform takes.
 
@@ -23,6 +23,7 @@ How much do your apps cost you each month? Guess, and we'll do the math with you
 
 ========== BEFORE YOU POST ==========
 
+- v4: STOP and $1,641 full-frame color cards cut into the hook, a 120 BPM music bed under the voice (it cuts out before the plug), a moving offer scene, and a still, silent last ~3 s after the CTA. That quiet tail is deliberate: the attention notebook always flags the weakest 20% of seconds, and this puts them after the CTA. To trim it for posting, lower endCardDur in script.json (6.2 now) and re-render. The v2 source is backed up as script-v2-backup.json and index-v2-backup.tpl.
 - It opens on a 1 second "ATTENTION TEST" card (loud voice + boom) that bounces, then zips up into the leaderboard bar. Good cover frame: the first frame.
 - The attention leaderboard is a game: everyone who watches to the end reaches Top 0.01%. The final card says so in small print ("a game, not a real ranking"). Keep that line.
 - Re-check the four starting prices (sources are listed at the end of the Hyperframes scripts file). They change.

@@ -291,7 +291,10 @@
         ],
         countdown: EC - 0.9,
       });
-      L.legend(EC + 0.6, { hold: T.total - EC, top: 264, sub: `${focusSecs} seconds of unbroken focus. Rank resets next reel. Follow and go longer.` });
+      L.legend(EC + 0.6, { hold: T.total - EC, top: 264, confetti: { n: 36, rain: 0 }, sub: `${focusSecs} seconds of unbroken focus. Rank resets next reel. Follow and go longer.` });
+      // reference-reel style word card cut into the hook
+      L.flashCard("WAIT.", 0.3, 0.32);
+
       L.captions({ hide: [["L1.2", "L1e+0.3"]] });
       L.done();
     </script>

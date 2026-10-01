@@ -230,7 +230,10 @@
         ],
         countdown: EC - 0.9,
       });
-      L.legend(EC + 0.6, { hold: T.total - EC, top: 264, sub: `${focusSecs} seconds of unbroken focus. Rank resets next reel. Follow and go longer.` });
+      L.legend(EC + 0.6, { hold: T.total - EC, top: 264, confetti: { n: 36, rain: 0 }, sub: `${focusSecs} seconds of unbroken focus. Rank resets next reel. Follow and go longer.` });
+      // reference-reel style word card cut into the hook
+      L.flashCard("NO LID?", 0.3, 0.34, { bg: "#F5A623", color: "#101828" });
+
       L.captions({ hide: [["L1.2", "L1e+0.3"], ["L2.3", "L2e+0.5"], ["L4.3", "L4e+0.5"], ["L5", "EC"]] });
       L.done();
     </script>

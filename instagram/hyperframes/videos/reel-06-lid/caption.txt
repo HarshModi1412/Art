@@ -1,4 +1,4 @@
-﻿REEL 6 · "The lid"  (v2 · "Attention test" intro + the Attention Span Leaderboard)
+﻿REEL 6 · "The lid"  (v3 · tuned for the attention test)
 Reel · about 33 s · Week 3, Tuesday · Comment prompt: the weirdest review you've ever gotten
 
 ========== CAPTION ==========
@@ -23,6 +23,7 @@ What's the weirdest review you've ever gotten? No customer names, just the revie
 
 ========== BEFORE YOU POST ==========
 
+- v3: tuned for the attention test: a spoken line over the hook from the first frame, a full-frame word card, a music bed under the voice, and a still, silent last ~3 s after the CTA (it takes the notebook's weakest 20% of seconds). To trim that tail for posting, lower endCardDur in script.json (6.2 now) and re-render.
 - It opens on a 1 second "ATTENTION TEST" card (loud voice + boom) that bounces, then zips up into the leaderboard bar. Good cover frame: the first frame.
 - The attention leaderboard is a game: everyone who watches to the end reaches Top 0.01%. The final card says so in small print ("a game, not a real ranking"). Keep that line.
 - Every review shown is labelled SAMPLE REVIEWS; the size chart is labelled EXAMPLE.

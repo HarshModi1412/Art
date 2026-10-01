@@ -1497,8 +1497,11 @@ td { color: var(--text-2); }
 
 /* Icons carry no intrinsic size — they inherit the text size unless a rule
    below says otherwise. Without this, one dropped into a flex row stretches to
-   fill it (which is what happened to the storefront's breadcrumb arrows). */
-svg { width: 1em; height: 1em; flex: none; vertical-align: -0.125em; }
+   fill it (which is what happened to the storefront's breadcrumb arrows).
+   Plotly's drawing surface is the exception: it is sized by its width/height
+   attributes, and this rule used to crush every chart to a 1em square.
+   :where() keeps the specificity at zero so every `.x svg` rule still wins. */
+:where(svg:not(.main-svg)) { width: 1em; height: 1em; flex: none; vertical-align: -0.125em; }
 
 /* ==========================================================
    Today · digest · undo · variants · pairings · save state

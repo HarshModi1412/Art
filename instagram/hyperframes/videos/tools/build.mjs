@@ -29,13 +29,13 @@ const run = (cmd, args, opts = {}) => {
 const duration = (f) => parseFloat(run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f]));
 
 // ---------- 1 + 2: voice chunks ----------
-function speak(text) {
-  const key = createHash("sha1").update(`${voice}|${speed}|${text}`).digest("hex").slice(0, 16);
+function speak(text, spd = speed) {
+  const key = createHash("sha1").update(`${voice}|${spd}|${text}`).digest("hex").slice(0, 16);
   const raw = join(cache, `${key}.raw.wav`);
   const trimmed = join(cache, `${key}.wav`);
   if (!existsSync(trimmed)) {
     for (let attempt = 0; attempt < 3 && !existsSync(raw); attempt++) {
-      const r = spawnSync("cmd", ["/c", "npx", "--yes", "hyperframes@0.8.78", "tts", text, "-v", voice, "-s", String(speed), "-o", raw, "--json"], {
+      const r = spawnSync("cmd", ["/c", "npx", "--yes", "hyperframes@0.8.78", "tts", text, "-v", voice, "-s", String(spd), "-o", raw, "--json"], {
         encoding: "utf8", env: { ...process.env, HYPERFRAMES_SKIP_SKILLS: "1", PYTHONUTF8: "1" },
       });
       if (!existsSync(raw) && attempt === 2) throw new Error(`tts failed for "${text}": ${r.stdout}${r.stderr}`);
@@ -62,12 +62,16 @@ function wordsFor(text, s, e) {
 const hook = S.hook;
 let t = S.voStart ?? hook + 0.3;
 const lines = [];
-S.lines.forEach((line, li) => {
+// optional "intro": a line (L0) spoken over the hook from the first frame; L1 still starts at voStart
+const all = S.intro ? [{ ...S.intro, id: "L0", at: S.intro.at ?? 0.12 }, ...S.lines] : S.lines;
+if (S.intro) t = 0;
+all.forEach((line, li) => {
+  if (line.id === undefined && S.intro && li === 1) t = Math.max(t, S.voStart ?? hook + 0.3);
   if (line.at != null) t = Math.max(t, line.at);
-  const L = { id: `L${li + 1}`, s: t, chunks: [] };
+  const L = { id: line.id ?? `L${S.intro ? li : li + 1}`, s: t, chunks: [] };
   line.say.forEach((text, ci) => {
     if (ci > 0) t += line.chunkGap ?? S.chunkGap ?? 0.2;
-    const { file, dur } = speak(text);
+    const { file, dur } = speak(text, line.speed ?? speed);
     L.chunks.push({ text, file, s: +t.toFixed(3), e: +(t + dur).toFixed(3), words: wordsFor(text, t + 0.03, t + dur - 0.05) });
     t += dur;
   });
@@ -95,7 +99,7 @@ function resolveExpr(expr) {
   else {
     const [ref, word] = base.split(":");
     const lm = ref.match(/^L(\d+)(?:\.(\d+))?(e?)$/i);
-    const L = lines[+lm[1] - 1];
+    const L = lines.find((x) => x.id === `L${+lm[1]}`);
     if (!L) throw new Error(`no line ${lm[1]} in ${expr}`);
     const C = lm[2] ? L.chunks[+lm[2] - 1] : null;
     if (word) {
@@ -120,19 +124,30 @@ lines.forEach((L) => L.chunks.forEach((c) => {
   voParts.push(`[${inputs.length - 1}:a]adelay=${Math.round(c.s * 1000)}:all=1[v${inputs.length - 1}]`);
 }));
 const voLabels = voParts.map((p) => p.match(/\[(v\d+)\]$/)[1]);
-// entries: [time, name, vol] or {series:[from, to, count], name, vol}
+// entries: [time, name, vol], {series:[from, to, count], name, vol} or {every: step, from, to, name, vol} (a beat)
 const cues = (S.sfx || []).flatMap((c) => {
   if (Array.isArray(c)) return [c];
+  // {clip: name, from, to, vol, offset, fadeIn, fadeOut}: a long sound (a music bed) trimmed to a window
+  if (c.clip) {
+    const a = resolveExpr(c.from), b = resolveExpr(c.to);
+    return [[a, c.clip, c.vol ?? 0.4, { dur: b - a, offset: c.offset ?? 0, fadeIn: c.fadeIn ?? 0.02, fadeOut: c.fadeOut ?? 0.08 }]];
+  }
+  if (c.every) {
+    const a = resolveExpr(c.from), b = resolveExpr(c.to), out = [];
+    for (let x = a; x <= b + 1e-6; x += c.every) out.push([x, c.name, c.vol ?? 0.4]);
+    return out;
+  }
   const [a, b, n] = c.series.map((v, i) => (i < 2 ? resolveExpr(v) : v));
   return Array.from({ length: n }, (_, i) => [a + (n === 1 ? 0 : ((b - a) * i) / (n - 1)), c.name, c.vol ?? 0.4]);
 });
-cues.forEach(([expr, name, vol = 0.5]) => {
+cues.forEach(([expr, name, vol = 0.5, clip]) => {
   const f = join(lib, "sfx", `${name}.wav`);
   if (!existsSync(f)) throw new Error(`missing sfx ${name}`);
   const at = resolveExpr(expr);
   if (at < 0 || at > total) return;
   inputs.push(f);
-  fxParts.push(`[${inputs.length - 1}:a]adelay=${Math.round(at * 1000)}:all=1,volume=${vol}[f${inputs.length - 1}]`);
+  const trim = clip ? `atrim=start=${clip.offset}:duration=${clip.dur.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:d=${clip.fadeIn},afade=t=out:st=${Math.max(0, clip.dur - clip.fadeOut).toFixed(3)}:d=${clip.fadeOut},` : "";
+  fxParts.push(`[${inputs.length - 1}:a]${trim}adelay=${Math.round(at * 1000)}:all=1,volume=${vol}[f${inputs.length - 1}]`);
 });
 const fxLabels = fxParts.map((p) => p.match(/\[(f\d+)\]$/)[1]);
 const graph = [
@@ -186,7 +201,7 @@ const HEAD = `<meta charset="UTF-8" />
 const ROOT = +(total + PRE).toFixed(2);
 const STAGE = `<div id="root" data-composition-id="main" data-start="0" data-duration="${ROOT}" data-width="1080" data-height="1920">
       <div id="stage" class="clip" data-start="0" data-duration="${ROOT}" data-track-index="0"></div>
-      <audio id="mix" src="assets/mix.wav" data-start="0" data-duration="${ROOT}" data-track-index="9" data-volume="1"></audio>
+      <audio id="mix" src="assets/mix.wav" data-start="0" data-duration="${ROOT}" data-track-index="9" data-volume="1"></audio>${S.media ? "\n      " + S.media : ""}
     </div>
     <!--TIMING-->
     <script src="ledger.js"></script>`;

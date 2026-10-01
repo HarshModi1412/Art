@@ -1157,18 +1157,28 @@ function showRail(on) { document.querySelector(".shell-body").classList.toggle("
 const _charts = {};
 function cssVar(name, fb) { const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return v || fb; }
 
+/* The chart look is Apple Health / Stocks: no axis lines, no tick marks, no
+   vertical grid, one hairline per y step, the system font, compact numbers
+   (₹42k, not ₹42,000.00), and the data doing all the talking. The axis is
+   context; the line or the bar is the content. */
 function _baseLayout() {
-  const axisColor = cssVar("--axis", "#47505f");
-  const gridColor = cssVar("--grid", "#eef0f3");
+  const axisColor = cssVar("--axis", "#6c6c72");
+  const gridColor = cssVar("--grid", "#ececf0");
   const surface = cssVar("--surface", "#fff");
-  const text = cssVar("--text", "#14171d");
+  const text = cssVar("--text", "#1c1c1e");
+  const family = cssVar("--font", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif");
   return {
-    margin: { l: 58, r: 16, t: 8, b: 42 }, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { family: "Inter, sans-serif", size: 12, color: axisColor }, bargap: 0.4,
-    xaxis: { gridcolor: gridColor, zeroline: false, automargin: true, separatethousands: true, tickfont: { color: axisColor } },
-    yaxis: { gridcolor: gridColor, zeroline: false, automargin: true, separatethousands: true, griddash: "dot", tickfont: { color: axisColor } },
-    hoverlabel: { bgcolor: surface, bordercolor: cssVar("--border", "#e0e4ea"), font: { color: text } },
-    legend: { orientation: "h", y: -0.2, font: { color: axisColor } },
+    margin: { l: 6, r: 14, t: 14, b: 6 }, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family, size: 11.5, color: axisColor },
+    bargap: 0.34, bargroupgap: 0.1, barcornerradius: 6,
+    xaxis: { showgrid: false, zeroline: false, showline: false, ticks: "", automargin: true,
+             separatethousands: true, tickfont: { color: axisColor, size: 11 } },
+    yaxis: { gridcolor: gridColor, gridwidth: 1, zeroline: false, showline: false, ticks: "", automargin: true,
+             nticks: 5, separatethousands: true, tickfont: { color: axisColor, size: 11 } },
+    hoverlabel: { bgcolor: surface, bordercolor: cssVar("--border-2", "#d5d5db"),
+                  font: { family, size: 12.5, color: text }, align: "left", namelength: -1 },
+    legend: { orientation: "h", x: 0, xanchor: "left", y: 1.02, yanchor: "bottom", itemsizing: "constant",
+              bgcolor: "rgba(0,0,0,0)", font: { color: cssVar("--text-2", text), size: 12 } },
     // Series colours come from the theme, not from hard-coded hexes. The old
     // list was a light-mode palette used in both themes: on the dark ground
     // those saturated blues and greens dropped to 2-3:1, and the mid-green sat
@@ -1190,6 +1200,152 @@ function SERIES() {
   return fb.map((f, i) => cssVar(`--chart-${i + 1}`, f));
 }
 function series(i) { return SERIES()[i % 8]; }
+
+/* Colour arithmetic for the chart polish. Theme tokens are hex; anything else
+   (an rgb() a call site passed) is parsed too, and an unreadable value falls
+   back to the accent rather than throwing mid-draw. */
+function _rgb(c) {
+  const s = String(c || "").trim();
+  let m = /^#([0-9a-f]{3})$/i.exec(s);
+  if (m) return m[1].split("").map((h) => parseInt(h + h, 16));
+  m = /^#([0-9a-f]{6})/i.exec(s);
+  if (m) return [0, 2, 4].map((i) => parseInt(m[1].substr(i, 2), 16));
+  m = /^rgba?\(([^)]+)\)/i.exec(s);
+  if (m) return m[1].split(",").slice(0, 3).map((v) => parseFloat(v));
+  return _rgb(cssVar("--primary", "#0062c9"));
+}
+function withAlpha(c, a) { const [r, g, b] = _rgb(c); return `rgba(${r},${g},${b},${a})`; }
+/* A solid tint of `c` toward the card colour. Solid, not transparent, so the
+   hairline grid never shows through a bar. */
+function tint(c, t) {
+  const a = _rgb(c), b = _rgb(cssVar("--surface", "#ffffff"));
+  return "#" + a.map((v, i) => Math.round(v + (b[i] - v) * t).toString(16).padStart(2, "0")).join("");
+}
+
+/* Every trace goes through here before it is drawn, so the sixteen call sites
+   keep passing plain data and still come out looking like one system:
+     · lines are smooth, a touch heavier, with a vertical gradient wash under a
+       single series and one ringed dot on the latest point (where "now" is);
+     · single-series bars get rounded tops, the peak bar at full strength and
+       the rest a quieter tint so the eye lands on the answer first; a bar set
+       that crosses zero goes green/red by sign instead;
+     · short bar sets carry their own value labels, because the inline chart is
+       a still picture with no hover. */
+function _polish(traces, layout) {
+  const surface = cssVar("--surface", "#ffffff");
+  const labelInk = cssVar("--text-2", "#46464a");
+  const multi = traces.length > 1;
+  return traces.map((src, i) => {
+    const t = { ...src };
+    const own = (t.line && t.line.color) || (t.marker && typeof t.marker.color === "string" && t.marker.color);
+    const color = own || series(i);
+
+    if (!t.type || t.type === "scatter") {
+      const n = (t.y || []).length;
+      const dashed = !!(t.line && t.line.dash);
+      // Smooth only a short series. A spline through noisy daily data swings
+      // past the real values; dense series read truer as straight segments.
+      t.line = { width: multi ? 2.25 : 2.75, ...(t.line || {}), color,
+                 shape: n <= 24 ? "spline" : "linear", smoothing: 0.75 };
+      if (n > 24) t.line.width = multi ? 1.75 : 2;
+      t.mode = "lines+markers";
+      t.marker = { color, size: Array.from({ length: n }, (_, k) => (k === n - 1 && !dashed ? 9 : 0)),
+                   line: { color: surface, width: 2.5 } };
+      if (t.fill === "tozeroy" || (!multi && !t.fill)) {
+        t.fill = "tozeroy";
+        t.fillgradient = { type: "vertical",
+          colorscale: [[0, withAlpha(color, 0)], [1, withAlpha(color, multi ? 0.14 : 0.24)]] };
+        delete t.fillcolor;
+      }
+      t.cliponaxis = false;
+    }
+
+    if (t.type === "bar") {
+      const horiz = t.orientation === "h";
+      // A ranking reads best-first. Every horizontal call site reverses the
+      // category axis, so descending order puts the leader on top.
+      if (horiz && !multi && Array.isArray(t.x) && Array.isArray(t.y)) {
+        const pairs = t.x.map((x, k) => [x, t.y[k]]).sort((a, b) => Number(b[0]) - Number(a[0]));
+        t.x = pairs.map((p) => p[0]); t.y = pairs.map((p) => p[1]);
+      }
+      const vals = ((horiz ? t.x : t.y) || []).map(Number);
+      const finite = vals.filter((v) => Number.isFinite(v));
+      const max = finite.length ? Math.max(...finite) : null;
+      if (!multi && finite.length > 1 && typeof (t.marker && t.marker.color) !== "object"
+          && finite.some((v) => v < 0) && finite.some((v) => v > 0)) {
+        const pos = cssVar("--green", "#1c7a35"), neg = cssVar("--red", "#c8232c");
+        t.marker = { ...(t.marker || {}), color: vals.map((v) => (v < 0 ? neg : pos)) };
+      } else if (multi && t.marker && typeof t.marker.color === "string" && layout.barmode === "overlay" && i === 0) {
+        // The backdrop series of an overlay (all orders behind cancelled ones)
+        // recedes so the foreground reads.
+        t.marker = { ...t.marker, color: tint(t.marker.color, 0.62) };
+      }
+      t.marker = { ...(t.marker || { color }), line: { width: 0 } };
+      if (!multi && vals.length && vals.length <= 12) {
+        // Every bar keeps full colour (3:1 against the card in both themes);
+        // the peak is called out by its label instead, set bold in full ink.
+        const prefix = ((horiz ? layout.xaxis : layout.yaxis) || {}).tickprefix || "";
+        const big = Math.max(...finite.map(Math.abs)) >= 10000;
+        const mute = cssVar("--muted", "#626268");
+        t.text = vals.map((v) => {
+          if (!Number.isFinite(v)) return "";
+          const s = prefix + (big ? _compact(v) : (+v.toFixed(2)).toLocaleString("en-IN"));
+          return v === max && finite.length > 2 ? `<b>${s}</b>` : s;
+        });
+        t.texttemplate = "%{text}";
+        t.textposition = "outside";
+        t.textfont = { size: 11, color: vals.map((v) => (v === max && finite.length > 2 ? labelInk : mute)) };
+        t.cliponaxis = false;
+      }
+    }
+    return t;
+  });
+}
+
+/* 612400 → "612k", 1250000 → "1.25M": the same shorthand as the axis ticks. */
+function _compact(v) {
+  const a = Math.abs(v);
+  const [d, u] = a >= 1e9 ? [1e9, "B"] : a >= 1e6 ? [1e6, "M"] : a >= 1e3 ? [1e3, "k"] : [1, ""];
+  return `${+(v / d).toPrecision(3)}${u}`;
+}
+
+/* Compact tick labels only where the numbers are big: "~s" turns 42000 into
+   42k, but would turn a sentiment of 0.25 into "250m". */
+function _compactAxes(traces, layout) {
+  const out = { ...layout };
+  ["x", "y"].forEach((ax) => {
+    const vals = traces.flatMap((t) => {
+      const horiz = t.orientation === "h";
+      const valueAxis = t.type === "bar" ? (horiz ? "x" : "y") : "y";
+      return valueAxis === ax ? (t[ax] || []).map(Number).filter(Number.isFinite) : [];
+    });
+    const key = ax + "axis";
+    if (vals.length && Math.max(...vals.map(Math.abs)) >= 10000 && !(out[key] && out[key].tickformat)) {
+      // The axis says ₹340k; the hover readout gives the exact ₹3,41,765.
+      out[key] = { ...(out[key] || {}), tickformat: "~s", hoverformat: ",.0f" };
+    }
+  });
+  return out;
+}
+
+function _composeLayout(traces, layout, extra = {}) {
+  const base = _baseLayout();
+  const l = _compactAxes(traces, layout);
+  // Horizontal bars swap roles: the category axis is y (every label shown, no
+  // grid) and the value axis is x (the hairlines move there).
+  if (traces.some((t) => t.type === "bar" && t.orientation === "h")) {
+    base.yaxis = { ...base.yaxis, showgrid: false, nticks: 0 };
+    base.xaxis = { ...base.xaxis, showgrid: true, gridcolor: base.yaxis.gridcolor, nticks: 5 };
+    // The fixed 150px left margin the call sites pass starved the bars on a
+    // phone; automargin already fits the product names. The right side needs
+    // room for the value label past the longest bar.
+    const m = { ...base.margin, ...(l.margin || {}) };
+    l.margin = { ...m, l: base.margin.l, r: Math.max(m.r || 0, 52) };
+  }
+  return { ...base, ...l, ...extra,
+    xaxis: { ...base.xaxis, ...(l.xaxis || {}), ...(extra.xaxis || {}) },
+    yaxis: { ...base.yaxis, ...(l.yaxis || {}), ...(extra.yaxis || {}) } };
+}
 
 /* ------------------------------------------------ the chart library, late ---
    Plotly is about 3.5 MB. It used to load in the <head> of every page, with no
@@ -1256,9 +1412,19 @@ function skeletonBar() {
 }
 
 function _drawPlot(el, traces, layout, title) {
-  const base = _baseLayout();
-  Plotly.newPlot(el, traces, { ...base, ...layout, xaxis: { ...base.xaxis, ...(layout.xaxis || {}) }, yaxis: { ...base.yaxis, ...(layout.yaxis || {}) } },
+  const first = !el.classList.contains("plot-in");
+  // Plotly appends to the node rather than replacing it, so the loading
+  // skeleton has to go first or it sits on top of the finished chart.
+  const wait = el.querySelector(":scope > .plot-wait");
+  if (wait) wait.remove();
+  // A ranking gets ~30px per row so long product names never crowd.
+  const hbar = traces.find((t) => t.type === "bar" && t.orientation === "h");
+  if (hbar) el.style.minHeight = `${Math.max(272, (hbar.y || []).length * 30 + 48)}px`;
+  Plotly.newPlot(el, _polish(traces, layout), _composeLayout(traces, layout),
     { displayModeBar: false, responsive: true, staticPlot: true });
+  // The first paint draws in once (a left-to-right reveal, see .plot-in in
+  // ios.css). A theme toggle re-plots the same node and does not replay it.
+  if (first) el.classList.add("plot-in");
   _addExpand(el, title);
 }
 
@@ -1267,8 +1433,11 @@ function _addExpand(el, title) {
   if (!card || card.querySelector(".chart-expand")) return;
   card.style.position = card.style.position || "relative";
   const btn = document.createElement("button");
+  btn.type = "button";
   btn.className = "chart-expand"; btn.title = "Maximize to analyse (zoom, pan, download)";
-  btn.textContent = "⤢";
+  btn.setAttribute("aria-label", `Expand ${title || "chart"}`);
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+    stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>`;
   btn.onclick = (e) => { e.stopPropagation(); openChartModal(el.id, title); };
   card.appendChild(btn);
 }
@@ -1281,10 +1450,15 @@ async function openChartModal(id, title) {
   $("chartModal").style.display = "flex";
   $("chartModalTitle").textContent = title || c.title || "Chart";
   const host = $("chartModalPlot");
-  const base = _baseLayout();
-  const layout = { ...base, ...c.layout, xaxis: { ...base.xaxis, ...(c.layout.xaxis || {}) }, yaxis: { ...base.yaxis, ...(c.layout.yaxis || {}) },
-    autosize: true, height: Math.floor(window.innerHeight * 0.66), dragmode: _modalMode };
-  Plotly.newPlot(host, c.traces, layout, { displayModeBar: false, responsive: true, staticPlot: false, scrollZoom: false });
+  // Lines read best with one unified readout per date and a hairline spike;
+  // bars answer "this one", so they keep the per-bar label.
+  const lines = c.traces.some((t) => !t.type || t.type === "scatter");
+  const spike = { showspikes: lines, spikemode: "across", spikethickness: 1, spikedash: "solid",
+                  spikecolor: cssVar("--border-strong", "#85858c"), spikesnap: "cursor" };
+  const layout = _composeLayout(c.traces, c.layout, {
+    autosize: true, height: Math.floor(window.innerHeight * 0.66), dragmode: _modalMode,
+    hovermode: lines ? "x unified" : "closest", xaxis: spike });
+  Plotly.newPlot(host, _polish(c.traces, c.layout), layout, { displayModeBar: false, responsive: true, staticPlot: false, scrollZoom: false });
   _syncModalBtns();
 }
 function _syncModalBtns() {
@@ -1309,6 +1483,114 @@ function redrawCharts() {
   Object.entries(_charts).forEach(([id, c]) => { const el = document.getElementById(id); if (el && el.isConnected) plot(el, c.traces, c.layout, c.title); });
   if (_modalChart) openChartModal(_modalChart);
 }
+
+// ---------- KPI cards ----------
+/* One card for every headline number in the app. Tinted symbol, quiet label,
+   a big rounded figure with the ₹ / % / x set smaller beside it (so the eye
+   reads the number, not the unit), and, where there is a history, a sparkline
+   of its shape. `tone` picks a chart series token, so a KPI and the chart
+   below it that plots the same measure share a colour. */
+const KPI_GLYPHS = {
+  rupee:   '<path d="M7 5h10M7 9.5h10M7 5h3.5a4.5 4.5 0 0 1 0 9H7l7.5 6"/>',
+  bag:     '<path d="M5.5 8.5h13l-1 11.5h-11z"/><path d="M9 8.5V7a3 3 0 0 1 6 0v1.5"/>',
+  people:  '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M15.5 5.8a3 3 0 0 1 0 5.4M17.5 14.3c1.8.6 3 2.3 3 4.7"/>',
+  receipt: '<path d="M6 3.5h12v17l-2.5-1.5-2 1.5-1.5-1.5-1.5 1.5-2-1.5L6 20.5z"/><path d="M9 8h6M9 11.5h6M9 15h3.5"/>',
+  cancel:  '<circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6M15 9l-6 6"/>',
+  pie:     '<path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5H12z"/><path d="M15 3.8A8.5 8.5 0 0 1 20.2 9H15z"/>',
+  star:    '<path d="m12 3.8 2.5 5.1 5.6.8-4 4 1 5.6-5.1-2.7-5 2.7.9-5.6-4-4 5.6-.8z"/>',
+  chat:    '<path d="M4.5 6.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5v-3.5h0a2 2 0 0 1-1-1.7z"/>',
+  smile:   '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14a4.2 4.2 0 0 0 7 0"/><path d="M9.2 9.6h0M14.8 9.6h0" stroke-width="2.4"/>',
+  eye:     '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+  tap:     '<path d="M9.5 11V5.5a1.5 1.5 0 0 1 3 0V11l4.6.9a2 2 0 0 1 1.6 2.3l-.9 4.8H10l-3.6-4.6a1.6 1.6 0 0 1 2.4-2.1l.7.7"/>',
+  target:  '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/>',
+  trend:   '<path d="m3.5 16.5 5.5-5.5 4 4 7.5-7.5"/><path d="M15 7.5h5.5V13"/>',
+  box:     '<path d="m12 3.5 8 4.2v8.6l-8 4.2-8-4.2V7.7z"/><path d="m4 7.7 8 4.3 8-4.3M12 12v8.5"/>',
+  layers:  '<path d="m12 4 8.5 4.5L12 13 3.5 8.5z"/><path d="m3.5 12.5 8.5 4.5 8.5-4.5M3.5 16.5 12 21l8.5-4.5"/>',
+};
+
+function _kpiValue(v) {
+  let num = String(v == null ? "–" : v), cur = "", unit = "";
+  if (num.startsWith("₹")) { cur = "₹"; num = num.slice(1); }
+  // Only a unit when it follows a digit: "3.2x" is a ROAS, "Box" is a word.
+  const u = /^(.*\d)(%|x)$/.exec(num);
+  if (u) { num = u[1]; unit = u[2]; }
+  return `${cur ? `<span class="kpi-cur">${cur}</span>` : ""}<span class="kpi-num">${esc(num)}</span>${unit ? `<span class="kpi-unit">${unit}</span>` : ""}`;
+}
+
+/* A smooth sparkline in a 100×30 box, stretched to the card. The stroke uses
+   non-scaling-stroke so stretching never fattens it; the end dot is an HTML
+   element positioned by percentage so it stays round. */
+let _sparkSeq = 0;
+function sparkline(ys) {
+  const v = (ys || []).map(Number).filter(Number.isFinite);
+  if (v.length < 3) return "";
+  const W = 100, H = 30, pad = 3;
+  const lo = Math.min(...v), hi = Math.max(...v), span = hi - lo || 1;
+  const pts = v.map((y, i) => [(i / (v.length - 1)) * W, pad + (1 - (y - lo) / span) * (H - pad * 2)]);
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ` C${c1[0].toFixed(2)},${c1[1].toFixed(2)} ${c2[0].toFixed(2)},${c2[1].toFixed(2)} ${p2[0].toFixed(2)},${p2[1].toFixed(2)}`;
+  }
+  const id = `spk${++_sparkSeq}`;
+  const [ex, ey] = pts[pts.length - 1];
+  return `<div class="kpi-spark" aria-hidden="true">
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="currentColor" stop-opacity=".26"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/>
+      </linearGradient></defs>
+      <path d="${d} L${W},${H} L0,${H} Z" fill="url(#${id})"/>
+      <path d="${d}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round"/>
+    </svg><i style="left:${ex}%;top:${(ey / H) * 100}%"></i></div>`;
+}
+
+function kpiCard({ label, value, icon = "trend", tone = 1, sub = "", spark = null, cls = "", id = "", title = "", button = false }) {
+  const toneVar = typeof tone === "number" ? `var(--chart-${tone})` : `var(--${tone})`;
+  return `
+    <div class="kpi kpi-x ${cls}"${id ? ` id="${id}"` : ""}${title ? ` title="${esc(title)}"` : ""}${button ? ` role="button" tabindex="0"` : ""} style="--kpi-tone:${toneVar}">
+      <div class="kpi-head">
+        <span class="kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+          stroke-linecap="round" stroke-linejoin="round">${KPI_GLYPHS[icon] || KPI_GLYPHS.trend}</svg></span>
+        <span class="label">${esc(label)}</span>
+      </div>
+      <div class="value">${_kpiValue(value)}</div>
+      ${sub ? `<div class="kpi-sub">${sub}</div>` : ""}
+      ${spark ? sparkline(spark) : ""}
+    </div>`;
+}
+
+/* Headline numbers count up from zero when a screen opens: 700 ms, ease-out,
+   formatted exactly like the final value at every frame so the width never
+   jitters (the figures are tabular). Skipped under reduced motion, and the
+   final text is what is left in the DOM either way. */
+function countUp(root) {
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  (root || document).querySelectorAll(".kpi-num:not([data-counted])").forEach((el) => {
+    el.dataset.counted = "1";
+    const final = el.textContent;
+    const m = /^([+-]?)([\d,]+)(\.(\d+))?$/.exec(final.trim());
+    if (reduce || !m) return;
+    const sign = m[1], dec = m[4] ? m[4].length : 0;
+    const target = parseFloat(m[2].replace(/,/g, "") + (m[3] || ""));
+    if (!target) return;
+    const f = (n) => sign + n.toLocaleString("en-IN", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    const t0 = performance.now(), dur = 700;
+    const step = (now) => {
+      if (!el.isConnected) return;
+      const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = p < 1 ? f(target * e) : final;
+      if (p < 1) requestAnimationFrame(step);
+    };
+    el.textContent = f(0);
+    requestAnimationFrame(step);
+  });
+}
+new MutationObserver((muts) => {
+  // Only element insertions matter; the count-up's own text writes are ignored.
+  if (muts.some((m) => Array.prototype.some.call(m.addedNodes, (n) => n.nodeType === 1))) countUp($("view"));
+}).observe($("view"), { childList: true, subtree: true });
 
 // ---------- HOME ----------
 // Ad Analytics is deliberately NOT in this list -- connecting Google/Meta ad
@@ -7130,12 +7412,15 @@ function renderSales(payload) {
     // app could not even add up their own sales. What genuinely needs volume is
     // the *inference* — a trend line, a weekday pattern, a 30-day forecast —
     // and that, and only that, is what gets held back now.
+    // Only the revenue card gets a sparkline: monthly revenue is the one
+    // history the payload carries, and a made-up shape would be worse than none.
+    const revSpark = !thin && d.monthly_trend ? d.monthly_trend.y : null;
     const cards = `
       <div class="kpis">
-        <div class="kpi"><div class="label">Revenue</div><div class="value">₹${fmt(k.revenue)}</div></div>
-        <div class="kpi"><div class="label">Orders</div><div class="value">${fmt(k.orders)}</div></div>
-        <div class="kpi"><div class="label">Customers</div><div class="value">${fmt(k.customers)}</div></div>
-        <div class="kpi"><div class="label">Average order</div><div class="value">₹${fmt(k.avg_order_value)}</div></div>
+        ${kpiCard({ label: "Revenue", value: `₹${fmt(k.revenue)}`, icon: "rupee", tone: 1, spark: revSpark })}
+        ${kpiCard({ label: "Orders", value: fmt(k.orders), icon: "bag", tone: 3 })}
+        ${kpiCard({ label: "Customers", value: fmt(k.customers), icon: "people", tone: 5 })}
+        ${kpiCard({ label: "Average order", value: `₹${fmt(k.avg_order_value)}`, icon: "receipt", tone: 2 })}
         ${cancelKpi(cx)}
       </div>`;
 
@@ -7183,13 +7468,9 @@ function renderSales(payload) {
 function cancelKpi(cx) {
   if (!cx || !cx.available) return "";
   const rate = cx.rate != null ? ` · ${cx.rate}%` : "";
-  return `
-    <div class="kpi kpi-warn" id="cancelKpi" title="Click for the breakdown">
-      <div class="label">Cancelled${rate}</div>
-      <div class="value">₹${fmt(cx.cancelled_value)}</div>
-      <div class="kpi-sub">${fmt(cx.cancelled)} order${cx.cancelled === 1 ? "" : "s"}
-        of ${fmt(cx.orders)}</div>
-    </div>`;
+  return kpiCard({ label: `Cancelled${rate}`, value: `₹${fmt(cx.cancelled_value)}`, icon: "cancel", tone: "amber",
+    cls: "kpi-warn", id: "cancelKpi", title: "Click for the breakdown", button: true,
+    sub: `${fmt(cx.cancelled)} order${cx.cancelled === 1 ? "" : "s"} of ${fmt(cx.orders)}` });
 }
 
 function cancelPanel(cx) {
@@ -7275,7 +7556,10 @@ function bindCancelPanel(cx) {
     }
   };
   t.onclick = open;
-  if (k) k.onclick = open;
+  if (k) {
+    k.onclick = open;
+    k.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } };
+  }
 }
 
 // ---------- MODULE: Sub-Category Analysis ----------
@@ -7293,10 +7577,9 @@ function renderSubcategory(d) {
     // Same rule as Sales Analytics: the cards are sums of the seller's own rows
     // and are always shown; only the trend charts wait for enough history.
     const cards = (d.cards || []).length ? `
-      <div class="kpis">${d.cards.map((c) => `
-        <div class="kpi"><div class="label">${esc(c.label)}</div>
-          <div class="value">${esc(String(c.value))}</div>
-          ${c.note ? `<div class="muted tiny">${esc(c.note)}</div>` : ""}</div>`).join("")}
+      <div class="kpis">${d.cards.map((c, i) => kpiCard({ label: c.label, value: String(c.value),
+        icon: ["layers", "rupee", "pie", "trend"][i % 4], tone: [1, 3, 6, 2][i % 4],
+        sub: c.note ? esc(c.note) : "" })).join("")}
       </div>` : "";
     if (!d.available) {
       moduleShell("Sub-Category Analysis", cards + `<div class="card">${esc(d.reason || "")}</div>`
@@ -7339,10 +7622,10 @@ async function renderSubDetail(value) {
       </div>
       ${renderActions(d.insights)}
       <div class="kpis">
-        <div class="kpi"><div class="label">Revenue</div><div class="value">₹${fmt(k.revenue)}</div></div>
-        <div class="kpi"><div class="label">Orders</div><div class="value">${fmt(k.orders)}</div></div>
-        <div class="kpi"><div class="label">Avg Order Value</div><div class="value">₹${fmt(k.avg_order_value)}</div></div>
-        <div class="kpi"><div class="label">Share of revenue</div><div class="value">${k.share_of_total_pct}%</div></div>
+        ${kpiCard({ label: "Revenue", value: `₹${fmt(k.revenue)}`, icon: "rupee", tone: 1, spark: d.monthly_trend && d.monthly_trend.y })}
+        ${kpiCard({ label: "Orders", value: fmt(k.orders), icon: "bag", tone: 3 })}
+        ${kpiCard({ label: "Avg order value", value: `₹${fmt(k.avg_order_value)}`, icon: "receipt", tone: 2 })}
+        ${kpiCard({ label: "Share of revenue", value: `${k.share_of_total_pct}%`, icon: "pie", tone: 6 })}
       </div>
       <div class="chart-card"><h4>${esc(value)}, monthly revenue</h4><div class="plot" id="cDT"></div></div>
       <div class="grid-2">
@@ -7372,9 +7655,10 @@ function renderReview(d) {
       <div class="card pos-banner"><span class="muted tiny">Your position, from your own reviews</span>
         <h3 style="margin:4px 0 0;"> ${esc(pos.quadrant || "–")}</h3></div>
       <div class="kpis">
-        <div class="kpi"><div class="label">Reviews</div><div class="value">${fmt(d.n_reviews)}</div></div>
-        <div class="kpi"><div class="label">Your rating</div><div class="value">${d.avg_rating ?? "–"}</div></div>
-        <div class="kpi"><div class="label">Sentiment</div><div class="value">${d.overall_sentiment > 0 ? "+" : ""}${d.overall_sentiment}</div></div>
+        ${kpiCard({ label: "Reviews", value: fmt(d.n_reviews), icon: "chat", tone: 1 })}
+        ${kpiCard({ label: "Your rating", value: d.avg_rating ?? "–", icon: "star", tone: 7 })}
+        ${kpiCard({ label: "Sentiment", value: `${d.overall_sentiment > 0 ? "+" : ""}${d.overall_sentiment}`, icon: "smile",
+                    tone: d.overall_sentiment < 0 ? "red" : "green" })}
       </div>
       <div class="chart-card"><h4>What your customers talk about (% of reviews)</h4><div class="plot" id="cShare"></div></div>
       <div class="chart-card"><h4>How positively they talk about it (sentiment)</h4><div class="plot" id="cSent"></div></div>`;
@@ -7412,7 +7696,7 @@ function renderComplaints(d) {
         <tbody>${d.deep.map((r) => `<tr><td><b>${esc(r.theme)}</b></td><td>${r.count}</td><td>${r.share_pct}%</td><td>${esc(r.severity)}</td><td class="muted">"${esc(r.example)}…"</td></tr>`).join("")}</tbody></table></div></div>`;
     }
     moduleShell("Complaint Analysis", html);
-    if (d.monthly) plot($("cCompM"), [{ x: d.monthly.months, y: d.monthly.counts, type: "bar", marker: { color: "#f97316" } }], {}, "Complaints per month");
+    if (d.monthly) plot($("cCompM"), [{ x: d.monthly.months, y: d.monthly.counts, type: "bar", marker: { color: cssVar("--chart-2", "#d9730d") } }], {}, "Complaints per month");
   }
 }
 
@@ -8479,14 +8763,14 @@ async function viewAdsMetrics(id) {
     <h3 style="margin:0 0 6px;">${esc(id)}, last ${m.range.days} days ${m.mode === "demo" ? "<span class='pill-off'>demo</span>" : "<span class='pill-on'>live</span>"}</h3>
     <p class="muted tiny">${esc(m.note || "")}</p>
     <div class="kpis" style="margin-top:8px;">
-      <div class="kpi"><div class="label">Spend</div><div class="value">₹${fmt(t.spend)}</div></div>
-      <div class="kpi"><div class="label">Impressions</div><div class="value">${fmt(t.impressions)}</div></div>
-      <div class="kpi"><div class="label">Clicks</div><div class="value">${fmt(t.clicks)}</div></div>
-      <div class="kpi"><div class="label">CTR</div><div class="value">${t.ctr_pct}%</div></div>
-      <div class="kpi"><div class="label">Conversions</div><div class="value">${fmt(t.conversions)}</div></div>
-      <div class="kpi"><div class="label">Revenue</div><div class="value">₹${fmt(t.revenue)}</div></div>
-      <div class="kpi"><div class="label">ROAS</div><div class="value">${t.roas}x</div></div>
-      <div class="kpi"><div class="label">CPC</div><div class="value">₹${t.cpc}</div></div>
+      ${kpiCard({ label: "Spend", value: `₹${fmt(t.spend)}`, icon: "rupee", tone: 1, spark: m.daily && m.daily.spend })}
+      ${kpiCard({ label: "Impressions", value: fmt(t.impressions), icon: "eye", tone: 6 })}
+      ${kpiCard({ label: "Clicks", value: fmt(t.clicks), icon: "tap", tone: 5 })}
+      ${kpiCard({ label: "CTR", value: `${t.ctr_pct}%`, icon: "target", tone: 2 })}
+      ${kpiCard({ label: "Conversions", value: fmt(t.conversions), icon: "bag", tone: 3 })}
+      ${kpiCard({ label: "Revenue", value: `₹${fmt(t.revenue)}`, icon: "trend", tone: 3, spark: m.daily && m.daily.revenue })}
+      ${kpiCard({ label: "ROAS", value: `${t.roas}x`, icon: "trend", tone: 4 })}
+      ${kpiCard({ label: "CPC", value: `₹${t.cpc}`, icon: "receipt", tone: 8 })}
     </div>
     <div class="chart-card" style="margin-top:14px;"><h4>Daily spend vs revenue</h4><div class="plot" id="adsCh"></div></div>
     <div class="card"><h4 style="margin-bottom:6px;">Top campaigns</h4>
@@ -9735,12 +10019,12 @@ function renderOrders() {
   const rows = _ordersFilter ? d.orders.filter((o) => o.status === _ordersFilter) : d.orders;
 
   const kpis = `
-    <div class="site-health">
-      <div class="sh"><b>${fmt(st.orders)}</b><span>orders</span></div>
-      <div class="sh"><b>₹${fmt(st.revenue)}</b><span>revenue</span></div>
-      <div class="sh"><b>₹${fmt(st.aov)}</b><span>average order</span></div>
-      <div class="sh"><b>${fmt(st.units)}</b><span>units sold</span></div>
-      <div class="sh"><b>${fmt(st.customers)}</b><span>customers</span></div>
+    <div class="kpis">
+      ${kpiCard({ label: "Orders", value: fmt(st.orders), icon: "bag", tone: 3 })}
+      ${kpiCard({ label: "Revenue", value: `₹${fmt(st.revenue)}`, icon: "rupee", tone: 1 })}
+      ${kpiCard({ label: "Average order", value: `₹${fmt(st.aov)}`, icon: "receipt", tone: 2 })}
+      ${kpiCard({ label: "Units sold", value: fmt(st.units), icon: "box", tone: 6 })}
+      ${kpiCard({ label: "Customers", value: fmt(st.customers), icon: "people", tone: 5 })}
     </div>`;
 
   const tabs = `<div class="site-tabs">

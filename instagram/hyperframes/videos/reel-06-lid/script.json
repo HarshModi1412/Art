@@ -6,7 +6,8 @@
   "speed": 0.94,
   "hook": 2.7,
   "voStart": 3.15,
-  "endCardDur": 4.5,
+  "intro": { "say": ["Hold on.", "Where's the lid?"], "chunkGap": 0.35, "speed": 1.05 },
+  "endCardDur": 6.2,
   "preroll": {
     "dur": 1.1,
     "say": "Attention test!",
@@ -22,6 +23,11 @@
     { "say": ["Comment the weirdest review you've ever gotten."] }
   ],
   "sfx": [
+    { "clip": "music", "from": "0", "to": "L5-0.6", "vol": 0.9, "fadeOut": 0.05 },
+    { "clip": "music", "from": "L5", "to": "EC+1.6", "vol": 0.65, "fadeOut": 1.2 },
+    { "every": 0.5, "from": "0", "to": "L5-0.6", "name": "kick", "vol": 0.32 },
+    { "every": 0.5, "from": "0.25", "to": "L5-0.6", "name": "hat", "vol": 0.4 },
+    ["0.3", "impact", 0.85], ["0.3", "stamp", 0.55],
     ["0.30", "pop", 0.4], ["0.62", "sparkle", 0.16],
     ["H+0.1", "levelup", 0.42], ["H+0.1+0.02", "sparkle", 0.22],
     ["L2", "levelup", 0.4], ["L2+0.02", "sparkle", 0.2],
