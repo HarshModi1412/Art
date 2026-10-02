@@ -7998,6 +7998,12 @@ async function openMarketing() {
     (d) => renderMarketing(d));
 }
 
+function mcLabel(reason, occasion) {
+  if (reason === "festival") return `${occasion || "Festival"} offer`;
+  const t = (((_mc.state || {}).types) || []).find((x) => x.id === reason);
+  return t ? t.label : ({ winback: "Win-back campaign" }[reason] || "Campaign");
+}
+
 function mcMoney(sym, v) { return `${sym || "₹"}${fmt(Number(v) || 0)}`; }
 
 /* *bold* in a WhatsApp message, shown the way WhatsApp will show it */
@@ -8018,9 +8024,16 @@ function renderMarketing(d) {
     ${mcAutoStrip(d.auto)}
     <div id="mcMain">${body}</div>
     ${mcHistoryHtml(d.history || [], d.symbol)}
-    ${mcIdeasHtml(d.ideas || [])}`);
+    ${mcIdeasHtml((d.types || []).filter((t) => t.id !== "winback" && t.id !== "festival"))}`);
   wireMcAuto();
   wireMcHistory();
+  document.querySelectorAll("[data-start]").forEach((b) => b.onclick = () => {
+    if (_mc.draft) return toast("Send or discard the campaign that is open first.", 5000);
+    const sel = $("mcReason");
+    if (!sel) return;
+    sel.value = b.dataset.start; mcOnType();
+    $("mcMain").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   if (_mc.draft) wireMcDraft(); else wireMcCompose();
 }
 
@@ -8029,6 +8042,10 @@ function mcComposeHtml(d) {
   const sym = d.symbol || "₹";
   const cov = d.coverage || {};
   const occ = d.occasions || [];
+  const types = (d.types && d.types.length) ? d.types : [
+    { id: "winback", label: "Win back quiet customers", offer: "flat", who: "customers who used to buy and have stopped", audience: 0 },
+    { id: "festival", label: "Festival offer", offer: "percent", needs: "occasion", who: "your best customers, plus the ones drifting away", audience: 0 }];
+  const pre = _mc.startType && types.some((t) => t.id === _mc.startType) ? _mc.startType : types[0].id;
   const reach = cov.customers
     ? (cov.phone || cov.email
         ? `<p class="muted tiny" style="margin:10px 0 0;">${sic("check")} ${fmt(cov.phone || 0)} of your
@@ -8042,15 +8059,12 @@ function mcComposeHtml(d) {
   return `
     <div class="card mc-card">
       <h4 class="mc-h">${sic("gift")}New campaign</h4>
-      <div class="mc-step"><span class="mc-n">1</span>Why are you sending it?</div>
-      <div class="mc-reasons" role="radiogroup">
-        <label class="mc-reason on"><input type="radio" name="mcReason" value="winback" checked>
-          <b>Win back quiet customers</b>
-          <span>People who used to buy from you and have stopped.</span></label>
-        <label class="mc-reason"><input type="radio" name="mcReason" value="festival">
-          <b>Festival offer</b>
-          <span>Your best customers, plus the ones drifting away.</span></label>
-      </div>
+      <div class="mc-step"><span class="mc-n">1</span><label for="mcReason">Why are you sending it?</label></div>
+      <select id="mcReason" class="mc-select">
+        ${types.map((t) => `<option value="${esc(t.id)}"${t.id === pre ? " selected" : ""}>${esc(t.label)}${
+          d.types ? ` (${fmt(t.audience || 0)} customer${t.audience === 1 ? "" : "s"})` : ""}</option>`).join("")}
+      </select>
+      <div class="mc-why" id="mcWhy"></div>
       <div id="mcFest" class="mc-fest" hidden>
         <label>Festival or occasion
           <input id="mcOccasion" list="mcOccList" value="${esc((occ[0] || {}).name || "")}"
@@ -8063,18 +8077,18 @@ function mcComposeHtml(d) {
       <div class="mc-step"><span class="mc-n">2</span>The offer, the same for everyone</div>
       <div class="mc-offer">
         <div class="mc-seg" role="group" aria-label="Discount type">
-          <button type="button" data-kind="flat" class="on">${esc(sym)} off</button>
+          <button type="button" data-kind="flat">${esc(sym)} off</button>
           <button type="button" data-kind="percent">% off</button>
+          <button type="button" data-kind="none">No discount</button>
         </div>
-        <label class="mc-val"><span id="mcValLbl">Amount off</span>
+        <label class="mc-val" id="mcValWrap"><span id="mcValLbl">Amount off</span>
           <input id="mcValue" type="number" min="1" step="1" inputmode="decimal" placeholder="200"></label>
-        <label class="mc-val"><span>Minimum order <span class="muted">(optional)</span></span>
+        <label class="mc-val" id="mcMinWrap"><span>Minimum order <span class="muted">(optional)</span></span>
           <input id="mcMin" type="number" min="0" step="1" inputmode="decimal" placeholder="999"></label>
       </div>
-      <p class="muted tiny" style="margin:6px 0 0;">Each customer gets their own code. It works once,
-        for 14 days, at checkout on your website.</p>
+      <p class="muted tiny" style="margin:6px 0 0;" id="mcOfferNote"></p>
 
-      <div class="mc-step"><span class="mc-n">3</span>Anything to mention? <span class="muted">(optional)</span></div>
+      <div class="mc-step"><span class="mc-n">3</span><span id="mcNoteLbl">Anything to mention? <span class="muted">(optional)</span></span></div>
       <input id="mcNote" class="mc-note" maxlength="300"
         placeholder="e.g. the new monsoon collection is in, free delivery this week">
 
@@ -8087,36 +8101,69 @@ function mcComposeHtml(d) {
     </div>`;
 }
 
+function mcType(id) {
+  const types = ((_mc.state || {}).types) || [];
+  return types.find((t) => t.id === id) || { id, offer: "flat" };
+}
+
+function mcSetKind(kind) {
+  _mc.kind = kind;
+  document.querySelectorAll(".mc-seg button").forEach((x) => x.classList.toggle("on", x.dataset.kind === kind));
+  const none = kind === "none";
+  $("mcValWrap").hidden = none;
+  $("mcMinWrap").hidden = none;
+  $("mcValLbl").textContent = kind === "percent" ? "Percent off" : "Amount off";
+  $("mcValue").placeholder = kind === "percent" ? "15" : "200";
+  $("mcOfferNote").textContent = none
+    ? "No discount: the message is just the reason to write. Every order from it is still tracked."
+    : "Each customer gets their own code. It works once, for 14 days, at checkout on your website.";
+}
+
+function mcOnType() {
+  const t = mcType($("mcReason").value);
+  $("mcWhy").innerHTML = t.who
+    ? `<b>Who gets it:</b> ${esc(t.who)}.${t.why ? ` <span class="muted">${esc(t.why)}</span>` : ""}`
+    : "";
+  $("mcFest").hidden = t.needs !== "occasion";
+  $("mcNoteLbl").innerHTML = t.needs === "note"
+    ? `What are they getting early access to? <span class="mc-req">required</span>`
+    : `Anything to mention? <span class="muted">(optional)</span>`;
+  $("mcNote").placeholder = t.needs === "note"
+    ? "e.g. our new festive collection is live, a day before everyone else"
+    : "e.g. the new monsoon collection is in, free delivery this week";
+  mcSetKind(t.offer || "flat");
+}
+
 function wireMcCompose() {
-  document.querySelectorAll(".mc-reason input").forEach((r) => r.onchange = () => {
-    document.querySelectorAll(".mc-reason").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked));
-    $("mcFest").hidden = r.value !== "festival" || !r.checked;
-  });
-  document.querySelectorAll(".mc-seg button").forEach((b) => b.onclick = () => {
-    _mc.kind = b.dataset.kind;
-    document.querySelectorAll(".mc-seg button").forEach((x) => x.classList.toggle("on", x === b));
-    $("mcValLbl").textContent = _mc.kind === "percent" ? "Percent off" : "Amount off";
-    $("mcValue").placeholder = _mc.kind === "percent" ? "15" : "200";
-  });
-  _mc.kind = "flat";
+  $("mcReason").onchange = mcOnType;
+  document.querySelectorAll(".mc-seg button").forEach((b) => b.onclick = () => mcSetKind(b.dataset.kind));
+  mcOnType();
+  _mc.startType = null;
   const go = $("mcBuild");
   if (go) go.onclick = buildCampaign;
 }
 
 async function buildCampaign() {
   const err = $("mcErr"); err.hidden = true;
-  const reason = (document.querySelector('input[name="mcReason"]:checked') || {}).value || "winback";
-  const value = Number($("mcValue").value);
-  if (!value || value <= 0) { err.textContent = "Enter the discount first."; err.hidden = false; $("mcValue").focus(); return; }
-  if (_mc.kind === "percent" && value > 90) { err.textContent = "A percentage discount can be at most 90%."; err.hidden = false; return; }
+  const fail = (m, focus) => { err.textContent = m; err.hidden = false; if (focus) focus.focus(); };
+  const reason = $("mcReason").value || "winback";
+  const t = mcType(reason);
+  const note = ($("mcNote").value || "").trim();
+  let offer = { kind: "none" };
+  if (_mc.kind !== "none") {
+    const value = Number($("mcValue").value);
+    if (!value || value <= 0) return fail("Enter the discount, or choose No discount.", $("mcValue"));
+    if (_mc.kind === "percent" && value > 90) return fail("A percentage discount can be at most 90%.", $("mcValue"));
+    offer = { kind: _mc.kind, value, min_order: Number($("mcMin").value) || 0 };
+  }
+  if (t.needs === "note" && !note) return fail("Say what your VIPs are getting early access to.", $("mcNote"));
   const btn = $("mcBuild");
   btn.disabled = true;
-  btn.innerHTML = `${sic("spark")}Writing the messages and making the picture…`;
+  btn.innerHTML = `<span class="spin" aria-hidden="true"></span> Writing the messages and making the picture…`;
   try {
     const draft = await api("/api/campaign/build", { method: "POST", json: {
-      reason, occasion: reason === "festival" ? ($("mcOccasion").value || "").trim() : "",
-      note: ($("mcNote").value || "").trim(),
-      offer: { kind: _mc.kind, value, min_order: Number($("mcMin").value) || 0 },
+      reason, occasion: t.needs === "occasion" ? ($("mcOccasion").value || "").trim() : "",
+      note, offer,
     }});
     _mc.draft = draft;
     warmModClearAll();
@@ -8124,7 +8171,7 @@ async function buildCampaign() {
     wireMcDraft();
     $("mcMain").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (e) {
-    err.textContent = e.message; err.hidden = false;
+    fail(e.message);
     btn.disabled = false; btn.innerHTML = `${sic("spark")}Build the campaign`;
   }
 }
@@ -8170,7 +8217,7 @@ function mcDraftHtml(d, openId) {
   const wa = d.whatsapp || {};
   const img = d.image || {};
   const allow = d.image_allowance || {};
-  const title = d.reason === "festival" ? `${esc(d.occasion || "Festival")} offer` : "Win-back campaign";
+  const title = esc(mcLabel(d.reason, d.occasion));
   const left = allow.left == null ? "" : ` (${fmt(allow.left)} left this month)`;
   const imgBlock = img.url
     ? `<img src="${esc(img.url)}" alt="Campaign picture" class="mc-img">`
@@ -8193,8 +8240,9 @@ function mcDraftHtml(d, openId) {
       <div class="mc-draft-h">
         <div>
           <h4 class="mc-h">${sic("gift")}${title}${d.trigger === "auto" ? ` <span class="mc-tag">prepared for you</span>` : ""}</h4>
-          <p class="muted tiny" style="margin:2px 0 0;">${esc(ctx.offer_label || "")} · codes valid till
-            ${esc(ctx.expiry_label || "")}${ctx.link ? "" : " · your website is not published yet, so codes can only be used in person"}</p>
+          <p class="muted tiny" style="margin:2px 0 0;">${ctx.offer_label
+            ? `${esc(ctx.offer_label)} · codes valid till ${esc(ctx.expiry_label || "")}`
+            : "No discount · every order from it is still tracked"}${ctx.link ? "" : " · your website is not published yet, so nothing can be tracked online"}</p>
         </div>
         <button class="btn ghost sm" id="mcDiscard">${sic("close")}Discard</button>
       </div>
@@ -8315,41 +8363,65 @@ function wireMcDraft() {
 }
 
 /* ------------------------------------------------------------- result ---- */
+/* The tap-to-send list. Tapping a customer opens WhatsApp with their message
+   and records them as sent, so every count in this screen is what actually
+   went out, never "everyone" just because the links were made. */
+function mcTapsHtml(campaignId, list, sentNow, total) {
+  if (!list.length) return "";
+  return `
+    <div class="mc-tapwrap" data-cid="${esc(campaignId)}">
+      <div class="mc-tapcount"><b id="mcSentN">${fmt(sentNow)}</b> of <b>${fmt(total)}</b> sent</div>
+      <p class="muted tiny" style="margin:0 0 10px;">Tap each customer: WhatsApp opens with their message
+        already written, press send there, come back for the next. Only the ones you tap are counted.
+        ${(_mc.draft && _mc.draft.image && _mc.draft.image.url)
+          ? `<a href="${esc(_mc.draft.image.url)}" download target="_blank" rel="noopener">Save the picture</a> to attach it.` : ""}</p>
+      <div class="mc-taps">
+        ${list.map((x) => `<a class="mc-tap" href="${esc(x.wa_link)}" target="_blank" rel="noopener" data-tapcid="${esc(x.customer_id)}">
+          ${sic("whatsapp")}<span><b>${esc(x.customer_name || x.phone || x.customer_id)}</b><span class="muted tiny">${esc(x.code || "")}</span></span>
+          <span class="mc-tap-s">Send</span></a>`).join("")}
+      </div>
+    </div>`;
+}
+
+function wireMcTaps() {
+  const wrap = document.querySelector(".mc-tapwrap");
+  if (!wrap) return;
+  const id = wrap.dataset.cid;
+  wrap.querySelectorAll("[data-tapcid]").forEach((a) => a.addEventListener("click", async () => {
+    if (a.classList.contains("done")) return;
+    a.classList.add("done");
+    a.querySelector(".mc-tap-s").textContent = "Sent";
+    try {
+      const r = await api(`/api/campaign/${encodeURIComponent(id)}/tapped`, { method: "POST",
+        json: { customer_id: a.dataset.tapcid } });
+      const n = $("mcSentN"); if (n) n.textContent = fmt(r.sent);
+    } catch (e) {
+      a.classList.remove("done"); a.querySelector(".mc-tap-s").textContent = "Send";
+      toast(e.message, 6000);
+    }
+  }));
+}
+
 function mcResultHtml(r) {
   const links = (r.results || []).filter((x) => x.wa_link);
+  const sentNow = r.sent_now != null ? r.sent_now : (r.delivered || 0);
+  // who CAN be sent something: sent already, plus the tap-to-send ones left
+  const total = sentNow + (r.to_send != null ? r.to_send : links.length);
+  const head = sentNow
+    ? `${sic("check")}${fmt(sentNow)} of ${fmt(total)} sent`
+    : `${sic("whatsapp")}Ready to send`;
   return `
     <div class="card mc-card">
-      <h4 class="mc-h">${sic("check")}Campaign sent</h4>
+      <h4 class="mc-h">${head}</h4>
       <p style="margin:4px 0 12px;">${esc(r.summary || "")}</p>
-      ${links.length ? `
-        <p class="muted tiny" style="margin:0 0 10px;">Tap each one: WhatsApp opens with the message
-          already written, press send, come back for the next. ${(_mc.draft && _mc.draft.image && _mc.draft.image.url)
-            ? `<a href="${esc(_mc.draft.image.url)}" download target="_blank" rel="noopener">Save the picture</a> to attach it.` : ""}</p>
-        <div class="mc-taps">
-          ${links.map((x, i) => `<a class="mc-tap" href="${esc(x.wa_link)}" target="_blank" rel="noopener" data-tap="${i}">
-            ${sic("whatsapp")}<span><b>${esc(x.customer_name || x.phone)}</b><span class="muted tiny">${esc(x.code)}</span></span>
-            <span class="mc-tap-s">Send</span></a>`).join("")}
-        </div>
-        ${r.pending_campaign_id ? `<div class="mc-go"><button class="btn primary" id="mcTapDone">${sic("check")}I have sent them</button>
-          <span class="muted tiny">Until you say so, these are not counted as contacted.</span></div>` : ""}` : ""}
+      ${mcTapsHtml(r.campaign_id, links, sentNow, total)}
       <div class="mc-go"><button class="btn primary" id="mcSeeRes">${sic("chart")}Track the results</button>
         <button class="btn ghost" id="mcNew">${sic("plus")}Start another campaign</button></div>
     </div>`;
 }
 
 function wireMcResult(r) {
-  document.querySelectorAll("[data-tap]").forEach((a) => a.addEventListener("click", () => {
-    a.classList.add("done");
-    a.querySelector(".mc-tap-s").textContent = "Opened";
-  }));
-  const done = $("mcTapDone");
-  if (done) done.onclick = async () => {
-    try {
-      await api("/api/rfm/winback/confirm", { method: "POST", json: { campaign_id: r.pending_campaign_id } });
-      toast("Marked as sent. Every code they use is counted below.");
-      done.disabled = true;
-    } catch (e) { toast(e.message, 6000); }
-  };
+  wireMcTaps();
   $("mcNew").onclick = () => { warmModClearAll(); openMarketing(); };
   $("mcSeeRes").onclick = () => openCampaignAnalysis(r.campaign_id);
 }
@@ -8363,11 +8435,11 @@ function mcHistoryHtml(rows, sym) {
       <div class="mk-sends">
         ${rows.slice(0, 20).map((s) => {
           const codes = s.codes || null;
-          const what = s.reason === "festival" ? `${s.occasion || "Festival"} offer` : "Win-back";
+          const what = mcLabel(s.reason || "winback", s.occasion);
           return `<div class="mk-send-row">
             <div style="flex:1;min-width:0;"><b>${esc(what)}${s.offer_label ? ` · ${esc(s.offer_label)}` : ""}</b><br>
             <span class="muted tiny">${esc(String(s.at || "").slice(0, 10))}
-              · ${fmt(s.delivered || 0)} sent${s.prepared ? ` · ${fmt(s.prepared)} by tap-to-send` : ""}
+              · ${s.total != null ? `<b>${fmt(s.sent_count || 0)} of ${fmt(s.total)} sent</b>` : `${fmt(s.delivered || 0)} sent`}
               ${codes && codes.issued ? ` · <b>${fmt(codes.redeemed)} of ${fmt(codes.issued)} codes used</b>${codes.revenue ? `, ${mcMoney(sym, codes.revenue)} in orders` : ""}` : ""}</span></div>
             ${s.tracked ? `<button class="btn ghost sm" data-an="${esc(s.campaign_id)}">${sic("chart")}Results</button>` : ""}
           </div>`;
@@ -8392,13 +8464,7 @@ async function openCampaignAnalysis(id) {
   $("mcMain").innerHTML = mcAnalysisHtml(a);
   $("mcMain").scrollIntoView({ behavior: "smooth", block: "start" });
   $("mcAnBack").onclick = () => { warmModClearAll(); openMarketing(); };
-  const td = $("mcAnTapDone");
-  if (td) td.onclick = async () => {
-    try {
-      await api("/api/rfm/winback/confirm", { method: "POST", json: { campaign_id: a.pending_proof_id } });
-      toast("Marked as sent."); openCampaignAnalysis(id);
-    } catch (e) { toast(e.message, 6000); }
-  };
+  wireMcTaps();
   const cl = $("mcCopyLink");
   if (cl) cl.onclick = async () => {
     try { await navigator.clipboard.writeText(cl.dataset.link); toast("Link copied"); }
@@ -8410,7 +8476,7 @@ function mcAnalysisHtml(a) {
   const c = a.campaign || {};
   const k = a.kpis || {};
   const sym = c.symbol || "₹";
-  const what = c.reason === "festival" ? `${c.occasion || "Festival"} offer` : "Win-back campaign";
+  const what = mcLabel(c.reason || "winback", c.occasion);
   const top = Math.max(1, ...(a.funnel || []).map((f) => f.n));
   const tile = (label, value, sub) => `<div class="mc-kpi"><span class="muted tiny">${label}</span>
     <b>${value}</b>${sub ? `<span class="muted tiny">${sub}</span>` : ""}</div>`;
@@ -8425,8 +8491,8 @@ function mcAnalysisHtml(a) {
         <div>
           <h4 class="mc-h">${sic("chart")}${esc(what)} · results</h4>
           <p class="muted tiny" style="margin:2px 0 0;">Sent ${esc(String(c.sent_at || "").slice(0, 10))}
-            (${fmt(a.days_since)} day${a.days_since === 1 ? "" : "s"} ago) · ${esc(c.offer_label || "")}
-            · codes valid till ${esc(c.valid_until || "")}</p>
+            (${fmt(a.days_since)} day${a.days_since === 1 ? "" : "s"} ago) · ${c.offer_label
+              ? `${esc(c.offer_label)} · codes valid till ${esc(c.valid_until || "")}` : "no discount"}</p>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           ${shareLink ? `<button class="btn ghost sm" id="mcCopyLink" data-link="${esc(shareLink)}">${sic("copy")}Copy shop link</button>` : ""}
@@ -8434,15 +8500,14 @@ function mcAnalysisHtml(a) {
         </div>
       </div>
 
-      ${a.pending_proof_id ? `<div class="mc-warn">${sic("whatsapp")}<span>Your WhatsApp messages were prepared as
-        tap-to-send links. Once you have sent them, confirm it so they count as reached.
-        <button class="btn primary sm" id="mcAnTapDone" style="margin-left:6px;">I have sent them</button></span></div>` : ""}
+      ${(a.to_send || []).length ? `<h5 class="mc-sub">Still to send</h5>
+        ${mcTapsHtml(c.id, a.to_send, k.reached, k.messaged)}` : ""}
       <div class="mc-kpis">
-        ${tile("Reached", fmt(k.reached), `of ${fmt(k.messaged)} messaged`)}
-        ${tile("Opened the link", `${fmt(k.clicked)}`, `${k.click_rate}% of reached`)}
-        ${tile("Orders with the code", fmt(k.orders), `${k.conversion}% of reached`)}
-        ${tile("Revenue from codes", mcMoney(sym, k.revenue), k.aov ? `${mcMoney(sym, k.aov)} average order` : "")}
-        ${tile("Discount given", mcMoney(sym, k.discount), k.per_discount ? `${mcMoney(sym, k.per_discount)} back for every ${sym}1` : "")}
+        ${tile("Sent", fmt(k.reached), `of ${fmt(k.messaged)} in the campaign`)}
+        ${tile("Opened the link", `${fmt(k.clicked)}`, `${k.click_rate}% of sent`)}
+        ${tile("Orders from it", fmt(k.orders), `${k.conversion}% of sent`)}
+        ${tile(c.offer_label ? "Revenue from codes" : "Revenue from it", mcMoney(sym, k.revenue), k.aov ? `${mcMoney(sym, k.aov)} average order` : "")}
+        ${c.offer_label ? tile("Discount given", mcMoney(sym, k.discount), k.per_discount ? `${mcMoney(sym, k.per_discount)} back for every ${sym}1` : "") : ""}
         ${tile("Came back (any way)", `${fmt(k.came_back)}`, `${k.came_back_rate}%${k.holdout ? ` vs ${k.holdout_rate}% held back` : ""}`)}
         ${tile("Lift from the campaign", lift, k.holdout ? (k.extra_customers != null ? `≈ ${k.extra_customers} extra customers` : "") : "needs 20+ customers to measure")}
       </div>
@@ -8461,7 +8526,7 @@ function mcAnalysisHtml(a) {
         <div class="mc-rows">
           ${(a.customers || []).map((r) => `<div class="mc-row mc-anrow">
             <div><b>${esc(r.customer_name || r.customer_id)}</b>
-              <span class="muted tiny">${esc(r.code)} · ${r.whatsapp === "sent" ? "WhatsApp" : r.whatsapp === "tap" ? "WhatsApp (tap)" : ""}${r.email ? `${r.whatsapp ? " + " : ""}email` : ""}${!r.reached ? "not reached" : ""}</span></div>
+              <span class="muted tiny">${esc(r.code)} · ${r.whatsapp === "sent" ? "WhatsApp" : r.whatsapp === "tapped" ? "WhatsApp (tapped)" : ""}${r.email ? `${r.whatsapp === "sent" || r.whatsapp === "tapped" ? " + " : ""}email` : ""}${!r.reached ? "not sent yet" : ""}</span></div>
             <span class="mc-chips">${chip(r.clicked, "opened")}${chip(r.applied || r.ordered, "used code")}${chip(r.ordered, "ordered")}${chip(r.came_back, "came back")}</span>
             <span class="tiny">${r.spent_since ? mcMoney(sym, r.spent_since) : ""}</span>
           </div>`).join("")}
@@ -8480,12 +8545,13 @@ function mcIdeasHtml(ideas) {
     <div class="card mc-card">
       <h4 class="mc-h">${sic("spark")}More campaigns that work</h4>
       <p class="muted tiny" style="margin:0 0 10px;">What the best small brands run besides win-back,
-        sized from your own sales. These are coming to this screen next.</p>
+        sized from your own sales. Each one is in the list above.</p>
       <div class="mc-ideas">
         ${ideas.map((i) => `<div class="mc-idea">
-          <b>${esc(i.title)}</b>
+          <b>${esc(i.label)}</b>
           <span class="tiny">${esc(i.why)}</span>
-          <span class="mc-idea-n">${i.audience ? `<b>${fmt(i.audience)}</b> ${esc(i.audience_label)}` : `<span class="muted">Nobody yet: ${esc(i.audience_label)}</span>`}</span>
+          <span class="mc-idea-n">${i.audience ? `<b>${fmt(i.audience)}</b> ${esc(i.who)}` : `<span class="muted">Nobody yet: ${esc(i.who)}</span>`}</span>
+          <button class="btn ghost sm" data-start="${esc(i.id)}"${i.audience ? "" : " disabled"}>Start this campaign</button>
         </div>`).join("")}
       </div>
     </div>`;

@@ -674,7 +674,10 @@ def _save_record(email: str, draft: dict, results: list[dict], ctx: dict,
     messaged on which channel, who was held out, the offer."""
     targets = []
     by_id = {r["customer_id"]: r for r in draft["rows"]}
-    for x in results:
+    # Only customers who could be sent something are counted in the campaign;
+    # the ones with no phone or email are kept as a number, not as "unsent".
+    reachable = [x for x in results if x.get("whatsapp_sent") or x.get("email_sent") or x.get("wa_link")]
+    for x in reachable:
         r = by_id.get(x["customer_id"]) or {}
         targets.append({
             "customer_id": x["customer_id"], "customer_name": x.get("customer_name") or "",
@@ -691,6 +694,7 @@ def _save_record(email: str, draft: dict, results: list[dict], ctx: dict,
         "image_url": (draft.get("image") or {}).get("url") or "",
         "link": ctx.get("link") or "", "valid_until": ctx.get("valid_until") or "",
         "targets": targets, "holdout": draft.get("holdout") or [],
+        "no_contact": len(results) - len(reachable),
         "pending_proof_id": draft.get("pending_proof_id"), "tap_proof_id": None,
     }
     recs = dict(_records(email))

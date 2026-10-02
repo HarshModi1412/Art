@@ -3932,3 +3932,12 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
   .mc-anrow { grid-template-columns: minmax(0, 1fr); }
   .mc-chips { justify-content: flex-start; }
 }
+
+/* Campaign type picker + tap-to-send counter */
+.mc-select { width: 100%; max-width: 460px; padding: 10px 12px; font: inherit; font-size: 0.9375rem; }
+.mc-why { margin-top: 8px; font-size: 0.8125rem; line-height: 1.55; max-width: 640px; }
+.mc-req { font-size: 0.6875rem; font-weight: 600; color: var(--amber); margin-left: 4px; }
+.mc-tapwrap { margin: 4px 0 6px; }
+.mc-tapcount { font-size: 0.9375rem; margin-bottom: 6px; }
+.mc-tapcount b:first-child { color: var(--green); }
+.mc-idea .btn { align-self: flex-start; margin-top: 4px; }
