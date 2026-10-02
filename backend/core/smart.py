@@ -734,7 +734,13 @@ def ensure_post_task(email: str, post: dict, kind: str = "video",
     text = head + (f" — goes out {label}" if label else "")
     steps = (VIDEO_STEPS if kind == "video"
              else PHOTO_UPLOAD_STEPS if prompt else PHOTO_STEPS)
-    t = {"id": hashlib.md5(f"{pid}{kind}{pd.Timestamp.now().isoformat()}".encode()).hexdigest()[:10],
+    # The id is derived, not random: two requests that create this task at the
+    # same moment (the weekly auto-approve and a tap on Approve) make the SAME
+    # task, and user_store's per-record merge keeps one. A timestamp id gave
+    # two "Make the reel" tasks. The count keeps a reopened task distinct from
+    # the finished one before it.
+    n_before = sum(1 for x in tasks if x.get("post_id") == pid and x.get("kind") == kind)
+    t = {"id": hashlib.md5(f"{pid}|{kind}|{n_before}".encode()).hexdigest()[:10],
          "text": text[:280], "done": False, "kind": kind, "post_id": pid,
          "product_name": name, "due": when, "format": post.get("format") or "",
          "reason": (reason or "")[:300],
