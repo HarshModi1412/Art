@@ -675,6 +675,18 @@ def analyze(email: str, campaign_id: str) -> dict:
     days = max(0, int((pd.Timestamp.now() - sent).days)) if not pd.isna(sent) else 0
 
     targets = rec.get("targets") or []
+    # Tap-to-send links only count once the seller confirms they sent them:
+    # a link that was never tapped reached nobody.
+    taps_confirmed = False
+    if rec.get("pending_proof_id"):
+        try:
+            taps_confirmed = any(r.get("id") == rec["pending_proof_id"] and r.get("state") == "sent"
+                                 for r in winback_proof._load(email))  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            taps_confirmed = False
+    for t in targets:
+        t["reached"] = bool(t.get("whatsapp") == "sent" or t.get("email") == "sent"
+                            or (t.get("whatsapp") == "tap" and taps_confirmed))
     reached = [t for t in targets if t.get("reached")]
     rows, clicked, applied, ordered = [], 0, 0, 0
     revenue = discount = 0.0
@@ -743,7 +755,9 @@ def analyze(email: str, campaign_id: str) -> dict:
                        {"step": "Ordered", "n": ordered}],
             "customers": sorted(rows, key=lambda r: (not r["ordered"], not r["applied"],
                                                      not r["clicked"], not r["came_back"])),
-            "diagnosis": _diagnose(k, days, rec)}
+            "taps_pending": bool(rec.get("pending_proof_id")) and not taps_confirmed,
+            "pending_proof_id": rec.get("pending_proof_id") if not taps_confirmed else None,
+            "diagnosis": _diagnose(k, days, {**rec, "taps_confirmed": taps_confirmed})}
 
 
 def _diagnose(k: dict, days: int, rec: dict) -> list[str]:
@@ -752,7 +766,10 @@ def _diagnose(k: dict, days: int, rec: dict) -> list[str]:
     if days < 3:
         out.append("It is early: most replies to a campaign come in the first 3 to 5 days. "
                    "Check back then.")
-    if k["reached"] == 0:
+    if rec.get("pending_proof_id") and not rec.get("taps_confirmed"):
+        out.append("Your WhatsApp messages were prepared as tap-to-send links. Once you have sent "
+                   "them, press 'I have sent them' so they count as reached.")
+    if k["reached"] == 0 and not rec.get("pending_proof_id"):
         return out + ["Nobody was reached. Add phone numbers or emails for these customers "
                       "and send the next one."]
     if not rec.get("link"):
@@ -822,7 +839,7 @@ def ideas(email: str) -> list[dict]:
             if len(gaps):
                 lastbuy = (t[t["product"].isin(gaps.index)]
                            .groupby(["customer_id", "product"])["_d"].max())
-                repl = int(sum(1 for (c, p), v in lastbuy.items() if (latest - v).days > gaps[p]))
+                repl = len({c for (c, p), v in lastbuy.items() if (latest - v).days > gaps[p]})
     return [
         {"id": "second_order", "title": "Second-order nudge", "audience": first,
          "audience_label": "first-time buyers from 2 to 8 weeks ago",

@@ -3878,3 +3878,57 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
   border: 2px solid currentColor; border-right-color: transparent; animation: cx-spin .8s linear infinite; }
 @keyframes cx-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+/* Marketing Campaign round 2: per-customer rows, tracker, ideas */
+.mc-who { margin-top: 18px; }
+.mc-who-h { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; margin-bottom: 8px; }
+.mc-rows2 { display: flex; flex-direction: column; max-height: 520px; overflow: auto; border: 1px solid var(--border);
+  border-radius: var(--radius); }
+.mc-row2 { border-bottom: 1px solid var(--border); }
+.mc-row2:last-child { border-bottom: none; }
+.mc-row2 > summary { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center;
+  padding: 9px 12px; cursor: pointer; list-style: none; font-size: 0.8125rem; }
+.mc-row2 > summary::-webkit-details-marker { display: none; }
+.mc-row2 > summary:hover { background: var(--surface-2); }
+.mc-row2[open] > summary { background: var(--surface-2); }
+.mc-row2 code { font-size: 0.75rem; padding: 2px 6px; border-radius: 6px; background: var(--surface-3, var(--surface-2)); }
+.mc-who-n { display: flex; flex-direction: column; min-width: 0; }
+.mc-who-n .tiny { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-row2.nocontact > summary { box-shadow: inset 3px 0 0 var(--amber); }
+.mc-add { font-size: 0.6875rem; font-weight: 600; color: var(--amber); white-space: nowrap; }
+.mc-bad { color: var(--amber); }
+.mc-row-body { padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.mc-row-body .mc-bubble { width: 100%; }
+.mc-contact { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; width: 100%; }
+.mc-contact label { display: flex; flex-direction: column; gap: 3px; flex: 1 1 180px; }
+.mc-contact input { width: 100%; }
+.mc-own { width: 100%; }
+.mc-own > summary { cursor: pointer; color: var(--primary); }
+.mc-own textarea { width: 100%; margin: 8px 0 4px; }
+.mc-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 14px 0 6px; }
+.mc-kpi { display: flex; flex-direction: column; gap: 2px; padding: 12px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--surface-2); }
+.mc-kpi b { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.mc-sub { margin: 18px 0 8px; font-size: 0.875rem; }
+.mc-funnel { display: flex; flex-direction: column; gap: 8px; }
+.mc-fstep { display: grid; grid-template-columns: 170px minmax(0, 1fr) 48px; gap: 10px; align-items: center; }
+.mc-fstep b { text-align: right; font-variant-numeric: tabular-nums; }
+.mc-fbar { height: 10px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.mc-fbar i { display: block; height: 100%; background: var(--primary); border-radius: 99px; min-width: 2px; }
+.mc-diag { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 0.8125rem; line-height: 1.5; }
+.mc-anrow { grid-template-columns: minmax(0, 1fr) auto auto; }
+.mc-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.mc-chip { font-size: 0.6875rem; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+.mc-chip.on { background: var(--green-soft); border-color: transparent; color: var(--green); font-weight: 600; }
+.mc-ideas { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.mc-idea { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--border);
+  border-radius: var(--radius); }
+.mc-idea .tiny { color: var(--text-2); line-height: 1.5; }
+.mc-idea-n { margin-top: auto; font-size: 0.78125rem; }
+@media (max-width: 640px) {
+  .mc-fstep { grid-template-columns: 110px minmax(0, 1fr) 36px; }
+  .mc-row2 > summary { grid-template-columns: minmax(0, 1fr) auto; }
+  .mc-row2 > summary .mc-ch { display: none; }
+  .mc-anrow { grid-template-columns: minmax(0, 1fr); }
+  .mc-chips { justify-content: flex-start; }
+}

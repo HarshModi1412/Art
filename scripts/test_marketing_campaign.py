@@ -79,6 +79,11 @@ check("both contact columns survive into the sales data",
 check("an empty email is left empty, not stored as ''",
       pd.isna(tx["customer_email"].iloc[1]), repr(tx["customer_email"].iloc[1]))
 check("the roles reach the mapping screen", "customer_phone" in mapper.ROLE_KEYWORDS)
+import io  # noqa: E402
+fl = pd.read_csv(io.StringIO("Date,Mobile,Total\n2026-01-01,9876543210,10\n2026-01-02,,20\n"))
+txf, _ = mapper.build_transactions(fl, mapper.suggest_mapping(fl))
+check("a phone column with blanks (read as decimals) keeps the exact number, no '.0'",
+      txf["customer_phone"].iloc[0] == "9876543210", repr(txf["customer_phone"].iloc[0]))
 
 no_contacts = raw.drop(columns=["Mobile", "Email ID"]).assign(Cust=["C1", "C2", "C3"])
 m2 = mapper.suggest_mapping(no_contacts)
@@ -372,7 +377,13 @@ r = c.post(f"/api/shop/{HANDLE}/order", json={"lines": [{"product_id": pid, "qty
 check("and the order", r.status_code == 200, r.text[:200])
 r = c.get(f"/api/campaign/{d['id']}/analysis", headers=H)
 check("the analysis opens", r.status_code == 200, r.text[:200])
+check("unconfirmed tap-to-send links do not count as reached",
+      r.json()["kpis"]["reached"] == 0 and r.json()["taps_pending"], str(r.json()["kpis"]))
+c.post("/api/rfm/winback/confirm", headers=H, json={"campaign_id": r.json()["pending_proof_id"]})
+r = c.get(f"/api/campaign/{d['id']}/analysis", headers=H)
 an = r.json()
+check("once the seller confirms, they do", an["kpis"]["reached"] == an["kpis"]["messaged"]
+      and not an["taps_pending"], str(an["kpis"]))
 k = an["kpis"]
 check("it counts who was messaged and reached", k["messaged"] == len(res["results"]) and k["reached"] > 0, str(k))
 check("the funnel narrows step by step",

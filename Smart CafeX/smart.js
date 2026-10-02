@@ -8010,15 +8010,17 @@ function renderMarketing(d) {
   _mc.draft = d.draft || null;
   _mc.result = null;
   const intro = `<p class="muted" style="margin-top:0;">Set one offer, and every customer it is
-    for gets a message on WhatsApp and email with their <b>own discount code</b>. The code works at
-    checkout on your website, and every code that gets used is counted below as a customer won back.</p>`;
+    for gets a message on WhatsApp and email with their <b>own discount code</b>, written in one of ten
+    voices so no two neighbours read the same thing. Every click, code used and order is tracked below.</p>`;
   const body = _mc.draft ? mcDraftHtml(_mc.draft) : mcComposeHtml(d);
   moduleShell("Marketing Campaign", `
     ${intro}
     ${mcAutoStrip(d.auto)}
     <div id="mcMain">${body}</div>
-    ${mcHistoryHtml(d.history || [], d.symbol)}`);
+    ${mcHistoryHtml(d.history || [], d.symbol)}
+    ${mcIdeasHtml(d.ideas || [])}`);
   wireMcAuto();
+  wireMcHistory();
   if (_mc.draft) wireMcDraft(); else wireMcCompose();
 }
 
@@ -8128,15 +8130,47 @@ async function buildCampaign() {
 }
 
 /* ------------------------------------------------------------- review ---- */
-function mcDraftHtml(d) {
+const MC_VOICES = 10;
+
+function mcRowHtml(r, open) {
+  const contact = r.phone || r.email;
+  return `<details class="mc-row2${contact ? "" : " nocontact"}" data-cid="${esc(r.customer_id)}"${open ? " open" : ""}>
+    <summary>
+      <span class="mc-who-n"><b>${esc(r.customer_name || r.customer_id)}</b>
+        <span class="muted tiny">${esc(r.product_display || "–")}${r.pick_display ? ` · suggests ${esc(r.pick_display)}` : ""}</span></span>
+      <code>${esc(r.code)}</code>
+      <span class="mc-ch">${r.phone ? sic("whatsapp") : ""}${r.email ? sic("mail") : ""}${contact ? "" : `<span class="mc-add">Add phone</span>`}</span>
+    </summary>
+    <div class="mc-row-body">
+      <div class="mc-bubble">${mcWa(r.message)}</div>
+      <p class="muted tiny" style="margin:6px 0 10px;">Email subject: ${esc(r.email_subject || "")}
+        ${r.message_override ? " · <b>your own words</b>" : ` · voice ${(Number(r.voice) || 0) + 1} of ${MC_VOICES}`}</p>
+      <div class="mc-contact">
+        <label class="tiny">Phone (WhatsApp)<input data-f="phone" value="${esc(r.phone || "")}" placeholder="+91 98765 43210" inputmode="tel"></label>
+        <label class="tiny">Email<input data-f="email" value="${esc(r.email || "")}" placeholder="name@email.com" inputmode="email"></label>
+        <button class="btn ghost sm" data-act="contact">Save contact</button>
+      </div>
+      <details class="mc-own">
+        <summary class="tiny">Write this customer's message yourself</summary>
+        <textarea data-f="message" rows="6">${esc(r.message_override || r.message || "")}</textarea>
+        <p class="muted tiny">Keep their code <b>${esc(r.code)}</b> in it. {offer}, {expiry} and {link} also work.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn primary sm" data-act="msg">Save message</button>
+          ${r.message_override ? `<button class="btn ghost sm" data-act="reset">Use the written one again</button>` : ""}
+        </div>
+      </details>
+      <button class="btn ghost tiny" data-act="remove">${sic("close")}Leave ${esc((r.customer_name || "this customer").split(" ")[0])} out</button>
+    </div>
+  </details>`;
+}
+
+function mcDraftHtml(d, openId) {
   const c = d.counts || {};
   const ctx = d.ctx || {};
   const wa = d.whatsapp || {};
   const img = d.image || {};
   const allow = d.image_allowance || {};
-  const sample = (d.rows || [])[0] || {};
   const title = d.reason === "festival" ? `${esc(d.occasion || "Festival")} offer` : "Win-back campaign";
-  const auto = d.trigger === "auto";
   const left = allow.left == null ? "" : ` (${fmt(allow.left)} left this month)`;
   const imgBlock = img.url
     ? `<img src="${esc(img.url)}" alt="Campaign picture" class="mc-img">`
@@ -8144,18 +8178,21 @@ function mcDraftHtml(d) {
   const waLine = wa.mode === "auto"
     ? `${sic("check")} Sends automatically from ${esc(wa.display_number || "+" + wa.number)}`
     : wa.mode === "waiting"
-      ? `Waiting for Meta to approve your template. Until then each message opens in WhatsApp for you to tap send.`
+      ? `Waiting for Meta to approve your message. Until then each one opens in WhatsApp for you to tap send.`
       : `Each message opens in WhatsApp already written, you tap send.
          <a href="#" id="mcWaSetup">Send automatically</a>`;
   const brandWarn = ctx.brand_ready ? "" :
     `<div class="mc-warn">${sic("bell")}<span><b>Add your shop name before sending.</b> These messages
       are signed with it. Set it in Product Studio → Brand.</span></div>`;
-  const rows = d.rows || [];
+  // customers with no way to reach them first: that is where the seller has work to do
+  const rows = (d.rows || []).slice().sort((a, b) => (!!(a.phone || a.email)) - (!!(b.phone || b.email)));
+  const reach = (c.audience || 0) - (c.unreachable || 0);
+  const hold = (d.holdout || []).length;
   return `
     <div class="card mc-card mc-draft">
       <div class="mc-draft-h">
         <div>
-          <h4 class="mc-h">${sic("gift")}${title}${auto ? ` <span class="mc-tag">prepared for you</span>` : ""}</h4>
+          <h4 class="mc-h">${sic("gift")}${title}${d.trigger === "auto" ? ` <span class="mc-tag">prepared for you</span>` : ""}</h4>
           <p class="muted tiny" style="margin:2px 0 0;">${esc(ctx.offer_label || "")} · codes valid till
             ${esc(ctx.expiry_label || "")}${ctx.link ? "" : " · your website is not published yet, so codes can only be used in person"}</p>
         </div>
@@ -8165,7 +8202,8 @@ function mcDraftHtml(d) {
         <span><b>${fmt(c.audience || 0)}</b> customers</span>
         <span>${sic("whatsapp")}<b>${fmt(c.phone || 0)}</b> on WhatsApp</span>
         <span>${sic("mail")}<b>${fmt(c.email || 0)}</b> by email</span>
-        ${c.unreachable ? `<span class="muted"><b>${fmt(c.unreachable)}</b> no contact</span>` : ""}
+        ${c.unreachable ? `<span class="mc-bad"><b>${fmt(c.unreachable)}</b> need a phone or email</span>` : ""}
+        ${hold ? `<span class="muted" title="These customers get no message, so the results can show what the campaign itself caused.">${fmt(hold)} held back to measure the effect</span>` : ""}
         ${d.held_back ? `<span class="muted">${fmt(d.held_back)} left out, contacted recently</span>` : ""}
       </div>
       ${brandWarn}
@@ -8179,36 +8217,19 @@ function mcDraftHtml(d) {
           </div>
         </div>
         <div class="mc-msg">
-          <div class="mc-msg-h"><b>What ${esc(sample.customer_name || "a customer")} gets</b>
-            <span class="muted tiny">${d.copy && d.copy.source === "template" ? "written from our templates" : d.copy && d.copy.source === "edited" ? "your edit" : "written by AI"}</span></div>
-          <div class="mc-bubble">${mcWa(sample.message)}</div>
-          <p class="muted tiny" style="margin:6px 0 0;">Email subject: ${esc(sample.email_subject || "")}</p>
-          <button class="btn ghost sm" id="mcEdit">${sic("edit")}Edit the message</button>
-          <div id="mcEditBox" hidden>
-            <label class="tiny">WhatsApp and email message
-              <textarea id="mcTpl" rows="7">${esc((d.copy || {}).whatsapp || "")}</textarea></label>
-            <label class="tiny">For customers whose favourite product we do not know
-              <textarea id="mcTplGen" rows="5">${esc((d.copy || {}).whatsapp_generic || "")}</textarea></label>
-            <label class="tiny">Email subject <input id="mcSubj" value="${esc((d.copy || {}).email_subject || "")}"></label>
-            <p class="muted tiny">Placeholders: {name} {product} {offer} {code} {expiry} {link} {brand}${d.reason === "festival" ? " {occasion}" : ""}.
-              {code} and {offer} must stay in.</p>
-            <button class="btn primary sm" id="mcSaveTpl">Save message</button>
-          </div>
+          <div class="mc-msg-h"><b>Every customer gets their own message</b></div>
+          <p class="muted tiny" style="margin:0 0 10px;">Ten different voices, each with the customer's name,
+            what they bought and something they are likely to love next (from what your other customers
+            buy together). Open anyone below to see exactly what they get, add their number, or write it yourself.</p>
+          <div class="mc-bubble">${mcWa((rows.find((r) => r.phone || r.email) || rows[0] || {}).message)}</div>
         </div>
       </div>
 
-      <details class="sm-fold mc-who"${rows.length <= 12 ? " open" : ""}>
-        <summary>Who gets it, and their codes (${fmt(rows.length)})</summary>
-        <div class="mc-rows">
-          ${rows.map((r) => `<div class="mc-row">
-            <div><b>${esc(r.customer_name || r.customer_id)}</b>
-              <span class="muted tiny">${esc(r.product_display || "–")}${r.segment ? ` · ${esc(r.segment)}` : ""}</span></div>
-            <code>${esc(r.code)}</code>
-            <span class="mc-ch">${r.phone ? sic("whatsapp") : ""}${r.email ? sic("mail") : ""}${!r.phone && !r.email ? `<span class="muted tiny">no contact</span>` : ""}</span>
-            <button class="btn ghost tiny" data-mcrm="${esc(r.customer_id)}" aria-label="Leave ${esc(r.customer_name || "this customer")} out">${sic("close")}</button>
-          </div>`).join("")}
-        </div>
-      </details>
+      <div class="mc-who">
+        <div class="mc-who-h"><b>Who gets it (${fmt(rows.length)})</b>
+          ${c.unreachable ? `<span class="muted tiny">Open a customer to add their phone number.</span>` : ""}</div>
+        <div class="mc-rows2">${rows.map((r) => mcRowHtml(r, r.customer_id === openId)).join("")}</div>
+      </div>
 
       <div class="mc-send">
         <label class="mc-chk"><input type="checkbox" id="mcChWa" checked>${sic("whatsapp")}<span><b>WhatsApp</b><br><span class="muted tiny">${waLine}</span></span></label>
@@ -8216,12 +8237,11 @@ function mcDraftHtml(d) {
           ? "Sent with the picture, the code and a Shop now button."
           : "Email sending is not set up on this server yet."}</span></span></label>
       </div>
-      ${(c.audience || 0) - (c.unreachable || 0) > 0 ? "" : `<div class="mc-warn">${sic("bell")}<span><b>None of these
-        customers have a phone number or email on file,</b> so there is nobody to send to. Upload your
-        sales again and map the <b>Customer phone</b> and <b>Customer email</b> columns, or take orders
-        on your website, which collects them for you.</span></div>`}
+      ${reach > 0 ? "" : `<div class="mc-warn">${sic("bell")}<span><b>None of these customers have a phone
+        number or email yet,</b> so there is nobody to send to. Open a customer above to add one, upload
+        your sales again with the phone column mapped, or take orders on your website.</span></div>`}
       <div class="mc-go">
-        <button class="btn primary" id="mcSend"${(c.audience || 0) - (c.unreachable || 0) > 0 ? "" : " disabled"}>${sic("arrow-right")}Send to ${fmt((c.audience || 0) - (c.unreachable || 0))} customers</button>
+        <button class="btn primary" id="mcSend"${reach > 0 ? "" : " disabled"}>${sic("arrow-right")}Send to ${fmt(reach)} customers</button>
         <span class="muted tiny">Codes start working as soon as you send.</span>
       </div>
       <div class="err" id="mcErr" hidden></div>
@@ -8230,8 +8250,18 @@ function mcDraftHtml(d) {
 
 function wireMcDraft() {
   const d = _mc.draft;
-  const err = (m) => { const e = $("mcErr"); if (e) { e.textContent = m; e.hidden = false; } else toast(m, 6000); };
-  const repaint = (nd) => { _mc.draft = nd; warmModClearAll(); $("mcMain").innerHTML = mcDraftHtml(nd); wireMcDraft(); };
+  const err = (m) => { const e = $("mcErr"); if (e) { e.textContent = m; e.hidden = false; } toast(m, 6000); };
+  const repaint = (nd, openId) => {
+    _mc.draft = nd; warmModClearAll();
+    $("mcMain").innerHTML = mcDraftHtml(nd, openId); wireMcDraft();
+    if (openId) {
+      const el = document.querySelector(`.mc-row2[data-cid="${CSS.escape(openId)}"]`);
+      if (el) el.scrollIntoView({ block: "nearest" });
+    }
+  };
+  const update = (body, openId, okMsg) => api(`/api/campaign/${d.id}/update`, { method: "POST", json: body })
+    .then((nd) => { repaint(nd, openId); if (okMsg) toast(okMsg); })
+    .catch((e) => err(e.message));
 
   $("mcDiscard").onclick = async () => {
     if (!confirm("Discard this campaign? Nothing has been sent, and its codes will never work.")) return;
@@ -8240,17 +8270,17 @@ function wireMcDraft() {
       warmModClearAll(); refreshApprovals(true); openMarketing();
     } catch (e) { err(e.message); }
   };
-  $("mcEdit").onclick = () => { const b = $("mcEditBox"); b.hidden = !b.hidden; };
-  $("mcSaveTpl").onclick = async () => {
-    try {
-      repaint(await api(`/api/campaign/${d.id}/update`, { method: "POST", json: {
-        whatsapp: $("mcTpl").value, whatsapp_generic: $("mcTplGen").value, email_subject: $("mcSubj").value } }));
-      toast("Message saved");
-    } catch (e) { err(e.message); }
-  };
-  document.querySelectorAll("[data-mcrm]").forEach((b) => b.onclick = async () => {
-    try { repaint(await api(`/api/campaign/${d.id}/update`, { method: "POST", json: { remove: [b.dataset.mcrm] } })); }
-    catch (e) { err(e.message); }
+  document.querySelectorAll(".mc-row2").forEach((row) => {
+    const cid = row.dataset.cid;
+    const val = (f) => (row.querySelector(`[data-f="${f}"]`) || {}).value || "";
+    row.querySelectorAll("[data-act]").forEach((b) => b.onclick = (ev) => {
+      ev.preventDefault();
+      const act = b.dataset.act;
+      if (act === "contact") update({ row: { customer_id: cid, phone: val("phone"), email: val("email") } }, cid, "Contact saved, and kept for next time");
+      if (act === "msg") update({ row: { customer_id: cid, message: val("message") } }, cid, "Message saved for this customer");
+      if (act === "reset") update({ row: { customer_id: cid, reset_message: true } }, cid);
+      if (act === "remove") update({ remove: [cid] }, null, "Left out of this campaign");
+    });
   });
   $("mcImgAi").onclick = async () => {
     const b = $("mcImgAi"); b.disabled = true; b.textContent = "Making the picture…";
@@ -8273,7 +8303,7 @@ function wireMcDraft() {
     if (!channels.length) return err("Pick WhatsApp, email or both.");
     const n = ((d.counts || {}).audience || 0) - ((d.counts || {}).unreachable || 0);
     if (!confirm(`Send this campaign to ${n} customers now?`)) return;
-    const b = $("mcSend"); b.disabled = true; b.textContent = "Sending…";
+    const b = $("mcSend"); b.disabled = true; b.innerHTML = `<span class="spin" aria-hidden="true"></span> Sending…`;
     try {
       const r = await api(`/api/campaign/${d.id}/send`, { method: "POST", json: { channels } });
       _mc.result = r;
@@ -8302,7 +8332,8 @@ function mcResultHtml(r) {
         </div>
         ${r.pending_campaign_id ? `<div class="mc-go"><button class="btn primary" id="mcTapDone">${sic("check")}I have sent them</button>
           <span class="muted tiny">Until you say so, these are not counted as contacted.</span></div>` : ""}` : ""}
-      <div class="mc-go"><button class="btn ghost" id="mcNew">${sic("plus")}Start another campaign</button></div>
+      <div class="mc-go"><button class="btn primary" id="mcSeeRes">${sic("chart")}Track the results</button>
+        <button class="btn ghost" id="mcNew">${sic("plus")}Start another campaign</button></div>
     </div>`;
 }
 
@@ -8320,28 +8351,144 @@ function wireMcResult(r) {
     } catch (e) { toast(e.message, 6000); }
   };
   $("mcNew").onclick = () => { warmModClearAll(); openMarketing(); };
+  $("mcSeeRes").onclick = () => openCampaignAnalysis(r.campaign_id);
 }
 
 /* ------------------------------------------------------------ history ---- */
 function mcHistoryHtml(rows, sym) {
   if (!rows.length) return "";
   return `
-    <details class="sm-fold" open>
-      <summary>Past campaigns (${rows.length})</summary>
+    <div class="card mc-card">
+      <h4 class="mc-h">${sic("trend")}Your campaigns</h4>
       <div class="mk-sends">
         ${rows.slice(0, 20).map((s) => {
           const codes = s.codes || null;
-          const what = s.reason === "festival" ? `${s.occasion || "Festival"} offer`
-            : s.reason === "winback" ? "Win-back" : "Win-back";
+          const what = s.reason === "festival" ? `${s.occasion || "Festival"} offer` : "Win-back";
           return `<div class="mk-send-row">
-            <b>${esc(what)}${s.offer_label ? ` · ${esc(s.offer_label)}` : ""}</b>
+            <div style="flex:1;min-width:0;"><b>${esc(what)}${s.offer_label ? ` · ${esc(s.offer_label)}` : ""}</b><br>
             <span class="muted tiny">${esc(String(s.at || "").slice(0, 10))}
               · ${fmt(s.delivered || 0)} sent${s.prepared ? ` · ${fmt(s.prepared)} by tap-to-send` : ""}
-              ${codes && codes.issued ? ` · <b>${fmt(codes.redeemed)} of ${fmt(codes.issued)} codes used</b>${codes.revenue ? `, ${mcMoney(sym, codes.revenue)} in orders` : ""}` : ""}</span>
+              ${codes && codes.issued ? ` · <b>${fmt(codes.redeemed)} of ${fmt(codes.issued)} codes used</b>${codes.revenue ? `, ${mcMoney(sym, codes.revenue)} in orders` : ""}` : ""}</span></div>
+            ${s.tracked ? `<button class="btn ghost sm" data-an="${esc(s.campaign_id)}">${sic("chart")}Results</button>` : ""}
           </div>`;
         }).join("")}
       </div>
-    </details>`;
+    </div>`;
+}
+
+function wireMcHistory() {
+  document.querySelectorAll("[data-an]").forEach((b) => b.onclick = () => openCampaignAnalysis(b.dataset.an));
+}
+
+/* ----------------------------------------------------------- analyzer ---- */
+/* How the people who run campaigns for a living read one: a funnel (where do
+   people drop off), the money (what it brought back for what it gave away),
+   and lift against a held-back group (what the campaign CAUSED, as opposed to
+   who was coming back anyway). Then what to try next. */
+async function openCampaignAnalysis(id) {
+  let a;
+  try { a = await api(`/api/campaign/${encodeURIComponent(id)}/analysis`); }
+  catch (e) { return toast(e.message, 6000); }
+  $("mcMain").innerHTML = mcAnalysisHtml(a);
+  $("mcMain").scrollIntoView({ behavior: "smooth", block: "start" });
+  $("mcAnBack").onclick = () => { warmModClearAll(); openMarketing(); };
+  const td = $("mcAnTapDone");
+  if (td) td.onclick = async () => {
+    try {
+      await api("/api/rfm/winback/confirm", { method: "POST", json: { campaign_id: a.pending_proof_id } });
+      toast("Marked as sent."); openCampaignAnalysis(id);
+    } catch (e) { toast(e.message, 6000); }
+  };
+  const cl = $("mcCopyLink");
+  if (cl) cl.onclick = async () => {
+    try { await navigator.clipboard.writeText(cl.dataset.link); toast("Link copied"); }
+    catch (e) { prompt("Copy this link:", cl.dataset.link); }
+  };
+}
+
+function mcAnalysisHtml(a) {
+  const c = a.campaign || {};
+  const k = a.kpis || {};
+  const sym = c.symbol || "₹";
+  const what = c.reason === "festival" ? `${c.occasion || "Festival"} offer` : "Win-back campaign";
+  const top = Math.max(1, ...(a.funnel || []).map((f) => f.n));
+  const tile = (label, value, sub) => `<div class="mc-kpi"><span class="muted tiny">${label}</span>
+    <b>${value}</b>${sub ? `<span class="muted tiny">${sub}</span>` : ""}</div>`;
+  const shareLink = c.link ? `${c.link}${c.link.includes("?") ? "&" : "?"}c=${encodeURIComponent(c.id)}` : "";
+  const lift = k.holdout
+    ? (k.lift_pts == null ? "–" : `${k.lift_pts > 0 ? "+" : ""}${k.lift_pts} pts`)
+    : "–";
+  const chip = (on, label) => `<span class="mc-chip${on ? " on" : ""}">${label}</span>`;
+  return `
+    <div class="card mc-card">
+      <div class="mc-draft-h">
+        <div>
+          <h4 class="mc-h">${sic("chart")}${esc(what)} · results</h4>
+          <p class="muted tiny" style="margin:2px 0 0;">Sent ${esc(String(c.sent_at || "").slice(0, 10))}
+            (${fmt(a.days_since)} day${a.days_since === 1 ? "" : "s"} ago) · ${esc(c.offer_label || "")}
+            · codes valid till ${esc(c.valid_until || "")}</p>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${shareLink ? `<button class="btn ghost sm" id="mcCopyLink" data-link="${esc(shareLink)}">${sic("copy")}Copy shop link</button>` : ""}
+          <button class="btn ghost sm" id="mcAnBack">${sic("arrow-left")}Back</button>
+        </div>
+      </div>
+
+      ${a.pending_proof_id ? `<div class="mc-warn">${sic("whatsapp")}<span>Your WhatsApp messages were prepared as
+        tap-to-send links. Once you have sent them, confirm it so they count as reached.
+        <button class="btn primary sm" id="mcAnTapDone" style="margin-left:6px;">I have sent them</button></span></div>` : ""}
+      <div class="mc-kpis">
+        ${tile("Reached", fmt(k.reached), `of ${fmt(k.messaged)} messaged`)}
+        ${tile("Opened the link", `${fmt(k.clicked)}`, `${k.click_rate}% of reached`)}
+        ${tile("Orders with the code", fmt(k.orders), `${k.conversion}% of reached`)}
+        ${tile("Revenue from codes", mcMoney(sym, k.revenue), k.aov ? `${mcMoney(sym, k.aov)} average order` : "")}
+        ${tile("Discount given", mcMoney(sym, k.discount), k.per_discount ? `${mcMoney(sym, k.per_discount)} back for every ${sym}1` : "")}
+        ${tile("Came back (any way)", `${fmt(k.came_back)}`, `${k.came_back_rate}%${k.holdout ? ` vs ${k.holdout_rate}% held back` : ""}`)}
+        ${tile("Lift from the campaign", lift, k.holdout ? (k.extra_customers != null ? `≈ ${k.extra_customers} extra customers` : "") : "needs 20+ customers to measure")}
+      </div>
+
+      <h5 class="mc-sub">Where people drop off</h5>
+      <div class="mc-funnel">
+        ${(a.funnel || []).map((f) => `<div class="mc-fstep"><span class="tiny">${esc(f.step)}</span>
+          <div class="mc-fbar"><i style="width:${Math.round(100 * f.n / top)}%"></i></div><b>${fmt(f.n)}</b></div>`).join("")}
+      </div>
+
+      ${(a.diagnosis || []).length ? `<h5 class="mc-sub">What to do next</h5>
+        <ul class="mc-diag">${a.diagnosis.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+
+      <details class="sm-fold"${(a.customers || []).length <= 15 ? " open" : ""}>
+        <summary>Customer by customer (${fmt((a.customers || []).length)})</summary>
+        <div class="mc-rows">
+          ${(a.customers || []).map((r) => `<div class="mc-row mc-anrow">
+            <div><b>${esc(r.customer_name || r.customer_id)}</b>
+              <span class="muted tiny">${esc(r.code)} · ${r.whatsapp === "sent" ? "WhatsApp" : r.whatsapp === "tap" ? "WhatsApp (tap)" : ""}${r.email ? `${r.whatsapp ? " + " : ""}email` : ""}${!r.reached ? "not reached" : ""}</span></div>
+            <span class="mc-chips">${chip(r.clicked, "opened")}${chip(r.applied || r.ordered, "used code")}${chip(r.ordered, "ordered")}${chip(r.came_back, "came back")}</span>
+            <span class="tiny">${r.spent_since ? mcMoney(sym, r.spent_since) : ""}</span>
+          </div>`).join("")}
+        </div>
+      </details>
+      <p class="muted tiny" style="margin-top:10px;">"Came back" counts any purchase in the ${fmt(a.window_days)} days after sending,
+        on your website or in sales you upload, so it includes people who did not use the code.
+        The held-back group got no message: the gap between the two is what the campaign caused.</p>
+    </div>`;
+}
+
+/* --------------------------------------------------------------- ideas ---- */
+function mcIdeasHtml(ideas) {
+  if (!ideas.length) return "";
+  return `
+    <div class="card mc-card">
+      <h4 class="mc-h">${sic("spark")}More campaigns that work</h4>
+      <p class="muted tiny" style="margin:0 0 10px;">What the best small brands run besides win-back,
+        sized from your own sales. These are coming to this screen next.</p>
+      <div class="mc-ideas">
+        ${ideas.map((i) => `<div class="mc-idea">
+          <b>${esc(i.title)}</b>
+          <span class="tiny">${esc(i.why)}</span>
+          <span class="mc-idea-n">${i.audience ? `<b>${fmt(i.audience)}</b> ${esc(i.audience_label)}` : `<span class="muted">Nobody yet: ${esc(i.audience_label)}</span>`}</span>
+        </div>`).join("")}
+      </div>
+    </div>`;
 }
 
 /* -------------------------------------------- every second Monday ------ */
@@ -8439,11 +8586,21 @@ async function openWinbackAutoSetup() {
 
 /* ------------------------------------------------- WhatsApp setup ------ */
 /* Lives in Account → WhatsApp, and opens as a popup from the campaign screen.
-   Step one works the minute it is saved (tap-to-send); step two is Meta's
-   official API, the only way WhatsApp lets a business message customers
-   automatically. */
+   Step one works the minute a number is saved (tap-to-send). Step two is one
+   button: Meta's own sign-in popup (Embedded Signup). Log in with Facebook,
+   pick the business, confirm the number with an SMS code, done. While the app
+   is in Meta's review, only sellers added as testers can finish it, exactly
+   like Instagram. Pasting IDs by hand is kept under Advanced. */
 function whatsappSetupHtml(w) {
   const badge = { auto: "Automatic", waiting: "Waiting for Meta", tap: "Tap-to-send", off: "Not set up" }[w.mode] || "";
+  const emb = w.embedded || {};
+  const manual = `
+      <label class="tiny" style="display:block;">Phone Number ID <input id="waPnid" inputmode="numeric" style="width:100%;"></label>
+      <label class="tiny" style="display:block;margin-top:6px;">WhatsApp Business Account ID <input id="waWaba" inputmode="numeric" style="width:100%;"></label>
+      <label class="tiny" style="display:block;margin-top:6px;">Permanent access token <input id="waTok" type="password" autocomplete="off" style="width:100%;"></label>
+      <button class="btn ghost sm" id="waConnect" style="margin-top:10px;">Connect with these</button>
+      <p class="muted tiny">From developers.facebook.com → your app → WhatsApp → API Setup, and a System User
+        token with whatsapp_business_messaging and whatsapp_business_management.</p>`;
   return `
     <p class="muted tiny" style="margin-top:0;"><span class="mc-tag">${esc(badge)}</span> ${esc(w.headline || "")}</p>
     <h4 style="margin:12px 0 6px;">1. The number you send from</h4>
@@ -8455,29 +8612,98 @@ function whatsappSetupHtml(w) {
     </div>
 
     <h4 style="margin:18px 0 6px;">2. Send automatically <span class="muted tiny">(optional)</span></h4>
-    <p class="muted tiny" style="margin:0 0 8px;">WhatsApp only lets a business message customers
-      automatically through its official Business Platform. Setting it up is free; Meta charges a
-      small fee per marketing message. In
-      <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener">Meta for Developers</a>,
-      create a Business app and add <b>WhatsApp</b> to it, add your number, then copy the three values
-      below. The two IDs are under WhatsApp → API Setup. For the token, create a System User in
-      Business Settings and generate a permanent token with <i>whatsapp_business_messaging</i> and
-      <i>whatsapp_business_management</i>.</p>
     ${w.connected ? `
-      <div class="ok-note">Connected${w.display_number ? ` as ${esc(w.display_number)}` : ""}.
+      <div class="ok-note">Connected${w.display_number ? ` as ${esc(w.display_number)}` : ""}${w.coexistence ? ", and still on your WhatsApp Business app" : ""}.
         Message template: <b>${esc(w.template_status || "not submitted")}</b>.
         ${w.template_error ? `<br>${esc(w.template_error)}` : ""}</div>
       <div style="display:flex;gap:8px;margin-top:10px;">
         <button class="btn ghost sm" id="waRefresh">${sic("refresh")}Check approval</button>
         <button class="btn ghost sm" id="waOff">Disconnect</button>
-      </div>` : `
-      <label class="tiny" style="display:block;">Phone Number ID <input id="waPnid" inputmode="numeric" style="width:100%;"></label>
-      <label class="tiny" style="display:block;margin-top:6px;">WhatsApp Business Account ID <input id="waWaba" inputmode="numeric" style="width:100%;"></label>
-      <label class="tiny" style="display:block;margin-top:6px;">Permanent access token <input id="waTok" type="password" autocomplete="off" style="width:100%;"></label>
-      <button class="btn primary sm" id="waConnect" style="margin-top:10px;">Connect and submit the template</button>
-      <p class="muted tiny">We check these with Meta, then submit your campaign message template for
-        approval. Meta usually approves within minutes, sometimes up to a day.</p>`}
+      </div>` : emb.available ? `
+      <div class="ig-pre">
+        <b>Before you start</b>
+        <ol style="line-height:1.7;padding-left:18px;margin:6px 0 0;">
+          <li><b>While we are in Meta's review, accept the tester invite first.</b> We add you as a
+            tester (just ask us); open <a href="https://developers.facebook.com/requests/" target="_blank" rel="noopener">developers.facebook.com/requests</a>
+            with your Facebook login and press Accept.</li>
+          <li>Keep the phone with your shop's WhatsApp number nearby: Meta sends it a code.</li>
+        </ol>
+      </div>
+      <label class="mc-chk" style="margin-top:10px;"><input type="checkbox" id="waCoex" checked>
+        <span><b>I use the WhatsApp Business app on this number</b><br>
+        <span class="muted tiny">Keep using the app as you do today; campaigns send from the same number.
+          Untick if this is a new number that is not on WhatsApp yet.</span></span></label>
+      <button class="btn primary" id="waEmbedded" style="margin-top:10px;">${sic("whatsapp")}Connect WhatsApp</button>
+      <ol class="muted tiny" style="line-height:1.7;padding-left:18px;margin-top:10px;">
+        <li>A Facebook window opens (facebook.com, not us). Log in.</li>
+        <li>Pick your business, or create one with your shop's name.</li>
+        <li>Choose your WhatsApp number and type the code Meta sends to it.</li>
+        <li>You land back here, connected. Meta then approves your campaign message, usually within minutes.</li>
+      </ol>
+      <p class="muted tiny">Meta charges a small fee per marketing message, billed to your own WhatsApp
+        account: add a payment method in WhatsApp Manager when it asks.</p>
+      <details class="sm-fold"><summary class="tiny">Advanced: paste the IDs yourself</summary>${manual}</details>` : `
+      <p class="muted tiny" style="margin:0 0 8px;">One-button WhatsApp sign-in is being switched on for your
+        account. Until then, messages open in WhatsApp for you to tap send, or connect by hand below.</p>
+      <details class="sm-fold"><summary class="tiny">Advanced: paste the IDs yourself</summary>${manual}</details>`}
     <div class="err" id="waErr" hidden></div>`;
+}
+
+function loadFacebookSdk(appId, version) {
+  if (window.FB) return Promise.resolve(window.FB);
+  return new Promise((resolve, reject) => {
+    window.fbAsyncInit = () => {
+      window.FB.init({ appId, autoLogAppEvents: true, xfbml: false, version: version || "v21.0" });
+      resolve(window.FB);
+    };
+    const s = document.createElement("script");
+    s.src = "https://connect.facebook.net/en_US/sdk.js";
+    s.async = true; s.defer = true; s.crossOrigin = "anonymous";
+    s.onerror = () => reject(new Error("Could not load the Facebook sign-in. Turn off any ad blocker for this step and try again."));
+    document.body.appendChild(s);
+  });
+}
+
+/* Meta's Embedded Signup. The popup posts the chosen account and number ids
+   to this window; FB.login hands back a code that is good for 30 seconds,
+   which the server swaps for the seller's token straight away. */
+async function connectWhatsAppEmbedded(coexistence, btn) {
+  const w = await api("/api/whatsapp");
+  const cfg = w.embedded || {};
+  if (!cfg.available) throw new Error("WhatsApp sign-in is not switched on yet.");
+  const FB = await loadFacebookSdk(cfg.app_id, cfg.graph_version);
+  let session = null;
+  const onMsg = (ev) => {
+    let host = "";
+    try { host = new URL(ev.origin).hostname; } catch (e) { return; }
+    if (!/(^|\.)facebook\.com$/.test(host)) return;
+    try {
+      const data = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
+      if (data && data.type === "WA_EMBEDDED_SIGNUP") session = data;
+    } catch (e) { /* other facebook.com messages are not JSON */ }
+  };
+  window.addEventListener("message", onMsg);
+  const extras = { setup: {}, sessionInfoVersion: "3" };
+  if (coexistence) extras.featureType = "whatsapp_business_app_onboarding";
+  return new Promise((resolve, reject) => {
+    FB.login((resp) => {
+      const code = resp && resp.authResponse && resp.authResponse.code;
+      // the session message can land a moment after the login callback
+      setTimeout(() => {
+        window.removeEventListener("message", onMsg);
+        if (!code) {
+          return reject(new Error(session && session.event === "CANCEL"
+            ? "Cancelled. Nothing was connected." : "The WhatsApp sign-in did not finish."));
+        }
+        if (btn) btn.innerHTML = `<span class="spin" aria-hidden="true"></span> Finishing…`;
+        const d = (session && session.data) || {};
+        api("/api/whatsapp/embedded", { method: "POST", json: {
+          code, waba_id: d.waba_id || "", phone_number_id: d.phone_number_id || "",
+          coexistence: !!coexistence || (session && session.event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING"),
+        } }).then(resolve, reject);
+      }, 400);
+    }, { config_id: cfg.config_id, response_type: "code", override_default_response_type: true, extras });
+  });
 }
 
 function wireWhatsAppSetup(onChange) {
@@ -8488,6 +8714,18 @@ function wireWhatsAppSetup(onChange) {
       toast("WhatsApp number saved"); onChange();
     } catch (e) { err(e.message); }
   };
+  const emb = $("waEmbedded");
+  if (emb) emb.onclick = async () => {
+    emb.disabled = true;
+    emb.innerHTML = `<span class="spin" aria-hidden="true"></span> Waiting for Facebook…`;
+    try {
+      await connectWhatsAppEmbedded($("waCoex") && $("waCoex").checked, emb);
+      toast("WhatsApp connected. Your campaign message is with Meta for approval.", 6000);
+      onChange();
+    } catch (e) {
+      err(e.message); emb.disabled = false; emb.innerHTML = `${sic("whatsapp")}Connect WhatsApp`;
+    }
+  };
   const c = $("waConnect");
   if (c) c.onclick = async () => {
     c.disabled = true; c.textContent = "Checking with Meta…";
@@ -8495,7 +8733,7 @@ function wireWhatsAppSetup(onChange) {
       await api("/api/whatsapp/connect", { method: "POST", json: {
         phone_number_id: $("waPnid").value, waba_id: $("waWaba").value, token: $("waTok").value } });
       toast("Connected. Your template is with Meta for approval."); onChange();
-    } catch (e) { err(e.message); c.disabled = false; c.textContent = "Connect and submit the template"; }
+    } catch (e) { err(e.message); c.disabled = false; c.textContent = "Connect with these"; }
   };
   const rf = $("waRefresh");
   if (rf) rf.onclick = async () => {

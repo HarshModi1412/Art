@@ -324,7 +324,16 @@ def contact_frame(raw: pd.DataFrame, mapping: dict) -> dict[str, pd.Series]:
     for role in CONTACT_ROLES:
         src = mapping.get(role)
         if src and src in raw.columns:
-            s = raw[src].astype("string").str.strip()
+            col = raw[src]
+            if pd.api.types.is_numeric_dtype(col):
+                # A phone column with any blank cell is read as float, and
+                # 9876543210 then prints as "9876543210.0": one ".0" away from
+                # messaging a stranger. Whole numbers go back to digits.
+                s = col.map(lambda v: "" if pd.isna(v) else str(int(round(float(v)))))
+                s = s.astype("string").replace("", pd.NA)
+            else:
+                s = col.astype("string").str.strip()
+                s = s.str.replace(r"\.0$", "", regex=True)
             if role == "customer_email":
                 s = s.str.lower().where(s.str.contains("@", na=False))
             else:

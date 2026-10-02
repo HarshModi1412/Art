@@ -1019,7 +1019,8 @@ def customer_profiles(txns: pd.DataFrame, ids: list, by_id: dict, idx: dict,
                 vals = vals[vals != ""]
                 if len(vals):
                     if attr == "phone":
-                        phone = vals.iloc[-1]
+                        # data saved before the mapper fix can carry "...0.0"
+                        phone = vals.iloc[-1].removesuffix(".0")
                     else:
                         email_addr = vals.iloc[-1]
 
