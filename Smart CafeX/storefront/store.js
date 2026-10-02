@@ -1848,6 +1848,16 @@ function scrollToRegion(key) {
   post({ type: "ready" });
   if (S.token) loadMe(S.route.name === "orders");
   if (qcode && !EDIT) setTimeout(() => toast(`Your code ${qcode} will be applied at checkout`, "check", 4200), 900);
+  // Tell the shop this campaign link was opened, once per visit (a reload in
+  // the same tab is not a second click).
+  if (qcode && !EDIT && !PREVIEW) {
+    let seen = null;
+    try { seen = sessionStorage.getItem("cs_click_" + qcode); } catch (e) { /* private mode */ }
+    if (!seen) {
+      try { sessionStorage.setItem("cs_click_" + qcode, "1"); } catch (e) { /* private mode */ }
+      api("/visit", { method: "POST", json: { code: qcode, c: QS.get("c") || "" } }).catch(() => {});
+    }
+  }
   // the emailed reset link comes back as ?reset=<token>
   const rt = QS.get("reset");
   if (rt) setTimeout(() => openReset(rt), 400);

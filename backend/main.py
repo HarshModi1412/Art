@@ -4195,9 +4195,8 @@ class CampaignBuildBody(BaseModel):
 
 
 class CampaignUpdateBody(BaseModel):
-    whatsapp: str | None = None
-    whatsapp_generic: str | None = None
-    email_subject: str | None = None
+    # one customer: {customer_id, phone?, email?, message?, reset_message?}
+    row: dict | None = None
     remove: list[str] | None = None
 
 
@@ -4237,6 +4236,7 @@ def campaign_state(authorization: str | None = Header(default=None)):
         "store_link": campaign_engine.store_link(email),
         "brand": brandname.resolve(email),
         "symbol": campaign_engine._symbol(email),
+        "ideas": campaign_engine.ideas(email),
     }
 
 
@@ -4309,6 +4309,17 @@ def campaign_send(draft_id: str, body: CampaignSendBody,
     return res
 
 
+@app.get("/api/campaign/{campaign_id}/analysis")
+def campaign_analysis(campaign_id: str, authorization: str | None = Header(default=None)):
+    """The campaign tracker: funnel, money, and lift against the holdout."""
+    email = require_user(authorization)
+    from backend.core import campaign_engine
+    try:
+        return campaign_engine.analyze(email, campaign_id)
+    except campaign_engine.CampaignError as e:
+        raise HTTPException(404, str(e))
+
+
 @app.post("/api/campaign/{draft_id}/discard")
 def campaign_discard(draft_id: str, authorization: str | None = Header(default=None)):
     email = require_user(authorization)
@@ -4354,6 +4365,24 @@ def whatsapp_connect(body: WhatsAppConnectBody, authorization: str | None = Head
     try:
         return whatsapp.connect(require_user(authorization), body.phone_number_id,
                                 body.waba_id, body.token)
+    except whatsapp.WhatsAppError as e:
+        raise HTTPException(400, str(e))
+
+
+class WhatsAppEmbeddedBody(BaseModel):
+    code: str
+    waba_id: str | None = ""
+    phone_number_id: str | None = ""
+    coexistence: bool = False
+
+
+@app.post("/api/whatsapp/embedded")
+def whatsapp_embedded(body: WhatsAppEmbeddedBody, authorization: str | None = Header(default=None)):
+    """Finish Meta's Embedded Signup popup (the one-button connect)."""
+    from backend.core import whatsapp
+    try:
+        return whatsapp.complete_embedded(require_user(authorization), body.code, body.waba_id or "",
+                                          body.phone_number_id or "", body.coexistence)
     except whatsapp.WhatsAppError as e:
         raise HTTPException(400, str(e))
 
@@ -5802,6 +5831,23 @@ def shop_me(handle: str, x_store_token: str | None = Header(default=None)):
 def shop_cart(handle: str, body: ShopCartBody):
     seller = _seller_for(handle)
     return storefront.price_cart(seller, body.lines or [], body.coupon or "")
+
+
+class ShopVisitBody(BaseModel):
+    code: str | None = ""
+    c: str | None = ""
+
+
+@app.post("/api/shop/{handle}/visit")
+def shop_visit(handle: str, body: ShopVisitBody):
+    """A shopper arrived from a Marketing Campaign link. Stamps the click on
+    their code (the storefront sends this once per visit). Public and quiet:
+    an unknown code is simply ignored."""
+    seller = _seller_for(handle)
+    from backend.core import discounts
+    if body.code:
+        discounts.track(seller, body.code, "click")
+    return {"ok": True}
 
 
 @app.post("/api/shop/{handle}/pay")

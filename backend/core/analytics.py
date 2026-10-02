@@ -767,6 +767,102 @@ def market_basket_pairs(txns: pd.DataFrame, item_field: str, min_pair_count: int
 
 
 # =========================================================
+# ASSOCIATION RULES (Apriori, pairs)  — "people who bought X also buy Y"
+# =========================================================
+def association_rules(txns: pd.DataFrame, item_field: str = "product", max_items: int = 300,
+                      min_count: int = 2, min_confidence: float = 0.05) -> dict:
+    """Pairwise Apriori rules X -> Y over baskets, with support, confidence
+    and lift. This is what the Marketing Campaign recommends from.
+
+      support(X)      share of baskets containing X
+      confidence      P(Y in basket | X in basket)
+      lift            confidence / support(Y): above 1 means X genuinely
+                      raises the chance of Y, rather than Y simply being
+                      popular with everyone (the trap a plain co-occurrence
+                      count falls into: the best seller pairs with everything).
+
+    A basket is an order when there is an order id, else one customer's day.
+    Only the `max_items` most common items are considered (the long tail
+    cannot reach `min_count` anyway), and the co-occurrence matrix is built in
+    chunks so a 300k-row file stays well inside a 512MB instance.
+
+    Returns {"baskets": n, "rules": {X: [{"item", "confidence", "lift",
+    "count"}, ...]}} with each list ordered by lift, then confidence.
+    """
+    if item_field not in txns.columns:
+        return {"baskets": 0, "rules": {}}
+    if "order_id" in txns.columns and txns["order_id"].notna().any():
+        key = txns["order_id"].astype(str)
+    elif "customer_id" in txns.columns and "date" in txns.columns:
+        key = (txns["customer_id"].astype(str) + "|"
+               + pd.to_datetime(txns["date"], errors="coerce").dt.strftime("%Y-%m-%d"))
+    else:
+        return {"baskets": 0, "rules": {}}
+    src = pd.DataFrame({"b": key.values, "i": txns[item_field].values}).dropna()
+    if src.empty:
+        return {"baskets": 0, "rules": {}}
+    src["i"] = src["i"].astype(str).str.strip()
+    src = src[src["i"] != ""].drop_duplicates()
+    top = src["i"].value_counts().head(max_items)
+    src = src[src["i"].isin(top.index)]
+    if src.empty:
+        return {"baskets": 0, "rules": {}}
+
+    b_codes, _ = pd.factorize(src["b"])
+    i_codes, items = pd.factorize(src["i"])
+    nb, ni = int(b_codes.max()) + 1, len(items)
+    co = np.zeros((ni, ni), dtype=np.int64)
+    order = np.argsort(b_codes, kind="stable")
+    b_sorted, i_sorted = b_codes[order], i_codes[order]
+    chunk = 20000
+    for start in range(0, nb, chunk):
+        sel = (b_sorted >= start) & (b_sorted < start + chunk)
+        if not sel.any():
+            continue
+        m = np.zeros((min(chunk, nb - start), ni), dtype=np.float32)
+        m[b_sorted[sel] - start, i_sorted[sel]] = 1.0
+        co += (m.T @ m).astype(np.int64)
+    supp = np.diag(co).astype(float)
+    rules: dict[str, list] = {}
+    for a in range(ni):
+        if supp[a] <= 0:
+            continue
+        row = co[a].astype(float)
+        row[a] = 0
+        conf = row / supp[a]
+        lift = np.where(supp > 0, conf / (supp / nb), 0.0)
+        ok = np.where((row >= min_count) & (conf >= min_confidence))[0]
+        if not len(ok):
+            continue
+        ranked = sorted(ok, key=lambda b: (-lift[b], -conf[b]))
+        rules[str(items[a])] = [{"item": str(items[b]), "confidence": round(float(conf[b]), 3),
+                                 "lift": round(float(lift[b]), 2), "count": int(row[b])}
+                                for b in ranked[:5]]
+    return {"baskets": nb, "rules": rules}
+
+
+def recommend_for(bought: set, rules: dict, fallback: list[str] | None = None) -> str:
+    """The single best thing to suggest to someone who bought `bought`: the
+    highest-lift consequent of anything they bought, that they do not already
+    own. `fallback` (best sellers, best first) is used when no rule applies.
+    "" when there is nothing honest to suggest."""
+    best, best_key = "", None
+    for a in bought:
+        for r in rules.get(a, []):
+            if r["item"] in bought or r["lift"] < 1.0:
+                continue
+            k = (r["lift"], r["confidence"])
+            if best_key is None or k > best_key:
+                best, best_key = r["item"], k
+    if best:
+        return best
+    for item in fallback or []:
+        if item not in bought:
+            return item
+    return ""
+
+
+# =========================================================
 # AT-RISK CUSTOMER PROFILES  (feeds the AI win-back message generator)
 # =========================================================
 _AT_RISK_POOL = 400          # profile this many once, then slice per caller

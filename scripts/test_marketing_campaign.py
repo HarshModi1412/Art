@@ -231,8 +231,9 @@ check("win-back reaches quiet customers only", segs <= {"At Risk", "Hibernating"
 msg = rows[0]["message"]
 check("the message carries the customer's code", rows[0]["code"] in msg, msg)
 check("and the offer", "₹200 off" in msg, msg)
-check("and a link that applies the code", f"/s/{HANDLE}?code={rows[0]['code']}" in msg, msg)
-check("and the shop's name", "Rang Studio" in msg, msg)
+check("and a link that applies the code and names the campaign",
+      f"/s/{HANDLE}?code={rows[0]['code']}&c={d['id']}" in msg, msg)
+check("and the shop's name, in every message", all("Rang Studio" in x["message"] for x in rows), msg)
 check("no placeholder is left unfilled", "{" not in msg and "}" not in msg, msg)
 check("no café copy anywhere", not any(w in x["message"].lower() for x in rows
                                        for w in ("counter", "machine", "seat warm")))
@@ -242,14 +243,65 @@ check("the product appears clean in the message",
       any(x["product_display"] and x["product_display"] in x["message"] for x in rows))
 check("no picture provider means an upload request, not an error",
       d["image"]["needs_upload"] and d["image"]["reason"], str(d["image"]))
-check("the copy fell back to the hand-written templates", d["copy"]["source"] == "template")
 
-r = c.post(f"/api/campaign/{d['id']}/update", headers=H, json={"whatsapp": "Hi {name}, no code here"})
-check("an edit that drops the code is refused", r.status_code == 400, r.text[:200])
-r = c.post(f"/api/campaign/{d['id']}/update", headers=H, json={
-    "whatsapp": "Hello {name}! {brand} misses you. {offer} with *{code}* till {expiry}. Loved the {product}?\n\n{link}"})
-check("a valid edit is saved and re-fills every message",
-      r.status_code == 200 and all(x["message"].startswith("Hello ") for x in r.json()["rows"]), r.text[:200])
+# --- not the same message for everyone
+voices = [x["voice"] for x in rows]
+check("ten different voices are used across the campaign", len(set(voices)) == min(10, len(rows)),
+      str(sorted(set(voices))))
+check("and no two neighbours share one",
+      all(voices[i] != voices[i + 1] for i in range(len(voices) - 1)))
+firsts = {x["message"].split("\n")[0][:40] for x in rows}
+check("the messages genuinely read differently", len(firsts) >= min(8, len(rows)), str(len(firsts)))
+check("subjects vary too", len({x["email_subject"] for x in rows}) >= min(5, len(rows)))
+picks = [x for x in rows if x["pick_display"]]
+check("customers get a suggestion from the shop's own buying patterns", len(picks) > 0)
+from backend.core import campaign_writer as cw2  # noqa: E402
+own = sample.groupby("customer_id")["product"].agg(lambda v: {cw2.clean_product_name(p) for p in v}).to_dict()
+check("never something they already bought",
+      all(x["pick_display"] not in own.get(x["customer_id"], set()) for x in picks))
+check("and it appears in their message", all(x["pick_display"] in x["message"] for x in picks))
+check("a missing product never leaves a hole in a sentence",
+      not any("the  " in x["message"] or " the ." in x["message"] for x in rows))
+
+# --- holdout: proof, not assumption
+check("a tenth of the audience is held out to measure the effect",
+      len(d["holdout"]) == round((len(rows) + len(d["holdout"])) * 0.1), str(len(d["holdout"])))
+held = {h["customer_id"] for h in d["holdout"]}
+check("held-out customers get no message and no code",
+      not (held & {x["customer_id"] for x in rows})
+      and not any(r_["customer_id"] in held for r_ in discounts.campaign_codes(SELLER, d["id"]).values()))
+
+# --- one customer at a time: see it, fix their number, edit their words
+row0 = rows[2]
+r = c.post(f"/api/campaign/{d['id']}/update", headers=H,
+           json={"row": {"customer_id": row0["customer_id"], "phone": "12"}})
+check("a bad phone number is refused", r.status_code == 400 and "phone" in r.text.lower(), r.text[:200])
+r = c.post(f"/api/campaign/{d['id']}/update", headers=H,
+           json={"row": {"customer_id": row0["customer_id"], "phone": "+91 99887 76655",
+                         "email": "New@Mail.com"}})
+upd = next(x for x in r.json()["rows"] if x["customer_id"] == row0["customer_id"])
+check("a phone and email can be added for one customer",
+      r.status_code == 200 and upd["phone"] == "+919988776655" and upd["email"] == "new@mail.com",
+      str(upd)[:200])
+from backend.core import contacts as contacts_mod  # noqa: E402
+check("and they are kept for the next campaign",
+      contacts_mod.book(SELLER)[row0["customer_id"]]["phone"] == "+919988776655")
+r = c.post(f"/api/campaign/{d['id']}/update", headers=H,
+           json={"row": {"customer_id": row0["customer_id"], "message": "Hi, no code here"}})
+check("an edit that drops the customer's code is refused",
+      r.status_code == 400 and row0["code"] in r.text, r.text[:200])
+mine = f"Hi there, just for you: {row0['code']} for {{offer}}."
+r = c.post(f"/api/campaign/{d['id']}/update", headers=H,
+           json={"row": {"customer_id": row0["customer_id"], "message": mine}})
+upd = next(x for x in r.json()["rows"] if x["customer_id"] == row0["customer_id"])
+others = [x for x in r.json()["rows"] if x["customer_id"] != row0["customer_id"]]
+check("one customer's message can be rewritten",
+      upd["message"].startswith("Hi there, just for you") and "₹200 off" in upd["message"], upd["message"])
+check("without touching anyone else's", all(not x["message"].startswith("Hi there, just") for x in others))
+r = c.post(f"/api/campaign/{d['id']}/update", headers=H,
+           json={"row": {"customer_id": row0["customer_id"], "reset_message": True}})
+upd = next(x for x in r.json()["rows"] if x["customer_id"] == row0["customer_id"])
+check("and put back", not upd["message"].startswith("Hi there, just"))
 drop = rows[0]["customer_id"]
 r = c.post(f"/api/campaign/{d['id']}/update", headers=H, json={"remove": [drop]})
 check("a customer can be left out", r.status_code == 200 and drop not in {x["customer_id"] for x in r.json()["rows"]})
@@ -304,6 +356,38 @@ check("the tap-to-send message carries the code",
 check("with no mail server nothing is claimed as emailed", res["email_sent"] == 0)
 check("it is recorded as pending until the seller confirms", res["pending_campaign_id"])
 check("and the history shows it", n == 1)
+
+# --- the tracker
+code_t = res["results"][0]["code"]
+r = c.post(f"/api/shop/{HANDLE}/visit", json={"code": code_t, "c": d["id"]})
+c.post(f"/api/shop/{HANDLE}/visit", json={"code": code_t, "c": d["id"]})
+c.post(f"/api/shop/{HANDLE}/visit", json={"code": "NOPE-11111"})
+check("opening the link is recorded", r.status_code == 200
+      and discounts._codes(SELLER)[code_t]["clicks"] == 2 and discounts._codes(SELLER)[code_t]["clicked_at"])
+c.post(f"/api/shop/{HANDLE}/cart", json={"lines": [{"product_id": pid, "qty": 2}], "coupon": code_t})
+check("using the code at checkout is recorded", discounts._codes(SELLER)[code_t].get("applied_at"))
+r = c.post(f"/api/shop/{HANDLE}/order", json={"lines": [{"product_id": pid, "qty": 2}], "address": addr,
+                                              "guest": True, "name": "Asha", "phone": "9000000001",
+                                              "coupon": code_t})
+check("and the order", r.status_code == 200, r.text[:200])
+r = c.get(f"/api/campaign/{d['id']}/analysis", headers=H)
+check("the analysis opens", r.status_code == 200, r.text[:200])
+an = r.json()
+k = an["kpis"]
+check("it counts who was messaged and reached", k["messaged"] == len(res["results"]) and k["reached"] > 0, str(k))
+check("the funnel narrows step by step",
+      [f["n"] for f in an["funnel"]] == sorted([f["n"] for f in an["funnel"]], reverse=True), str(an["funnel"]))
+check("one click, one code used, one order", k["clicked"] >= 1 and k["applied"] >= 1 and k["orders"] == 1, str(k))
+check("with the money it brought", k["revenue"] == 2798 and k["discount"] == 200 and k["per_discount"] == 14.0, str(k))
+check("it compares against the held-out group", k["holdout"] == len(d["holdout"]) and k["holdout_rate"] is not None)
+check("and the ordering customer is at the top of the list", an["customers"][0]["ordered"])
+check("it says what to do next", isinstance(an["diagnosis"], list) and an["diagnosis"], str(an["diagnosis"]))
+st2 = c.get("/api/campaign/state", headers=H).json()
+check("the history marks it as trackable", st2["history"][0]["tracked"])
+check("ideas for other campaigns, sized from the data",
+      len(st2["ideas"]) == 5 and all("audience" in i for i in st2["ideas"]), str(st2["ideas"])[:200])
+r = c.get("/api/campaign/nope/analysis", headers=H)
+check("an unknown campaign is a 404", r.status_code == 404)
 r = c.post(f"/api/campaign/{d['id']}/send", headers=H, json={"channels": ["whatsapp"]})
 check("a campaign cannot be sent twice", r.status_code == 400, r.text[:200])
 
@@ -433,6 +517,69 @@ check("and no newline in any parameter",
 check("the token is never shown back", "EAAtoken" not in str(whatsapp.status(W)))
 whatsapp.disconnect(W)
 check("disconnecting keeps the number for tap-to-send", whatsapp.status(W)["mode"] == "tap")
+
+section("6b. WhatsApp in one button (Embedded Signup)")
+check("off until the admin sets the Meta app up", not whatsapp.embedded_config()["available"])
+try:
+    whatsapp.complete_embedded(W, "code", "2072", "1061")
+    check("refuses while switched off", False)
+except whatsapp.WhatsAppError as e:
+    check("refuses while switched off", "not switched on" in str(e), str(e))
+os.environ.update(WHATSAPP_APP_ID="APP1", WHATSAPP_APP_SECRET="sec", WHATSAPP_CONFIG_ID="CFG1")
+check("on once the three settings exist", whatsapp.embedded_config() == {
+    "available": True, "app_id": "APP1", "config_id": "CFG1",
+    "graph_version": whatsapp.GRAPH.rsplit("/", 1)[-1]})
+got = []
+
+
+def fake_get(url, params=None, timeout=None):
+    got.append((url, params))
+    return _Resp({"access_token": "BIZTOKEN"} if params.get("code") == "good" else
+                 {"error": {"message": "code expired"}})
+
+
+_Resp.content = b"x"
+whatsapp.requests.get = fake_get
+calls.clear()
+try:
+    whatsapp.complete_embedded(W, "stale", "2072", "1061")
+    check("an expired code is explained", False)
+except whatsapp.WhatsAppError as e:
+    check("an expired code is explained", "30 seconds" in str(e), str(e))
+
+
+def fake_request2(method, url, headers=None, timeout=None, **kw):
+    calls.append((method, url, kw))
+    if url.endswith("/2072/phone_numbers"):
+        return _Resp({"data": [{"id": "1061", "display_phone_number": "+91 98765 43210"}]})
+    if url.endswith("/register") or url.endswith("/subscribed_apps") or url.endswith("/smb_app_data"):
+        return _Resp({"success": True})
+    return fake_request(method, url, headers, timeout, **kw)
+
+
+whatsapp.requests.request = fake_request2
+s9 = whatsapp.complete_embedded(W, "good", "2072", "1061")
+urls = [u.split("/v")[-1] for _, u, _ in calls]
+check("the code is exchanged with the app secret", got[-1][1]["client_secret"] == "sec")
+check("the app is subscribed to the seller's account", any(u.endswith("2072/subscribed_apps") for u in urls))
+from backend.core import secrets_store  # noqa: E402
+pin = (secrets_store.get_credentials(W, whatsapp.CONNECTOR + "_pin") or {}).get("pin", "")
+check("the number is registered with a PIN, kept encrypted",
+      any(u.endswith("1061/register") for u in urls) and len(pin) == 6 and pin.isdigit())
+check("the template is submitted", s9["template_status"] in ("PENDING", "APPROVED"), str(s9))
+check("connected through the popup", s9["connected"] and s9["via"] == "embedded")
+calls.clear()
+s10 = whatsapp.complete_embedded(W, "good", "2072", "", coexistence=True)
+urls = [u for _, u, _ in calls]
+check("keeping the WhatsApp Business app: the number id is looked up",
+      any(u.endswith("2072/phone_numbers") for u in urls))
+check("no re-registration (it would take the number off the app)",
+      not any(u.endswith("/register") for u in urls))
+check("both syncs Meta requires are requested",
+      sum(1 for u in urls if u.endswith("1061/smb_app_data")) == 2)
+check("and it says so", s10["coexistence"])
+for k_ in ("WHATSAPP_APP_ID", "WHATSAPP_APP_SECRET", "WHATSAPP_CONFIG_ID"):
+    os.environ.pop(k_, None)
 
 print(f"\n{PASSED} passed, {FAILED} failed")
 sys.exit(1 if FAILED else 0)

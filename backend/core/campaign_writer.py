@@ -10,48 +10,46 @@ clothing shop's product into that and a customer read
     "Simran A., the Chikankari Kurta, White machine keeps asking where you went."
 
 Two faults in one line: copy for the wrong kind of shop, and the product's
-VARIANT (", White", ", 6 ml") pasted into the middle of a sentence. A message
-that reads like a mail-merge accident is worse than no message, because it is
-the customer's first contact from the shop in months.
+VARIANT (", White", ", 6 ml") pasted into the middle of a sentence. Round one
+fixed both, but sent every customer the SAME message, and a customer who sees
+their friend's identical "personal" note stops believing either was personal.
 
 HOW IT WORKS NOW
 ----------------
-One AI call per CAMPAIGN, not per customer. The AI is told what the shop sells,
-why this campaign is going out (win back quiet customers / a festival), what
-the offer is, and is asked for a short WhatsApp message and an email subject
-with placeholders:
+No AI per campaign, and no two neighbours with the same words. There are ten
+hand-written VOICES for each kind of campaign (win back / festival). A voice
+is not a template string but five parts:
 
-    {name} {product} {offer} {code} {expiry} {link} {brand} {occasion}
+    open     greeting, with the customer's first name
+    bought   a line about what they actually bought most        (if known)
+    pick     a suggestion from the shop's own association rules (if any)
+    offer    the discount, their personal code and the last date
+    close    sign-off, before the link
 
-Every customer's message is then the template filled in locally. That keeps it
-to one call (cheap, fast, inside free tiers), and it means no customer's name,
-spend or contact details are ever sent to an AI provider — only the brief.
+so a customer with no known product or no honest suggestion still gets a
+complete message, never a sentence with a hole in it. Voices are dealt
+round-robin in an order shuffled per campaign, so the ten are spread evenly and
+two customers next to each other in the list never get the same one.
 
-The AI goes through aiprovider.generate with the seller's email, so it is
-written on the seller's own ChatGPT plan when they connected one, then
-OpenAI / Cloudflare / the rest of the chain. If every provider is down, or the
-answer does not carry the placeholders a campaign cannot work without ({code}
-and {offer}), the hand-written retail templates below are used. They are
-written to be good on their own, not a placeholder for the AI.
+{pick} comes from analytics.association_rules (Apriori, ranked by lift) via
+analytics.recommend_for: the item people who bought what this customer bought
+also buy, that this customer has not bought yet. The wording around it is
+deliberately neutral ("you might also like") because a fallback pick is a best
+seller, not a rule, and the message must stay true either way.
 """
 from __future__ import annotations
 
-import json
-import logging
 import random
 import re
-
-log = logging.getLogger("campaign_writer")
 
 REASONS = {
     "winback": "Win back customers who have gone quiet",
     "festival": "Festival offer for your best customers",
 }
 
-PLACEHOLDERS = ("{name}", "{product}", "{offer}", "{code}", "{expiry}", "{link}",
+PLACEHOLDERS = ("{name}", "{product}", "{pick}", "{offer}", "{code}", "{expiry}", "{link}",
                 "{brand}", "{occasion}")
-REQUIRED = ("{code}", "{offer}")
-MAX_WHATSAPP = 700
+MAX_MESSAGE = 1000
 
 # --------------------------------------------------------------- product names
 _SKUISH = re.compile(r"^[A-Za-z0-9_./#-]{3,24}$")
@@ -113,145 +111,147 @@ def first_name(full) -> str:
     return first if len(first) >= 2 else ""
 
 
-# ------------------------------------------------------------------- fallback
-_WA_WINBACK = [
-    ("Hi {name}, it's {brand}. It's been a while, and we wanted to say we've missed you.\n\n"
-     "Since you liked the {product}, we've put aside {offer} for your next order. "
-     "Your code is *{code}*, valid till {expiry}.\n\n{link}"),
-    ("Hi {name}! {brand} here. We noticed it's been some time since your last order, "
-     "so here's a small thank-you for shopping with us before: {offer}.\n\n"
-     "Use code *{code}* by {expiry}. Fancy another {product}? This is a good week for it.\n\n{link}"),
-    ("Hello {name}, hope you're well! It's {brand}. We'd love to see you back, "
-     "so this one's just for you: {offer} with code *{code}* (till {expiry}).\n\n"
-     "Thank you for choosing the {product} last time, we'd love to help you find your next favourite.\n\n{link}"),
+# --------------------------------------------------------------------- voices
+# Ten per kind. Each part must read on its own: `bought` and `pick` are left
+# out when unknown, so `open` must never lean on them.
+WINBACK = [
+    {"open": "Hi {name}, it's {brand}. It has been a little while, and we wanted to say we've missed you.",
+     "bought": "We still remember the {product} you picked.",
+     "pick": "If you're looking for something new, we think you'd love the {pick}.",
+     "offer": "Here's {offer} on your next order, just for you. Your code is *{code}*, valid till {expiry}.",
+     "close": "Hope to see you soon!",
+     "subject": "{name}, we've missed you: {offer} inside"},
+    {"open": "Hello {name}! {brand} here.",
+     "bought": "Thank you for choosing the {product} with us before, it meant a lot to a small shop like ours.",
+     "pick": "Customers with your taste have been loving the {pick} lately.",
+     "offer": "As a thank-you, take {offer} with your personal code *{code}*. It's yours till {expiry}.",
+     "close": "Warmly, the {brand} team",
+     "subject": "A thank-you from {brand}"},
+    {"open": "Hi {name}, a quick note from {brand}.",
+     "bought": "Your {product} order is one of our favourite memories of this year.",
+     "pick": "The {pick} might be the perfect next pick for you.",
+     "offer": "We've saved {offer} for you: use *{code}* at checkout before {expiry}.",
+     "close": "No pressure at all, we just wanted you to have it.",
+     "subject": "Saved for you, {name}: {offer}"},
+    {"open": "Dear {name}, greetings from {brand}.",
+     "bought": "We hope the {product} is still a favourite.",
+     "pick": "When you're ready for something new, have a look at the {pick}.",
+     "offer": "Your next order comes with {offer}. Code: *{code}*, valid till {expiry}.",
+     "close": "With love, {brand}",
+     "subject": "{name}, something special from {brand}"},
+    {"open": "Hey {name}! It's {brand}, and it's been too long.",
+     "bought": "Fancy another {product}?",
+     "pick": "Or try the {pick}, it's been a hit with people who shop like you.",
+     "offer": "Either way, {offer} is waiting for you with code *{code}* (till {expiry}).",
+     "close": "See you soon!",
+     "subject": "It's been too long, {name}"},
+    {"open": "Hi {name}, this is {brand}.",
+     "bought": "We loved packing your {product} for you, and we'd love to do it again.",
+     "pick": "Our pick for you this time: the {pick}.",
+     "offer": "Here's {offer} to make it easy. Your code *{code}* works till {expiry}.",
+     "close": "Thank you for being part of our story.",
+     "subject": "We'd love to pack your next order, {name}"},
+    {"open": "Hello {name}, it's {brand}.",
+     "bought": "You have great taste: the {product} is one of our most loved pieces.",
+     "pick": "We think the {pick} would suit you just as well.",
+     "offer": "Treat yourself with {offer}, using code *{code}* before {expiry}.",
+     "close": "Always happy to help if you have questions.",
+     "subject": "{offer} for you, {name}"},
+    {"open": "Hi {name}! A little hello from {brand}.",
+     "bought": "Since you liked the {product}, we kept you in mind.",
+     "pick": "The {pick} is one we think you'll enjoy next.",
+     "offer": "Your exclusive code *{code}* gives you {offer}, valid till {expiry}.",
+     "close": "Just reply here if you'd like any help choosing.",
+     "subject": "Your exclusive code from {brand}"},
+    {"open": "Dear {name}, we've been thinking of our favourite customers at {brand}, and you're one of them.",
+     "bought": "Thank you again for the {product} order.",
+     "pick": "You might also like the {pick}.",
+     "offer": "To welcome you back: {offer} with code *{code}*, till {expiry}.",
+     "close": "Hope you're doing well!",
+     "subject": "One of our favourite customers: {name}"},
+    {"open": "Hi {name}, {brand} here with something just for you.",
+     "bought": "Remember the {product}? We'd love to help you find your next favourite.",
+     "pick": "The {pick} is a lovely place to start.",
+     "offer": "Use *{code}* for {offer}. It's personal to you and works till {expiry}.",
+     "close": "Thank you for shopping small with us.",
+     "subject": "Something just for you, {name}"},
 ]
-_WA_WINBACK_GENERIC = [
-    ("Hi {name}, it's {brand}. It's been a while, and we wanted to say we've missed you.\n\n"
-     "Here's {offer} on your next order. Your code is *{code}*, valid till {expiry}.\n\n{link}"),
-    ("Hello {name}! {brand} here. As a thank-you for shopping with us before, "
-     "here's {offer} on whatever you pick next. Code *{code}*, till {expiry}.\n\n{link}"),
+
+FESTIVAL = [
+    {"open": "Hi {name}, {occasion} is almost here, and everyone at {brand} wishes you a beautiful one.",
+     "bought": "Since you loved the {product}, we wanted you to hear from us first.",
+     "pick": "For {occasion}, we think the {pick} would be perfect for you.",
+     "offer": "Celebrate with {offer}: your code is *{code}*, valid till {expiry}.",
+     "close": "Happy {occasion}!",
+     "subject": "Happy {occasion}, {name}: {offer} for you"},
+    {"open": "Happy {occasion} in advance, {name}! It's {brand}.",
+     "bought": "Thank you for bringing home the {product} with us.",
+     "pick": "This {occasion}, the {pick} could be a lovely addition.",
+     "offer": "As one of our favourite customers, you get {offer} with code *{code}* till {expiry}.",
+     "close": "Wishing you and your family a wonderful {occasion}.",
+     "subject": "Your {occasion} gift from {brand}"},
+    {"open": "Hello {name}! {occasion} is around the corner.",
+     "bought": "We hope the {product} is ready for the celebrations.",
+     "pick": "If you're planning something new, have a look at the {pick}.",
+     "offer": "{brand} has saved {offer} for you: use *{code}* before {expiry}.",
+     "close": "With warm {occasion} wishes, {brand}",
+     "subject": "{occasion} is almost here, {name}"},
+    {"open": "Dear {name}, warm {occasion} wishes from all of us at {brand}.",
+     "bought": "Customers like you, who chose the {product}, make this season special for us.",
+     "pick": "We think you'd love the {pick} this {occasion}.",
+     "offer": "Here's {offer} for your {occasion} shopping. Code: *{code}*, till {expiry}.",
+     "close": "Have a joyful {occasion}!",
+     "subject": "Warm {occasion} wishes from {brand}"},
+    {"open": "Hi {name}! Getting ready for {occasion}?",
+     "bought": "The {product} you chose last time was one of our favourites too.",
+     "pick": "For the festive look, the {pick} is our pick for you.",
+     "offer": "{brand} is giving you {offer} with your own code *{code}* (valid till {expiry}).",
+     "close": "Happy celebrating!",
+     "subject": "Getting ready for {occasion}, {name}?"},
+    {"open": "Hello {name}, this is {brand}, wishing you a very happy {occasion}.",
+     "bought": "Thank you for your {product} order, it's customers like you who keep us going.",
+     "pick": "You might also like the {pick} for the festivities.",
+     "offer": "Our {occasion} thank-you: {offer} with code *{code}* until {expiry}.",
+     "close": "Warmly, {brand}",
+     "subject": "Our {occasion} thank-you to you, {name}"},
+    {"open": "Hi {name}, {occasion} is the perfect time to treat yourself.",
+     "bought": "You've got great taste: the {product} proves it.",
+     "pick": "The {pick} might be just the thing this {occasion}.",
+     "offer": "Here's {offer} from {brand}. Your code *{code}* works till {expiry}.",
+     "close": "Happy {occasion}!",
+     "subject": "Treat yourself this {occasion}, {name}"},
+    {"open": "Dear {name}, as {occasion} comes closer, we're thinking of the people who made our year at {brand}.",
+     "bought": "Your {product} order was one of them.",
+     "pick": "We think the {pick} would make a lovely {occasion} pick.",
+     "offer": "Please enjoy {offer} with code *{code}*, valid till {expiry}.",
+     "close": "Wishing you light and joy.",
+     "subject": "{name}, you made our year"},
+    {"open": "Hey {name}! {brand} here with an early {occasion} surprise.",
+     "bought": "Loved the {product}? There's more where that came from.",
+     "pick": "Our suggestion for you: the {pick}.",
+     "offer": "Your surprise is {offer}, with code *{code}* until {expiry}.",
+     "close": "Happy {occasion} in advance!",
+     "subject": "An early {occasion} surprise"},
+    {"open": "Hi {name}, wishing you a happy {occasion} from {brand}.",
+     "bought": "Thank you for choosing the {product} with us.",
+     "pick": "This season, the {pick} is one we think you'll love.",
+     "offer": "Celebrate with {offer}: your personal code *{code}* works till {expiry}.",
+     "close": "Just reply here if you'd like help picking something.",
+     "subject": "{offer} this {occasion}, {name}"},
 ]
-_WA_FESTIVAL = [
-    ("Hi {name}, {occasion} is almost here! From all of us at {brand}, here's "
-     "{offer} to make it special.\n\nYour code: *{code}* (valid till {expiry}). "
-     "You loved the {product}, so this felt like the perfect time to say thank you.\n\n{link}"),
-    ("Happy {occasion} in advance, {name}! As one of our favourite customers, "
-     "you get {offer} at {brand}. Use code *{code}* by {expiry}.\n\n"
-     "Pair it with the {product} you liked.\n\n{link}"),
-]
-_WA_FESTIVAL_GENERIC = [
-    ("Hi {name}, {occasion} is almost here! From all of us at {brand}, here's "
-     "{offer} to make it special.\n\nYour code: *{code}* (valid till {expiry}).\n\n{link}"),
-    ("Happy {occasion} in advance, {name}! As one of our favourite customers, "
-     "you get {offer} at {brand}. Use code *{code}* by {expiry}.\n\n{link}"),
-]
-_SUBJECTS = {
-    "winback": ["{name}, we've missed you: {offer} inside", "A little something from {brand}"],
-    "festival": ["{occasion} at {brand}: {offer} for you", "{name}, your {occasion} offer is here"],
-}
+
+VOICES = {"winback": WINBACK, "festival": FESTIVAL}
+assert all(len(v) == 10 for v in VOICES.values())
 
 
-def fallback_copy(reason: str) -> dict:
-    if reason == "festival":
-        return {"whatsapp": random.choice(_WA_FESTIVAL),
-                "whatsapp_generic": random.choice(_WA_FESTIVAL_GENERIC),
-                "email_subject": random.choice(_SUBJECTS["festival"]),
-                "source": "template"}
-    return {"whatsapp": random.choice(_WA_WINBACK),
-            "whatsapp_generic": random.choice(_WA_WINBACK_GENERIC),
-            "email_subject": random.choice(_SUBJECTS["winback"]),
-            "source": "template"}
-
-
-# ---------------------------------------------------------------------- AI
-_SYSTEM = """You write marketing messages for a small independent online shop.
-They are sent on WhatsApp (and the same text by email) to the shop's own past
-customers. Sound like the shop owner: warm, specific, short, never pushy, never
-salesy jargon. Plain English. At most one emoji per message, or none.
-
-Use these placeholders EXACTLY as written, they are filled in per customer:
-{name} customer's first name, {brand} the shop name, {product} the product this
-customer bought most, {offer} the discount (e.g. "Rs 200 off"), {code} their
-personal code, {expiry} the last date it works, {link} the shop link,
-{occasion} the festival name (festival campaigns only).
-
-Rules:
-- "whatsapp": 3 to 5 short sentences, under 450 characters. MUST contain {code},
-  {offer} and {expiry}. Put {link} alone on the last line. Bold the code as *{code}*.
-- "whatsapp_generic": the same message for a customer whose product we do not
-  know: identical rules, but it must NOT contain {product}.
-- "email_subject": under 60 characters, may use {name}, {offer}, {brand}, {occasion}.
-- Never invent facts: no "new collection", "limited stock", prices or delivery
-  promises unless the brief says so.
-
-Reply with ONLY a JSON object with keys whatsapp, whatsapp_generic, email_subject."""
-
-
-def _brief(ctx: dict) -> str:
-    lines = [f"Shop name: {ctx.get('brand') or 'the shop'}",
-             f"What the shop sells: {ctx.get('sells') or 'retail products'}",
-             f"Campaign: {REASONS.get(ctx.get('reason'), ctx.get('reason'))}",
-             f"Offer: {ctx.get('offer_label')}"]
-    if ctx.get("reason") == "festival":
-        lines.append(f"Festival: {ctx.get('occasion') or 'the festival'}")
-    else:
-        lines.append("Audience: customers who used to buy and have not ordered for a while.")
-    if ctx.get("note"):
-        lines.append(f"The owner wants to mention: {str(ctx['note'])[:300]}")
-    return "\n".join(lines)
-
-
-def _parse(text: str) -> dict | None:
-    if not text:
-        return None
-    m = re.search(r"\{.*\}", text, re.S)
-    if not m:
-        return None
-    try:
-        d = json.loads(m.group(0))
-    except (TypeError, ValueError):
-        return None
-    return d if isinstance(d, dict) else None
-
-
-def valid_template(t: str, allow_product: bool = True) -> bool:
-    if not isinstance(t, str) or not t.strip() or len(t) > MAX_WHATSAPP:
-        return False
-    if any(p not in t for p in REQUIRED):
-        return False
-    if not allow_product and "{product}" in t:
-        return False
-    # anything in braces that is not one of ours would reach a customer as-is
-    stray = [x for x in re.findall(r"\{[^{}]*\}", t) if x not in PLACEHOLDERS]
-    return not stray
-
-
-def write(email: str, ctx: dict) -> dict:
-    """The campaign's message templates. Never raises; falls back to the
-    hand-written copy when the AI is unavailable or its answer is unusable."""
-    base = fallback_copy(ctx.get("reason") or "winback")
-    try:
-        from backend.core import aiprovider
-        res = aiprovider.generate(_SYSTEM, _brief(ctx), sensitivity="public",
-                                  max_tokens=500, temperature=0.8,
-                                  role="writer", email=email, fallback="")
-    except Exception as e:  # noqa: BLE001 — incl. a spent ChatGPT plan
-        log.info("campaign copy fell back to templates: %s", e)
-        return base
-    d = _parse(res.get("text") or "")
-    if not d:
-        return base
-    wa, gen, subj = d.get("whatsapp"), d.get("whatsapp_generic"), d.get("email_subject")
-    out = dict(base)
-    if valid_template(wa):
-        out["whatsapp"] = wa.strip()
-        out["source"] = res.get("provider") or "ai"
-    if valid_template(gen, allow_product=False):
-        out["whatsapp_generic"] = gen.strip()
-    if isinstance(subj, str) and subj.strip() and len(subj) <= 90 and \
-            not [x for x in re.findall(r"\{[^{}]*\}", subj) if x not in PLACEHOLDERS]:
-        out["email_subject"] = subj.strip()
-    return out
+def deal(campaign_id: str, n: int, reason: str = "winback") -> list[int]:
+    """Which voice each of n customers gets: every voice used before any
+    repeats, in an order shuffled per campaign, so the spread is even and two
+    customers next to each other never share one."""
+    k = len(VOICES.get(reason) or WINBACK)
+    order = list(range(k))
+    random.Random(str(campaign_id)).shuffle(order)
+    return [order[i % k] for i in range(n)]
 
 
 # ----------------------------------------------------------------------- fill
@@ -259,40 +259,76 @@ def fill(template: str, values: dict) -> str:
     out = template or ""
     for k in PLACEHOLDERS:
         out = out.replace(k, str(values.get(k.strip("{}")) or ""))
-    # a message with no link leaves an empty last line; tidy the whitespace
-    out = re.sub(r"[ \t]+\n", "\n", out)
-    out = re.sub(r"\n{3,}", "\n\n", out).strip()
     return out
 
 
-def message_for(copy: dict, row: dict, ctx: dict) -> dict:
-    """One customer's WhatsApp text and email subject."""
+def _sentence(note: str) -> str:
+    note = note.strip()
+    if not note:
+        return ""
+    note = note[0].upper() + note[1:]
+    return note if note[-1] in ".!?" else note + "."
+
+
+def message_for(row: dict, ctx: dict) -> dict:
+    """One customer's WhatsApp/email text and email subject.
+
+    Uses the customer's own edited message when the seller wrote one
+    (`message_override`), otherwise their voice."""
+    reason = ctx.get("reason") or "winback"
+    voices = VOICES.get(reason) or WINBACK
+    v = voices[int(row.get("voice") or 0) % len(voices)]
     product = row.get("product_display") or ""
-    tpl = copy["whatsapp"] if product else copy["whatsapp_generic"]
+    pick = row.get("pick_display") or ""
+    if pick and pick == product:
+        pick = ""
     link = ctx.get("link") or ""
     if link and row.get("code"):
-        link = f"{link}{'&' if '?' in link else '?'}code={row['code']}"
+        sep = "&" if "?" in link else "?"
+        link = f"{link}{sep}code={row['code']}"
+        if ctx.get("campaign_id"):
+            link += f"&c={ctx['campaign_id']}"
     values = {"name": first_name(row.get("customer_name")) or "there",
-              "product": product, "offer": ctx.get("offer_label") or "",
+              "product": product, "pick": pick, "offer": ctx.get("offer_label") or "",
               "code": row.get("code") or "", "expiry": ctx.get("expiry_label") or "",
               "link": link, "brand": ctx.get("brand") or "us",
               "occasion": ctx.get("occasion") or "the festival"}
-    text = fill(tpl, values)
-    # The AI works the seller's note into its own sentences; the hand-written
-    # copy cannot, so the note goes in as its own line rather than being
-    # silently dropped.
-    note = (ctx.get("note") or "").strip()
-    if note and copy.get("source") == "template" and note not in text:
-        note = note[0].upper() + note[1:]
-        note = note if note[-1] in ".!?" else note + "."
-        if link and link in text:
-            text = text.replace(link, f"{note}\n\n{link}", 1)
-        else:
-            text = f"{text}\n\n{note}"
+
+    if (row.get("message_override") or "").strip():
+        text = fill(row["message_override"].strip(), values)
+    else:
+        first = [fill(v["open"], values)]
+        if product:
+            first.append(fill(v["bought"], values))
+        if pick:
+            first.append(fill(v["pick"], values))
+        parts = [" ".join(first), fill(v["offer"], values)]
+        note = _sentence(ctx.get("note") or "")
+        if note:
+            parts.append(note)
+        parts.append(fill(v["close"], values))
+        if link:
+            parts.append(link)
+        text = "\n\n".join(p for p in parts if p.strip())
     if link and link not in text:
         text = f"{text}\n\n{link}"
     subj_values = dict(values)
     if subj_values["name"] == "there":
         subj_values["name"] = "Hi"
-    subject = fill(copy.get("email_subject") or "", subj_values)
-    return {"message": text, "email_subject": subject[:120], "shop_link": link}
+    subject = fill(v["subject"], subj_values)
+    return {"message": text.strip()[:MAX_MESSAGE], "email_subject": subject[:120],
+            "shop_link": link}
+
+
+def valid_override(text: str, code: str) -> str:
+    """The reason a seller's edit of one customer's message cannot be used,
+    or "" when it can. The code is the one thing it must keep: without it the
+    customer has an offer they cannot redeem."""
+    t = (text or "").strip()
+    if not t:
+        return "The message is empty."
+    if len(t) > MAX_MESSAGE:
+        return f"Keep it under {MAX_MESSAGE} characters."
+    if code and code not in t and "{code}" not in t:
+        return f"Keep the customer's code ({code}) in the message, or they cannot use the offer."
+    return ""

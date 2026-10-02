@@ -240,6 +240,42 @@ def release(seller: str, code: str, order_no: str) -> None:
         user_store.set_key(seller, KEY, codes)
 
 
+# ------------------------------------------------------------------ tracking
+def track(seller: str, code: str, event: str) -> bool:
+    """Stamp a step of the funnel on a code: "click" (the customer opened the
+    link in their message) or "applied" (the code priced a cart at checkout).
+    First time only for the timestamp; clicks are also counted. Unknown codes
+    are ignored: this is called from a public page."""
+    seller = _norm(seller)
+    code = normalize_code(code)
+    if not code or event not in ("click", "applied"):
+        return False
+    with _lock:
+        codes = dict(_codes(seller, fresh=True))
+        rec = codes.get(code)
+        if not isinstance(rec, dict):
+            return False
+        rec = dict(rec)
+        now = datetime.now().isoformat(timespec="seconds")
+        if event == "click":
+            rec["clicks"] = int(rec.get("clicks") or 0) + 1
+            if not rec.get("clicked_at"):
+                rec["clicked_at"] = now
+        else:
+            if rec.get("applied_at"):
+                return True             # already stamped: no write
+            rec["applied_at"] = now
+        codes[code] = rec
+        user_store.set_key(seller, KEY, codes)
+    return True
+
+
+def campaign_codes(seller: str, campaign_id: str) -> dict[str, dict]:
+    """{code: record} for one campaign."""
+    return {k: v for k, v in _codes(seller).items()
+            if isinstance(v, dict) and v.get("campaign_id") == campaign_id}
+
+
 # ------------------------------------------------------------------- results
 def campaign_stats(seller: str, campaign_id: str) -> dict:
     """How many of a campaign's codes came back, and what those orders were."""

@@ -161,6 +161,105 @@ def connect(email: str, phone_number_id: str, waba_id: str, token: str) -> dict:
     return status(email)
 
 
+# ------------------------------------------------------- Embedded Signup
+# The way a non-technical seller connects: Meta's own popup. They log in with
+# Facebook, pick or create their business, and confirm their number with an
+# SMS code. We get back a short-lived code plus the account and number ids,
+# and do the rest here. Until Meta approves this app as a Tech Provider, only
+# people with a role on the app (testers, added by the platform admin, exactly
+# like Instagram) can complete it.
+#
+# Admin env, once:
+#   WHATSAPP_APP_ID      the Meta app's App ID (Settings -> Basic)
+#   WHATSAPP_APP_SECRET  its App Secret
+#   WHATSAPP_CONFIG_ID   Facebook Login for Business -> Configurations ->
+#                        a "WhatsApp Embedded Signup" configuration
+def embedded_config() -> dict:
+    app_id = (os.environ.get("WHATSAPP_APP_ID") or "").strip()
+    cfg = (os.environ.get("WHATSAPP_CONFIG_ID") or "").strip()
+    secret = (os.environ.get("WHATSAPP_APP_SECRET") or "").strip()
+    return {"available": bool(app_id and cfg and secret), "app_id": app_id, "config_id": cfg,
+            "graph_version": GRAPH.rsplit("/", 1)[-1]}
+
+
+def complete_embedded(email: str, code: str, waba_id: str = "", phone_number_id: str = "",
+                      coexistence: bool = False) -> dict:
+    """Finish Embedded Signup: swap the code for the seller's business token,
+    subscribe to their account, make the number ready to send, store it all
+    and submit the campaign template."""
+    cfg = embedded_config()
+    if not cfg["available"]:
+        raise WhatsAppError("WhatsApp sign-in is not switched on for this app yet.")
+    if not code:
+        raise WhatsAppError("The WhatsApp sign-in did not finish. Please try again.")
+    waba = re.sub(r"\D", "", waba_id or "")
+    if not waba:
+        raise WhatsAppError("Meta did not say which WhatsApp account you picked. Please try again.")
+    try:
+        r = requests.get(f"{GRAPH}/oauth/access_token", timeout=TIMEOUT, params={
+            "client_id": cfg["app_id"], "client_secret": os.environ.get("WHATSAPP_APP_SECRET", ""),
+            "code": code})
+        body = r.json() if r.content else {}
+    except (requests.RequestException, ValueError) as e:
+        raise WhatsAppError(f"Could not reach Meta just now ({e.__class__.__name__}). Try again.")
+    token = (body or {}).get("access_token") or ""
+    if not token:
+        err = ((body or {}).get("error") or {}).get("message") or "no token"
+        raise WhatsAppError(f"Meta did not accept the sign-in ({err}). It expires in 30 seconds, "
+                            f"so please try once more.")
+
+    pnid = re.sub(r"\D", "", phone_number_id or "")
+    if not pnid:
+        # coexistence onboarding does not send the number id; ask for it
+        nums = _req("GET", f"{waba}/phone_numbers", token,
+                    params={"fields": "id,display_phone_number,verified_name"})
+        first = (nums.get("data") or [{}])[0]
+        pnid = re.sub(r"\D", "", str(first.get("id") or ""))
+        if not pnid:
+            raise WhatsAppError("No phone number was found on that WhatsApp account.")
+    _req("POST", f"{waba}/subscribed_apps", token)
+    if coexistence:
+        # The number stays on the WhatsApp Business app; Meta asks for both
+        # syncs within 24 hours. Best effort: a failed sync does not undo the
+        # connection, it is retried by reconnecting.
+        for kind in ("smb_app_state_sync", "history"):
+            try:
+                _req("POST", f"{pnid}/smb_app_data", token,
+                     json={"messaging_product": "whatsapp", "sync_type": kind})
+            except WhatsAppError as e:
+                log.info("coexistence %s sync for %s failed: %s", kind, email, e)
+    else:
+        import secrets as _s
+        pin = "".join(_s.choice("0123456789") for _ in range(6))
+        try:
+            _req("POST", f"{pnid}/register", token,
+                 json={"messaging_product": "whatsapp", "pin": pin})
+        except WhatsAppError as e:
+            if "already" not in str(e).lower():
+                raise
+        secrets_store.save_connection(email, CONNECTOR + "_pin", {"pin": pin})
+
+    info = _req("GET", f"{pnid}", token,
+                params={"fields": "display_phone_number,verified_name"})
+    secrets_store.save_connection(email, CONNECTOR, {"token": token},
+                                  {"connected_at": datetime.now().isoformat(timespec="seconds"),
+                                   "via": "embedded"})
+    shown = info.get("display_phone_number") or ""
+    _save_cfg(email, {
+        "phone_number_id": pnid, "waba_id": waba, "display_number": shown,
+        "verified_name": info.get("verified_name") or "",
+        "number": digits(shown) or _cfg(email).get("number") or "",
+        "connected_at": datetime.now().isoformat(timespec="seconds"),
+        "via": "embedded", "coexistence": bool(coexistence),
+        "template": "", "template_status": "", "template_error": "",
+    })
+    try:
+        submit_template(email)
+    except WhatsAppError as e:
+        _save_cfg(email, {"template_error": str(e)})
+    return status(email)
+
+
 def disconnect(email: str) -> dict:
     try:
         secrets_store.delete_connection(email, CONNECTOR)
@@ -280,6 +379,9 @@ def status(email: str) -> dict:
         "template_status": tstat,
         "template_header": bool(c.get("template_header")),
         "template_error": c.get("template_error") or "",
+        "via": c.get("via") or ("manual" if connected else ""),
+        "coexistence": bool(c.get("coexistence")),
+        "embedded": embedded_config(),
         "headline": {
             "auto": "Automatic: approved campaigns send on WhatsApp by themselves.",
             "waiting": ("Connected. Waiting for Meta to approve your message template "
@@ -288,7 +390,7 @@ def status(email: str) -> dict:
                         if tstat != "REJECTED" else
                         "Meta rejected the message template. Messages open in WhatsApp "
                         "for you to tap send; contact us and we will resubmit it."),
-            "tap": "Tap-to-send: each message opens in WhatsApp already written. Connect the WhatsApp Business API to send automatically.",
+            "tap": "Tap-to-send: each message opens in WhatsApp already written, you tap send. Connect WhatsApp to send automatically.",
             "off": "Add the WhatsApp number you use for your shop.",
         }[mode],
     }

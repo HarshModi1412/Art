@@ -31,8 +31,15 @@ from backend.core import campaigns, messaging, user_store, winback_proof
 log = logging.getLogger("campaign_engine")
 
 DRAFTS_KEY = "campaign_drafts"
+RECORDS_KEY = "campaign_records"
 MAX_DRAFTS = 4
+MAX_RECORDS = 30
 MAX_AUDIENCE = 150
+# A holdout is how a campaign PROVES it worked: a random tenth of the audience
+# is not messaged, and the analyzer compares how many of each group came back.
+# Without it, "12 customers returned" might be 12 who would have anyway.
+HOLDOUT_SHARE = 0.10
+HOLDOUT_MIN_AUDIENCE = 20
 COOLDOWN = {"winback": 45, "festival": 14}
 _SAMPLE_DOMAINS = ("example.com", "example.org", "example.net")
 
@@ -212,11 +219,26 @@ def build(email: str, reason: str = "winback", offer: dict | None = None,
                             if reason == "winback" else
                             "There are no customers in your sales data yet.")
 
+    from backend.core import contacts
+    contacts.apply(email, fresh)
     names = cw.catalogue_names(email)
     for c in fresh:
         c["product_display"] = cw.clean_product_name(c.get("favorite_item"), names)
 
     campaign_id = secrets.token_hex(6)
+    _add_picks(txns, fresh, names)
+
+    holdout = []
+    if len(fresh) >= HOLDOUT_MIN_AUDIENCE:
+        import random as _random
+        idx = list(range(len(fresh)))
+        _random.Random(campaign_id).shuffle(idx)
+        keep_out = set(idx[:max(1, round(len(fresh) * HOLDOUT_SHARE))])
+        holdout = [{"customer_id": str(c["customer_id"]),
+                    "customer_name": c.get("customer_name") or "",
+                    "monetary": c.get("monetary") or 0}
+                   for i, c in enumerate(fresh) if i in keep_out]
+        fresh = [c for i, c in enumerate(fresh) if i not in keep_out]
     try:
         codes = discounts.issue(email, campaign_id, fresh, offer,
                                 prefix_fallback="FEST" if reason == "festival" else "BACK")
@@ -241,12 +263,12 @@ def build(email: str, reason: str = "winback", offer: dict | None = None,
         "offer_label": discounts.offer_label(offer, sym),
         "offer_short": f"{val:g}% OFF" if offer["kind"] == "percent" else f"{sym}{val:g} OFF",
         "expiry_label": expiry_label, "valid_until": valid_until,
-        "link": store_link(email), "symbol": sym,
+        "link": store_link(email), "symbol": sym, "campaign_id": campaign_id,
     }
-    copy = cw.write(email, ctx)
+    voices = cw.deal(campaign_id, len(fresh), reason)
 
     rows = []
-    for c in fresh:
+    for c, voice in zip(fresh, voices):
         row = {"customer_id": str(c["customer_id"]),
                "customer_name": c.get("customer_name") or "",
                "phone": c.get("phone") or "", "email": c.get("email") or "",
@@ -254,8 +276,10 @@ def build(email: str, reason: str = "winback", offer: dict | None = None,
                "recency_days": c.get("recency_days") or 0,
                "favorite_item": c.get("favorite_item") or "",
                "product_display": c["product_display"],
+               "pick_display": c.get("pick_display") or "",
+               "voice": voice,
                "code": (codes.get(str(c["customer_id"])) or {}).get("code") or ""}
-        row.update(cw.message_for(copy, row, ctx))
+        row.update(cw.message_for(row, ctx))
         row["pitch"] = pitch(reason, row["product_display"], occasion)
         rows.append(row)
 
@@ -276,7 +300,7 @@ def build(email: str, reason: str = "winback", offer: dict | None = None,
         "id": campaign_id, "state": "draft", "trigger": trigger,
         "created_at": pd.Timestamp.now().isoformat(timespec="seconds"),
         "reason": reason, "occasion": occasion, "offer": offer, "ctx": ctx,
-        "copy": copy, "image": image, "rows": rows, "held_back": held_back,
+        "image": image, "rows": rows, "held_back": held_back, "holdout": holdout,
         "festival": ({"name": fest.get("name"), "date": fest.get("date"),
                       "days_away": fest.get("days_away")} if fest else None),
     }
@@ -303,35 +327,47 @@ def public_draft(email: str, draft: dict) -> dict:
 
 
 def update_draft(email: str, draft_id: str, patch: dict) -> dict:
-    """Seller edits before sending: the words, the picture, who is in it."""
-    from backend.core import campaign_writer as cw
+    """Seller edits before sending: one customer's contact details or message,
+    who is in it, the picture."""
+    from backend.core import campaign_writer as cw, contacts
     draft = get_draft(email, draft_id)
     if not draft or draft.get("state") != "draft":
         raise CampaignError("That campaign is no longer a draft.")
-    copy = dict(draft["copy"])
-    for k in ("whatsapp", "whatsapp_generic"):
-        if patch.get(k) is not None:
-            t = str(patch[k]).strip()
-            if not cw.valid_template(t, allow_product=(k == "whatsapp")):
-                raise CampaignError("Keep {code} and {offer} in the message"
-                                    + ("" if k == "whatsapp" else ", and leave out {product}")
-                                    + ". Use only the {placeholders} listed under the box.")
-            copy[k] = t
-            copy["source"] = "edited"
-    if patch.get("email_subject"):
-        copy["email_subject"] = str(patch["email_subject"]).strip()[:120]
     if patch.get("remove"):
         drop = {str(x) for x in patch["remove"]}
         draft["rows"] = [r for r in draft["rows"] if r["customer_id"] not in drop]
         if not draft["rows"]:
             raise CampaignError("That would leave nobody in the campaign.")
+    edit = patch.get("row") or None
+    if edit:
+        cid = str(edit.get("customer_id") or "")
+        row = next((r for r in draft["rows"] if r["customer_id"] == cid), None)
+        if not row:
+            raise CampaignError("That customer is not in this campaign.")
+        if "phone" in edit or "email" in edit:
+            try:
+                saved = contacts.save(email, cid, edit.get("phone") if "phone" in edit else None,
+                                      edit.get("email") if "email" in edit else None,
+                                      row.get("customer_name") or "")
+            except contacts.ContactError as e:
+                raise CampaignError(str(e))
+            if "phone" in edit:
+                row["phone"] = saved.get("phone") or ""
+            if "email" in edit:
+                row["email"] = saved.get("email") or ""
+        if edit.get("reset_message"):
+            row.pop("message_override", None)
+        elif edit.get("message") is not None:
+            why = cw.valid_override(str(edit["message"]), row.get("code") or "")
+            if why:
+                raise CampaignError(why)
+            row["message_override"] = str(edit["message"]).strip()
     if patch.get("image_url"):
         draft["image"] = {"url": str(patch["image_url"]),
                           "source": patch.get("image_source") or "upload",
                           "needs_upload": False, "reason": ""}
-    draft["copy"] = copy
     for r in draft["rows"]:
-        r.update(cw.message_for(copy, r, draft["ctx"]))
+        r.update(cw.message_for(r, draft["ctx"]))
     _save_draft(email, draft)
     return public_draft(email, draft)
 
@@ -407,7 +443,7 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
 
     results, n_mail, n_wa, n_links, skipped, sample = [], 0, 0, 0, 0, 0
     for r in draft["rows"]:
-        r.update(cw.message_for(draft["copy"], r, ctx))
+        r.update(cw.message_for(r, ctx))
         to = (r.get("email") or "").strip()
         phone = (r.get("phone") or "").strip()
         entry = {"customer_id": r["customer_id"], "customer_name": r.get("customer_name") or "",
@@ -494,6 +530,7 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
         draft["sent_at"] = stamp
         draft["proof_id"], draft["pending_proof_id"] = proof_id, pending_id
         _save_draft(email, draft)
+        _save_record(email, draft, results, ctx, channels, wa_auto)
 
     bits = []
     if n_wa:
@@ -523,7 +560,287 @@ def history(email: str, limit: int = 30) -> list[dict]:
     """Past campaigns, each with what its codes brought back."""
     from backend.core import discounts
     out = []
+    recs = _records(email)
     for h in campaigns.history(email, limit):
         cid = h.get("campaign_id")
-        out.append({**h, "codes": discounts.campaign_stats(email, cid) if cid else None})
+        out.append({**h, "codes": discounts.campaign_stats(email, cid) if cid else None,
+                    "tracked": bool(cid and cid in recs)})
     return out
+
+
+# ------------------------------------------------------------------ picks
+def _add_picks(txns, profiles: list[dict], names: dict) -> None:
+    """For each customer, one thing to suggest: Apriori rules over the shop's
+    own orders (analytics.association_rules), what people who bought what they
+    bought also buy, that they have not bought themselves. Falls back to the
+    shop's best sellers they do not own. Sets `pick_display` (clean name)."""
+    from backend.core import analytics
+    from backend.core import campaign_writer as cw
+    if "product" not in txns.columns or "customer_id" not in txns.columns:
+        return
+    try:
+        rules = analytics.association_rules(txns, "product").get("rules") or {}
+    except Exception as e:  # noqa: BLE001 — a suggestion is a nice-to-have
+        log.warning("association rules failed: %s", e)
+        rules = {}
+    sub = txns[["customer_id", "product", "amount"]].dropna(subset=["customer_id", "product"])
+    best = (sub.groupby(sub["product"].astype(str))["amount"].sum()
+            .sort_values(ascending=False).head(15).index.tolist())
+    ids = {str(p.get("customer_id")) for p in profiles}
+    sub = sub[sub["customer_id"].astype(str).isin(ids)]
+    owned = sub.groupby(sub["customer_id"].astype(str))["product"].agg(
+        lambda s: set(map(str, s))).to_dict()
+    for p in profiles:
+        bought = owned.get(str(p.get("customer_id")), set())
+        bought_clean = {cw.clean_product_name(x, names) for x in bought}
+        raw = analytics.recommend_for(bought, rules, best)
+        pick = cw.clean_product_name(raw, names) if raw else ""
+        # "you might also like the Linen Shirt" to someone who bought the blue
+        # Linen Shirt reads as if the shop was not paying attention
+        if pick and (pick in bought_clean or pick == p.get("product_display")):
+            pick = ""
+        p["pick_display"] = pick
+
+
+# ---------------------------------------------------------------- records
+def _records(email: str) -> dict:
+    r = user_store.get_key(email, RECORDS_KEY, {}) or {}
+    return r if isinstance(r, dict) else {}
+
+
+def _save_record(email: str, draft: dict, results: list[dict], ctx: dict,
+                 channels, wa_auto: bool) -> None:
+    """What the analyzer needs long after the draft is gone: who was
+    messaged on which channel, who was held out, the offer."""
+    targets = []
+    by_id = {r["customer_id"]: r for r in draft["rows"]}
+    for x in results:
+        r = by_id.get(x["customer_id"]) or {}
+        targets.append({
+            "customer_id": x["customer_id"], "customer_name": x.get("customer_name") or "",
+            "code": x.get("code") or "", "monetary": r.get("monetary") or 0,
+            "whatsapp": "sent" if x.get("whatsapp_sent") else ("tap" if x.get("wa_link") else ""),
+            "email": "sent" if x.get("email_sent") else "",
+            "reached": bool(x.get("whatsapp_sent") or x.get("email_sent") or x.get("wa_link")),
+        })
+    rec = {
+        "id": draft["id"], "sent_at": draft.get("sent_at"), "reason": draft["reason"],
+        "occasion": draft.get("occasion") or "", "offer": draft.get("offer"),
+        "offer_label": ctx.get("offer_label") or "", "symbol": ctx.get("symbol") or "₹",
+        "channels": list(channels), "whatsapp_auto": wa_auto,
+        "image_url": (draft.get("image") or {}).get("url") or "",
+        "link": ctx.get("link") or "", "valid_until": ctx.get("valid_until") or "",
+        "targets": targets, "holdout": draft.get("holdout") or [],
+        "pending_proof_id": draft.get("pending_proof_id"),
+    }
+    recs = dict(_records(email))
+    recs[rec["id"]] = rec
+    if len(recs) > MAX_RECORDS:
+        for k in sorted(recs, key=lambda k: recs[k].get("sent_at") or "")[:len(recs) - MAX_RECORDS]:
+            recs.pop(k, None)
+    user_store.set_key(email, RECORDS_KEY, recs)
+
+
+
+# ---------------------------------------------------------------- analyzer
+WINDOW_DAYS = 30
+
+
+def records(email: str) -> list[dict]:
+    return sorted(_records(email).values(), key=lambda r: r.get("sent_at") or "", reverse=True)
+
+
+def _pct(a: float, b: float) -> float:
+    return round(100.0 * a / b, 1) if b else 0.0
+
+
+def analyze(email: str, campaign_id: str) -> dict:
+    """How one campaign is doing, measured the way a campaign manager would.
+
+    The funnel (each step from the codes themselves):
+        messaged -> reached -> opened the link -> used the code -> ordered
+    Money: revenue from code orders, discount spent, revenue per unit of
+    discount, average order.
+    Incrementality: of the customers messaged, how many bought again in the
+    window by ANY route (website and uploaded sales alike), against the
+    holdout who were not messaged. The difference is what the campaign caused;
+    the raw count alone also includes people who were coming back anyway.
+    """
+    from backend.core import discounts, smart
+    rec = _records(email).get(campaign_id)
+    if not rec:
+        raise CampaignError("That campaign could not be found.")
+    by_code = discounts.campaign_codes(email, campaign_id)
+    sent = pd.to_datetime(rec.get("sent_at"), errors="coerce")
+    days = max(0, int((pd.Timestamp.now() - sent).days)) if not pd.isna(sent) else 0
+
+    targets = rec.get("targets") or []
+    reached = [t for t in targets if t.get("reached")]
+    rows, clicked, applied, ordered = [], 0, 0, 0
+    revenue = discount = 0.0
+    for t in targets:
+        c = by_code.get(t.get("code") or "") or {}
+        st = {"clicked": bool(c.get("clicked_at")), "applied": bool(c.get("applied_at")),
+              "ordered": bool(c.get("redeemed_at"))}
+        clicked += st["clicked"]
+        applied += st["applied"] or st["ordered"]
+        ordered += st["ordered"]
+        revenue += float(c.get("order_total") or 0)
+        discount += float(c.get("discount_given") or 0)
+        rows.append({"customer_id": t["customer_id"], "customer_name": t.get("customer_name") or "",
+                     "code": t.get("code") or "", "whatsapp": t.get("whatsapp") or "",
+                     "email": t.get("email") or "", "reached": bool(t.get("reached")),
+                     "clicks": int(c.get("clicks") or 0), **st,
+                     "order_no": c.get("order_no") or "", "order_total": c.get("order_total") or 0,
+                     "came_back": False, "spent_since": 0.0})
+
+    hold = rec.get("holdout") or []
+    back_ids, spend_by = set(), {}
+    try:
+        txns = smart.load_sales(email, copy=False)
+    except Exception:  # noqa: BLE001
+        txns = None
+    if txns is not None and len(txns) and not pd.isna(sent) and "customer_id" in txns.columns:
+        end = sent + pd.Timedelta(days=WINDOW_DAYS)
+        d = pd.to_datetime(txns["date"], errors="coerce")
+        win = txns[(d > sent) & (d <= end)]
+        if len(win):
+            g = win.groupby(win["customer_id"].astype(str))["amount"].sum()
+            spend_by = g.to_dict()
+            back_ids = set(g.index)
+    for r in rows:
+        r["came_back"] = r["customer_id"] in back_ids or r["ordered"]
+        r["spent_since"] = round(float(spend_by.get(r["customer_id"], 0) or r["order_total"] or 0), 2)
+    n_reached = len(reached) or len(rows)
+    back_msg = sum(1 for r in rows if r["came_back"] and r["reached"])
+    back_hold = sum(1 for h in hold if str(h["customer_id"]) in back_ids)
+    rate_msg = _pct(back_msg, n_reached)
+    rate_hold = _pct(back_hold, len(hold)) if hold else None
+    lift_pts = round(rate_msg - rate_hold, 1) if rate_hold is not None else None
+    extra = round((rate_msg - rate_hold) / 100.0 * n_reached, 1) if rate_hold is not None else None
+
+    k = {
+        "messaged": len(targets), "reached": len(reached),
+        "clicked": clicked, "click_rate": _pct(clicked, n_reached),
+        "applied": applied, "orders": ordered, "conversion": _pct(ordered, n_reached),
+        "revenue": round(revenue, 2), "discount": round(discount, 2),
+        "per_discount": round(revenue / discount, 1) if discount else None,
+        "aov": round(revenue / ordered, 2) if ordered else None,
+        "came_back": back_msg, "came_back_rate": rate_msg,
+        "came_back_revenue": round(sum(r["spent_since"] for r in rows if r["came_back"]), 2),
+        "holdout": len(hold), "holdout_back": back_hold, "holdout_rate": rate_hold,
+        "lift_pts": lift_pts, "extra_customers": extra,
+    }
+    return {"campaign": {kk: rec.get(kk) for kk in ("id", "sent_at", "reason", "occasion", "offer_label",
+                                                     "symbol", "channels", "whatsapp_auto", "image_url",
+                                                     "valid_until", "link")},
+            "days_since": days, "window_days": WINDOW_DAYS,
+            "kpis": k,
+            "funnel": [{"step": "Messaged", "n": len(targets)},
+                       {"step": "Reached", "n": len(reached)},
+                       {"step": "Opened the link", "n": clicked},
+                       {"step": "Used the code at checkout", "n": applied},
+                       {"step": "Ordered", "n": ordered}],
+            "customers": sorted(rows, key=lambda r: (not r["ordered"], not r["applied"],
+                                                     not r["clicked"], not r["came_back"])),
+            "diagnosis": _diagnose(k, days, rec)}
+
+
+def _diagnose(k: dict, days: int, rec: dict) -> list[str]:
+    """Where the funnel leaks, and what a campaign manager would try next."""
+    out = []
+    if days < 3:
+        out.append("It is early: most replies to a campaign come in the first 3 to 5 days. "
+                   "Check back then.")
+    if k["reached"] == 0:
+        return out + ["Nobody was reached. Add phone numbers or emails for these customers "
+                      "and send the next one."]
+    if not rec.get("link"):
+        out.append("Your website is not published, so nobody can click through or use a code "
+                   "online. Publish it and the next campaign can be tracked end to end.")
+    elif k["click_rate"] < 10 and days >= 3:
+        out.append("Few people opened the link. Put the offer in the first line, use a picture "
+                   "of a real product, and send around 11am or 7pm when people read WhatsApp.")
+    if k["clicked"] and k["applied"] < k["clicked"] / 3:
+        out.append("People opened the shop but did not get to checkout. Check that the products "
+                   "they bought before are in stock and easy to find on the home page.")
+    if k["applied"] and k["orders"] < k["applied"]:
+        out.append("Some added the code but did not finish the order: often delivery cost or a "
+                   "minimum order. Consider free delivery for campaign orders.")
+    if k["lift_pts"] is not None and days >= 7:
+        if k["lift_pts"] > 0:
+            out.append(f"It is working: {k['came_back_rate']}% of messaged customers came back "
+                       f"against {k['holdout_rate']}% of those held back, about "
+                       f"{k['extra_customers']:g} extra customers because of this campaign.")
+        else:
+            out.append("Messaged customers are not coming back more often than the ones held "
+                       "back. Try a bigger offer, or a different reason to write (a festival, a "
+                       "new arrival).")
+    if k["per_discount"] and k["per_discount"] >= 3:
+        out.append(f"Every 1 given away in discount brought back {k['per_discount']:g} in orders.")
+    return out
+
+
+# ------------------------------------------------------------------- ideas
+def ideas(email: str) -> list[dict]:
+    """Other campaigns worth running, each sized from the seller's own data."""
+    from backend.core import analytics, smart
+    try:
+        txns = smart.load_sales(email, copy=False)
+    except Exception:  # noqa: BLE001
+        txns = None
+    first = vip = recent = cross = repl = 0
+    if txns is not None and len(txns) and "customer_id" in txns.columns:
+        d = pd.to_datetime(txns["date"], errors="coerce")
+        latest = d.max()
+        oc = "order_id" if "order_id" in txns.columns else "date"
+        per = txns.assign(_d=d).groupby(txns["customer_id"].astype(str)).agg(
+            orders=(oc, "nunique"), first=("_d", "min"), last=("_d", "max"))
+        age = (latest - per["first"]).dt.days
+        first = int(((per["orders"] == 1) & age.between(14, 60)).sum())
+        recent = int(((latest - per["last"]).dt.days <= 10).sum())
+        try:
+            rfm = analytics.calculate_rfm(txns)
+            if rfm.get("available"):
+                idx = {c: i for i, c in enumerate(rfm["columns"])}
+                vip = sum(1 for r in rfm["rows"] if r[idx["segment"]] == "Champions")
+        except Exception:  # noqa: BLE001
+            vip = 0
+        if "product" in txns.columns:
+            try:
+                rules = analytics.association_rules(txns, "product").get("rules") or {}
+                strong = {a for a, rs in rules.items() if any(r["lift"] >= 1.2 for r in rs)}
+                if strong:
+                    cross = int(txns[txns["product"].astype(str).isin(strong)]["customer_id"].nunique())
+            except Exception:  # noqa: BLE001
+                cross = 0
+            # replenishment: products people buy again, and who is past due
+            t = txns.assign(_d=d)[["customer_id", "product", "_d"]].dropna().sort_values("_d")
+            t["gap"] = t.groupby(["customer_id", "product"])["_d"].diff().dt.days
+            gaps = t.dropna(subset=["gap"]).groupby("product")["gap"].median()
+            gaps = gaps[(gaps >= 7) & (gaps <= 120)]
+            if len(gaps):
+                lastbuy = (t[t["product"].isin(gaps.index)]
+                           .groupby(["customer_id", "product"])["_d"].max())
+                repl = int(sum(1 for (c, p), v in lastbuy.items() if (latest - v).days > gaps[p]))
+    return [
+        {"id": "second_order", "title": "Second-order nudge", "audience": first,
+         "audience_label": "first-time buyers from 2 to 8 weeks ago",
+         "why": "A customer who orders twice is far more likely to stay. Thank first-time buyers "
+                "a few weeks later with a small offer on their next order."},
+        {"id": "cross_sell", "title": "Goes well with what you bought", "audience": cross,
+         "audience_label": "customers with a strong pairing to suggest",
+         "why": "Your own orders show which products are bought together. Suggest the matching "
+                "one to people who only have half the pair."},
+        {"id": "replenish", "title": "Time to restock", "audience": repl,
+         "audience_label": "customers due for a restock",
+         "why": "For things people run out of (attars, skincare, food), remind them when they are "
+                "about due, based on how often they usually buy again."},
+        {"id": "vip", "title": "VIP early access", "audience": vip, "audience_label": "Champions",
+         "why": "Give your best customers a first look at new arrivals or a sale before everyone "
+                "else. No discount needed: being first is the reward."},
+        {"id": "thank_you", "title": "Thank you + review request", "audience": recent,
+         "audience_label": "customers who ordered in the last 10 days",
+         "why": "A short thank-you a few days after delivery, asking for a review or a photo. "
+                "Builds the reviews that make new customers trust you."},
+    ]

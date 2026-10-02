@@ -356,6 +356,7 @@ def price_cart(seller: str, lines: list[dict], coupon: str = "") -> dict:
             d = discounts.check(seller, coupon, subtotal,
                                 symbol=currency.symbol(c.get("currency") or "INR") or "")
             discount, coupon_code = _money(d["amount"]), d["code"]
+            discounts.track(seller, coupon_code, "applied")   # funnel: code used at checkout
         except discounts.DiscountError as e:
             coupon_error = str(e)
     # Everything below works on what the shopper actually pays for the goods.
