@@ -8,6 +8,20 @@ What the app does today, written from the code as of 24 September 2026. Use it t
 
 One Tap Manager is a web app for small online sellers of clothing, jewelry and fragrance. Since September 2026 the primary market is the United States (onetapmanager.com, prices in USD); India is the second market (onetapmanager.com/in, prices in INR). A seller brings in the sales they already make (a file from Amazon, Shopify, a POS or a spreadsheet, a live connector, or orders from their own One Tap website). The app reads it and answers "what should I do this morning?" on the home screen, then does most of the work: the win-back message is written, the purchase order is filled in, the week of Instagram is planned and scheduled. It lives at onetapmanager.com, and the app itself is at onetapmanager.com/smart.
 
+### 1a. The first pain it fixes: selling through chats
+
+Most of our sellers do not have a shop yet. They have a chat. They post on Instagram, and every sale happens in DMs or on WhatsApp: "price?", "is this available?", "size M?", "send the link", a screenshot of the payment, an address typed out by hand. Nothing is structured. There is no catalog, no cart, no order list, no customer list, and no sales file, so every other part of One Tap Manager has nothing to read. Buyers drop off at every reply they wait for (the "DM for price" problem, Shop Doctor episode 1).
+
+The fix, in the seller's words: **add your products, pick a theme, and your designer-level website is ready to sell.** What is real in the code:
+
+- **Add products**: the first-run journey asks for just 3 products (photo, name, price) to get a live site; the rest go in Product Management later.
+- **Pick a theme**: 8 themes, each a different layout, not a recolor, plus 20 fonts sold as ready-made pairings (Quiet Modern, Editorial, Gallery, Atelier and more) and a live click-to-edit canvas. "Designer-level" means these hand-built layouts and font pairings, not a template with a logo swapped in.
+- **Ready to sell**: a cart, shopper accounts and checkout, with payments into the seller's own account (Razorpay; USD needs International Payments switched on), at onetapmanager.com/<shop name> or their own domain.
+- **Back to the chat**: the journey ends on the live link with Share on WhatsApp and Copy for Instagram bio. The chat stays the place people discover you; the website becomes where they buy. Every order placed there flows straight into Orders, Inventory, analytics, customer groups and win-back, so the rest of the app starts working on real data.
+- **Price**: included in Pro ($10 a month), custom domain too. There is no cut of sales.
+
+Keep the claim honest: the website does not take orders inside Instagram or WhatsApp, and WhatsApp sending is still switched off (section 9). We replace the chat *checkout*, not the chat.
+
 ---
 
 ## 2. Plans and money

@@ -1611,9 +1611,9 @@ new MutationObserver((muts) => {
    they cannot tell which one is for them right now. Four short headings turn the
    same twelve into "oh, that section is where I look in the morning".
 
-   `offGrid` keeps a module off the home screen without unwiring it. Marketing
-   and Billing & GST are off-grid for now — both work, both are reachable
-   directly by URL (#/module/marketing and #/module/gst) — because a seller who
+   `offGrid` keeps a module off the home screen without unwiring it. Billing &
+   GST is off-grid for now — it works and is reachable directly by URL
+   (#/module/gst) — because a seller who
    has not sent a single order does not need a GST filing tool competing for
    attention with "look at your sales". */
 const MODULE_GROUPS = [
@@ -1640,12 +1640,12 @@ const MODULES = [
   { id: "studio",     name: "Product Studio",         sub: "Upload your photos once. We learn your look and use it in everything we make.", ico: "spark", cls: "tile-content", needs: null, tag: "STUDIO", group: "grow" },
   { id: "social",     name: "Social Media Manager",   sub: "A week of Instagram posts planned, written and scheduled for you.", ico: "spark", cls: "tile-content", needs: null, tag: "SOCIAL", group: "grow" },
   { id: "site",       name: "Website Builder",        sub: "Your own selling website. Pick a look, publish, start taking orders.", ico: "globe", cls: "tile-site", needs: null, tag: "SITE", group: "grow" },
+  { id: "marketing",  name: "Marketing Campaign",     sub: "Win-back messages for customers who have gone quiet, and what they brought back.", ico: "mail", cls: "tile-marketing", needs: null, tag: "MARKETING", group: "grow" },
   // --- go deeper -------------------------------------------------------------
   { id: "review",     name: "Review Analytics",       sub: "What customers actually praise you for, in their words.", ico: "star", cls: "tile-review", needs: "review", tag: "BRAND", group: "deep" },
   { id: "complaints", name: "Complaint Analysis",     sub: "The complaints costing you the most, in the order worth fixing.", ico: "flame", cls: "tile-complaint", needs: "review", tag: "BRAND", group: "deep" },
   { id: "strategy",   name: "Position Strategy + AI", sub: "A step-by-step plan to stand for something, plus an AI you can ask anything.", ico: "compass", cls: "tile-strategy", needs: "review", tag: "STRATEGY", group: "deep" },
   // --- off the grid, still reachable by URL ---------------------------------
-  { id: "marketing",  name: "Marketing",              sub: "Win-back messages for customers who have gone quiet, and what they brought back.", ico: "mail", cls: "tile-marketing", needs: null, tag: "MARKETING", group: "run", offGrid: true },
   { id: "gst",        name: "Billing & GST",          sub: "Tax invoices, HSN codes and a GSTR-1 file your accountant can file from.", ico: "receipt", cls: "tile-orders", needs: null, tag: "BILLING", group: "run", offGrid: true },
 ];
 
@@ -7949,7 +7949,7 @@ function renderActions(insights) {
 // home: open it any time and it fetches the current at-risk list itself,
 // same endpoint the panel card uses, no waiting for an insight to appear.
 async function openMarketing() {
-  await openCached("marketing", "Marketing",
+  await openCached("marketing", "Marketing Campaign",
     async () => {
       const [wb, proof, sends, auto] = await Promise.all([
         api("/api/rfm/winback", { method: "POST" }).catch((e) => ({ customers: [], _error: e.message })),
@@ -8112,7 +8112,7 @@ function renderMarketing(wb, proof, sends, auto) {
       </div>
     </details>` : "";
 
-  moduleShell("Marketing", `
+  moduleShell("Marketing Campaign", `
     <p class="muted" style="margin-top:0;">Win-back campaigns for customers who used to
       buy from you and have gone quiet, written and ready, one tap to send.</p>
     ${winbackStrip(auto)}
