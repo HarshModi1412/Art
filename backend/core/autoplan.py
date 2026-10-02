@@ -136,7 +136,8 @@ def get_config(email: str) -> dict:
     except (TypeError, ValueError):
         hour = DEFAULT_HOUR
     return {"enabled": bool(s.get("auto_plan", True)), "day": day, "hour": hour,
-            "day_name": DAY_NAMES[day]}
+            "day_name": DAY_NAMES[day],
+            "auto_approve": bool(s.get("auto_plan_approve", True))}
 
 
 def save_config(email: str, patch: dict) -> dict:
@@ -153,6 +154,8 @@ def save_config(email: str, patch: dict) -> dict:
             clean["auto_plan_hour"] = max(0, min(23, int(patch["hour"])))
         except (TypeError, ValueError):
             pass
+    if "auto_approve" in patch:
+        clean["auto_plan_approve"] = bool(patch["auto_approve"])
     social.save_settings(email, clean)
     st = _state(email)
     if clean.get("auto_plan") and not st.get("armed_at"):
@@ -969,6 +972,92 @@ def cancel_week(email: str, week: str) -> int:
     return n
 
 
+# --------------------------------------------------------------- auto-approve
+# "Don't ask me to approve the week's schedule, just do it." Each post goes
+# through the same approve-and-make-ready path as the Approve button
+# (main._approve_post_ready, registered with set_auto_approver because it lives
+# in main.py): a photo post gets its picture and is scheduled, a reel is
+# approved and its clip goes on the task list. One post at a time, in the
+# background, so a week's pictures never pile up in memory at once and the
+# planning request does not wait for them.
+#
+# While a post is waiting its turn it is kept off the Approval panel
+# (social.pending_insight_cards asks hidden_from_panel), so the seller is never
+# asked about it. One that fails is marked and comes back as an ordinary card.
+_auto_approver = None
+_APPROVING: set[str] = set()
+_APPROVING_GUARD = threading.Lock()
+AUTO_APPROVE_ERROR = "auto_approve_error"
+
+
+def set_auto_approver(fn) -> None:
+    global _auto_approver
+    _auto_approver = fn
+
+
+def auto_approve_on(email: str) -> bool:
+    return _auto_approver is not None and bool(get_config(email).get("auto_approve", True))
+
+
+def hidden_from_panel(email: str, post: dict) -> bool:
+    """An auto-planned draft the worker will approve: not a question for the
+    seller. One whose approval failed is shown, with nothing hidden."""
+    return (post.get("source") == "autoplan" and not post.get(AUTO_APPROVE_ERROR)
+            and auto_approve_on(email))
+
+
+def waiting_for_auto_approve(email: str) -> list[dict]:
+    now = now_local(email)
+    return [p for p in social._posts(email)
+            if p.get("source") == "autoplan" and p.get("state") == "draft"
+            and not p.get(AUTO_APPROVE_ERROR) and not social.is_missed(p, now)]
+
+
+def start_auto_approve(email: str) -> bool:
+    """Run the worker for this account in the background, once at a time."""
+    email = (email or "").lower()
+    with _APPROVING_GUARD:
+        if email in _APPROVING or _auto_approver is None:
+            return False
+        _APPROVING.add(email)
+    threading.Thread(target=_auto_approve_worker, args=(email,), daemon=True,
+                     name=f"autoapprove-{email[:12]}").start()
+    return True
+
+
+def _auto_approve_worker(email: str) -> None:
+    try:
+        approve_waiting(email)
+    finally:
+        with _APPROVING_GUARD:
+            _APPROVING.discard(email)
+
+
+def approve_waiting(email: str) -> dict:
+    """Approve every auto-planned draft still waiting. Returns counts."""
+    done, failed = 0, 0
+    for p in waiting_for_auto_approve(email):
+        try:
+            _auto_approver(email, p["id"])
+            done += 1
+        except Exception as e:  # noqa: BLE001 — one post must not stop the week
+            failed += 1
+            reason = getattr(e, "detail", None) or str(e) or "it could not be approved"
+            log.warning("auto-approve failed for %s post %s: %s", email, p.get("id"), reason)
+            try:
+                social.set_post_flag(email, p["id"], AUTO_APPROVE_ERROR, str(reason)[:300])
+            except Exception:  # noqa: BLE001
+                pass
+    if done or failed:
+        try:
+            from backend.core import cache, memory
+            cache.clear(email)
+            memory.release()
+        except Exception:  # noqa: BLE001
+            pass
+    return {"approved": done, "failed": failed}
+
+
 # --------------------------------------------------------------- running it
 _LOCKS: dict[str, threading.Lock] = {}
 _LOCKS_GUARD = threading.Lock()
@@ -1006,11 +1095,20 @@ def run_for(email: str, week_start: date | None = None, trigger: str = "manual",
         # first, then plan the week around it. Covers the buttons AND the
         # background scheduler, since both enter here.
         started = _ensure_live_festival_campaigns(email, now_local(email).date())
-        return plan_week(email, week_start, trigger, replace=replace,
-                         started_campaigns=started)
+        brief = plan_week(email, week_start, trigger, replace=replace,
+                          started_campaigns=started)
     finally:
         _RUNNING.pop(email, None)
         lk.release()
+    # The seller asked not to be asked: a planned week is approved by itself.
+    if isinstance(brief, dict) and not brief.get("skipped") and auto_approve_on(email):
+        n = len(waiting_for_auto_approve(email))
+        if n and start_auto_approve(email):
+            brief["auto_approving"] = n
+            brief["note"] = (f"{(brief.get('note') or '').strip()} Approving the "
+                             f"{n} new post{'' if n == 1 else 's'} now: pictures are being "
+                             f"made and scheduled, reels go on your task list.").strip()
+    return brief
 
 
 def run_if_due(email: str) -> dict | None:
@@ -1024,6 +1122,13 @@ def kick(email: str) -> bool:
     """Start a due plan in the background and return at once — used when a
     seller opens the app, so a missed Saturday catches up without making the
     home screen wait for a dozen caption calls."""
+    # A week planned before auto-approve existed, or one interrupted by a
+    # restart, still has drafts waiting: finish approving them.
+    try:
+        if auto_approve_on(email) and waiting_for_auto_approve(email):
+            start_auto_approve(email)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         if not due(email) or _running(email):
             return False

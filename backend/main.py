@@ -491,6 +491,7 @@ class SessionData:
         self.file_names: dict[str, str] = {}
         self.txns_df: pd.DataFrame | None = None
         self.mapped_file_id: str | None = None
+        self.txns_stamp: str | None = None   # cache.stamp() txns_df was loaded at
         self.chat_messages: list[dict] = []
         self.used_initial_prompt = False
         self.last_used = time.time()
@@ -1311,6 +1312,7 @@ def reset_password(body: ResetBody):
 
 
 @app.get("/api/today")
+@memory.one_at_a_time
 def today_strip(authorization: str | None = Header(default=None)):
     """The three things worth the seller's time. Same rows the digest sends."""
     email = require_user(authorization)
@@ -1576,6 +1578,7 @@ def connector_pull(body: PullBody, x_session_id: str | None = Header(default=Non
 
 
 @app.get("/api/report/pdf")
+@memory.one_at_a_time
 def download_report(lang: str = "en", x_session_id: str | None = Header(default=None),
                     authorization: str | None = Header(default=None)):
     """Proper PDF report of the dashboard: prescriptive actions first, KPIs,
@@ -2726,12 +2729,17 @@ def _require_txns(sess: SessionData, authorization: str | None = None) -> pd.Dat
     data — upload once, use everywhere."""
     email = optional_user(authorization)
     bind_session(sess, email)
-    if sess.txns_df is None:
-        if email:
-            saved = smart.load_sales(email)
+    if email:
+        # The session's copy is a cache of the account's data, keyed on its
+        # stamp: a new upload or order elsewhere makes it stale, and it is
+        # reloaded here, on the request that needs it (not on every home load).
+        stamp = cache.stamp(email)
+        if sess.txns_df is None or sess.txns_stamp != stamp:
+            saved = smart.session_sales(email)
             if saved is not None and len(saved):
                 sess.txns_df = saved
-                sess.mapped_file_id = "shared_account_sales"
+                sess.txns_stamp = stamp
+                sess.mapped_file_id = sess.mapped_file_id or "shared_account_sales"
     if sess.txns_df is None:
         raise HTTPException(400, "No sales data yet, upload a sales file and confirm the mapping first.")
     return sess.txns_df
@@ -2818,6 +2826,7 @@ def get_languages():
 
 
 @app.get("/api/analytics")
+@memory.one_at_a_time
 def get_analytics(lang: str = "en", x_session_id: str | None = Header(default=None),
                   authorization: str | None = Header(default=None)):
     result = analytics.sales_analytics(_require_txns(get_session(x_session_id), authorization))
@@ -2826,6 +2835,7 @@ def get_analytics(lang: str = "en", x_session_id: str | None = Header(default=No
 
 
 @app.get("/api/subcategory")
+@memory.one_at_a_time
 def get_subcategory(lang: str = "en", x_session_id: str | None = Header(default=None),
                     authorization: str | None = Header(default=None)):
     result = analytics.subcategory_trends(_require_txns(get_session(x_session_id), authorization))
@@ -2867,6 +2877,7 @@ async def analyze_positioning(lang: str = "en", product_type: str | None = None,
 
 
 @app.get("/api/subcategory/detail")
+@memory.one_at_a_time
 def get_subcategory_detail(value: str, lang: str = "en", x_session_id: str | None = Header(default=None),
                            authorization: str | None = Header(default=None)):
     result = analytics.subcategory_detail(_require_txns(get_session(x_session_id), authorization), value)
@@ -2876,6 +2887,7 @@ def get_subcategory_detail(value: str, lang: str = "en", x_session_id: str | Non
 
 
 @app.get("/api/rfm")
+@memory.one_at_a_time
 def get_rfm(x_session_id: str | None = Header(default=None),
             authorization: str | None = Header(default=None)):
     return analytics.calculate_rfm(_require_txns(get_session(x_session_id), authorization))
@@ -2893,6 +2905,7 @@ _winback_cache: dict[str, WinbackSession] = {}
 
 
 @app.post("/api/rfm/winback")
+@memory.one_at_a_time
 def generate_winback(x_session_id: str | None = Header(default=None),
                      authorization: str | None = Header(default=None)):
     email = require_user(authorization)
@@ -3423,6 +3436,7 @@ def _home_fingerprint(email: str) -> str:
 
 
 @app.get("/api/smart/state")
+@memory.one_at_a_time
 def smart_state(response: Response,
                 x_session_id: str | None = Header(default=None),
                 if_none_match: str | None = Header(default=None),
@@ -3474,6 +3488,7 @@ def smart_state(response: Response,
 
 
 @app.get("/api/smart/history")
+@memory.one_at_a_time
 def smart_history(authorization: str | None = Header(default=None)):
     """Full approved + dismissed history, newest first."""
     email = require_user(authorization)
@@ -3579,6 +3594,7 @@ class SmartMapBody(BaseModel):
 
 
 @app.post("/api/smart/map")
+@memory.one_at_a_time
 def smart_map(body: SmartMapBody, x_session_id: str | None = Header(default=None),
               authorization: str | None = Header(default=None)):
     """Confirm the mapping, build the dataset and persist it to the account."""
@@ -3614,8 +3630,9 @@ def smart_map(body: SmartMapBody, x_session_id: str | None = Header(default=None
             replenish.after_sales(email, "past sales uploaded")
         else:
             replenish.after_sales(email, "sales upload")
-            # served from memory (keep_in_memory above), not re-downloaded
-            sess.txns_df = smart.load_sales(email)
+            # the session reloads it (from memory, keep_in_memory above) the
+            # first time an analytics screen asks: _require_txns
+            sess.txns_df = None
             sess.mapped_file_id = "smart_sales"
         data = smart.data_status(email)
         total = int((data.get(body.kind) or {}).get("rows") or diag["rows_after"])
@@ -7645,6 +7662,11 @@ def _approve_post_ready(email: str, post_id: str, generate: bool = True,
             "ready": social.post_ready(out_post or {})}
 
 
+# The weekly plan approves itself through this same path (autoplan.py,
+# "auto-approve"): the seller asked not to be asked about the week's schedule.
+autoplan.set_auto_approver(lambda email, post_id: _approve_post_ready(email, post_id))
+
+
 @app.post("/api/social/approve-ready")
 def social_approve_ready(body: SocialReadyBody,
                          authorization: str | None = Header(default=None)):
@@ -7686,6 +7708,7 @@ class AutoplanSettingsBody(BaseModel):
     enabled: bool | None = None
     day: int | None = None
     hour: int | None = None
+    auto_approve: bool | None = None   # approve the planned week without asking
 
 
 class AutoplanRunBody(BaseModel):

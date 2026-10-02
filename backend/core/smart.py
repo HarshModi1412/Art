@@ -130,8 +130,9 @@ def save_review(email: str, df: pd.DataFrame, meta: dict, mode: str = "replace",
         user_store.remember_df(email, REVIEW_KEY, df)
 
 
-def load_sales(email: str):
-    return user_store.load_df(email, SALES_KEY)
+def load_sales(email: str, copy: bool = True):
+    """copy=False: the shared cached frame, for read-only use (user_store.load_df)."""
+    return user_store.load_df(email, SALES_KEY, copy)
 
 
 def load_review(email: str):
@@ -155,8 +156,8 @@ def save_supply_sales(email: str, txns: pd.DataFrame, meta: dict, mode: str = "r
         user_store.remember_df(email, SUPPLY_SALES_KEY, txns)
 
 
-def load_supply_sales(email: str):
-    return user_store.load_df(email, SUPPLY_SALES_KEY)
+def load_supply_sales(email: str, copy: bool = True):
+    return user_store.load_df(email, SUPPLY_SALES_KEY, copy)
 
 
 def clear(email: str, kind: str) -> None:
@@ -179,9 +180,9 @@ def data_status(email: str) -> dict:
     }
 
 
-def hydrate_session(email: str, sess) -> dict:
-    """Load the account's saved Sales data into the live browser session so the
-    existing /api/analytics, /api/subcategory, /api/rfm endpoints work on it."""
+def session_sales(email: str):
+    """The account's Sales data as the analytics endpoints want it: a private
+    copy (they may add columns) with product names rolled up to canonical."""
     txns = load_sales(email)
     if txns is not None and len(txns):
         try:
@@ -189,8 +190,20 @@ def hydrate_session(email: str, sess) -> dict:
             txns = _products.canonicalize_df(email, txns)
         except Exception:
             pass
-        sess.txns_df = txns
-        sess.mapped_file_id = "smart_sales"
+    return txns
+
+
+def hydrate_session(email: str, sess) -> dict:
+    """Keep the browser session's copy of the Sales data honest, cheaply.
+
+    This used to load and copy the whole sales table into the session on
+    EVERY home-screen load (+118MB on a 300k-row file), whether or not the
+    seller went near an analytics screen, and while the old copy was still
+    alive. Now a stale copy is just dropped; main._require_txns loads a fresh
+    one the first time an analytics endpoint actually needs it."""
+    from backend.core import cache
+    if sess.txns_df is not None and getattr(sess, "txns_stamp", None) != cache.stamp(email):
+        sess.txns_df = None
     return data_status(email)
 
 
@@ -313,7 +326,9 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
     from backend.core import personas
     decisions = user_store.get_key(email, "smart_decisions", {}) or {}
     out: list[dict] = []
-    txns = load_sales(email)
+    # read-only here (at_risk_cached only groups and slices it), so the shared
+    # cached frame rather than a private copy of the whole sales table
+    txns = load_sales(email, copy=False)
     review = load_review(email)
 
     if txns is not None and len(txns):

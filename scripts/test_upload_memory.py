@@ -76,8 +76,10 @@ check("insights are no longer built inside the save (nobody read them)", "insigh
 sess = main._data_sessions.get(SID)
 check("the raw upload is gone from the session once saved",
       sess is not None and "smart_pending_sales" not in sess.raw_dfs)
-check("the session can still run the analytics endpoints",
-      sess is not None and sess.txns_df is not None and len(sess.txns_df) == 400)
+a = c.get("/api/analytics?lang=en", headers=H)
+check("the session can still run the analytics endpoints (loaded on first use)",
+      a.status_code == 200 and sess is not None and sess.txns_df is not None
+      and len(sess.txns_df) == 400, a.status_code)
 saved = smart.load_sales(email)
 check("the saved dataset loads back", saved is not None and len(saved) == 400)
 
@@ -93,6 +95,7 @@ up = c.post("/api/smart/upload?kind=sales", headers=H,
             files={"files": ("more.csv", io.BytesIO(sales_csv(100)), "text/csv")})
 r = c.post("/api/smart/map", headers=H, json={"kind": "sales", "mapping": mapping, "mode": "append"})
 check("append totals old + new", r.json().get("rows") == 500 and r.json().get("added") == 100, r.json())
+c.get("/api/analytics?lang=en", headers=H)
 check("and the session sees the combined table", len(main._data_sessions[SID].txns_df) == 500)
 
 print("\n== 4. a bad mapping keeps the upload so the seller can fix it ==")

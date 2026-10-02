@@ -10970,7 +10970,9 @@ function autoplanStrip(ap) {
             : "Automatic weekly planning is off"}</b>
           <span class="muted tiny">${ap.enabled
             ? (ap.pending_week ? `Next week is due now, it runs in the background as soon as it can.`
-               : `Next run ${esc(ap.next_run_label || "")}. It checks festivals, what is already planned and how each product is selling, then puts the posts in your Approval panel.`)
+               : `Next run ${esc(ap.next_run_label || "")}. It checks festivals, what is already planned and how each product is selling, then ${ap.auto_approve === false
+                   ? "puts the posts in your Approval panel."
+                   : "approves and schedules the posts itself: pictures are made for you, reels go on your task list."}`)
             : "Turn it on in Setup and the week plans itself."}
             ${last ? `Last plan: ${esc(last.week_label || "")} – ${esc(last.note || "")}` : ""}</span>
         </div>
@@ -10993,8 +10995,12 @@ async function runAutoplanNow() {
     const br = r.brief || {};
     await afterPostChange();
     toast(br.added
-      ? `${br.added} post${br.added === 1 ? "" : "s"} planned for ${br.week_label}, they are in your Approval panel.`
+      ? (br.auto_approving
+        ? `${br.added} post${br.added === 1 ? "" : "s"} planned for ${br.week_label}. Approving and scheduling them now, pictures are being made.`
+        : `${br.added} post${br.added === 1 ? "" : "s"} planned for ${br.week_label}, they are in your Approval panel.`)
       : (br.note || "Nothing to add."), 8000);
+    // pictures land over the next minute or so: refresh the calendar then
+    if (br.auto_approving) setTimeout(() => { afterPostChange().catch(() => {}); }, 45000);
   } catch (e) { toast(e.message, 6000); }
   if ($("apRunNow")) $("apRunNow").disabled = false;
 }
@@ -11866,8 +11872,9 @@ async function openSocialSetup() {
       </div>
       <p class="sm-hint">It checks festivals and the season, what is already on the calendar
         and which products are selling or stuck, then tops next week up to your number of
-        posts, never past it. The posts wait in your Approval panel; nothing goes out
-        until you approve it.</p>
+        posts, never past it. It approves the week itself: each photo post gets its
+        picture and is scheduled, and each reel goes on your task list for the clip.
+        Any post it cannot finish comes back to your Approval panel.</p>
       ${loc ? `<label class="fld"><span>Times are local to</span>
         <select id="soCountry">${(loc.options || []).map((o) =>
           `<option value="${esc(o.code)}"${o.code === loc.country ? " selected" : ""}>${esc(o.name)}${o.note ? ` – ${esc(o.note)}` : ""} · ${esc(o.now)} now</option>`).join("")}</select></label>

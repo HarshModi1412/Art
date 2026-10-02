@@ -525,18 +525,20 @@ def _quintile(series: pd.Series, invert: bool = False) -> pd.Series:
 
 
 def calculate_rfm(txns: pd.DataFrame) -> dict:
-    df = txns.copy()
-    if "customer_id" not in df.columns:
+    if "customer_id" not in txns.columns:
         return {"available": False, "reason": "No customer ID column was mapped — RFM needs one."}
+    # Reads four columns and changes none of them, so it no longer copies the
+    # whole frame first: on a 300k-row file that copy was most of this call's
+    # memory, and it ran on every home-screen load (at-risk card).
+    order_col = "order_id" if "order_id" in txns.columns else "date"
+    df = txns[list(dict.fromkeys(["customer_id", "date", order_col, "amount"]))]
 
     snapshot = df["date"].max() + pd.Timedelta(days=1)
-    order_col = "order_id" if "order_id" in df.columns else "date"
-
-    rfm = df.groupby("customer_id").agg(
-        recency=("date", lambda x: (snapshot - x.max()).days),
-        frequency=(order_col, "nunique"),
-        monetary=("amount", "sum"),
-    ).reset_index()
+    g = df.groupby("customer_id")
+    # same numbers as the old per-group lambda, without a Python call per customer
+    rfm = pd.DataFrame({"recency": (snapshot - g["date"].max()).dt.days,
+                        "frequency": g[order_col].nunique(),
+                        "monetary": g["amount"].sum()}).reset_index()
 
     # quintile scores (5 = best). Recency inverted: fewer days = higher score.
     rfm["R"] = _quintile(rfm["recency"], invert=True)
@@ -544,18 +546,12 @@ def calculate_rfm(txns: pd.DataFrame) -> dict:
     rfm["M"] = _quintile(rfm["monetary"])
     rfm["RFM_score"] = rfm["R"].astype(str) + rfm["F"].astype(str) + rfm["M"].astype(str)
 
-    def segment(row):
-        if row.R >= 4 and row.F >= 4:
-            return "Champions"
-        if row.R >= 4 and row.F >= 2:
-            return "Loyal / Potential"
-        if row.R >= 3 and row.F <= 2:
-            return "New Customers"
-        if row.R == 2:
-            return "At Risk"
-        return "Hibernating"
-
-    rfm["segment"] = rfm.apply(segment, axis=1)
+    # first matching rule wins, exactly as the old row-by-row function did
+    R, F = rfm["R"], rfm["F"]
+    rfm["segment"] = np.select(
+        [(R >= 4) & (F >= 4), (R >= 4) & (F >= 2), (R >= 3) & (F <= 2), R == 2],
+        ["Champions", "Loyal / Potential", "New Customers", "At Risk"],
+        default="Hibernating")
     rfm["monetary"] = rfm["monetary"].round(2)
 
     seg_counts = rfm["segment"].value_counts()

@@ -33,6 +33,7 @@ time, so the smart <-> supply pair does not deadlock on import.
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import math
 import os
@@ -407,6 +408,24 @@ EOQ_MIN_DAYS = 30           # a month of sales before annual demand is trusted
 
 
 def _demand_stats(email: str):
+    """Cached per data version: see _demand_stats_uncached."""
+    from backend.core import cache
+    try:
+        from backend.core import products as _products
+        aliases = _products.alias_map(email) or {}
+    except Exception:  # noqa: BLE001
+        aliases = {}
+    # Every Approval-panel build asked for this twice (reorder + overstock
+    # cards), and the home screen builds the panel twice (insights + history):
+    # four passes over the whole sales history per page load, ~110MB each on a
+    # 300k-row file. The result depends only on the sales data (the stamp) and
+    # the product aliases, so that is the key.
+    tag = hashlib.md5(repr(sorted(aliases.items())).encode()).hexdigest()
+    return cache.memo("demand_stats", email, lambda: _demand_stats_uncached(email),
+                      ttl=600, extra=tag)
+
+
+def _demand_stats_uncached(email: str):
     """(product_daily_mean, daily_matrix, meta).
 
     product_daily_mean: {norm product -> mean units/day over the span}
@@ -418,13 +437,19 @@ def _demand_stats(email: str):
     if txns is None or not len(txns) or "product" not in getattr(txns, "columns", []):
         return {}, None, {"has_sales": False, "days_span": 0, "source": "",
                           "window_days": 0, "data_to": ""}
+    # Only the three columns this reads: a copy of just those, never of the
+    # whole frame (the frame itself is the shared cached one, read-only).
+    df = txns[[c for c in ("product", "quantity", "date") if c in txns.columns]].copy()
+    del txns
     try:
         from backend.core import products as _products
-        txns = _products.canonicalize_df(email, txns)
+        df = _products.canonicalize_df(email, df)
     except Exception:
         pass
-    df = txns.copy()
-    df["_prod"] = df["product"].map(_norm)
+    # normalise each distinct name once; mapping through the dict reuses those
+    # strings instead of building one new string per row
+    names = {v: _norm(v) for v in df["product"].dropna().unique()}
+    df["_prod"] = df["product"].map(names).fillna("")
     df = df[df["_prod"] != ""]
     qty_col = "quantity" if "quantity" in df.columns else None
     df["_q"] = (pd.to_numeric(df[qty_col], errors="coerce").fillna(0.0)
@@ -462,10 +487,11 @@ def _sales_source(email: str):
     already includes every order from their own website. Without the second
     route a seller who never used the Supply upload had no consumption rate at
     all, so days of supply could never be worked out."""
-    txns = smart.load_supply_sales(email)
+    # read-only: _demand_stats_uncached copies only the columns it needs
+    txns = smart.load_supply_sales(email, copy=False)
     if txns is not None and len(txns) and "product" in getattr(txns, "columns", []):
         return txns, "supply_sales"
-    txns = smart.load_sales(email)
+    txns = smart.load_sales(email, copy=False)
     if txns is not None and len(txns) and "product" in getattr(txns, "columns", []):
         return txns, "sales"
     return None, ""

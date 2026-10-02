@@ -381,7 +381,7 @@ _DF_CACHE: dict[tuple, object] = {}
 _DF_CACHE_MAX = 24
 
 
-def _df_cache_get(email: str, key: str):
+def _df_cache_get(email: str, key: str, copy: bool = True):
     from backend.core import cache
     hit = _DF_CACHE.get((email, key))
     if not hit:
@@ -391,17 +391,17 @@ def _df_cache_get(email: str, key: str):
         _DF_CACHE.pop((email, key), None)
         return None
     # hand out a copy: callers routinely mutate what they are given
-    return df.copy()
+    return df.copy() if copy else df
 
 
-def _df_cache_put(email: str, key: str, df):
+def _df_cache_put(email: str, key: str, df, copy: bool = True):
     from backend.core import cache
     if df is None:
         return None
     if len(_DF_CACHE) >= _DF_CACHE_MAX:
         _DF_CACHE.clear()
     _DF_CACHE[(email, key)] = (cache.stamp(email), df)
-    return df.copy()
+    return df.copy() if copy else df
 
 
 def remember_df(email: str, key: str, df) -> None:
@@ -418,11 +418,42 @@ def remember_df(email: str, key: str, df) -> None:
     _DF_CACHE[(email, key)] = (cache.stamp(email), df)
 
 
-def load_df(email: str, key: str):
-    cached = _df_cache_get(email, key)
+# One cold load per dataset at a time. The home screen fires its first few
+# requests together, and on a fresh process every one of them missed the
+# cache and downloaded, decrypted and unpickled the whole sales table at once:
+# three or four full copies in flight, which is what OOM-killed the 512MB
+# instance on 2 October 2026 when a seller opened Sales Analytics right after
+# a deploy. The others now wait for the first and are served from the cache.
+_LOAD_LOCKS: dict[tuple, threading.Lock] = {}
+_LOAD_LOCKS_GUARD = threading.Lock()
+
+
+def _load_lock(email: str, key: str) -> threading.Lock:
+    with _LOAD_LOCKS_GUARD:
+        lk = _LOAD_LOCKS.get((email, key))
+        if lk is None:
+            lk = _LOAD_LOCKS[(email, key)] = threading.Lock()
+        return lk
+
+
+def load_df(email: str, key: str, copy: bool = True):
+    """The saved frame, or None.
+
+    copy=False hands out the cached frame itself, for callers that only read
+    it (select columns, group, sum). It saves a full copy of the dataset per
+    call; a caller that adds a column or assigns into it must keep the
+    default, or it corrupts every later reader."""
+    cached = _df_cache_get(email, key, copy)
     if cached is not None:
         return cached
+    with _load_lock(email, key):
+        cached = _df_cache_get(email, key, copy)    # someone loaded it meanwhile
+        if cached is not None:
+            return cached
+        return _load_df_uncached(email, key, copy)
 
+
+def _load_df_uncached(email: str, key: str, copy: bool):
     if db.SUPABASE_ENABLED:
         enc = db.download_blob(_blob_path(email, key))
         if not enc:
@@ -432,14 +463,14 @@ def load_df(email: str, key: str):
             del enc
             df = pickle.loads(raw)
             del raw
-            return _df_cache_put(email, key, df)
+            return _df_cache_put(email, key, df, copy)
         except Exception:
             return None
     path = _df_path(email, key)
     if not os.path.exists(path):
         return None
     try:
-        return _df_cache_put(email, key, pd.read_pickle(path))
+        return _df_cache_put(email, key, pd.read_pickle(path), copy)
     except Exception:
         return None
 

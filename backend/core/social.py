@@ -197,7 +197,10 @@ def blank_settings() -> dict:
             # default, every Monday night (9pm India time), planning the week
             # that starts the following Monday so a post lands every day of it,
             # Sunday included. Monday = 0 ... Sunday = 6.
-            "auto_plan": True, "auto_plan_day": 0, "auto_plan_hour": 21}
+            "auto_plan": True, "auto_plan_day": 0, "auto_plan_hour": 21,
+            # ...and the planned week approves itself rather than waiting in
+            # the Approval panel (autoplan.py, "auto-approve").
+            "auto_plan_approve": True}
 
 
 def get_settings(email: str) -> dict:
@@ -239,6 +242,7 @@ def save_settings(email: str, patch: dict) -> dict:
     if s["language"] not in LANGUAGES:
         s["language"] = "hinglish"
     s["auto_plan"] = bool(s.get("auto_plan", True))
+    s["auto_plan_approve"] = bool(s.get("auto_plan_approve", True))
     try:
         s["auto_plan_day"] = int(s.get("auto_plan_day", 5)) % 7
     except (TypeError, ValueError):
@@ -2026,6 +2030,14 @@ def _missed_notice(email: str, missed: list[dict], now) -> list[dict]:
     }]
 
 
+def _auto_approved(email: str, post: dict) -> bool:
+    try:
+        from backend.core import autoplan
+        return autoplan.hidden_from_panel(email, post)
+    except Exception:  # noqa: BLE001 — a doubt shows the card rather than hiding it
+        return False
+
+
 def dismiss_missed_notice(email: str, notice_id: str) -> None:
     user_store.set_key((email or "").lower(), MISSED_SEEN_KEY, str(notice_id))
 
@@ -2069,6 +2081,9 @@ def pending_insight_cards(email: str) -> list[dict]:
         # Its day has gone: one summary line, not a card to approve.
         if is_missed(p, _now):
             missed.append(p)
+            continue
+        # The weekly auto-approve will handle it: not a question for the seller.
+        if _auto_approved(email, p):
             continue
         # The weekly auto-plan runs on Saturday for the week after, so its
         # Sunday post is eight days out — past the usual window. Everything it
@@ -2212,6 +2227,19 @@ def clear_plan(email: str) -> int:
     except Exception:  # noqa: BLE001
         pass
     return n
+
+
+def set_post_flag(email: str, post_id: str, field: str, value) -> dict:
+    """Set one bookkeeping field on a post (update_post only takes the fields a
+    seller edits). Used by the weekly auto-approve to mark a post it could not
+    approve, so it comes back to the Approval panel as an ordinary card."""
+    rows = _posts(email)
+    for p in rows:
+        if p.get("id") == post_id:
+            p[field] = value
+            _save_posts(email, rows)
+            return p
+    return {"error": "not found"}
 
 
 def update_post(email: str, post_id: str, patch: dict) -> dict:
