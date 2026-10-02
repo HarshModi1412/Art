@@ -97,6 +97,27 @@ def mark_sent(email: str, customers: list[dict], channel: str = "whatsapp",
     return row
 
 
+def add_targets(email: str, campaign_id: str, customers: list[dict]) -> dict:
+    """Add customers to a recorded campaign (tap-to-send, one tap at a time)."""
+    rows = _load(email)
+    for r in rows:
+        if r.get("id") == campaign_id:
+            have = {x["customer_id"] for x in r.get("targets") or []}
+            for c in customers or []:
+                cid = str(c.get("customer_id") or "").strip()
+                if cid and cid not in have:
+                    r.setdefault("targets", []).append({
+                        "customer_id": cid,
+                        "name": str(c.get("customer_name") or "").strip()[:80],
+                        "prior_value": float(c.get("monetary") or 0)})
+                    have.add(cid)
+            r["n_targets"] = len(r.get("targets") or [])
+            r["prior_value"] = round(sum(x["prior_value"] for x in r["targets"]), 2)
+            _save(email, rows)
+            return r
+    raise ValueError("That campaign is no longer in your history.")
+
+
 def confirm_sent(email: str, campaign_id: str) -> dict:
     """The seller says they tapped through the WhatsApp links after all.
 

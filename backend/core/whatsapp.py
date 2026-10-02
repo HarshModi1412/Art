@@ -55,6 +55,18 @@ TEMPLATE_BODY = (
     "Shop here: {{7}} (the code applies automatically)."
 )
 TEMPLATE_FOOTER = "Reply STOP to stop offers from us"
+# The no-discount campaigns (restock, VIP first look, thank-you): no code, no
+# offer, no picture header, so it is quick for Meta to approve.
+TEMPLATE_UPDATE_NAME = "otm_campaign_update_v1"
+TEMPLATE_UPDATE_BODY = (
+    "Hi {{1}}, it's {{2}}.\n\n"
+    "{{3}}\n\n"
+    "Have a look here: {{4}}\n\n"
+    "Thank you for shopping with us."
+)
+UPDATE_EXAMPLE = ["Priya", "Rang Studio",
+                  "It has been about the usual time since your last Mogra Attar, so it might be running low.",
+                  "https://onetapmanager.com/s/rangstudio?ref=PRIYA-7K2PQ"]
 EXAMPLE = ["Priya", "Rang Studio",
            "It has been a while, and we saved something special for your next order.",
            "PRIYA-7K2PQ", "Rs 200 off", "16 Oct",
@@ -311,6 +323,22 @@ def template_payload(name: str, header_handle: str = "") -> dict:
     return {"name": name, "language": "en", "category": "MARKETING", "components": comps}
 
 
+def _submit_update_template(email: str, existing: dict) -> None:
+    c, token = _cfg(email), _token(email)
+    if TEMPLATE_UPDATE_NAME in existing:
+        _save_cfg(email, {"update_template_status": existing[TEMPLATE_UPDATE_NAME]})
+        return
+    try:
+        res = _req("POST", f"{c['waba_id']}/message_templates", token, json={
+            "name": TEMPLATE_UPDATE_NAME, "language": "en", "category": "MARKETING",
+            "components": [{"type": "BODY", "text": TEMPLATE_UPDATE_BODY,
+                            "example": {"body_text": [UPDATE_EXAMPLE]}},
+                           {"type": "FOOTER", "text": TEMPLATE_FOOTER}]})
+        _save_cfg(email, {"update_template_status": (res.get("status") or "PENDING").upper()})
+    except WhatsAppError as e:
+        log.info("update template not submitted for %s: %s", email, e)
+
+
 def submit_template(email: str) -> dict:
     """Ask Meta to approve the campaign template (picture header if we can,
     text-only otherwise). Safe to call again: an existing one is reused."""
@@ -318,6 +346,7 @@ def submit_template(email: str) -> dict:
     if not (c.get("waba_id") and token):
         raise WhatsAppError("Connect WhatsApp first.")
     existing = _templates(email)
+    _submit_update_template(email, existing)
     for name in (TEMPLATE_NAME, TEMPLATE_TEXT_NAME):
         if name in existing:
             _save_cfg(email, {"template": name, "template_status": existing[name],
@@ -352,10 +381,13 @@ def refresh(email: str) -> dict:
     c = _cfg(email)
     if c.get("template"):
         try:
-            st = _templates(email).get(c["template"])
+            all_t = _templates(email)
+            st = all_t.get(c["template"])
             if st:
                 _save_cfg(email, {"template_status": st, "template_checked_at":
                                   datetime.now().isoformat(timespec="seconds")})
+            if all_t.get(TEMPLATE_UPDATE_NAME):
+                _save_cfg(email, {"update_template_status": all_t[TEMPLATE_UPDATE_NAME]})
         except WhatsAppError as e:
             _save_cfg(email, {"template_error": str(e)})
     return status(email)
@@ -406,14 +438,26 @@ def _param(v) -> str:
     return re.sub(r"\s+", " ", str(v or "")).strip()[:900] or "-"
 
 
-def send_campaign_message(email: str, phone: str, values: list, image_url: str = "") -> str:
-    """Send one approved-template message. Returns Meta's message id."""
+def send_campaign_message(email: str, phone: str, values: list, image_url: str = "",
+                          kind: str = "offer") -> str:
+    """Send one approved-template message. Returns Meta's message id.
+    kind "offer" uses the code-and-offer template (4+3 values); "update" the
+    no-discount one (name, brand, line, link)."""
     c, token = _cfg(email), _token(email)
     if not (c.get("phone_number_id") and token and c.get("template")):
         raise WhatsAppError("WhatsApp is not connected for automatic sending.")
     to = digits(phone, default_cc(email))
     if len(to) < 11:
         raise WhatsAppError("not a full phone number")
+    if kind == "update":
+        if (c.get("update_template_status") or "").upper() != "APPROVED":
+            raise WhatsAppError("the no-discount message is still waiting for Meta's approval")
+        body = _req("POST", f"{c['phone_number_id']}/messages", token, json={
+            "messaging_product": "whatsapp", "to": to, "type": "template",
+            "template": {"name": TEMPLATE_UPDATE_NAME, "language": {"code": "en"},
+                         "components": [{"type": "body", "parameters": [
+                             {"type": "text", "text": _param(v)} for v in values]}]}})
+        return ((body.get("messages") or [{}])[0]).get("id") or ""
     comps = []
     if c.get("template_header"):
         if not image_url:

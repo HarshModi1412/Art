@@ -359,7 +359,8 @@ check("WhatsApp without a connection becomes tap-to-send links",
 check("the tap-to-send message carries the code",
       all(x["code"] in x["message"] for x in res["results"]))
 check("with no mail server nothing is claimed as emailed", res["email_sent"] == 0)
-check("it is recorded as pending until the seller confirms", res["pending_campaign_id"])
+check("nothing counts as sent until it is tapped", res["sent_now"] == 0
+      and res["to_send"] == res["wa_links"] and "tap each one" in res["summary"], res["summary"])
 check("and the history shows it", n == 1)
 
 # --- the tracker
@@ -377,15 +378,27 @@ r = c.post(f"/api/shop/{HANDLE}/order", json={"lines": [{"product_id": pid, "qty
 check("and the order", r.status_code == 200, r.text[:200])
 r = c.get(f"/api/campaign/{d['id']}/analysis", headers=H)
 check("the analysis opens", r.status_code == 200, r.text[:200])
-check("unconfirmed tap-to-send links do not count as reached",
-      r.json()["kpis"]["reached"] == 0 and r.json()["taps_pending"], str(r.json()["kpis"]))
-c.post("/api/rfm/winback/confirm", headers=H, json={"campaign_id": r.json()["pending_proof_id"]})
-r = c.get(f"/api/campaign/{d['id']}/analysis", headers=H)
-an = r.json()
-check("once the seller confirms, they do", an["kpis"]["reached"] == an["kpis"]["messaged"]
-      and not an["taps_pending"], str(an["kpis"]))
+check("untapped links are not counted as sent", r.json()["kpis"]["reached"] == 0
+      and len(r.json()["to_send"]) == r.json()["kpis"]["messaged"], str(r.json()["kpis"]))
+tap_ids = [x["customer_id"] for x in res["results"][:3]]
+for cid_ in tap_ids:
+    rt = c.post(f"/api/campaign/{d['id']}/tapped", headers=H, json={"customer_id": cid_})
+c.post(f"/api/campaign/{d['id']}/tapped", headers=H, json={"customer_id": tap_ids[0]})
+check("each tap counts one customer as sent, once", rt.status_code == 200 and rt.json()["sent"] == 3,
+      rt.text[:200])
+r = c.post(f"/api/campaign/{d['id']}/tapped", headers=H, json={"customer_id": "nobody"})
+check("a customer outside the campaign is refused", r.status_code == 400)
+an = c.get(f"/api/campaign/{d['id']}/analysis", headers=H).json()
 k = an["kpis"]
-check("it counts who was messaged and reached", k["messaged"] == len(res["results"]) and k["reached"] > 0, str(k))
+check("the results show exactly how many were sent", k["reached"] == 3 and k["messaged"] == len(res["results"]),
+      str(k))
+check("and who is still waiting, with their link",
+      len(an["to_send"]) == k["messaged"] - 3 and all(x["wa_link"] for x in an["to_send"]))
+check("the diagnosis says how many are still to send",
+      any("still waiting" in x for x in an["diagnosis"]), str(an["diagnosis"]))
+hist = c.get("/api/campaign/state", headers=H).json()["history"][0]
+check("the history shows the real count", hist["sent_count"] == 3 and hist["total"] == len(res["results"]),
+      str(hist)[:200])
 check("the funnel narrows step by step",
       [f["n"] for f in an["funnel"]] == sorted([f["n"] for f in an["funnel"]], reverse=True), str(an["funnel"]))
 check("one click, one code used, one order", k["clicked"] >= 1 and k["applied"] >= 1 and k["orders"] == 1, str(k))
@@ -395,8 +408,10 @@ check("and the ordering customer is at the top of the list", an["customers"][0][
 check("it says what to do next", isinstance(an["diagnosis"], list) and an["diagnosis"], str(an["diagnosis"]))
 st2 = c.get("/api/campaign/state", headers=H).json()
 check("the history marks it as trackable", st2["history"][0]["tracked"])
-check("ideas for other campaigns, sized from the data",
-      len(st2["ideas"]) == 5 and all("audience" in i for i in st2["ideas"]), str(st2["ideas"])[:200])
+check("seven campaign types, each sized from the data",
+      [t["id"] for t in st2["types"]] == ["winback", "festival", "second_order", "cross_sell",
+                                          "restock", "vip", "thank_you"]
+      and all(isinstance(t["audience"], int) for t in st2["types"]), str(st2["types"])[:200])
 r = c.get("/api/campaign/nope/analysis", headers=H)
 check("an unknown campaign is a 404", r.status_code == 404)
 r = c.post(f"/api/campaign/{d['id']}/send", headers=H, json={"channels": ["whatsapp"]})
@@ -404,8 +419,9 @@ check("a campaign cannot be sent twice", r.status_code == 400, r.text[:200])
 
 r = c.post("/api/campaign/build", headers=H, json={
     "reason": "winback", "offer": {"kind": "flat", "value": 100}})
-check("everyone just contacted is held back by the cooldown",
-      r.status_code == 400 or r.json()["held_back"] > 0, r.text[:200])
+check("only the customers actually sent to are held back by the cooldown",
+      r.status_code == 200 and r.json()["held_back"] == 3, r.text[:200])
+c.post(f"/api/campaign/{r.json()['id']}/discard", headers=H)
 
 r = c.post("/api/campaign/build", headers=H, json={
     "reason": "festival", "occasion": "Diwali", "offer": {"kind": "percent", "value": 15}})
@@ -416,6 +432,72 @@ check("it reaches the best customers, not only the quiet ones",
       bool(fsegs & {"Champions", "Loyal / Potential"}), str(fsegs))
 check("and names the festival", all("Diwali" in x["message"] for x in fd["rows"][:5]), fd["rows"][0]["message"])
 check("with a percent offer", "15% off" in fd["rows"][0]["message"])
+c.post(f"/api/campaign/{fd['id']}/discard", headers=H)
+
+section("4b. Seven kinds of campaign")
+from backend.core import campaign_writer as cw3  # noqa: E402
+r = c.post("/api/campaign/build", headers=H, json={"reason": "vip", "offer": {"kind": "none"}})
+check("a VIP campaign needs to say what the early access is to",
+      r.status_code == 400 and "early access" in r.text, r.text[:200])
+kinds = {
+    "second_order": {"offer": {"kind": "flat", "value": 150}},
+    "cross_sell": {"offer": {"kind": "percent", "value": 10}},
+    "restock": {"offer": {"kind": "none"}},
+    "vip": {"offer": {"kind": "none"}, "note": "our festive collection is live"},
+    "thank_you": {"offer": {"kind": "none"}},
+}
+built = {}
+for kind, extra in kinds.items():
+    r = c.post("/api/campaign/build", headers=H, json={"reason": kind, **extra})
+    ok_ = r.status_code == 200
+    check(f"{kind}: builds", ok_, r.text[:200])
+    if not ok_:
+        continue
+    dd = r.json()
+    built[kind] = dd
+    closes = {cw3.fill(v["close"], {"brand": "Rang Studio"}) for v in cw3.VOICES[kind]}
+    wb_closes = {cw3.fill(v["close"], {"brand": "Rang Studio"}) for v in cw3.VOICES["winback"]} - closes
+    check(f"{kind}: written in its own voices",
+          all(set(x["message"].split("\n\n")) & closes for x in dd["rows"])
+          and not any(set(x["message"].split("\n\n")) & wb_closes for x in dd["rows"])
+          and len({x["voice"] for x in dd["rows"]}) == min(10, len(dd["rows"])),
+          dd["rows"][0]["message"])
+    c.post(f"/api/campaign/{dd['id']}/discard", headers=H)
+
+if "second_order" in built:
+    so = built["second_order"]
+    owners = sample.groupby("customer_id")["order_id"].nunique()
+    check("second_order: only customers with exactly one order",
+          all(owners.get(x["customer_id"], 0) == 1 for x in so["rows"]))
+    check("second_order: talks about the next order", all("₹150 off" in x["message"] for x in so["rows"]))
+if "cross_sell" in built:
+    cs = built["cross_sell"]
+    check("cross_sell: every message names the pair",
+          all(x["product_display"] and x["pick_display"] and x["pick_display"] in x["message"]
+              and x["product_display"] in x["message"] for x in cs["rows"]))
+    check("cross_sell: and never suggests what they already have",
+          all(x["pick_display"] not in own.get(x["customer_id"], set()) for x in cs["rows"]))
+if "restock" in built:
+    rs = built["restock"]
+    check("restock: names the product that is due, with no discount and no code in sight",
+          all(x["product_display"] in x["message"] and x["code"] not in x["message"].split("?")[0]
+              and "off" not in x["message"].split("?")[0].lower().replace("office", "")
+              for x in rs["rows"]), rs["rows"][0]["message"])
+    check("restock: the link carries a quiet tracking code (ref=), not code=",
+          all(f"ref={x['code']}" in x["message"] and "code=" not in x["message"] for x in rs["rows"]))
+    ref = rs["rows"][0]["code"]
+    cart = c.post(f"/api/shop/{HANDLE}/cart", json={"lines": [{"product_id": pid, "qty": 1}], "coupon": ref}).json()
+    check("restock: the tracking code prices the cart at full price, without an error",
+          cart["discount"] == 0 and cart["coupon"] == ref and not cart["coupon_error"]
+          and cart["total"] == 1499, str({k_: cart.get(k_) for k_ in ("discount", "coupon", "coupon_error", "total")}))
+if "vip" in built:
+    check("vip: says what is new, from the seller's note",
+          all("festive collection is live" in x["message"] for x in built["vip"]["rows"]))
+if "thank_you" in built:
+    ty = built["thank_you"]
+    check("thank_you: asks for a review or a reply, no discount",
+          all(("review" in x["message"].lower() or "reply" in x["message"].lower()) for x in ty["rows"]))
+
 while True:
     open_draft = c.get("/api/campaign/state", headers=H).json()["draft"]
     if not open_draft:

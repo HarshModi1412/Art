@@ -42,10 +42,6 @@ from __future__ import annotations
 import random
 import re
 
-REASONS = {
-    "winback": "Win back customers who have gone quiet",
-    "festival": "Festival offer for your best customers",
-}
 
 PLACEHOLDERS = ("{name}", "{product}", "{pick}", "{offer}", "{code}", "{expiry}", "{link}",
                 "{brand}", "{occasion}")
@@ -240,7 +236,399 @@ FESTIVAL = [
      "subject": "{offer} this {occasion}, {name}"},
 ]
 
-VOICES = {"winback": WINBACK, "festival": FESTIVAL}
+
+# Campaign types beyond win-back and festival. Same five parts, plus
+# `offer_none`: the line used when the campaign carries no discount.
+SECOND_ORDER = [
+    {"open": "Hi {name}, it's {brand}. Thank you again for your first order with us!",
+     "bought": "We hope you're enjoying the {product}.",
+     "pick": "A lot of our customers pick the {pick} next, we think you'd like it.",
+     "offer": "For your second order, here's {offer}: use *{code}* by {expiry}.",
+     "offer_none": "Whenever you're ready for the next one, we're right here.",
+     "close": "Thank you for giving a small shop a try.",
+     "subject": "Thank you for your first order, {name}"},
+    {"open": "Hello {name}! {brand} here.",
+     "bought": "It's been a few weeks since your {product} arrived, and we hope it's a favourite.",
+     "pick": "If you're looking for something to go with it, the {pick} is a lovely choice.",
+     "offer": "Your second order comes with {offer}. Code: *{code}*, valid till {expiry}.",
+     "offer_none": "We'd love to help you find your next piece.",
+     "close": "Warmly, the {brand} team",
+     "subject": "{name}, a little something for your next order"},
+    {"open": "Hi {name}, a quick hello from {brand}.",
+     "bought": "We loved packing your first order, the {product}.",
+     "pick": "Our pick for your next one: the {pick}.",
+     "offer": "To make the next one easier: {offer} with *{code}* (till {expiry}).",
+     "offer_none": "Have a look around whenever you like.",
+     "close": "Just reply here if you need anything.",
+     "subject": "We loved packing your first order"},
+    {"open": "Dear {name}, welcome to the {brand} family.",
+     "bought": "We hope the {product} was everything you hoped for.",
+     "pick": "You might also love the {pick}.",
+     "offer": "Here's {offer} on your next order with code *{code}*, till {expiry}.",
+     "offer_none": "We'd be happy to see you again soon.",
+     "close": "With love, {brand}",
+     "subject": "Welcome to the {brand} family"},
+    {"open": "Hey {name}! It's {brand}.",
+     "bought": "How are you finding the {product}?",
+     "pick": "People who loved it often come back for the {pick}.",
+     "offer": "If you fancy a second order, {offer} is yours with *{code}* until {expiry}.",
+     "offer_none": "We'd love to hear what you think, just reply here.",
+     "close": "See you soon!",
+     "subject": "How did we do, {name}?"},
+    {"open": "Hi {name}, thank you for choosing {brand} for the first time.",
+     "bought": "The {product} is one of our customers' favourites, great choice.",
+     "pick": "Next, we think the {pick} would suit you.",
+     "offer": "As a thank-you for coming back: {offer}, code *{code}*, valid till {expiry}.",
+     "offer_none": "Whenever you're ready, we'd love to help you pick the next one.",
+     "close": "Thank you for supporting a small business.",
+     "subject": "A thank-you from {brand}"},
+    {"open": "Hello {name}, it's {brand} checking in.",
+     "bought": "We hope your {product} has been treating you well.",
+     "pick": "If you're in the mood for something new, try the {pick}.",
+     "offer": "We've saved {offer} for your second order. Use *{code}* before {expiry}.",
+     "offer_none": "We're here whenever you'd like something new.",
+     "close": "Have a lovely week!",
+     "subject": "Checking in, {name}"},
+    {"open": "Hi {name}! {brand} here, still smiling about your first order.",
+     "bought": "Thank you for trusting us with the {product}.",
+     "pick": "The {pick} might be the perfect next pick.",
+     "offer": "Your next order gets {offer} with code *{code}* (till {expiry}).",
+     "offer_none": "We'd love to see you again.",
+     "close": "Warm wishes, {brand}",
+     "subject": "Still smiling about your first order"},
+    {"open": "Dear {name}, a short note from {brand}.",
+     "bought": "We hope the {product} made you happy.",
+     "pick": "Many people who buy it go on to love the {pick}.",
+     "offer": "To welcome you back: {offer}. Your code *{code}* works till {expiry}.",
+     "offer_none": "We'd be glad to have you back whenever you like.",
+     "close": "Thank you for being here.",
+     "subject": "A short note from {brand}"},
+    {"open": "Hi {name}, it's {brand}. You're officially one of us now!",
+     "bought": "Thanks again for the {product}.",
+     "pick": "Here's one we think you'll love next: the {pick}.",
+     "offer": "Enjoy {offer} on your second order with *{code}*, valid till {expiry}.",
+     "offer_none": "Come and say hello again soon.",
+     "close": "Big thanks from all of us.",
+     "subject": "You're one of us now, {name}"},
+]
+
+CROSS_SELL = [
+    {"open": "Hi {name}, it's {brand}.",
+     "bought": "Since you have the {product},",
+     "pick": "we think you'd love the {pick}: our customers often pair the two.",
+     "offer": "Try it with {offer}, code *{code}*, valid till {expiry}.",
+     "offer_none": "Have a look whenever you like.",
+     "close": "Happy shopping!",
+     "subject": "{name}, we found the perfect match"},
+    {"open": "Hello {name}! A little idea from {brand}.",
+     "bought": "Your {product}",
+     "pick": "goes beautifully with the {pick}, a favourite combination with our customers.",
+     "offer": "Here's {offer} if you'd like to complete the set. Use *{code}* by {expiry}.",
+     "offer_none": "Thought you'd like to know.",
+     "close": "Warmly, the {brand} team",
+     "subject": "An idea for you from {brand}"},
+    {"open": "Hi {name}, quick tip from {brand}.",
+     "bought": "Customers who bought the {product}",
+     "pick": "very often come back for the {pick}.",
+     "offer": "If you'd like to try it, {offer} is yours with *{code}* (till {expiry}).",
+     "offer_none": "Just in case you were looking for something to go with it.",
+     "close": "Reply here if you have any questions.",
+     "subject": "Customers like you also loved this"},
+    {"open": "Dear {name}, we've been thinking about your last order at {brand}.",
+     "bought": "The {product}",
+     "pick": "would look lovely with the {pick}.",
+     "offer": "To make it easy: {offer}, code *{code}*, until {expiry}.",
+     "offer_none": "Have a look and see what you think.",
+     "close": "With love, {brand}",
+     "subject": "{name}, this would go lovely with yours"},
+    {"open": "Hey {name}! {brand} here.",
+     "bought": "Loving your {product}?",
+     "pick": "Then you'll probably love the {pick} too, it's the most common pairing in our shop.",
+     "offer": "Grab it with {offer}: *{code}*, valid till {expiry}.",
+     "offer_none": "Worth a look!",
+     "close": "See you soon!",
+     "subject": "The most loved pairing in our shop"},
+    {"open": "Hi {name}, this is {brand}.",
+     "bought": "We noticed you have the {product}.",
+     "pick": "The {pick} is what many of our customers choose to go with it.",
+     "offer": "Here's {offer} to try it, with your code *{code}* until {expiry}.",
+     "offer_none": "We think it's worth a look.",
+     "close": "Thank you for shopping with us.",
+     "subject": "A match for your {brand} favourite"},
+    {"open": "Hello {name}, a styling note from {brand}.",
+     "bought": "Pair your {product}",
+     "pick": "with the {pick} for a look our customers love.",
+     "offer": "Complete it with {offer}. Code *{code}*, till {expiry}.",
+     "offer_none": "Have fun trying it out.",
+     "close": "Warm wishes, {brand}",
+     "subject": "A styling note for you, {name}"},
+    {"open": "Hi {name}! {brand} with a suggestion just for you.",
+     "bought": "Because you bought the {product},",
+     "pick": "we picked the {pick} for you.",
+     "offer": "Enjoy {offer} on it with *{code}* (valid till {expiry}).",
+     "offer_none": "Let us know what you think.",
+     "close": "Happy browsing!",
+     "subject": "Picked for you, {name}"},
+    {"open": "Dear {name}, greetings from {brand}.",
+     "bought": "Owners of the {product}",
+     "pick": "tell us the {pick} is the perfect companion.",
+     "offer": "Here's {offer} to try it, code *{code}*, until {expiry}.",
+     "offer_none": "We think you'll agree.",
+     "close": "Thank you for being a customer.",
+     "subject": "The perfect companion"},
+    {"open": "Hi {name}, it's {brand}.",
+     "bought": "You've got the {product},",
+     "pick": "and the {pick} is the one our customers most often add next.",
+     "offer": "Add it with {offer}: *{code}*, valid till {expiry}.",
+     "offer_none": "Whenever you're ready, it's waiting.",
+     "close": "Thank you!",
+     "subject": "{name}, the one people add next"},
+]
+
+RESTOCK = [
+    {"open": "Hi {name}, it's {brand}.",
+     "bought": "It's been about the usual time since your last {product}, so it might be running low.",
+     "pick": "",
+     "offer": "Restock with {offer}: use *{code}* by {expiry}.",
+     "offer_none": "Restock whenever you're ready, it's in stock.",
+     "close": "Thank you for coming back to us.",
+     "subject": "Running low, {name}?"},
+    {"open": "Hello {name}! A friendly reminder from {brand}.",
+     "bought": "Your {product} might be close to finishing.",
+     "pick": "",
+     "offer": "Here's {offer} on your restock with code *{code}*, till {expiry}.",
+     "offer_none": "We have it ready whenever you need it.",
+     "close": "Warmly, the {brand} team",
+     "subject": "A friendly reminder from {brand}"},
+    {"open": "Hi {name}, {brand} here.",
+     "bought": "Customers usually come back for the {product} around now.",
+     "pick": "",
+     "offer": "Stock up with {offer}. Your code *{code}* works till {expiry}.",
+     "offer_none": "Tap below to get it again in a minute.",
+     "close": "Just reply if you'd like any help.",
+     "subject": "Time for your {brand} restock?"},
+    {"open": "Dear {name}, hope you're well. It's {brand}.",
+     "bought": "We thought you might be needing a fresh {product} soon.",
+     "pick": "",
+     "offer": "Here's {offer} to make it easy: *{code}*, valid till {expiry}.",
+     "offer_none": "Order whenever suits you.",
+     "close": "With love, {brand}",
+     "subject": "{name}, need a fresh one?"},
+    {"open": "Hey {name}! {brand} here.",
+     "bought": "Is your {product} running out?",
+     "pick": "",
+     "offer": "Top up with {offer} using *{code}* (till {expiry}).",
+     "offer_none": "It's one tap away.",
+     "close": "See you soon!",
+     "subject": "Running out, {name}?"},
+    {"open": "Hi {name}, it's {brand} with a quick reminder.",
+     "bought": "Based on your last order, you might be due for more {product}.",
+     "pick": "",
+     "offer": "Restock with {offer}, code *{code}*, until {expiry}.",
+     "offer_none": "We're ready when you are.",
+     "close": "Thank you!",
+     "subject": "A quick reminder from {brand}"},
+    {"open": "Hello {name}, from all of us at {brand}.",
+     "bought": "Don't run out of your {product}!",
+     "pick": "",
+     "offer": "Here's {offer} for your next one. Code *{code}*, valid till {expiry}.",
+     "offer_none": "It's in stock and ready to go.",
+     "close": "Warm wishes, {brand}",
+     "subject": "Don't run out, {name}"},
+    {"open": "Hi {name}! {brand} here.",
+     "bought": "Time flies: it's about time for a new {product}.",
+     "pick": "",
+     "offer": "Treat yourself with {offer}: *{code}* works till {expiry}.",
+     "offer_none": "Order it again in a few taps.",
+     "close": "Thank you for being a regular.",
+     "subject": "Time flies, {name}"},
+    {"open": "Dear {name}, a short note from {brand}.",
+     "bought": "Your {product} may be running low by now.",
+     "pick": "",
+     "offer": "Restock with {offer} using *{code}* before {expiry}.",
+     "offer_none": "We'd be happy to send you another.",
+     "close": "Thank you for shopping with us.",
+     "subject": "A short note from {brand}"},
+    {"open": "Hi {name}, it's {brand}.",
+     "bought": "Ready for another {product}?",
+     "pick": "",
+     "offer": "Here's {offer} with *{code}* (valid till {expiry}).",
+     "offer_none": "It's waiting for you.",
+     "close": "See you soon!",
+     "subject": "Ready for another, {name}?"},
+]
+
+VIP = [
+    {"open": "Hi {name}, it's {brand}. You're one of our very best customers, so you hear first.",
+     "bought": "Thank you for every order, including the {product}.",
+     "pick": "We think you'll love the {pick} too.",
+     "offer": "As a thank-you: {offer} with your code *{code}*, till {expiry}.",
+     "offer_none": "Have a look before anyone else does.",
+     "close": "Thank you for being with us.",
+     "subject": "{name}, you hear it first"},
+    {"open": "Hello {name}! A private note from {brand} to our favourite customers.",
+     "bought": "You've been with us since the {product}, and we're grateful.",
+     "pick": "One we'd love you to see: the {pick}.",
+     "offer": "Here's {offer}, just for you: *{code}*, valid till {expiry}.",
+     "offer_none": "You get first look, before we tell anyone else.",
+     "close": "Warmly, the {brand} team",
+     "subject": "A private note for you, {name}"},
+    {"open": "Hi {name}, {brand} here with early access for you.",
+     "bought": "Customers who loved the {product} get to see this first.",
+     "pick": "You might especially like the {pick}.",
+     "offer": "Your VIP code *{code}* gives you {offer} till {expiry}.",
+     "offer_none": "Take a look before it opens to everyone.",
+     "close": "Enjoy!",
+     "subject": "Early access for you, {name}"},
+    {"open": "Dear {name}, you're on our VIP list at {brand}.",
+     "bought": "Thank you for choosing us again and again, from the {product} on.",
+     "pick": "Here's one we picked for you: the {pick}.",
+     "offer": "Enjoy {offer} with code *{code}*, until {expiry}.",
+     "offer_none": "As a VIP, you're the first to know.",
+     "close": "With love, {brand}",
+     "subject": "You're on our VIP list"},
+    {"open": "Hey {name}! Before anyone else hears about it, we wanted to tell you.",
+     "bought": "You've got great taste: the {product} proved it.",
+     "pick": "So we think you'll love the {pick}.",
+     "offer": "VIP perk: {offer} with *{code}* (till {expiry}).",
+     "offer_none": "Have a look, you're first in line.",
+     "close": "See you soon! Love, {brand}",
+     "subject": "Before anyone else, {name}"},
+    {"open": "Hi {name}, it's {brand}. Our best customers always get the first look.",
+     "bought": "That includes you, thanks to orders like your {product}.",
+     "pick": "One to look out for: the {pick}.",
+     "offer": "Here's {offer} too, code *{code}*, valid till {expiry}.",
+     "offer_none": "This is your first look.",
+     "close": "Thank you for everything.",
+     "subject": "Your first look, from {brand}"},
+    {"open": "Hello {name}, thank you for being one of {brand}'s most loyal customers.",
+     "bought": "From the {product} to every order since, it means a lot.",
+     "pick": "We set aside a moment to show you the {pick}.",
+     "offer": "Please enjoy {offer} with *{code}* until {expiry}.",
+     "offer_none": "You're seeing this before anyone else.",
+     "close": "Gratefully, {brand}",
+     "subject": "Thank you for being loyal, {name}"},
+    {"open": "Hi {name}! You're invited: early access at {brand}.",
+     "bought": "Because you loved the {product},",
+     "pick": "we think the {pick} will be right up your street.",
+     "offer": "Your invite comes with {offer}: *{code}*, till {expiry}.",
+     "offer_none": "Your invite is below.",
+     "close": "Enjoy the first look!",
+     "subject": "You're invited, {name}"},
+    {"open": "Dear {name}, a first look for a favourite customer, from {brand}.",
+     "bought": "Thank you for the {product} and every order since.",
+     "pick": "We'd love to know what you think of the {pick}.",
+     "offer": "Here's {offer} with code *{code}*, valid till {expiry}.",
+     "offer_none": "Have a look and tell us what you think.",
+     "close": "With love, {brand}",
+     "subject": "A first look, just for you"},
+    {"open": "Hi {name}, it's {brand}. VIPs first, always.",
+     "bought": "You've been part of our story since the {product}.",
+     "pick": "Here's one we're excited for you to see: the {pick}.",
+     "offer": "VIP code *{code}*: {offer}, till {expiry}.",
+     "offer_none": "You're getting this before everyone else.",
+     "close": "Thank you for being here.",
+     "subject": "VIPs first, {name}"},
+]
+
+THANK_YOU = [
+    {"open": "Hi {name}, it's {brand}. Thank you so much for your order!",
+     "bought": "We hope the {product} arrived safely and you love it.",
+     "pick": "",
+     "offer": "Here's {offer} on your next order as a thank-you: *{code}*, till {expiry}.",
+     "offer_none": "If you have a moment, reply with a line about how you like it, or a photo. It helps other customers more than anything.",
+     "close": "Thank you for supporting a small business.",
+     "subject": "Thank you for your order, {name}"},
+    {"open": "Hello {name}! A big thank-you from everyone at {brand}.",
+     "bought": "How are you finding the {product}?",
+     "pick": "",
+     "offer": "As a thank-you, take {offer} next time with *{code}* (till {expiry}).",
+     "offer_none": "We'd love a quick review: just reply here with what you think.",
+     "close": "Warmly, the {brand} team",
+     "subject": "How did we do, {name}?"},
+    {"open": "Hi {name}, {brand} here.",
+     "bought": "Your {product} should be with you by now.",
+     "pick": "",
+     "offer": "Here's {offer} for next time: code *{code}*, valid till {expiry}.",
+     "offer_none": "If anything isn't perfect, reply here and we'll fix it. And if you love it, we'd be grateful for a review.",
+     "close": "Thank you!",
+     "subject": "Did your order arrive safely?"},
+    {"open": "Dear {name}, thank you for choosing {brand}.",
+     "bought": "We packed your {product} with care, and we hope it shows.",
+     "pick": "",
+     "offer": "A small thank-you: {offer} with *{code}* until {expiry}.",
+     "offer_none": "Would you share a photo or a few words about it? Just reply here.",
+     "close": "With love, {brand}",
+     "subject": "Thank you for choosing {brand}"},
+    {"open": "Hey {name}! It's {brand}.",
+     "bought": "Hope you're loving the {product}!",
+     "pick": "",
+     "offer": "Next time, {offer} is yours with *{code}* (till {expiry}).",
+     "offer_none": "Tell us what you think, a one-line reply helps us a lot.",
+     "close": "Thanks again!",
+     "subject": "Loving it, {name}?"},
+    {"open": "Hi {name}, thank you for your recent order with {brand}.",
+     "bought": "We'd love to hear how the {product} is working out.",
+     "pick": "",
+     "offer": "Here's {offer} for your next order: *{code}*, valid till {expiry}.",
+     "offer_none": "Your feedback, good or bad, helps us get better. Just reply here.",
+     "close": "Thank you for shopping small.",
+     "subject": "We'd love your feedback, {name}"},
+    {"open": "Hello {name}, from all of us at {brand}: thank you!",
+     "bought": "Orders like your {product} keep our small shop going.",
+     "pick": "",
+     "offer": "As thanks, here's {offer} with *{code}* until {expiry}.",
+     "offer_none": "If you're happy with it, a quick review would mean the world to us.",
+     "close": "Warm wishes, {brand}",
+     "subject": "From all of us: thank you"},
+    {"open": "Hi {name}! Just checking in from {brand}.",
+     "bought": "Is the {product} everything you hoped for?",
+     "pick": "",
+     "offer": "Here's {offer} on your next one: code *{code}*, till {expiry}.",
+     "offer_none": "Reply with a photo of it in use, we'd love to see it.",
+     "close": "Thank you!",
+     "subject": "Just checking in, {name}"},
+    {"open": "Dear {name}, a quick thank-you note from {brand}.",
+     "bought": "We hope the {product} is already a favourite.",
+     "pick": "",
+     "offer": "Please enjoy {offer} next time, with *{code}* until {expiry}.",
+     "offer_none": "If you have a minute, we'd be grateful for a short review.",
+     "close": "With gratitude, {brand}",
+     "subject": "A thank-you note from {brand}"},
+    {"open": "Hi {name}, it's {brand}. Thank you for shopping with us!",
+     "bought": "Enjoy your {product}.",
+     "pick": "",
+     "offer": "Here's {offer} for your next order: *{code}*, valid till {expiry}.",
+     "offer_none": "If you love it, tell us (and others) with a quick review. Just reply here.",
+     "close": "See you again soon!",
+     "subject": "Thank you for shopping with us, {name}"},
+]
+
+# Win-back and festival had no no-discount line; one per voice, by index.
+_OFFER_NONE = {
+    "winback": ["We'd love to see you again.", "Have a look whenever you're ready.",
+                "Whenever you're ready, we're right here.", "We'd be happy to help you find something new.",
+                "Come and say hello again soon."],
+    "festival": ["Have a look at what we have for {occasion}.", "Celebrate with something special from us.",
+                 "We'd love to be part of your {occasion}.", "Have a look whenever you're ready.",
+                 "Wishing you the very best this season."],
+}
+_SUBJECT_NONE = {
+    "winback": "{name}, we've missed you", "festival": "Happy {occasion}, {name}",
+}
+
+LABELS = {
+    "winback": "Win back quiet customers",
+    "festival": "Festival offer",
+    "second_order": "Second-order nudge",
+    "cross_sell": "Goes well with what you bought",
+    "restock": "Time to restock",
+    "vip": "VIP early access",
+    "thank_you": "Thank you + review request",
+}
+
+VOICES = {"winback": WINBACK, "festival": FESTIVAL, "second_order": SECOND_ORDER,
+          "cross_sell": CROSS_SELL, "restock": RESTOCK, "vip": VIP, "thank_you": THANK_YOU}
 assert all(len(v) == 10 for v in VOICES.values())
 
 
@@ -282,10 +670,13 @@ def message_for(row: dict, ctx: dict) -> dict:
     pick = row.get("pick_display") or ""
     if pick and pick == product:
         pick = ""
+    no_offer = (ctx.get("offer") or {}).get("kind") == "none"
     link = ctx.get("link") or ""
     if link and row.get("code"):
         sep = "&" if "?" in link else "?"
-        link = f"{link}{sep}code={row['code']}"
+        # A no-discount campaign's code only tracks: it rides as ref= so the
+        # shop applies it quietly instead of announcing "your code".
+        link = f"{link}{sep}{'ref' if no_offer else 'code'}={row['code']}"
         if ctx.get("campaign_id"):
             link += f"&c={ctx['campaign_id']}"
     values = {"name": first_name(row.get("customer_name")) or "there",
@@ -300,9 +691,14 @@ def message_for(row: dict, ctx: dict) -> dict:
         first = [fill(v["open"], values)]
         if product:
             first.append(fill(v["bought"], values))
-        if pick:
+        if pick and v.get("pick"):
             first.append(fill(v["pick"], values))
-        parts = [" ".join(first), fill(v["offer"], values)]
+        if no_offer:
+            line = v.get("offer_none") or _OFFER_NONE.get(reason, _OFFER_NONE["winback"])[
+                int(row.get("voice") or 0) % 5]
+        else:
+            line = v["offer"]
+        parts = [" ".join(p for p in first if p.strip()), fill(line, values)]
         note = _sentence(ctx.get("note") or "")
         if note:
             parts.append(note)
@@ -315,12 +711,15 @@ def message_for(row: dict, ctx: dict) -> dict:
     subj_values = dict(values)
     if subj_values["name"] == "there":
         subj_values["name"] = "Hi"
-    subject = fill(v["subject"], subj_values)
+    subj = v["subject"]
+    if no_offer and "{offer}" in subj:
+        subj = _SUBJECT_NONE.get(reason, "A note from {brand}")
+    subject = fill(subj, subj_values)
     return {"message": text.strip()[:MAX_MESSAGE], "email_subject": subject[:120],
             "shop_link": link}
 
 
-def valid_override(text: str, code: str) -> str:
+def valid_override(text: str, code: str, no_offer: bool = False) -> str:
     """The reason a seller's edit of one customer's message cannot be used,
     or "" when it can. The code is the one thing it must keep: without it the
     customer has an offer they cannot redeem."""
@@ -329,6 +728,8 @@ def valid_override(text: str, code: str) -> str:
         return "The message is empty."
     if len(t) > MAX_MESSAGE:
         return f"Keep it under {MAX_MESSAGE} characters."
+    if no_offer:
+        return ""          # nothing to redeem: the tracking rides on {link}
     if code and code not in t and "{code}" not in t:
         return f"Keep the customer's code ({code}) in the message, or they cannot use the offer."
     return ""

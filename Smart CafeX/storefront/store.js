@@ -1070,13 +1070,15 @@ function viewCheckout() {
    with a Remove link; a code that did not apply says why, in the shop's own
    words, and the cart stays priced without it. */
 function couponBox(priced) {
-  if (priced.coupon) {
+  // a tracking-only code (0 off) stays out of sight: the shopper was never
+  // promised anything, and "code applied, ₹0 off" would read as broken
+  if (priced.coupon && priced.discount > 0) {
     return `<div class="coupon on"><span>${ic("check")} Code <b>${esc(priced.coupon)}</b> applied</span>
       <a href="#" class="ul tiny" id="couponRemove">Remove</a></div>`;
   }
   return `<div class="coupon">
       <div class="coupon-row">
-        <input id="couponIn" placeholder="Discount code" value="${esc(S.coupon || "")}" autocomplete="off" autocapitalize="characters" />
+        <input id="couponIn" placeholder="Discount code" value="${esc(priced.coupon && !priced.discount ? "" : (S.coupon || ""))}" autocomplete="off" autocapitalize="characters" />
         <button class="b g s" id="couponApply" type="button">Apply</button>
       </div>
       ${priced.coupon_error ? `<div class="tiny coupon-err">${esc(priced.coupon_error)}</div>` : ""}
@@ -1831,7 +1833,11 @@ function scrollToRegion(key) {
   applyTheme(S.style, S.site);
   S.cart = migrateCart(store(LS_CART) || {});
   S.token = store(LS_TOKEN);
-  const qcode = (QS.get("code") || "").trim().toUpperCase();
+  // code= is a discount the shopper was promised; ref= is a no-discount
+  // campaign's tracking code. Both are applied at checkout; only a real
+  // discount is announced.
+  const qcode = (QS.get("code") || QS.get("ref") || "").trim().toUpperCase();
+  const qIsDiscount = !!QS.get("code");
   if (qcode) store(LS_CODE, qcode);
   S.coupon = store(LS_CODE) || "";
   readHash();
@@ -1847,7 +1853,7 @@ function scrollToRegion(key) {
   runPreloader();
   post({ type: "ready" });
   if (S.token) loadMe(S.route.name === "orders");
-  if (qcode && !EDIT) setTimeout(() => toast(`Your code ${qcode} will be applied at checkout`, "check", 4200), 900);
+  if (qcode && qIsDiscount && !EDIT) setTimeout(() => toast(`Your code ${qcode} will be applied at checkout`, "check", 4200), 900);
   // Tell the shop this campaign link was opened, once per visit (a reload in
   // the same tab is not a second click).
   if (qcode && !EDIT && !PREVIEW) {

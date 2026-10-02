@@ -4236,7 +4236,7 @@ def campaign_state(authorization: str | None = Header(default=None)):
         "store_link": campaign_engine.store_link(email),
         "brand": brandname.resolve(email),
         "symbol": campaign_engine._symbol(email),
-        "ideas": campaign_engine.ideas(email),
+        "types": campaign_engine.campaign_types(email),
     }
 
 
@@ -4307,6 +4307,22 @@ def campaign_send(draft_id: str, body: CampaignSendBody,
         winback_auto._save_state(email, st)
     cache.clear(email)
     return res
+
+
+class CampaignTapBody(BaseModel):
+    customer_id: str
+
+
+@app.post("/api/campaign/{campaign_id}/tapped")
+def campaign_tapped(campaign_id: str, body: CampaignTapBody,
+                    authorization: str | None = Header(default=None)):
+    """The seller tapped Send on one customer's WhatsApp message."""
+    email = require_user(authorization)
+    from backend.core import campaign_engine
+    try:
+        return campaign_engine.mark_tapped(email, campaign_id, body.customer_id)
+    except campaign_engine.CampaignError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get("/api/campaign/{campaign_id}/analysis")

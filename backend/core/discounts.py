@@ -53,8 +53,12 @@ def clean_offer(raw: dict | None) -> dict:
     """Validate the seller's offer. Raises DiscountError with a plain reason."""
     raw = raw or {}
     kind = str(raw.get("kind") or "flat").strip().lower()
+    if kind == "none":
+        # No discount: the campaign still issues a code per customer, but it
+        # only TRACKS (link opened, order placed); it takes nothing off.
+        return {"kind": "none", "value": 0.0, "min_order": 0.0}
     if kind not in ("flat", "percent"):
-        raise DiscountError("Choose an amount off or a percentage off.")
+        raise DiscountError("Choose an amount off, a percentage off, or no discount.")
     try:
         value = round(float(raw.get("value") or 0), 2)
     except (TypeError, ValueError):
@@ -73,7 +77,9 @@ def clean_offer(raw: dict | None) -> dict:
 
 
 def offer_label(offer: dict, symbol: str = "₹") -> str:
-    """'₹200 off' / '15% off', plus the minimum when there is one."""
+    """'₹200 off' / '15% off', plus the minimum when there is one; "" for none."""
+    if offer.get("kind") == "none":
+        return ""
     v = offer.get("value") or 0
     num = f"{v:,.0f}" if float(v).is_integer() else f"{v:,.2f}"
     base = f"{num}% off" if offer.get("kind") == "percent" else f"{symbol}{num} off"
@@ -87,6 +93,8 @@ def offer_label(offer: dict, symbol: str = "₹") -> str:
 def amount_for(offer: dict, subtotal: float) -> float:
     """What this offer takes off this subtotal. Never more than the subtotal."""
     subtotal = max(0.0, float(subtotal or 0))
+    if offer.get("kind") == "none":
+        return 0.0
     if offer.get("kind") == "percent":
         off = subtotal * float(offer.get("value") or 0) / 100.0
     else:
@@ -198,7 +206,7 @@ def check(seller: str, code: str, subtotal: float, fresh: bool = False,
     if min_order and float(subtotal or 0) < min_order:
         raise DiscountError(f"This code works on orders of {symbol}{min_order:,.0f} or more.")
     off = amount_for(rec, subtotal)
-    if off <= 0:
+    if off <= 0 and rec.get("kind") != "none":
         raise DiscountError("Add something to your bag first.")
     return {"code": code, "amount": off, "kind": rec.get("kind"),
             "value": rec.get("value"), "min_order": min_order,

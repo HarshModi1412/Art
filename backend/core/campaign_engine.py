@@ -40,7 +40,27 @@ MAX_AUDIENCE = 150
 # Without it, "12 customers returned" might be 12 who would have anyway.
 HOLDOUT_SHARE = 0.10
 HOLDOUT_MIN_AUDIENCE = 20
-COOLDOWN = {"winback": 45, "festival": 14}
+# How long anyone contacted by ANY campaign is left alone before this kind
+# may write to them again. Shorter for the ones customers welcome (a restock
+# reminder, a VIP first look), longest for win-back.
+COOLDOWN = {"winback": 45, "festival": 14, "second_order": 30, "cross_sell": 21,
+            "restock": 14, "vip": 14, "thank_you": 30}
+REASONS = tuple(COOLDOWN)
+PREFIX = {"winback": "BACK", "festival": "FEST", "second_order": "NEXT", "cross_sell": "PAIR",
+          "restock": "REFILL", "vip": "VIP", "thank_you": "THANKS"}
+EMPTY = {
+    "winback": "Nobody has gone quiet yet, so there is nobody to win back. Try a festival "
+               "campaign for your best customers instead.",
+    "festival": "There are no customers in your sales data yet.",
+    "second_order": "Nobody placed a first order 2 to 8 weeks ago, so there is nobody to nudge "
+                    "towards a second one right now.",
+    "cross_sell": "Your sales do not show strong 'bought together' pairs yet. It needs more "
+                  "orders with two or more products in them.",
+    "restock": "Nobody is due for a restock right now: either your products are not bought "
+               "again and again, or everyone has bought recently.",
+    "vip": "You do not have customers in the Champions group yet.",
+    "thank_you": "Nobody ordered in the last two weeks.",
+}
 _SAMPLE_DOMAINS = ("example.com", "example.org", "example.net")
 
 
@@ -164,8 +184,21 @@ def is_sample(addr: str) -> bool:
     return a.split("@")[-1] in _SAMPLE_DOMAINS
 
 
-def pitch(reason: str, product: str, occasion: str) -> str:
+def pitch(reason: str, product: str, occasion: str, pick: str = "") -> str:
     """The one-line middle of the WhatsApp API template (no newlines allowed)."""
+    if reason == "second_order":
+        return (f"We hope you are enjoying the {product}. " if product else
+                "Thank you for your first order with us. ") + \
+            (f"Many of our customers pick the {pick} next." if pick else "We would love to see you again.")
+    if reason == "cross_sell":
+        return f"Since you have the {product}, we think you would love the {pick}: our customers often pair the two."
+    if reason == "restock":
+        return f"It has been about the usual time since your last {product}, so it might be running low."
+    if reason == "vip":
+        return "You are one of our very best customers, so you hear about this first."
+    if reason == "thank_you":
+        return (f"Thank you for your order. We hope you love the {product}." if product
+                else "Thank you for your order with us.")
     if reason == "festival":
         return (f"{occasion} is almost here, and we would love to be part of it. "
                 + (f"You loved the {product}, so we think you will like what is new."
@@ -184,7 +217,7 @@ def build(email: str, reason: str = "winback", offer: dict | None = None,
                               winback_auto)
     from backend.core import campaign_writer as cw
 
-    reason = "festival" if reason == "festival" else "winback"
+    reason = reason if reason in REASONS else "winback"
     try:
         offer = discounts.clean_offer(offer)
     except discounts.DiscountError as e:
@@ -201,6 +234,9 @@ def build(email: str, reason: str = "winback", offer: dict | None = None,
         occasion = (fest or {}).get("name") or ""
         if not occasion:
             raise CampaignError("Which festival or occasion is this for? Type its name.")
+    if reason == "vip" and not (note or "").strip():
+        raise CampaignError("What are your VIPs getting early access to? Write it in "
+                            "'Anything to mention', e.g. 'our new festive collection is live'.")
 
     cap = max(1, min(int(limit), MAX_AUDIENCE))
     cooling = winback_auto.recently_contacted(email, days=COOLDOWN[reason])
@@ -214,19 +250,35 @@ def build(email: str, reason: str = "winback", offer: dict | None = None,
         if held_back:
             raise CampaignError(f"Everyone this campaign would reach was contacted in the last "
                                 f"{COOLDOWN[reason]} days. Give them a break and try again later.")
-        raise CampaignError("Nobody has gone quiet yet, so there is nobody to win back. "
-                            "Try a festival campaign for your best customers instead."
-                            if reason == "winback" else
-                            "There are no customers in your sales data yet.")
+        raise CampaignError(EMPTY[reason])
 
     from backend.core import contacts
     contacts.apply(email, fresh)
     names = cw.catalogue_names(email)
+    last_bought = _last_bought(txns, fresh) if reason == "thank_you" else {}
     for c in fresh:
-        c["product_display"] = cw.clean_product_name(c.get("favorite_item"), names)
+        # what the message talks about depends on why it is being sent
+        about = {"restock": c.get("due_item"), "cross_sell": c.get("pair_have"),
+                 "thank_you": last_bought.get(str(c.get("customer_id")))}.get(reason) \
+            or c.get("favorite_item")
+        c["product_display"] = cw.clean_product_name(about, names)
 
     campaign_id = secrets.token_hex(6)
-    _add_picks(txns, fresh, names)
+    if reason == "cross_sell":
+        for c in fresh:
+            c["pick_display"] = cw.clean_product_name(c.get("pair_pick"), names)
+    elif reason in ("restock", "thank_you"):
+        for c in fresh:
+            c["pick_display"] = ""         # one product, one reason to write
+    else:
+        _add_picks(txns, fresh, names)
+    # these two only make sense with the product they are about
+    if reason in ("cross_sell", "restock"):
+        fresh = [c for c in fresh if c["product_display"]
+                 and (reason != "cross_sell" or (c.get("pick_display")
+                                                 and c["pick_display"] != c["product_display"]))]
+        if not fresh:
+            raise CampaignError(EMPTY[reason])
 
     holdout = []
     if len(fresh) >= HOLDOUT_MIN_AUDIENCE:
@@ -241,7 +293,7 @@ def build(email: str, reason: str = "winback", offer: dict | None = None,
         fresh = [c for i, c in enumerate(fresh) if i not in keep_out]
     try:
         codes = discounts.issue(email, campaign_id, fresh, offer,
-                                prefix_fallback="FEST" if reason == "festival" else "BACK")
+                                prefix_fallback=PREFIX[reason])
     except discounts.DiscountError as e:
         raise CampaignError(str(e))
     valid_until = next(iter(codes.values()))["valid_until"] if codes else ""
@@ -280,7 +332,7 @@ def build(email: str, reason: str = "winback", offer: dict | None = None,
                "voice": voice,
                "code": (codes.get(str(c["customer_id"])) or {}).get("code") or ""}
         row.update(cw.message_for(row, ctx))
-        row["pitch"] = pitch(reason, row["product_display"], occasion)
+        row["pitch"] = pitch(reason, row["product_display"], occasion, row.get("pick_display") or "")
         rows.append(row)
 
     image = {"url": "", "source": "", "needs_upload": False, "reason": ""}
@@ -358,7 +410,8 @@ def update_draft(email: str, draft_id: str, patch: dict) -> dict:
         if edit.get("reset_message"):
             row.pop("message_override", None)
         elif edit.get("message") is not None:
-            why = cw.valid_override(str(edit["message"]), row.get("code") or "")
+            why = cw.valid_override(str(edit["message"]), row.get("code") or "",
+                                    (draft.get("offer") or {}).get("kind") == "none")
             if why:
                 raise CampaignError(why)
             row["message_override"] = str(edit["message"]).strip()
@@ -438,7 +491,8 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
     image_url = absolute((draft.get("image") or {}).get("url") or "")
     wa = whatsapp.status(email)
     wa_auto = "whatsapp" in channels and wa["mode"] == "auto"
-    if wa_auto and wa.get("template_header") and not image_url:
+    if wa_auto and wa.get("template_header") and not image_url \
+            and (draft.get("offer") or {}).get("kind") != "none":
         raise CampaignError("Add a picture first: your WhatsApp template sends one with every message.")
 
     results, n_mail, n_wa, n_links, skipped, sample = [], 0, 0, 0, 0, 0
@@ -471,13 +525,20 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
             reachable = True
             if wa_auto:
                 try:
-                    whatsapp.send_campaign_message(
-                        email, phone,
-                        [cw.first_name(r.get("customer_name")) or "there", brand,
-                         r.get("pitch") or "", r.get("code") or "",
-                         ctx.get("offer_label") or "", ctx.get("expiry_label") or "",
-                         r.get("shop_link") or ctx.get("link") or "-"],
-                        image_url)
+                    if (draft.get("offer") or {}).get("kind") == "none":
+                        whatsapp.send_campaign_message(
+                            email, phone,
+                            [cw.first_name(r.get("customer_name")) or "there", brand,
+                             r.get("pitch") or "", r.get("shop_link") or ctx.get("link") or "-"],
+                            kind="update")
+                    else:
+                        whatsapp.send_campaign_message(
+                            email, phone,
+                            [cw.first_name(r.get("customer_name")) or "there", brand,
+                             r.get("pitch") or "", r.get("code") or "",
+                             ctx.get("offer_label") or "", ctx.get("expiry_label") or "",
+                             r.get("shop_link") or ctx.get("link") or "-"],
+                            image_url)
                     entry["whatsapp_sent"] = True
                     n_wa += 1
                 except whatsapp.WhatsAppError as e:
@@ -496,7 +557,10 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
     delivered = [r for r in results if r["email_sent"] or r["whatsapp_sent"]]
     prepared = [r for r in results if r["wa_link"] and not (r["email_sent"] or r["whatsapp_sent"])]
     by_id = {r["customer_id"]: r for r in draft["rows"]}
-    proof_id = pending_id = None
+    proof_id = None
+    # Tap-to-send links are NOT recorded as contacts here. A customer counts as
+    # messaged when the seller taps their Send (mark_tapped), one by one, so
+    # every number on screen is what actually went out.
     if delivered:
         try:
             proof_id = winback_proof.mark_sent(
@@ -505,15 +569,6 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
                 note=f"campaign {draft_id}").get("id")
         except Exception as e:  # noqa: BLE001
             log.warning("could not record campaign for measurement: %s", e)
-    if prepared:
-        try:
-            pending_id = winback_proof.mark_sent(
-                email, [by_id[c["customer_id"]] for c in prepared],
-                channel="whatsapp", state="pending",
-                note=f"campaign {draft_id}: tap-to-send links").get("id")
-        except Exception as e:  # noqa: BLE001
-            log.warning("could not record prepared campaign: %s", e)
-
     if delivered or prepared:
         log_rows = campaigns._log(email)  # noqa: SLF001 — same history, one log
         log_rows.append({
@@ -523,12 +578,12 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
             "recipients": len(results), "delivered": len(delivered),
             "prepared": len(prepared), "email_sent": n_mail, "whatsapp_sent": n_wa,
             "wa_links": n_links, "skipped": skipped, "channels": list(channels),
-            "whatsapp_live": wa_auto, "state": "sent" if delivered else "pending",
+            "whatsapp_live": wa_auto, "state": "sent" if delivered else "ready",
         })
         campaigns._save_log(email, log_rows)  # noqa: SLF001
         draft["state"] = "sent"
         draft["sent_at"] = stamp
-        draft["proof_id"], draft["pending_proof_id"] = proof_id, pending_id
+        draft["proof_id"] = proof_id
         _save_draft(email, draft)
         _save_record(email, draft, results, ctx, channels, wa_auto)
 
@@ -538,7 +593,8 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
     if n_mail:
         bits.append(f"{n_mail} email{'s' if n_mail != 1 else ''} sent")
     if n_links:
-        bits.append(f"{n_links} WhatsApp message{'s' if n_links != 1 else ''} ready to tap send")
+        bits.append(f"{n_links} WhatsApp message{'s' if n_links != 1 else ''} ready: tap each "
+                    f"one to send it")
     if skipped:
         bits.append(f"{skipped} with no phone or email")
     if sample:
@@ -553,7 +609,7 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
             "skipped": skipped, "sample": sample, "delivered": len(delivered),
             "prepared": len(prepared), "whatsapp_auto": wa_auto,
             "email_ready": messaging.smtp_configured(),
-            "pending_campaign_id": pending_id, "summary": summary}
+            "sent_now": len(delivered), "to_send": len(prepared), "summary": summary}
 
 
 def history(email: str, limit: int = 30) -> list[dict]:
@@ -563,8 +619,12 @@ def history(email: str, limit: int = 30) -> list[dict]:
     recs = _records(email)
     for h in campaigns.history(email, limit):
         cid = h.get("campaign_id")
+        rec = recs.get(cid) if cid else None
+        sent_n = sum(1 for t in (rec or {}).get("targets") or [] if _is_sent(t, False)) if rec else None
         out.append({**h, "codes": discounts.campaign_stats(email, cid) if cid else None,
-                    "tracked": bool(cid and cid in recs)})
+                    "tracked": bool(rec), "sent_count": sent_n,
+                    "total": len((rec or {}).get("targets") or []) if rec else None,
+                    "label": label(h.get("reason") or "winback")})
     return out
 
 
@@ -621,7 +681,7 @@ def _save_record(email: str, draft: dict, results: list[dict], ctx: dict,
             "code": x.get("code") or "", "monetary": r.get("monetary") or 0,
             "whatsapp": "sent" if x.get("whatsapp_sent") else ("tap" if x.get("wa_link") else ""),
             "email": "sent" if x.get("email_sent") else "",
-            "reached": bool(x.get("whatsapp_sent") or x.get("email_sent") or x.get("wa_link")),
+            "wa_link": x.get("wa_link") or "", "tapped_at": "",
         })
     rec = {
         "id": draft["id"], "sent_at": draft.get("sent_at"), "reason": draft["reason"],
@@ -631,7 +691,7 @@ def _save_record(email: str, draft: dict, results: list[dict], ctx: dict,
         "image_url": (draft.get("image") or {}).get("url") or "",
         "link": ctx.get("link") or "", "valid_until": ctx.get("valid_until") or "",
         "targets": targets, "holdout": draft.get("holdout") or [],
-        "pending_proof_id": draft.get("pending_proof_id"),
+        "pending_proof_id": draft.get("pending_proof_id"), "tap_proof_id": None,
     }
     recs = dict(_records(email))
     recs[rec["id"]] = rec
@@ -685,8 +745,7 @@ def analyze(email: str, campaign_id: str) -> dict:
         except Exception:  # noqa: BLE001
             taps_confirmed = False
     for t in targets:
-        t["reached"] = bool(t.get("whatsapp") == "sent" or t.get("email") == "sent"
-                            or (t.get("whatsapp") == "tap" and taps_confirmed))
+        t["reached"] = _is_sent(t, taps_confirmed)
     reached = [t for t in targets if t.get("reached")]
     rows, clicked, applied, ordered = [], 0, 0, 0
     revenue = discount = 0.0
@@ -748,15 +807,17 @@ def analyze(email: str, campaign_id: str) -> dict:
                                                      "valid_until", "link")},
             "days_since": days, "window_days": WINDOW_DAYS,
             "kpis": k,
-            "funnel": [{"step": "Messaged", "n": len(targets)},
-                       {"step": "Reached", "n": len(reached)},
+            "funnel": [{"step": "In the campaign", "n": len(targets)},
+                       {"step": "Sent", "n": len(reached)},
                        {"step": "Opened the link", "n": clicked},
                        {"step": "Used the code at checkout", "n": applied},
                        {"step": "Ordered", "n": ordered}],
             "customers": sorted(rows, key=lambda r: (not r["ordered"], not r["applied"],
                                                      not r["clicked"], not r["came_back"])),
-            "taps_pending": bool(rec.get("pending_proof_id")) and not taps_confirmed,
-            "pending_proof_id": rec.get("pending_proof_id") if not taps_confirmed else None,
+            "to_send": [{"customer_id": t["customer_id"], "customer_name": t.get("customer_name") or "",
+                         "code": t.get("code") or "", "wa_link": t.get("wa_link") or ""}
+                        for t in targets if t.get("whatsapp") == "tap" and t.get("wa_link")
+                        and not t.get("reached")],
             "diagnosis": _diagnose(k, days, {**rec, "taps_confirmed": taps_confirmed})}
 
 
@@ -766,10 +827,11 @@ def _diagnose(k: dict, days: int, rec: dict) -> list[str]:
     if days < 3:
         out.append("It is early: most replies to a campaign come in the first 3 to 5 days. "
                    "Check back then.")
-    if rec.get("pending_proof_id") and not rec.get("taps_confirmed"):
-        out.append("Your WhatsApp messages were prepared as tap-to-send links. Once you have sent "
-                   "them, press 'I have sent them' so they count as reached.")
-    if k["reached"] == 0 and not rec.get("pending_proof_id"):
+    waiting = k["messaged"] - k["reached"]
+    if waiting and any(t.get("whatsapp") == "tap" for t in rec.get("targets") or []):
+        out.append(f"{waiting} WhatsApp message{'s are' if waiting != 1 else ' is'} still waiting "
+                   f"to be sent. Tap each one below; only the ones you send are counted.")
+    if k["reached"] == 0 and not waiting:
         return out + ["Nobody was reached. Add phone numbers or emails for these customers "
                       "and send the next one."]
     if not rec.get("link"):
@@ -798,66 +860,103 @@ def _diagnose(k: dict, days: int, rec: dict) -> list[str]:
     return out
 
 
-# ------------------------------------------------------------------- ideas
-def ideas(email: str) -> list[dict]:
-    """Other campaigns worth running, each sized from the seller's own data."""
+# ------------------------------------------------------------- campaign types
+TYPES = [
+    {"id": "winback", "label": "Win back quiet customers", "offer": "flat",
+     "who": "customers who used to buy and have stopped",
+     "why": "People who stopped buying are the cheapest customers to win: they already know you."},
+    {"id": "festival", "label": "Festival offer", "offer": "percent", "needs": "occasion",
+     "who": "your best customers, plus the ones drifting away",
+     "why": "A festival is the most natural reason there is to get in touch."},
+    {"id": "second_order", "label": "Second-order nudge", "offer": "flat",
+     "who": "first-time buyers from 2 to 8 weeks ago",
+     "why": "A customer who orders twice is far more likely to stay. Thank first-time buyers "
+            "with a small offer on their next order."},
+    {"id": "cross_sell", "label": "Goes well with what you bought", "offer": "percent",
+     "who": "customers who have one half of a pair your customers often buy together",
+     "why": "Your own orders show which products are bought together. Suggest the matching one "
+            "to people who only have half the pair."},
+    {"id": "restock", "label": "Time to restock", "offer": "none",
+     "who": "customers past their usual time to buy a product again",
+     "why": "For things people run out of (attars, skincare, food), a reminder when they are "
+            "about due, based on how often they usually buy again."},
+    {"id": "vip", "label": "VIP early access", "offer": "none", "needs": "note",
+     "who": "your Champions: the customers who buy most, most often",
+     "why": "A first look at something new before everyone else. No discount needed: being "
+            "first is the reward."},
+    {"id": "thank_you", "label": "Thank you + review request", "offer": "none",
+     "who": "customers who ordered in the last two weeks",
+     "why": "A short thank-you after delivery, asking for a review or a photo. Builds the "
+            "reviews that make new customers trust you."},
+]
+
+
+def campaign_types(email: str) -> list[dict]:
+    """Every campaign the seller can run, with how many customers each would
+    reach right now (before anyone recently contacted is left out)."""
     from backend.core import analytics, smart
     try:
         txns = smart.load_sales(email, copy=False)
-    except Exception:  # noqa: BLE001
-        txns = None
-    first = vip = recent = cross = repl = 0
-    if txns is not None and len(txns) and "customer_id" in txns.columns:
-        d = pd.to_datetime(txns["date"], errors="coerce")
-        latest = d.max()
-        oc = "order_id" if "order_id" in txns.columns else "date"
-        per = txns.assign(_d=d).groupby(txns["customer_id"].astype(str)).agg(
-            orders=(oc, "nunique"), first=("_d", "min"), last=("_d", "max"))
-        age = (latest - per["first"]).dt.days
-        first = int(((per["orders"] == 1) & age.between(14, 60)).sum())
-        recent = int(((latest - per["last"]).dt.days <= 10).sum())
+        counts = analytics.campaign_counts(txns) if txns is not None else {}
+    except Exception as e:  # noqa: BLE001 — a count is never worth a broken screen
+        log.warning("campaign counts failed for %s: %s", email, e)
+        counts = {}
+    return [{**t, "audience": int(counts.get(t["id"]) or 0), "cooldown_days": COOLDOWN[t["id"]]}
+            for t in TYPES]
+
+
+def label(reason: str) -> str:
+    return next((t["label"] for t in TYPES if t["id"] == reason), "Campaign")
+
+
+def _last_bought(txns, profiles: list[dict]) -> dict:
+    """{customer_id: product of their most recent purchase} (thank-you)."""
+    if "product" not in txns.columns:
+        return {}
+    ids = {str(p.get("customer_id")) for p in profiles}
+    t = txns[txns["customer_id"].astype(str).isin(ids)].dropna(subset=["product"])
+    if t.empty:
+        return {}
+    t = t.assign(_d=pd.to_datetime(t["date"], errors="coerce")).sort_values("_d")
+    return t.groupby(t["customer_id"].astype(str))["product"].last().astype(str).to_dict()
+
+
+# --------------------------------------------------------------- tap-to-send
+def _is_sent(t: dict, taps_confirmed: bool = False) -> bool:
+    """Did this customer actually get the message? An API or email send, or a
+    tap-to-send link the seller tapped. (`taps_confirmed`: campaigns from
+    before per-tap tracking, confirmed in one go.)"""
+    return bool(t.get("whatsapp") in ("sent", "tapped") or t.get("email") == "sent"
+                or (t.get("whatsapp") == "tap" and taps_confirmed))
+
+
+def mark_tapped(email: str, campaign_id: str, customer_id: str) -> dict:
+    """The seller tapped Send for one customer: from now on that customer
+    counts as messaged (results, cooldown, the 'came back' measurement)."""
+    recs = dict(_records(email))
+    rec = recs.get(campaign_id)
+    if not rec:
+        raise CampaignError("That campaign could not be found.")
+    rec = dict(rec)
+    targets = [dict(t) for t in rec.get("targets") or []]
+    t = next((x for x in targets if x["customer_id"] == str(customer_id)), None)
+    if not t:
+        raise CampaignError("That customer is not in this campaign.")
+    if t.get("whatsapp") == "tap":
+        t["whatsapp"] = "tapped"
+        t["tapped_at"] = pd.Timestamp.now().isoformat(timespec="seconds")
+        person = {"customer_id": t["customer_id"], "customer_name": t.get("customer_name"),
+                  "monetary": t.get("monetary") or 0}
         try:
-            rfm = analytics.calculate_rfm(txns)
-            if rfm.get("available"):
-                idx = {c: i for i, c in enumerate(rfm["columns"])}
-                vip = sum(1 for r in rfm["rows"] if r[idx["segment"]] == "Champions")
-        except Exception:  # noqa: BLE001
-            vip = 0
-        if "product" in txns.columns:
-            try:
-                rules = analytics.association_rules(txns, "product").get("rules") or {}
-                strong = {a for a, rs in rules.items() if any(r["lift"] >= 1.2 for r in rs)}
-                if strong:
-                    cross = int(txns[txns["product"].astype(str).isin(strong)]["customer_id"].nunique())
-            except Exception:  # noqa: BLE001
-                cross = 0
-            # replenishment: products people buy again, and who is past due
-            t = txns.assign(_d=d)[["customer_id", "product", "_d"]].dropna().sort_values("_d")
-            t["gap"] = t.groupby(["customer_id", "product"])["_d"].diff().dt.days
-            gaps = t.dropna(subset=["gap"]).groupby("product")["gap"].median()
-            gaps = gaps[(gaps >= 7) & (gaps <= 120)]
-            if len(gaps):
-                lastbuy = (t[t["product"].isin(gaps.index)]
-                           .groupby(["customer_id", "product"])["_d"].max())
-                repl = len({c for (c, p), v in lastbuy.items() if (latest - v).days > gaps[p]})
-    return [
-        {"id": "second_order", "title": "Second-order nudge", "audience": first,
-         "audience_label": "first-time buyers from 2 to 8 weeks ago",
-         "why": "A customer who orders twice is far more likely to stay. Thank first-time buyers "
-                "a few weeks later with a small offer on their next order."},
-        {"id": "cross_sell", "title": "Goes well with what you bought", "audience": cross,
-         "audience_label": "customers with a strong pairing to suggest",
-         "why": "Your own orders show which products are bought together. Suggest the matching "
-                "one to people who only have half the pair."},
-        {"id": "replenish", "title": "Time to restock", "audience": repl,
-         "audience_label": "customers due for a restock",
-         "why": "For things people run out of (attars, skincare, food), remind them when they are "
-                "about due, based on how often they usually buy again."},
-        {"id": "vip", "title": "VIP early access", "audience": vip, "audience_label": "Champions",
-         "why": "Give your best customers a first look at new arrivals or a sale before everyone "
-                "else. No discount needed: being first is the reward."},
-        {"id": "thank_you", "title": "Thank you + review request", "audience": recent,
-         "audience_label": "customers who ordered in the last 10 days",
-         "why": "A short thank-you a few days after delivery, asking for a review or a photo. "
-                "Builds the reviews that make new customers trust you."},
-    ]
+            if rec.get("tap_proof_id"):
+                winback_proof.add_targets(email, rec["tap_proof_id"], [person])
+            else:
+                rec["tap_proof_id"] = winback_proof.mark_sent(
+                    email, [person], channel="whatsapp", state="sent",
+                    note=f"campaign {campaign_id}: sent by tap").get("id")
+        except Exception as e:  # noqa: BLE001 — the count still moves
+            log.warning("could not record tapped send: %s", e)
+    rec["targets"] = targets
+    recs[campaign_id] = rec
+    user_store.set_key(email, RECORDS_KEY, recs)
+    return {"sent": sum(1 for x in targets if _is_sent(x)), "total": len(targets)}

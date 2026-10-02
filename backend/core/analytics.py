@@ -673,7 +673,7 @@ def _quintile(series: pd.Series, invert: bool = False) -> pd.Series:
     return scores
 
 
-def calculate_rfm(txns: pd.DataFrame) -> dict:
+def calculate_rfm(txns: pd.DataFrame, limit: int | None = 500) -> dict:
     if "customer_id" not in txns.columns:
         return {"available": False, "reason": "No customer ID column was mapped — RFM needs one."}
     # Reads four columns and changes none of them, so it no longer copies the
@@ -707,7 +707,10 @@ def calculate_rfm(txns: pd.DataFrame) -> dict:
     return {
         "available": True,
         "columns": ["customer_id", "recency", "frequency", "monetary", "R", "F", "M", "RFM_score", "segment"],
-        "rows": rfm.sort_values("monetary", ascending=False).head(500).values.tolist(),
+        # the screens show the top 500; campaigns ask for everyone (limit=None),
+        # or a first-time buyer in a big shop could never be reached
+        "rows": (rfm.sort_values("monetary", ascending=False).head(limit) if limit
+                 else rfm.sort_values("monetary", ascending=False)).values.tolist(),
         "segments": {"labels": seg_counts.index.tolist(), "values": seg_counts.tolist()},
         "customer_count": int(len(rfm)),
     }
@@ -1050,21 +1053,101 @@ def customer_profiles(txns: pd.DataFrame, ids: list, by_id: dict, idx: dict,
     return profiles[:limit]
 
 
+CAMPAIGN_REASONS = ("winback", "festival", "second_order", "cross_sell", "restock",
+                    "vip", "thank_you")
+
+
+def _dates(txns: pd.DataFrame) -> pd.Series:
+    return pd.to_datetime(txns["date"], errors="coerce")
+
+
+def second_order_ids(txns: pd.DataFrame, min_days: int = 14, max_days: int = 60) -> list:
+    """Customers with exactly one order, placed min_days to max_days ago
+    (relative to the latest sale in the data)."""
+    if "customer_id" not in txns.columns:
+        return []
+    d = _dates(txns)
+    oc = "order_id" if "order_id" in txns.columns else "date"
+    per = txns.assign(_d=d).groupby("customer_id").agg(orders=(oc, "nunique"), first=("_d", "min"))
+    age = (d.max() - per["first"]).dt.days
+    return per[(per["orders"] == 1) & age.between(min_days, max_days)].index.tolist()
+
+
+def restock_due(txns: pd.DataFrame, min_gap: int = 7, max_gap: int = 120) -> dict:
+    """{customer_id: product} for customers past their usual reorder time.
+
+    "Usual" is the median number of days between two purchases of the same
+    product by the same customer, across the shop: products nobody buys twice
+    have no gap and are never suggested. Gaps under a week (one shopping trip)
+    or over four months (not a consumable) are ignored. Each customer gets the
+    product most overdue relative to its gap."""
+    if "product" not in txns.columns or "customer_id" not in txns.columns:
+        return {}
+    d = _dates(txns)
+    t = txns.assign(_d=d)[["customer_id", "product", "_d"]].dropna().sort_values("_d")
+    t = t.assign(product=t["product"].astype(str))
+    t["gap"] = t.groupby(["customer_id", "product"])["_d"].diff().dt.days
+    gaps = t.dropna(subset=["gap"]).groupby("product")["gap"].median()
+    gaps = gaps[(gaps >= min_gap) & (gaps <= max_gap)]
+    if not len(gaps):
+        return {}
+    latest = d.max()
+    last = t[t["product"].isin(gaps.index)].groupby(["customer_id", "product"])["_d"].max()
+    best: dict = {}
+    for (cid, prod), when in last.items():
+        over = (latest - when).days / float(gaps[prod])
+        if over > 1.0 and over > best.get(cid, ("", 0.0))[1]:
+            best[cid] = (prod, over)
+    return {cid: v[0] for cid, v in best.items()}
+
+
+def cross_sell_targets(txns: pd.DataFrame, min_lift: float = 1.2) -> dict:
+    """{customer_id: (have, pick)}: they own `have`, people who buy it often
+    also buy `pick` (lift >= min_lift), and they do not own `pick`."""
+    if "product" not in txns.columns or "customer_id" not in txns.columns:
+        return {}
+    rules = association_rules(txns, "product").get("rules") or {}
+    strong = {a: [r for r in rs if r["lift"] >= min_lift] for a, rs in rules.items()}
+    strong = {a: rs for a, rs in strong.items() if rs}
+    if not strong:
+        return {}
+    owned = txns.dropna(subset=["customer_id", "product"]).groupby("customer_id")["product"].agg(
+        lambda v: set(map(str, v)))
+    out = {}
+    for cid, items in owned.items():
+        best = None
+        for a in items & set(strong):
+            for r in strong[a]:
+                if r["item"] in items:
+                    continue
+                k = (r["lift"], r["confidence"])
+                if best is None or k > best[0]:
+                    best = (k, a, r["item"])
+        if best:
+            out[cid] = (best[1], best[2])
+    return out
+
+
 def campaign_audience(txns: pd.DataFrame, reason: str = "winback",
                       limit: int = 150) -> list[dict]:
     """Who a Marketing Campaign should reach, by why it is being sent.
 
-      winback  -- customers who have gone quiet: the At Risk segment, plus the
-                  Hibernating ones who last bought within a year (beyond that
-                  the shop is a stranger to them, and a discount reads as spam).
-      festival -- a festival offer is for the people most likely to buy:
-                  Champions and Loyal customers, anyone in the top fifth by
-                  spend, AND the At Risk group, because a festival is the most
-                  natural excuse there is to get back in touch.
+      winback      -- gone quiet: At Risk, plus Hibernating within a year
+                      (beyond that the shop is a stranger to them).
+      festival     -- the people most likely to buy: Champions, Loyal, anyone
+                      in the top fifth by spend, and the At Risk group.
+      second_order -- one order only, 2 to 8 weeks ago: the moment a first
+                      buyer either becomes a customer or forgets the shop.
+      cross_sell   -- own one half of a strong pairing (Apriori, lift >= 1.2)
+                      and not the other. Profile carries `pair_have`/`pair_pick`.
+      restock      -- past their usual reorder time for a product. Profile
+                      carries `due_item`.
+      vip          -- Champions.
+      thank_you    -- ordered in the last 2 to 14 days.
 
     Highest spend first, so if the list is capped it keeps the customers worth
     the most."""
-    rfm_result = calculate_rfm(txns)
+    rfm_result = calculate_rfm(txns, limit=None)
     if not rfm_result.get("available"):
         return []
     cols = rfm_result["columns"]
@@ -1075,16 +1158,73 @@ def campaign_audience(txns: pd.DataFrame, reason: str = "winback",
     def seg(r):
         return r[idx["segment"]]
 
+    extra: dict = {}
     if reason == "festival":
         spend = sorted((float(r[idx["monetary"]] or 0) for r in rows), reverse=True)
         cutoff = spend[max(0, len(spend) // 5 - 1)] if spend else 0
         chosen = [r for r in rows
                   if seg(r) in ("Champions", "Loyal / Potential", "At Risk")
                   or float(r[idx["monetary"]] or 0) >= cutoff]
+    elif reason == "second_order":
+        ids = set(second_order_ids(txns))
+        chosen = [r for r in rows if r[idx["customer_id"]] in ids]
+    elif reason == "cross_sell":
+        pairs = cross_sell_targets(txns)
+        chosen = [r for r in rows if r[idx["customer_id"]] in pairs]
+        extra = {cid: {"pair_have": a, "pair_pick": b} for cid, (a, b) in pairs.items()}
+    elif reason == "restock":
+        due = restock_due(txns)
+        chosen = [r for r in rows if r[idx["customer_id"]] in due]
+        extra = {cid: {"due_item": p} for cid, p in due.items()}
+    elif reason == "vip":
+        chosen = [r for r in rows if seg(r) == "Champions"]
+    elif reason == "thank_you":
+        chosen = [r for r in rows if 2 <= int(r[idx["recency"]]) <= 14]
     else:
         chosen = [r for r in rows
                   if seg(r) == "At Risk"
                   or (seg(r) == "Hibernating" and int(r[idx["recency"]]) <= 365)]
     chosen.sort(key=lambda r: float(r[idx["monetary"]] or 0), reverse=True)
     ids = [r[idx["customer_id"]] for r in chosen[:max(1, int(limit))]]
-    return customer_profiles(txns, ids, by_id, idx, limit=limit)
+    profiles = customer_profiles(txns, ids, by_id, idx, limit=limit)
+    for p in profiles:
+        p.update(extra.get(p["customer_id"]) or extra.get(_orig_id(p["customer_id"], ids)) or {})
+    return profiles
+
+
+def _orig_id(cid: str, ids: list):
+    """customer_profiles stringifies ids; the extras are keyed by the original."""
+    for i in ids:
+        if str(i) == cid:
+            return i
+    return cid
+
+
+def campaign_counts(txns: pd.DataFrame) -> dict:
+    """How many customers each campaign type would reach right now (before
+    cooldowns), for the type picker. Cheap: no profiles are built."""
+    out = {r: 0 for r in CAMPAIGN_REASONS}
+    if txns is None or not len(txns) or "customer_id" not in txns.columns:
+        return out
+    rfm = calculate_rfm(txns, limit=None)
+    if rfm.get("available"):
+        idx = {c: i for i, c in enumerate(rfm["columns"])}
+        rows = rfm["rows"]
+        seg = [r[idx["segment"]] for r in rows]
+        rec = [int(r[idx["recency"]]) for r in rows]
+        spend = sorted((float(r[idx["monetary"]] or 0) for r in rows), reverse=True)
+        cutoff = spend[max(0, len(spend) // 5 - 1)] if spend else 0
+        out["winback"] = sum(1 for s_, r_ in zip(seg, rec)
+                             if s_ == "At Risk" or (s_ == "Hibernating" and r_ <= 365))
+        out["festival"] = sum(1 for r, s_ in zip(rows, seg)
+                              if s_ in ("Champions", "Loyal / Potential", "At Risk")
+                              or float(r[idx["monetary"]] or 0) >= cutoff)
+        out["vip"] = sum(1 for s_ in seg if s_ == "Champions")
+        out["thank_you"] = sum(1 for r_ in rec if 2 <= r_ <= 14)
+    try:
+        out["second_order"] = len(second_order_ids(txns))
+        out["restock"] = len(restock_due(txns))
+        out["cross_sell"] = len(cross_sell_targets(txns))
+    except Exception:  # noqa: BLE001 — a count is never worth a 500
+        pass
+    return out
