@@ -403,7 +403,8 @@ def run_due(base: str = "") -> dict:
         try:
             if not instagram.is_connected(account):
                 continue                 # nothing to publish to
-            res = run_for(account, base)
+            with user_store.job_scope():
+                res = run_for(account, base)
         except Exception as e:  # noqa: BLE001
             log.warning("publishing failed for %s: %s", account, e)
             continue
@@ -537,6 +538,7 @@ def kick(email: str) -> bool:
 
 def _safe_run(email: str) -> None:
     try:
-        run_for(email)
+        with user_store.job_scope():
+            run_for(email)
     except Exception as e:  # noqa: BLE001
         log.warning("publish kick failed for %s: %s", email, e)

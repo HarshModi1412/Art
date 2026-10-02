@@ -147,7 +147,7 @@ from backend.core import analytics, smart  # noqa: E402
 
 _pool = []
 analytics.at_risk_cached = lambda email, txns: list(_pool)
-smart.load_sales = lambda email: ["one row"]        # just needs to be non-empty
+smart.load_sales = lambda email, copy=True: ["one row"]   # just needs to be non-empty
 
 user_store.set_key(EMAIL, winback_proof.CAMPAIGNS_KEY, [])
 _pool = []

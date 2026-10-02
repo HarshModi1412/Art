@@ -1038,7 +1038,8 @@ def approve_waiting(email: str) -> dict:
     done, failed = 0, 0
     for p in waiting_for_auto_approve(email):
         try:
-            _auto_approver(email, p["id"])
+            with user_store.job_scope():   # one post, one scope: see job_scope
+                _auto_approver(email, p["id"])
             done += 1
         except Exception as e:  # noqa: BLE001 — one post must not stop the week
             failed += 1
@@ -1112,10 +1113,11 @@ def run_for(email: str, week_start: date | None = None, trigger: str = "manual",
 
 
 def run_if_due(email: str) -> dict | None:
-    target = due(email)
-    if not target:
-        return None
-    return run_for(email, target, trigger="schedule")
+    with user_store.job_scope():     # writes merge with what others did meanwhile
+        target = due(email)
+        if not target:
+            return None
+        return run_for(email, target, trigger="schedule")
 
 
 def kick(email: str) -> bool:

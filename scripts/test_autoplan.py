@@ -269,6 +269,10 @@ print("\n== 5. the Approval panel: Approve / Details / Cancel ==")
 from backend.core import localtime  # noqa: E402
 _real_now = localtime.now
 localtime.now = lambda email="": FRI
+# This section is the manual panel (Approve / Details / Cancel), which a seller
+# gets by switching the week's auto-approve off; on by default it approves
+# itself (scripts/test_autoplan_auto_approve.py).
+autoplan.save_config(e2, {"auto_approve": False})
 cards = social.pending_insight_cards(e2)
 ids = [x["id"] for x in cards]
 check("a header card for the week", f"autoplan_{MON.isoformat()}" in ids, ids)
@@ -293,6 +297,8 @@ localtime.now = _real_now
 print("\n== 6. endpoints: settings, run now, approve, reel task, clip, schedule ==")
 # =========================================================================
 e6, H6 = account("ap6")
+# the manual flow: run-now leaves the week in the panel for the seller
+autoplan.save_config(e6, {"auto_approve": False})
 add_products(H6, [{"name": "Chanderi Kurta", "category": "Clothing", "price": 2200, "stock": 8},
                   {"name": "Mul Saree", "category": "Clothing", "price": 3100, "stock": 4}])
 c.post("/api/social/settings", json={"patch": {"cadence": "standard"}}, headers=H6)  # 4-post week below

@@ -29,6 +29,7 @@ import os
 import pickle
 import tempfile
 import threading
+import time
 import warnings
 
 import pandas as pd
@@ -113,6 +114,23 @@ def request_scope():
         _scope.reset(token)
 
 
+@contextlib.contextmanager
+def job_scope():
+    """request_scope() for work that runs outside a request: the weekly
+    planner, the auto-approve worker, the publisher, the win-back scan.
+
+    Without a scope a background job had no record of what it read, so its
+    write could not be merged (update_state) and simply replaced the key: the
+    planner spends minutes writing captions, then saved the posts list it read
+    at the start, putting back to draft every post approved in the meantime.
+    Inside a request it does nothing; the request's own scope already applies."""
+    if _scope.get() is not None:
+        yield
+        return
+    with request_scope():
+        yield
+
+
 def _norm_email(email: str) -> str:
     return (email or "").strip().lower()
 
@@ -173,6 +191,21 @@ def load_state(email: str) -> dict:
     return state
 
 
+def _replace(tmp: str, path: str) -> None:
+    """os.replace, patient on Windows. There a file another thread has open
+    for reading cannot be replaced (WinError 5), and the weekly auto-approve
+    reads an account's state in the background while requests write it. Linux
+    (Render) never hits this; a local run and the test suites did."""
+    for attempt in range(40):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if os.name != "nt" or attempt == 39:
+                raise
+            time.sleep(0.025)
+
+
 def _read_state(email: str) -> dict:
     if db.SUPABASE_ENABLED:
         row = db.fetch_one("user_state", {"email": (email or "").strip().lower()})
@@ -183,11 +216,21 @@ def _read_state(email: str) -> dict:
     path = _state_path(email)
     if not os.path.exists(path):
         return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    # On Windows a file being replaced by another thread cannot be opened for
+    # that instant (WinError 5 / 32). Reading it as "no state" made the
+    # background auto-approve see an empty account, and a write after such a
+    # read would save an empty one. Wait it out instead. Linux never hits this.
+    for attempt in range(40):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except PermissionError:
+            if os.name != "nt" or attempt == 39:
+                return {}
+            time.sleep(0.025)
+        except Exception:
+            return {}
+    return {}
 
 
 def _jsonb_safe(v):
@@ -225,11 +268,12 @@ def save_state(email: str, state: dict) -> None:
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)
+        _replace(tmp, path)
     _scope_put(email, state, _bump(email))
 
 
-_MISSING = object()
+_MISSING = object()   # this request never read the state: nothing to merge against
+_ABSENT = object()    # it read the state and the key was not in it
 
 
 def _merge_value(base, ours, theirs):
@@ -245,6 +289,13 @@ def _merge_value(base, ours, theirs):
     When nobody else wrote the key, ours wins exactly as before. When someone
     did, a dict merges per sub-key and a list of {"id": ...} records merges per
     record, each side keeping what it changed. Anything else is last-writer."""
+    if base is _ABSENT:
+        if isinstance(ours, list) and isinstance(theirs, list):
+            base = []
+        elif isinstance(ours, dict) and isinstance(theirs, dict):
+            base = {}
+        else:
+            base = None
     if base is _MISSING or theirs == base:
         return ours
     if isinstance(ours, dict) and isinstance(base, dict) and isinstance(theirs, dict):
@@ -268,7 +319,15 @@ def _merge_value(base, ours, theirs):
             if rid in base_by and rid not in ours_by:
                 continue                       # we removed it
             mine = ours_by.get(rid)
-            out.append(mine if mine is not None and mine != base_by.get(rid) else r)
+            if mine is None or mine == base_by.get(rid):
+                out.append(r)                  # we did not touch it: theirs
+            elif rid in base_by and r != base_by[rid]:
+                # both sides changed this record (the planner retagging a post
+                # while the approver scheduled it): merge it field by field,
+                # so each keeps the fields it changed
+                out.append(_merge_value(base_by[rid], mine, r))
+            else:
+                out.append(mine)
         have = {r["id"] for r in out}
         out.extend(r for r in ours if r["id"] not in have and r["id"] not in base_by)
         return out
@@ -300,7 +359,10 @@ def update_state(email: str, patch: dict) -> dict:
         else:
             state = _read_state(email)
         for k, v in patch.items():
-            base = seen.get(k, _MISSING) if seen is not None else _MISSING
+            # read the state but the key was not there yet: it was empty, not
+            # unknown, so a job that started before anyone wrote it merges
+            # its additions rather than replacing what was written meanwhile
+            base = seen.get(k, _ABSENT) if seen is not None else _MISSING
             state[k] = _merge_value(base, v, state.get(k))
         if db.SUPABASE_ENABLED:
             state = _jsonb_safe(state)
@@ -312,7 +374,7 @@ def update_state(email: str, patch: dict) -> dict:
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)
+        _replace(tmp, path)
         _scope_put(email, state, _bump(email))
         return state
 

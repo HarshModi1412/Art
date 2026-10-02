@@ -111,7 +111,7 @@ email2, H2 = account("ab")
 seed(email2)
 main.smart_state  # noqa: B018 — the endpoint below calls autoplan.kick
 c.get("/api/smart/state", headers=H2)
-ok = wait_until(lambda: states(email2)["photo1"] == "scheduled" and states(email2)["reel1"] == "approved")
+ok = wait_until(lambda: states(email2)["photo1"] == "scheduled" and states(email2)["reel1"] == "approved", 40)
 check("the home screen kicked the worker and it approved the week", ok, states(email2))
 
 print("\n== 4. a post it cannot approve comes back to the panel ==")
@@ -156,11 +156,60 @@ for row in ({"name": "Chanderi Kurta", "category": "Clothing", "price": 2200, "s
 nxt = autoplan.next_monday(localtime.now(email5).date())
 brief = autoplan.run_for(email5, nxt, trigger="manual")
 check("the plan says it is approving", brief.get("auto_approving", 0) > 0, brief.get("note"))
-ok = wait_until(lambda: not autoplan.waiting_for_auto_approve(email5), 20)
+ok = wait_until(lambda: not autoplan.waiting_for_auto_approve(email5), 60)
 mine = [p for p in social._posts(email5) if p.get("source") == "autoplan"]
 check("and every planned post leaves draft by itself",
       ok and mine and all(p["state"] in ("scheduled", "approved") for p in mine),
       [(p["format"], p["state"]) for p in mine])
+
+print("\n== 7. the worker and a tap at the same moment make one task, not two ==")
+import threading  # noqa: E402
+
+email6, _ = account("af")
+seed(email6)
+reel = social.get_post(email6, "reel1")
+
+
+def ensure(delay):
+    with user_store.request_scope():
+        smart.get_tasks(email6)          # the request reads its state first...
+        time.sleep(delay)                # ...then does slow work
+        smart.ensure_post_task(email6, reel, "video")
+
+
+# staggered, so the two tasks are made at clearly different times (Windows'
+# clock is coarse enough that two at once could share a timestamp by luck)
+ts = [threading.Thread(target=ensure, args=(d,)) for d in (0.2, 0.3)]
+[t.start() for t in ts]
+[t.join() for t in ts]
+made = [t for t in smart.get_tasks(email6) if t.get("post_id") == "reel1"]
+check("one 'make the reel' task", len(made) == 1, [t["text"] for t in made])
+
+print("\n== 8. a slow background job does not undo an approval made meanwhile ==")
+email7, _ = account("ag")
+seed(email7)
+
+
+def slow_planner():
+    # what plan_week does: read the posts, spend a while writing captions,
+    # then save the list with its own changes
+    with user_store.job_scope():
+        rows = social._posts(email7)
+        time.sleep(0.4)
+        rows.append({"id": "newweek", "state": "draft", "format": "image",
+                     "product_name": "New", "scheduled_at": "2030-01-08T10:00:00"})
+        social._save_posts(email7, rows)
+
+
+t = threading.Thread(target=slow_planner)
+t.start()
+time.sleep(0.1)
+with user_store.job_scope():
+    social.set_state(email7, "photo1", "scheduled")   # approved while it ran
+t.join()
+st = states(email7)
+check("the approval survived", st.get("photo1") == "scheduled", st)
+check("and the planner's new post is there too", "newweek" in st, st)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

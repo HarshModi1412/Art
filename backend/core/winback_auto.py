@@ -304,7 +304,8 @@ def kick(email: str) -> bool:
 
 def _safe_run(email: str) -> None:
     try:
-        run_if_due(email)
+        with user_store.job_scope():
+            run_if_due(email)
     except Exception as e:  # noqa: BLE001
         log.warning("win-back run failed for %s: %s", email, e)
 
@@ -319,7 +320,8 @@ def run_due() -> dict:
             if billing.is_locked(account):   # trial over, nothing paid
                 skipped += 1
                 continue
-            res = run_if_due(account)
+            with user_store.job_scope():
+                res = run_if_due(account)
         except Exception as e:  # noqa: BLE001
             log.warning("win-back failed for %s: %s", account, e)
             failed += 1

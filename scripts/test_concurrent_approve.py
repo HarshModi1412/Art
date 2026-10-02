@@ -132,6 +132,11 @@ check("records: ours added, theirs added, both kept",
       [r["id"] for r in M(base, base + [{"id": 3}], base + [{"id": 4}])] == [1, 2, 4, 3])
 check("records: a record we removed stays removed",
       [r["id"] for r in M(base, base[:1], base + [{"id": 4}])] == [1, 4])
+check("records: both changed one record, each keeps its own fields",
+      M([{"id": 1, "s": "d", "tag": ""}], [{"id": 1, "s": "d", "tag": "fest"}],
+        [{"id": 1, "s": "ok", "tag": ""}]) == [{"id": 1, "s": "ok", "tag": "fest"}])
+check("key absent when read: additions merge, nothing written meanwhile is lost",
+      M(user_store._ABSENT, [{"id": 2}], [{"id": 1}]) == [{"id": 1}, {"id": 2}])
 check("not records (duplicate ids): last writer",
       M([{"id": 1}], [{"id": 1}, {"id": 1}], [{"id": 2}]) == [{"id": 1}, {"id": 1}])
 
