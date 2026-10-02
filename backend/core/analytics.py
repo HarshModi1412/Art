@@ -37,11 +37,6 @@ def sales_analytics(txns: pd.DataFrame) -> dict:
         cat = df.groupby("category")["amount"].sum().sort_values(ascending=False).head(12)
         by_category = {"x": cat.index.astype(str).tolist(), "y": cat.round(2).tolist()}
 
-    top_products = None
-    if "product" in df.columns:
-        prod = df.groupby("product")["amount"].sum().sort_values(ascending=False).head(10)
-        top_products = {"x": prod.round(2).tolist()[::-1], "y": prod.index.astype(str).tolist()[::-1]}
-
     weekday = df.groupby(df["date"].dt.day_name())["amount"].sum()
     order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     weekday = weekday.reindex([d for d in order if d in weekday.index])
@@ -52,11 +47,165 @@ def sales_analytics(txns: pd.DataFrame) -> dict:
         "kpis": kpis,
         "monthly_trend": monthly_trend,
         "by_category": by_category,
-        "top_products": top_products,
         "weekday_pattern": weekday_pattern,
+        # The "Top products" bar chart is gone: product names that are numbers
+        # (SKU codes like 3000, 4000) were drawn on a numeric axis as hairlines,
+        # and a ranking of totals said nothing a seller could act on. These say
+        # when to sell, what is moving and who is coming back.
+        "best_days": _best_days(df),
+        "heatmap": _sales_heatmap(df),
+        "product_movers": _product_movers(df),
+        "new_vs_returning": _new_vs_returning(df),
         "forecast": forecast,
         "insights": _prioritize_insights(generate_sales_insights(df, forecast=forecast), df),
     }
+
+
+_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def _ampm(h: int) -> str:
+    return f"{h % 12 or 12}{'am' if h < 12 else 'pm'}"
+
+
+def _best_days(df: pd.DataFrame) -> dict | None:
+    """What a TYPICAL Monday, Tuesday... brings in.
+
+    Not the weekday totals: those favour whichever weekday the date range
+    happens to contain more of, and they ignore days with no sales at all.
+    Every calendar day in the range counts, a zero day included, and each
+    weekday is the average of its own days."""
+    d = df["date"].dt.normalize()
+    if d.isna().all():
+        return None
+    days = pd.date_range(d.min(), d.max(), freq="D")
+    if len(days) < 14:          # fewer than two of each weekday: not a pattern
+        return None
+    daily = df.groupby(d)["amount"].sum().reindex(days, fill_value=0.0)
+    avg = daily.groupby(daily.index.dayofweek).mean().reindex(range(7), fill_value=0.0)
+    typical = float(daily.mean()) or 1e-9
+    orders = None
+    if "order_id" in df.columns:
+        o = df.groupby(d)["order_id"].nunique().reindex(days, fill_value=0)
+        orders = o.groupby(o.index.dayofweek).mean().reindex(range(7), fill_value=0.0)
+    best, worst = int(avg.idxmax()), int(avg.idxmin())
+    return {"x": _DAYS, "y": [round(float(v), 2) for v in avg.tolist()],
+            "orders": None if orders is None else [round(float(v), 1) for v in orders.tolist()],
+            "typical": round(typical, 2),
+            "best": _DAYS[best], "worst": _DAYS[worst],
+            "best_lift_pct": round((float(avg[best]) / typical - 1) * 100),
+            "worst_dip_pct": round((1 - float(avg[worst]) / typical) * 100)}
+
+
+def _sales_heatmap(df: pd.DataFrame) -> dict | None:
+    """When the money comes in. Day x hour when the data has times of day;
+    most exports are dates only, and then it is day x month, which shows
+    whether the weekend peak holds all year or only in the festival months."""
+    dt = df["date"].dropna()
+    if dt.empty:
+        return None
+    has_time = bool(((dt.dt.hour != 0) | (dt.dt.minute != 0)).mean() > 0.2)
+    dow = df["date"].dt.dayofweek
+    if has_time:
+        hours = df["date"].dt.hour
+        n_days = (df["date"].dt.normalize().groupby(dow).nunique()
+                  .reindex(range(7)).fillna(1).clip(lower=1))
+        g = (df.groupby([dow, hours])["amount"].sum().unstack(fill_value=0.0)
+             .reindex(index=range(7), fill_value=0.0))
+        g = g.div(n_days, axis=0)                 # average per such weekday
+        used = [h for h in g.columns if g[h].sum() > 0]
+        if not used:
+            return None
+        span = list(range(int(min(used)), int(max(used)) + 1))
+        g = g.reindex(columns=span, fill_value=0.0)
+        peak = g.stack().idxmax()
+        return {"mode": "hour", "y": _DAYS, "x": [_ampm(h) for h in span],
+                "z": g.round(2).values.tolist(),
+                "peak": f"{_DAYS[int(peak[0])]} around {_ampm(int(peak[1]))}"}
+    month = df["date"].dt.to_period("M")
+    months = sorted(month.dropna().unique())
+    # a month the data only touches (the 1st of this month, say) is a column of
+    # empty squares and one stray value: leave it out until it has a week
+    days_in = df["date"].dt.normalize().groupby(month).nunique()
+    months = [m for m in months if days_in.get(m, 0) >= 7][-12:]
+    if len(months) < 2:
+        return None
+    sub = df[month.isin(months)]
+    g = (sub.groupby([sub["date"].dt.dayofweek, sub["date"].dt.to_period("M")])["amount"].sum()
+         .unstack(fill_value=0.0).reindex(index=range(7), columns=months, fill_value=0.0))
+    # Average per day, not the month's total: a month with five Sundays is
+    # not a better month for Sundays than one with four.
+    cal = pd.date_range(sub["date"].min().normalize(), sub["date"].max().normalize(), freq="D")
+    n = (pd.Series(1, index=cal).groupby([cal.dayofweek, cal.to_period("M")]).sum()
+         .unstack(fill_value=0).reindex(index=range(7), columns=months, fill_value=0))
+    g = g.div(n.where(n > 0)).fillna(0.0)
+    peak = g.stack().idxmax()
+    return {"mode": "month", "y": _DAYS, "x": [m.strftime("%b %y") for m in months],
+            "z": g.round(2).values.tolist(),
+            "peak": f"{_DAYS[int(peak[0])]}s in {peak[1].strftime('%B %Y')}"}
+
+
+def _product_movers(df: pd.DataFrame, n: int = 5) -> dict | None:
+    """The products gaining and losing the most: the last 30 days against the
+    30 before. A ranking of all-time totals tells a seller what they already
+    know; this tells them what changed, while there is still time to act."""
+    if "product" not in df.columns:
+        return None
+    end = df["date"].max().normalize()
+    if pd.isna(end) or (end - df["date"].min().normalize()).days < 45:
+        return None
+    cut, start = end - pd.Timedelta(days=30), end - pd.Timedelta(days=60)
+    last = df[df["date"] > cut]
+    prev = df[(df["date"] <= cut) & (df["date"] > start)]
+    a = last.groupby("product")["amount"].sum()
+    b = prev.groupby("product")["amount"].sum()
+    ch = a.sub(b, fill_value=0.0)
+    ch = ch[ch.abs() > 0.005]
+    if ch.empty:
+        return None
+    up = ch[ch > 0].sort_values(ascending=False).head(n)
+    down = ch[ch < 0].sort_values().head(n)
+    # read top to bottom: biggest gain first, biggest fall last
+    rows = pd.concat([up, down.sort_values(ascending=False)])
+
+    def pct(p):
+        base = float(b.get(p, 0.0))
+        return None if base <= 0 else round((float(a.get(p, 0.0)) / base - 1) * 100)
+    return {"y": [str(p) for p in rows.index], "x": [round(float(v), 2) for v in rows.tolist()],
+            "pct": [pct(p) for p in rows.index],
+            "top_gainer": str(up.index[0]) if len(up) else None,
+            "top_gainer_change": round(float(up.iloc[0]), 2) if len(up) else None,
+            "top_loser": str(down.index[0]) if len(down) else None,
+            "top_loser_change": round(float(down.iloc[0]), 2) if len(down) else None,
+            "window": f"{(end - pd.Timedelta(days=29)).strftime('%d %b')} to {end.strftime('%d %b')}"}
+
+
+def _new_vs_returning(df: pd.DataFrame) -> dict | None:
+    """Revenue per month from first-time buyers and from people who had bought
+    before. Growth that is all new customers and no returning ones is a leaky
+    bucket, and this is the chart that shows it."""
+    if "customer_id" not in df.columns or df["customer_id"].isna().all():
+        return None
+    sub = df.dropna(subset=["customer_id"])
+    month = sub["date"].dt.to_period("M")
+    first = sub.groupby("customer_id")["date"].transform("min").dt.to_period("M")
+    is_new = (month == first).rename("is_new")
+    g = sub.groupby([month, is_new])["amount"].sum().unstack(fill_value=0.0)
+    # same rule as the heatmap: a month with under a week of data is a stub bar
+    days_in = sub["date"].dt.normalize().groupby(month).nunique()
+    g = g[[days_in.get(m, 0) >= 7 for m in g.index]]
+    g = g.reindex(columns=[True, False], fill_value=0.0).tail(12)
+    if len(g) < 2:
+        return None
+    new, ret = g[True], g[False]
+    total = float(new.sum() + ret.sum()) or 1e-9
+    recent = g.tail(3)
+    recent_ret = float(recent[False].sum()) / (float(recent.values.sum()) or 1e-9)
+    return {"x": [m.strftime("%b %y") for m in g.index],
+            "new": [round(float(v), 2) for v in new.tolist()],
+            "returning": [round(float(v), 2) for v in ret.tolist()],
+            "returning_share_pct": round(float(ret.sum()) / total * 100),
+            "recent_returning_share_pct": round(recent_ret * 100)}
 
 
 # Priority weight per insight — higher = more decision-driving. Anything the

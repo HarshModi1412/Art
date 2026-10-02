@@ -150,14 +150,18 @@ def build_sales_report(analytics: dict, insights_rendered: list[dict],
         ax.spines[["top", "right"]].set_visible(False)
         story.append(_chart_image(fig, height_mm=50))
 
-    top = analytics.get("top_products")
-    if top and top.get("y"):
-        story.append(Paragraph("🏆 Top products", H2))
-        fig, ax = plt.subplots(figsize=(8.6, 2.6))
-        ax.barh(top["y"], top["x"], color="#f59e0b")
-        ax.tick_params(labelsize=6.5)
+    # Same as the screen: the typical take of each weekday (zero days count),
+    # the best one picked out, instead of the old all-time product ranking.
+    bd = analytics.get("best_days")
+    if bd and bd.get("y"):
+        story.append(Paragraph(
+            f"📅 Best day to sell: {bd['best']} (+{bd['best_lift_pct']}% on a typical day)", H2))
+        fig, ax = plt.subplots(figsize=(8.6, 2.4))
+        ax.bar([d[:3] for d in bd["x"]], bd["y"],
+               color=["#22c55e" if d == bd["best"] else "#9ca3af" for d in bd["x"]])
+        ax.tick_params(labelsize=7)
         ax.spines[["top", "right"]].set_visible(False)
-        story.append(_chart_image(fig, height_mm=54))
+        story.append(_chart_image(fig, height_mm=50))
 
     # ---- Menu engineering: slow-item beverage bundles
     me = analytics.get("menu_engineering")

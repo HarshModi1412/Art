@@ -1281,7 +1281,7 @@ function _polish(traces, layout) {
         t.marker = { ...t.marker, color: tint(t.marker.color, 0.62) };
       }
       t.marker = { ...(t.marker || { color }), line: { width: 0 } };
-      if (!multi && vals.length && vals.length <= 12) {
+      if (!multi && vals.length && vals.length <= 12 && !(t.meta && t.meta.keepText)) {
         // Every bar keeps full colour (3:1 against the card in both themes);
         // the peak is called out by its label instead, set bold in full ink.
         const prefix = ((horiz ? layout.xaxis : layout.yaxis) || {}).tickprefix || "";
@@ -7466,11 +7466,8 @@ function renderSales(payload) {
       ${renderActions(d.insights)}
       <div class="chart-card"><h4>Monthly revenue</h4><div class="plot" id="cMonthly"></div></div>
       ${d.forecast ? `<div class="chart-card"><h4>Next 30 days: ≈ ₹${fmt(d.forecast.next_30_total)} (${d.forecast.vs_last_30_pct >= 0 ? "+" : ""}${d.forecast.vs_last_30_pct}% vs last 30)</h4><div class="plot" id="cFcst"></div></div>` : ""}
-      <div class="grid-2">
-        ${d.by_category ? `<div class="chart-card"><h4>Revenue by category</h4><div class="plot" id="cCat"></div></div>` : ""}
-        <div class="chart-card"><h4>Revenue by weekday</h4><div class="plot" id="cWk"></div></div>
-      </div>
-      ${d.top_products ? `<div class="chart-card"><h4>Top products</h4><div class="plot" id="cTop"></div></div>` : ""}`;
+      ${salesInsightCharts(d)}
+      ${d.by_category ? `<div class="chart-card"><h4>Revenue by category</h4><div class="plot" id="cCat"></div></div>` : ""}`;
     moduleShell("Sales Analytics", html);
     bindCancelPanel(cx);
     const primary = cssVar("--primary", "#6d28d9");
@@ -7483,8 +7480,110 @@ function renderSales(payload) {
       ], { yaxis: { tickprefix: "₹" } }, "30-day forecast");
     }
     if (d.by_category) plot($("cCat"), [{ x: d.by_category.x, y: d.by_category.y, type: "bar", marker: { color: primary } }], { yaxis: { tickprefix: "₹" } }, "Revenue by category");
-    plot($("cWk"), [{ x: d.weekday_pattern.x, y: d.weekday_pattern.y, type: "bar", marker: { color: series(1) } }], { yaxis: { tickprefix: "₹" } }, "Revenue by weekday");
-    if (d.top_products) plot($("cTop"), [{ x: d.top_products.x, y: d.top_products.y, type: "bar", orientation: "h", marker: { color: series(2) } }], { xaxis: { tickprefix: "₹" }, yaxis: { autorange: "reversed" }, margin: { l: 150, r: 20, t: 8, b: 40 } }, "Top products");
+    drawSalesInsightCharts(d);
+  }
+}
+
+/* ------------------------------------------------ the insight charts --------
+   Replaced "Top products", a ranking of all-time totals that told a seller
+   nothing they did not know (and drew numeric SKU names as hairlines on a
+   number axis). Each of these answers a question a seller acts on, and says
+   the answer in a sentence above the chart so it reads without decoding:
+     - which day to push (a typical day's take, not the weekday totals)
+     - when the money comes in (day x hour, or day x month for date-only data)
+     - what changed in the last 30 days (products rising and falling)
+     - whether customers come back (new vs returning revenue by month) */
+function chartCard(id, title, take, wide) {
+  return `<div class="chart-card${wide ? "" : ""}"><h4>${esc(title)}</h4>`
+    + (take ? `<p class="chart-take">${take}</p>` : "")
+    + `<div class="plot" id="${id}"></div></div>`;
+}
+
+function salesInsightCharts(d) {
+  const bd = d.best_days, hm = d.heatmap, mv = d.product_movers, nr = d.new_vs_returning;
+  const out = [];
+  if (bd) {
+    out.push(chartCard("cBest", "Best day to sell",
+      `<b>${esc(bd.best)}</b> is your best day, <b>${bd.best_lift_pct >= 0 ? "+" : ""}${bd.best_lift_pct}%</b> on a typical day
+       (₹${fmt(bd.typical)}). ${esc(bd.worst)} is the quietest, ${bd.worst_dip_pct}% below: the day an offer has the most room to help.`));
+  } else if (d.weekday_pattern) {
+    out.push(chartCard("cWk", "Revenue by weekday", ""));
+  }
+  if (hm) {
+    out.push(chartCard("cHeat", hm.mode === "hour" ? "When your sales happen" : "Your week, month by month",
+      hm.mode === "hour"
+        ? `Busiest: <b>${esc(hm.peak)}</b>. Post and reply to messages just before it.`
+        : `Strongest: <b>${esc(hm.peak)}</b>. Darker squares took more money; a column that is pale all through is a slow month.`));
+  }
+  const pair = [];
+  if (mv) {
+    const g = mv.top_gainer ? `<b>${esc(mv.top_gainer)}</b> is up ₹${fmt(mv.top_gainer_change)}` : "";
+    const l = mv.top_loser ? `<b>${esc(mv.top_loser)}</b> is down ₹${fmt(Math.abs(mv.top_loser_change))}` : "";
+    pair.push(chartCard("cMove", "Products rising and falling",
+      `Last 30 days (${esc(mv.window)}) against the 30 before. ${[g, l].filter(Boolean).join(", ")}.`));
+  }
+  if (nr) {
+    pair.push(chartCard("cNewRet", "New and returning customers",
+      `Returning customers brought <b>${nr.recent_returning_share_pct}%</b> of revenue in the last 3 months
+       (${nr.returning_share_pct}% overall). ${nr.recent_returning_share_pct < 30
+         ? "Most money is from first-time buyers: a win-back message is the cheapest growth here."
+         : "People come back: keep them close with a reason to return."}`));
+  }
+  if (pair.length) out.push(`<div class="grid-2">${pair.join("")}</div>`);
+  return out.join("");
+}
+
+function drawSalesInsightCharts(d) {
+  const primary = cssVar("--primary", "#6d28d9");
+  const muted = withAlpha(cssVar("--muted", "#8a8a8e"), 0.45);
+  const bd = d.best_days, hm = d.heatmap, mv = d.product_movers, nr = d.new_vs_returning;
+  if (bd) {
+    plot($("cBest"), [{ x: bd.x.map((x) => x.slice(0, 3)), y: bd.y, type: "bar",
+      marker: { color: bd.x.map((x) => (x === bd.best ? primary : muted)) } }],
+      { xaxis: { type: "category" }, yaxis: { tickprefix: "₹" } }, "Best day to sell");
+  } else if (d.weekday_pattern && $("cWk")) {
+    plot($("cWk"), [{ x: d.weekday_pattern.x, y: d.weekday_pattern.y, type: "bar", marker: { color: series(1) } }],
+      { xaxis: { type: "category" }, yaxis: { tickprefix: "₹" } }, "Revenue by weekday");
+  }
+  if (hm) {
+    // one hue, light to dark: more money, darker square
+    // The scale starts at the quietest square, not at zero: days that all take
+    // ₹18k-30k would otherwise be one shade, and the differences are the point.
+    const zs = hm.z.flat().filter((v) => v > 0);
+    const days = hm.y.map((y) => y.slice(0, 3));
+    plot($("cHeat"), [{ type: "heatmap", x: hm.x, y: days, z: hm.z,
+      zmin: zs.length ? Math.min(...zs) : 0, zmax: zs.length ? Math.max(...zs) : 1,
+      colorscale: [[0, withAlpha(primary, 0.08)], [1, primary]], showscale: false, xgap: 2, ygap: 2,
+      hovertemplate: "%{y} %{x}: ₹%{z:,.0f}<extra></extra>" }],
+      { xaxis: { type: "category", showgrid: false },
+        // every day labelled: the axis thinning that suits a value scale hid three of seven
+        yaxis: { type: "category", autorange: "reversed", showgrid: false, tickmode: "array", tickvals: days, ticktext: days, nticks: 0 } },
+      hm.mode === "hour" ? "When your sales happen" : "Your week, month by month");
+  }
+  if (mv) {
+    // diverging: gains and falls in two hues, read top (biggest gain) to bottom (biggest fall)
+    const up = cssVar("--green", "#0a7a4d"), down = cssVar("--red", "#c0392b");
+    // Own labels (meta.keepText): a signed change and the percentage, inside a
+    // long bar and outside a short one, so the biggest fall's label never runs
+    // into the product names on the left.
+    plot($("cMove"), [{ type: "bar", orientation: "h", x: mv.x, y: mv.y, meta: { keepText: true },
+      marker: { color: mv.x.map((v) => (v >= 0 ? up : down)) },
+      text: mv.x.map((v, i) => `${v >= 0 ? "+" : "−"}₹${_compact(Math.abs(v))}${mv.pct[i] != null ? ` (${mv.pct[i] >= 0 ? "+" : ""}${mv.pct[i]}%)` : " (new)"}`),
+      texttemplate: "%{text}", insidetextanchor: "middle",
+      // inside a bar long enough to hold it, outside a short one
+      textposition: (() => { const top = Math.max(...mv.x.map(Math.abs)) || 1;
+        return mv.x.map((v) => (Math.abs(v) >= top * 0.45 ? "inside" : "outside")); })(),
+      insidetextfont: { color: "#ffffff", size: 11 }, outsidetextfont: { color: cssVar("--text-2", "#46464a"), size: 11 },
+      cliponaxis: false }],
+      { xaxis: { tickprefix: "₹", zeroline: true }, yaxis: { type: "category", autorange: "reversed" } },
+      "Products rising and falling");
+  }
+  if (nr) {
+    plot($("cNewRet"), [
+      { type: "bar", name: "Returning", x: nr.x, y: nr.returning, marker: { color: series(0) } },
+      { type: "bar", name: "New", x: nr.x, y: nr.new, marker: { color: series(1) } },
+    ], { barmode: "stack", xaxis: { type: "category" }, yaxis: { tickprefix: "₹" },
+         showlegend: true, legend: { orientation: "h", y: 1.12, x: 0 } }, "New and returning customers");
   }
 }
 
@@ -7664,7 +7763,8 @@ async function renderSubDetail(value) {
     $("backHome").onclick = goHome; $("subBack").onclick = openSubcategory;
     plot($("cDT"), [{ x: d.monthly_trend.x, y: d.monthly_trend.y, type: "scatter", mode: "lines+markers", fill: "tozeroy", fillcolor: softFill(), line: { color: cssVar("--primary", "#6d28d9") } }], { yaxis: { tickprefix: "₹" } }, value + " monthly");
     plot($("cDW"), [{ x: d.weekday_pattern.x, y: d.weekday_pattern.y, type: "bar", marker: { color: series(1) } }], { yaxis: { tickprefix: "₹" } }, "Weekday");
-    if (d.top_products) plot($("cDP"), [{ x: d.top_products.x, y: d.top_products.y, type: "bar", orientation: "h", marker: { color: series(2) } }], { xaxis: { tickprefix: "₹" }, yaxis: { autorange: "reversed" }, margin: { l: 150, r: 20, t: 8, b: 40 } }, "Top items");
+    // type "category": item names that are numbers (SKU codes) are labels, not a scale
+    if (d.top_products) plot($("cDP"), [{ x: d.top_products.x, y: d.top_products.y.map(String), type: "bar", orientation: "h", marker: { color: series(2) } }], { xaxis: { tickprefix: "₹" }, yaxis: { type: "category", autorange: "reversed" }, margin: { l: 150, r: 20, t: 8, b: 40 } }, "Top items");
   } catch (e) { toast(e.message); }
 }
 

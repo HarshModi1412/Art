@@ -821,3 +821,9 @@ table.tbl thead th, th { letter-spacing: .03em; }
   .jr-body { padding: 20px 20px 8px; }
   .jr-foot { padding-left: 20px; padding-right: 20px; }
 }
+
+/* The one-sentence answer above an insight chart ("Saturday is your best day,
+   +34% on a typical day"). Secondary ink: the chart is the evidence, this is
+   what it says. */
+.chart-card .chart-take { margin: -6px 46px 12px 0; font-size: .84375rem; line-height: 1.5; color: var(--text-2); }
+.chart-card .chart-take b { color: var(--text); font-weight: 650; }
