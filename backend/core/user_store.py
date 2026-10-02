@@ -128,18 +128,48 @@ def _scope_get(email: str):
     return copy.deepcopy(hit) if hit is not None else None
 
 
-def _scope_put(email: str, state: dict) -> None:
+# Every write in this process bumps the account's version. A request records
+# the version its memoised copy was taken at, so update_state can tell whether
+# anyone else has written since: if not, the copy IS the stored state and the
+# extra read is skipped (on Supabase that read is a full round trip, and the
+# home screen is budgeted at one per request: test_perf_resilience).
+_versions: dict[str, int] = {}
+_vlock = threading.Lock()
+
+
+def _version(email: str) -> int:
+    return _versions.get(_norm_email(email), 0)
+
+
+def _bump(email: str) -> int:
+    with _vlock:
+        e = _norm_email(email)
+        _versions[e] = _versions.get(e, 0) + 1
+        return _versions[e]
+
+
+def _scope_put(email: str, state: dict, version: int | None = None) -> None:
     box = _scope.get()
     if box is not None:
-        box[_norm_email(email)] = copy.deepcopy(state)
+        e = _norm_email(email)
+        box[e] = copy.deepcopy(state)
+        box[e + "#v"] = _version(email) if version is None else version
+
+
+def _scope_version(email: str):
+    box = _scope.get()
+    return None if box is None else box.get(_norm_email(email) + "#v")
 
 
 def load_state(email: str) -> dict:
     cached = _scope_get(email)
     if cached is not None:
         return cached
+    # the version BEFORE the read: a write that lands during it makes this
+    # copy look older than it is, which costs a re-read, never a lost write
+    v = _version(email)
     state = _read_state(email)
-    _scope_put(email, state)
+    _scope_put(email, state, v)
     return state
 
 
@@ -188,7 +218,7 @@ def save_state(email: str, state: dict) -> None:
         state = _jsonb_safe(state)
         db.upsert("user_state", {"email": _norm_email(email), "state": state},
                   on_conflict="email")
-        _scope_put(email, state)
+        _scope_put(email, state, _bump(email))
         return
     path = _state_path(email)
     with _lock:
@@ -196,27 +226,94 @@ def save_state(email: str, state: dict) -> None:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
         os.replace(tmp, path)
-    _scope_put(email, state)
+    _scope_put(email, state, _bump(email))
+
+
+_MISSING = object()
+
+
+def _merge_value(base, ours, theirs):
+    """Three-way merge of one key: `base` is what this request last saw,
+    `ours` what it wants to write, `theirs` what is stored now.
+
+    WHY: the per-request memo above means a request writes from the copy it
+    read when it started. Approve all sends two approvals at once and each
+    spends seconds drawing a picture, so each saved the posts list as it was
+    before the other's approval, and the last one to finish put every other
+    post back to draft. A seller had to press Approve all once per post.
+
+    When nobody else wrote the key, ours wins exactly as before. When someone
+    did, a dict merges per sub-key and a list of {"id": ...} records merges per
+    record, each side keeping what it changed. Anything else is last-writer."""
+    if base is _MISSING or theirs == base:
+        return ours
+    if isinstance(ours, dict) and isinstance(base, dict) and isinstance(theirs, dict):
+        out = dict(theirs)
+        for k in set(base) | set(ours):
+            b, o = base.get(k, _MISSING), ours.get(k, _MISSING)
+            if o is _MISSING:
+                if b is not _MISSING:
+                    out.pop(k, None)          # we deleted it
+            elif b is _MISSING or o != b:
+                out[k] = _merge_value(b, o, theirs.get(k, _MISSING)) \
+                    if b is not _MISSING and k in theirs else o
+        return out
+    ids = _record_ids(base), _record_ids(ours), _record_ids(theirs)
+    if None not in ids:
+        base_by = {r["id"]: r for r in base}
+        ours_by = {r["id"]: r for r in ours}
+        out = []
+        for r in theirs:
+            rid = r["id"]
+            if rid in base_by and rid not in ours_by:
+                continue                       # we removed it
+            mine = ours_by.get(rid)
+            out.append(mine if mine is not None and mine != base_by.get(rid) else r)
+        have = {r["id"] for r in out}
+        out.extend(r for r in ours if r["id"] not in have and r["id"] not in base_by)
+        return out
+    return ours
+
+
+def _record_ids(v):
+    """The ids of a list of {"id": ...} dicts, or None if it is not one."""
+    if not isinstance(v, list) or not all(isinstance(r, dict) and "id" in r for r in v):
+        return None
+    ids = [r["id"] for r in v]
+    return ids if len(set(map(str, ids))) == len(ids) else None
 
 
 def update_state(email: str, patch: dict) -> dict:
-    """Shallow-merge `patch` into the stored state and persist. Returns the
-    merged state."""
+    """Merge `patch` into the stored state and persist. Returns the merged
+    state.
+
+    Starts from the CURRENT stored state, not this request's memoised copy,
+    so keys this request never touched keep whatever another request wrote
+    meanwhile, and the keys it did touch are merged against what it last saw
+    (see _merge_value). When no other write has happened in this process
+    since the copy was taken, the copy is the stored state and no read is
+    spent finding that out."""
     with _lock:
-        state = load_state(email)
-        state.update(patch)
+        seen = _scope_get(email)
+        if seen is not None and _scope_version(email) == _version(email):
+            state = dict(seen)   # nobody wrote since: it IS the stored state
+        else:
+            state = _read_state(email)
+        for k, v in patch.items():
+            base = seen.get(k, _MISSING) if seen is not None else _MISSING
+            state[k] = _merge_value(base, v, state.get(k))
         if db.SUPABASE_ENABLED:
             state = _jsonb_safe(state)
             db.upsert("user_state", {"email": _norm_email(email), "state": state},
                       on_conflict="email")
-            _scope_put(email, state)
+            _scope_put(email, state, _bump(email))
             return state
         path = _state_path(email)
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
         os.replace(tmp, path)
-        _scope_put(email, state)
+        _scope_put(email, state, _bump(email))
         return state
 
 
