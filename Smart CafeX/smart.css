@@ -3871,3 +3871,10 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 @media (max-width: 640px) {
   .cgpt-invite .siwc-btn { width: 100%; }
 }
+
+/* Busy indicator inside a button (mapping Confirm & save, and anything else
+   that takes a while). Respects reduced motion: it just sits still. */
+.spin { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: -2px;
+  border: 2px solid currentColor; border-right-color: transparent; animation: cx-spin .8s linear infinite; }
+@keyframes cx-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

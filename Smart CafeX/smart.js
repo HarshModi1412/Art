@@ -4156,10 +4156,32 @@ function openMapModal(d) {
   $("mapErr").hidden = true;
   $("mapModal").hidden = false;
 }
-function closeMap() { $("mapModal").hidden = true; _mapCtx = null; _pendingMode = null; _afterUpload = null; const mm = $("mapMode"); if (mm) mm.hidden = true; }
+function closeMap() {
+  if (_mapSaving) return;            // closing mid-save would orphan the request
+  $("mapModal").hidden = true; _mapCtx = null; _pendingMode = null; _afterUpload = null;
+  const mm = $("mapMode"); if (mm) mm.hidden = true;
+}
 $("mapClose").onclick = closeMap; $("mapCancel").onclick = closeMap;
+/* Saving a big file takes a while (it is parsed, cleaned and stored), and the
+   button used to sit there unchanged, so sellers pressed it again and again,
+   each press starting another save. While one runs: the button says so, and
+   nothing in the dialog can start a second one or close it. */
+let _mapSaving = false;
+function mapBusy(on) {
+  _mapSaving = on;
+  const b = $("mapConfirm");
+  if (on) {
+    b.dataset.label = b.dataset.label || b.innerHTML;
+    b.innerHTML = `<span class="spin" aria-hidden="true"></span> Saving your data… big files take a minute`;
+  } else if (b.dataset.label) {
+    b.innerHTML = b.dataset.label;
+  }
+  [b, $("mapCancel"), $("mapClose")].forEach((x) => { if (x) x.disabled = on; });
+  document.querySelectorAll("#mapGrid select, #mapMode input").forEach((x) => x.disabled = on);
+  b.setAttribute("aria-busy", on ? "true" : "false");
+}
 $("mapConfirm").onclick = async () => {
-  if (!_mapCtx) return;
+  if (!_mapCtx || _mapSaving) return;
   const mapping = {};
   document.querySelectorAll("#mapGrid select").forEach((s) => mapping[s.dataset.role] = s.value || null);
   for (const req of _mapCtx.required) {
@@ -4170,13 +4192,19 @@ $("mapConfirm").onclick = async () => {
     const sel = document.querySelector('input[name="mapMode"]:checked');
     mode = sel ? sel.value : "replace";
   }
+  $("mapErr").hidden = true;
+  mapBusy(true);
   try {
     const res = await api("/api/smart/map", { method: "POST", json: { kind: _mapCtx.kind, mapping, mode } });
+    mapBusy(false);
     closeMap();
     if (res && res.mode === "append") toast(`Added ${fmt(res.added)} rows, ${fmt(res.rows)} total saved`);
     else toast("Data saved to your account");
     if (_afterUpload) { const f = _afterUpload; _afterUpload = null; f(); } else goHome();
-  } catch (e) { const el = $("mapErr"); el.textContent = e.message; el.hidden = false; }
+  } catch (e) {
+    mapBusy(false);
+    const el = $("mapErr"); el.textContent = e.message; el.hidden = false;
+  }
 };
 /* Clearing an uploaded dataset is the one thing here that cannot be undone —
    the rows are gone from the server. So this keeps the confirm, and says
