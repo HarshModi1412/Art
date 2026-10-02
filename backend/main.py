@@ -20,6 +20,7 @@ import math
 import os
 import re
 import secrets
+import threading
 import time
 
 import pandas as pd
@@ -57,6 +58,7 @@ from backend.core import videotools
 from backend.core import errors
 from backend.core import health
 from backend.core import aicaps
+from backend.core import memory
 from backend.core import region
 from backend.core import legal
 from backend.core import legal_html
@@ -491,16 +493,56 @@ class SessionData:
         self.mapped_file_id: str | None = None
         self.chat_messages: list[dict] = []
         self.used_initial_prompt = False
+        self.last_used = time.time()
 
 _data_sessions: dict[str, SessionData] = {}
+
+# Sessions used to live until the process died. Each one holds its own copy of
+# the seller's sales table, and the browser mints a fresh id on every logout,
+# account switch and new device, so a quiet server crept toward the 512MB limit
+# on dead sessions alone (Render OOM-killed it on 2 October 2026, mid "Confirm
+# & save"). Dropping an idle one loses nothing saved: _require_txns hydrates a
+# logged-in session from the account again on its next call. What is lost is
+# an upload that was never confirmed, hence an idle window, not a short TTL.
+_SESSION_IDLE_SECONDS = max(5, int(os.environ.get("SESSION_IDLE_MINUTES", "60") or 60)) * 60
+_SESSION_SWEEP_EVERY = 60.0
+_last_session_sweep = 0.0
+_sessions_lock = threading.Lock()
+
+
+def _sweep_sessions(now: float) -> None:
+    global _last_session_sweep
+    if now - _last_session_sweep < _SESSION_SWEEP_EVERY:
+        return
+    _last_session_sweep = now
+    cutoff = now - _SESSION_IDLE_SECONDS
+    stale = [sid for sid, s in list(_data_sessions.items()) if s.last_used < cutoff]
+    for sid in stale:
+        _data_sessions.pop(sid, None)
+    if stale:
+        memory.release()
 
 
 def get_session(session_id: str | None) -> SessionData:
     if not session_id:
         raise HTTPException(400, "Missing X-Session-Id header")
-    if session_id not in _data_sessions:
-        _data_sessions[session_id] = SessionData()
-    return _data_sessions[session_id]
+    now = time.time()
+    with _sessions_lock:
+        _sweep_sessions(now)
+        sess = _data_sessions.get(session_id)
+        if sess is None:
+            sess = _data_sessions[session_id] = SessionData()
+        sess.last_used = now
+    return sess
+
+
+def drop_session(session_id: str | None) -> None:
+    if not session_id:
+        return
+    with _sessions_lock:
+        gone = _data_sessions.pop(session_id, None)
+    if gone is not None:
+        memory.release()
 
 
 def bind_session(sess: SessionData, email: str | None) -> SessionData:
@@ -1316,8 +1358,12 @@ def dev_outbox(x_admin_token: str | None = Header(default=None)):
 
 
 @app.post("/api/logout")
-def logout(authorization: str | None = Header(default=None)):
+def logout(authorization: str | None = Header(default=None),
+           x_session_id: str | None = Header(default=None)):
     auth.logout((authorization or "").removeprefix("Bearer ").strip())
+    # The browser throws this id away after a logout (resetSessionId in
+    # smart.js), so nothing will ever ask for it again: free its data now.
+    drop_session(x_session_id)
     return {"ok": True}
 
 
@@ -3448,6 +3494,7 @@ async def smart_upload(kind: str, files: list[UploadFile] = File(...),
             parsed = _read_any_table(f.filename or "file", content)
         except Exception as e:
             raise HTTPException(400, f"Could not read {f.filename}: {e}")
+        del content   # parsed now; the raw bytes are a second copy of the file
         for label, df in parsed:
             if df.empty or len(df.columns) == 0:
                 continue
@@ -3455,7 +3502,16 @@ async def smart_upload(kind: str, files: list[UploadFile] = File(...),
             names.append(label)
     if not dfs:
         raise HTTPException(400, "No readable data found in the uploaded file(s).")
+    try:
+        return _stage_smart_upload(kind, email, sess, dfs, names)
+    finally:
+        # parsing a spreadsheet leaves glibc holding the high-water mark; give
+        # it back before the seller presses Confirm & save (backend/core/memory.py)
+        dfs = parsed = df = None  # noqa: F841 — drop the loop's references too
+        memory.release()
 
+
+def _stage_smart_upload(kind: str, email: str, sess, dfs: list, names: list) -> dict:
     if kind in ("sales", "supply_sales"):
         if len(dfs) == 1:
             combined = dfs[0]
@@ -3531,26 +3587,35 @@ def smart_map(body: SmartMapBody, x_session_id: str | None = Header(default=None
             raise HTTPException(400, str(e))
         if diag["rows_after"] == 0:
             raise HTTPException(400, "None of the rows had a readable date and amount, check your mapping.")
+        # MEMORY: this request used to hold the raw upload, the mapped frame,
+        # a re-downloaded copy of what it had just saved and a full insights
+        # pass all at once, and on the 512MB instance that is what got the
+        # server OOM-killed mid "Confirm & save" (2 October 2026). Now each
+        # copy is let go the moment the next step has what it needs.
+        files = sess.file_names.get(pending_key, "Supply sales upload" if is_supply else "Sales upload")
         if is_supply:
-            smart.save_supply_sales(email, txns,
-                                    {"files": sess.file_names.get(pending_key, "Supply sales upload")},
-                                    mode=body.mode)
-            combined = smart.load_supply_sales(email)
-            total = int(len(combined)) if combined is not None else diag["rows_after"]
+            smart.save_supply_sales(email, txns, {"files": files}, mode=body.mode, keep_in_memory=True)
+        else:
+            smart.save_sales(email, txns, {"files": files}, mode=body.mode, keep_in_memory=True)
+        # saved: the raw upload (every column, every cell a Python string) is
+        # dead weight from here on. Kept until now so a failed save can retry.
+        sess.raw_dfs.pop(pending_key, None)
+        del pending, txns
+        if is_supply:
             replenish.after_sales(email, "past sales uploaded")
         else:
-            smart.save_sales(email, txns,
-                             {"files": sess.file_names.get(pending_key, "Sales upload")},
-                             mode=body.mode)
             replenish.after_sales(email, "sales upload")
-            combined = smart.load_sales(email)
-            sess.txns_df = combined if combined is not None else txns
+            # served from memory (keep_in_memory above), not re-downloaded
+            sess.txns_df = smart.load_sales(email)
             sess.mapped_file_id = "smart_sales"
-            total = int(len(sess.txns_df)) if sess.txns_df is not None else diag["rows_after"]
-        sess.raw_dfs.pop(pending_key, None)
+        data = smart.data_status(email)
+        total = int((data.get(body.kind) or {}).get("rows") or diag["rows_after"])
+        memory.release()
+        # No "insights" here any more: the only caller (mapConfirm in
+        # smart.js) never read them, and the home screen it opens next builds
+        # them anyway, after this request's memory is gone.
         return {"ok": True, "kind": body.kind, "rows": total,
-                "added": diag["rows_after"], "mode": body.mode,
-                "data": smart.data_status(email), "insights": smart.build_insights(email)}
+                "added": diag["rows_after"], "mode": body.mode, "data": data}
     elif body.kind == "review":
         pending = sess.raw_dfs.get("smart_pending_review")
         if pending is None:
@@ -3569,13 +3634,15 @@ def smart_map(body: SmartMapBody, x_session_id: str | None = Header(default=None
             if tgt in df.columns and src != tgt:
                 df = df.drop(columns=[tgt])
         df = df.rename(columns=rename)
-        smart.save_review(email, df, {}, mode=body.mode)
+        added = int(len(df))
+        smart.save_review(email, df, {}, mode=body.mode, keep_in_memory=True)
         sess.raw_dfs.pop("smart_pending_review", None)
-        combined = smart.load_review(email)
-        total = int(len(combined)) if combined is not None else int(len(df))
+        del pending, df
+        data = smart.data_status(email)
+        total = int((data.get("review") or {}).get("rows") or added)
+        memory.release()
         return {"ok": True, "kind": "review", "rows": total,
-                "added": int(len(df)), "mode": body.mode,
-                "data": smart.data_status(email), "insights": smart.build_insights(email)}
+                "added": added, "mode": body.mode, "data": data}
     raise HTTPException(400, "kind must be 'sales' or 'review'")
 
 

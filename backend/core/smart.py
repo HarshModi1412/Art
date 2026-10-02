@@ -83,7 +83,8 @@ def set_product_type(email: str, product_type: str, label: str | None = None) ->
 # ---------------------------------------------------------
 # Data persistence + session hydration
 # ---------------------------------------------------------
-def save_sales(email: str, txns: pd.DataFrame, meta: dict, mode: str = "replace") -> None:
+def save_sales(email: str, txns: pd.DataFrame, meta: dict, mode: str = "replace",
+               keep_in_memory: bool = False) -> None:
     """Persist the account's Sales data.
 
     mode="replace" (default) overwrites; mode="append" adds the new rows on top
@@ -100,9 +101,16 @@ def save_sales(email: str, txns: pd.DataFrame, meta: dict, mode: str = "replace"
     st["sales"] = {**meta, "rows": int(len(txns)),
                    "updated_at": pd.Timestamp.now().isoformat(timespec="seconds")}
     user_store.set_key(email, "smart_data", st)
+    # keep_in_memory: the caller hands the frame over and never touches it
+    # again, so the next load_sales is served from memory instead of
+    # downloading and decrypting what was just uploaded. Not the default:
+    # several callers pass a live session frame they go on using.
+    if keep_in_memory:
+        user_store.remember_df(email, SALES_KEY, txns)
 
 
-def save_review(email: str, df: pd.DataFrame, meta: dict, mode: str = "replace") -> None:
+def save_review(email: str, df: pd.DataFrame, meta: dict, mode: str = "replace",
+                keep_in_memory: bool = False) -> None:
     """Persist the account's Review data.
 
     mode="replace" (default) overwrites; mode="append" stacks the new rows onto
@@ -118,6 +126,8 @@ def save_review(email: str, df: pd.DataFrame, meta: dict, mode: str = "replace")
     st["review"] = {**meta, "rows": int(len(df)),
                     "updated_at": pd.Timestamp.now().isoformat(timespec="seconds")}
     user_store.set_key(email, "smart_data", st)
+    if keep_in_memory:   # see save_sales
+        user_store.remember_df(email, REVIEW_KEY, df)
 
 
 def load_sales(email: str):
@@ -128,7 +138,8 @@ def load_review(email: str):
     return user_store.load_df(email, REVIEW_KEY)
 
 
-def save_supply_sales(email: str, txns: pd.DataFrame, meta: dict, mode: str = "replace") -> None:
+def save_supply_sales(email: str, txns: pd.DataFrame, meta: dict, mode: str = "replace",
+                      keep_in_memory: bool = False) -> None:
     """Persist the Supply module's own historical/"previous" sales set. Kept
     separate from the main Sales data — it feeds the supply-chain math only."""
     if mode == "append":
@@ -140,6 +151,8 @@ def save_supply_sales(email: str, txns: pd.DataFrame, meta: dict, mode: str = "r
     st["supply_sales"] = {**meta, "rows": int(len(txns)),
                           "updated_at": pd.Timestamp.now().isoformat(timespec="seconds")}
     user_store.set_key(email, "smart_data", st)
+    if keep_in_memory:   # see save_sales
+        user_store.remember_df(email, SUPPLY_SALES_KEY, txns)
 
 
 def load_supply_sales(email: str):

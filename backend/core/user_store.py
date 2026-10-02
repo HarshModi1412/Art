@@ -266,7 +266,11 @@ def save_df(email: str, key: str, df: pd.DataFrame) -> None:
     if db.SUPABASE_ENABLED:
         raw = pickle.dumps(df)
         enc = _fernet().encrypt(raw)
+        # the plaintext is not needed for the (slow) network call; on a 512MB
+        # box holding both through the upload is a dataset's worth of memory
+        del raw
         db.upload_blob(_blob_path(email, key), enc, content_type="application/octet-stream")
+        del enc
         _track_key(email, key, True)
         return
     df.to_pickle(_df_path(email, key))
@@ -303,6 +307,20 @@ def _df_cache_put(email: str, key: str, df):
     return df.copy()
 
 
+def remember_df(email: str, key: str, df) -> None:
+    """Seed the cache with a frame that was just saved, so the next load_df
+    does not download, decrypt and unpickle the very bytes we uploaded a
+    moment ago. Call it AFTER the write that changes cache.stamp(email) (the
+    smart_data row count / updated_at), or the entry is born stale. The cache
+    takes ownership: the caller must not mutate `df` afterwards."""
+    if df is None:
+        return
+    from backend.core import cache
+    if len(_DF_CACHE) >= _DF_CACHE_MAX:
+        _DF_CACHE.clear()
+    _DF_CACHE[(email, key)] = (cache.stamp(email), df)
+
+
 def load_df(email: str, key: str):
     cached = _df_cache_get(email, key)
     if cached is not None:
@@ -314,7 +332,10 @@ def load_df(email: str, key: str):
             return None
         try:
             raw = _fernet().decrypt(enc)
-            return _df_cache_put(email, key, pickle.loads(raw))
+            del enc
+            df = pickle.loads(raw)
+            del raw
+            return _df_cache_put(email, key, df)
         except Exception:
             return None
     path = _df_path(email, key)
