@@ -535,6 +535,24 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px s
    telling them to retry. None of these endpoints is idempotent. */
 .ins-failed.unsure { background: var(--surface-2); }
 .ins-failed.unsure b, .ins-failed.unsure svg { color: var(--muted); }
+/* "We missed 3 posts": one quiet line for drafts whose day went by, in place
+   of a stack of overdue cards that could no longer be posted. Information,
+   not a decision, so it has no buttons, only a dismiss. */
+.ap-missed {
+  display: flex; gap: 8px; align-items: flex-start;
+  background: var(--amber-soft, var(--surface-2)); border-radius: 10px;
+  padding: 10px 12px; margin: 0 0 10px; font-size: 0.78125rem; line-height: 1.5;
+  color: var(--text-2);
+}
+.ap-missed b { color: var(--amber); }
+.ap-missed svg { width: 15px; height: 15px; color: var(--amber); flex: none; margin-top: 2px; }
+.ap-missed span { flex: 1; min-width: 0; }
+.ap-missed-x {
+  flex: none; background: none; border: 0; color: var(--muted); cursor: pointer;
+  font-size: 1.1rem; line-height: 1; padding: 2px 4px; border-radius: 6px;
+  min-width: 28px; min-height: 28px;
+}
+.ap-missed-x:hover { color: var(--text); background: var(--surface-2); }
 
 /* ==========================================================
    AN UPLOAD BAR THAT IS TELLING THE TRUTH

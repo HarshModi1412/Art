@@ -3406,9 +3406,18 @@ def _home_fingerprint(email: str) -> str:
             ob = onboarding.fingerprint(email)
         except Exception:  # noqa: BLE001
             ob = None
+        # The panel now depends on the clock too: a draft turns into part of
+        # the "we missed N posts" line when its day (or the publisher's grace
+        # hours) passes, with no data changing. The hour makes that visible,
+        # and the dismissed-line key makes a dismiss stick across a reload.
+        try:
+            hour = localtime.now(email).strftime("%Y-%m-%d %H")
+        except Exception:  # noqa: BLE001
+            hour = ""
+        missed_seen = user_store.get_key(email, social.MISSED_SEEN_KEY, "")
         return json.dumps([posts, tasks, sorted((k, str(v)) for k, v in dec.items()),
                            ap.get("last_run_at"), social.get_settings(email).get("auto_plan_day"),
-                           pos, ob], default=str)
+                           pos, ob, hour, missed_seen], default=str)
     except Exception:  # noqa: BLE001 — a fingerprint failure only costs a 200
         return secrets.token_hex(4)
 
@@ -4012,6 +4021,13 @@ def smart_decision(insight_id: str, body: SmartDecisionBody,
                 "insights": smart.build_insights(email),
                 "history": smart.build_history(email),
                 "tasks": smart.get_tasks(email)}
+    if str(insight_id).startswith("missed_"):
+        # The "we missed N posts" line. Nothing to approve: any decision just
+        # puts it away until something new is missed (social._missed_notice).
+        social.dismiss_missed_notice(email, insight_id)
+        return {"ok": True, "download": False, "download_url": None,
+                "insights": smart.build_insights(email),
+                "history": smart.build_history(email)}
     if str(insight_id).startswith("autoplan_"):
         # The header card over an auto-planned week. Approve runs every one of
         # its posts through the same approve-and-make-ready path as the single
@@ -4019,9 +4035,12 @@ def smart_decision(insight_id: str, body: SmartDecisionBody,
         week = insight_id[len("autoplan_"):]
         results = []
         if body.decision == "approve":
+            now = localtime.now(email)
             for p in list(social._posts(email)):
+                # a post whose day has gone could not be sent; the panel shows
+                # it only in the "we missed N posts" line, so do not approve it
                 if (p.get("source") == "autoplan" and p.get("autoplan_week") == week
-                        and p.get("state") == "draft"):
+                        and p.get("state") == "draft" and not social.is_missed(p, now)):
                     results.append(_approve_post_ready(email, p["id"]))
         elif body.decision in ("disapprove", "cancel"):
             autoplan.cancel_week(email, week)
@@ -7932,7 +7951,8 @@ def social_reclean_video(body: SocialRecleanBody,
 def manager_desks(authorization: str | None = Header(default=None)):
     """Who is on the team and what each of them has waiting."""
     email = require_user(authorization)
-    cards = smart.build_insights(email)
+    # the "we missed N posts" line is information, not something waiting
+    cards = [c for c in smart.build_insights(email) if not c.get("notice")]
     return {"managers": list(personas.MANAGERS.values()),
             "desks": personas.desks(cards), "pending": len(cards)}
 

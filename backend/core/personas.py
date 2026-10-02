@@ -104,6 +104,7 @@ def assign(card: dict) -> str:
     if cid in BY_ID:
         return BY_ID[cid]
     for prefix, who in (("content_", "social"), ("post_", "social"), ("autoplan_", "social"),
+                        ("missed_", "social"),
                         ("po_", "supply"),
                         ("supplier_", "supply"), ("stock_", "operations")):
         if cid.startswith(prefix):
@@ -361,8 +362,17 @@ WRITERS = {
 }
 # Dynamic ids (one per social post, e.g. "post_a1b2c3") can't live in WRITERS
 # by exact match, so they're matched by prefix instead, checked in dress().
+def _missed_posts(card: dict) -> dict:
+    """The one-line "we missed N posts" notice. Not a decision, so no CTA:
+    the panel shows it as a line with a dismiss, never as a card to approve."""
+    return {"headline": card.get("title") or "We missed some posts",
+            "body": card.get("detail") or "", "why": card.get("detail") or "",
+            "cta": ""}
+
+
 PREFIX_WRITERS = [("post_", _social_post), ("content_", _social),
-                  ("autoplan_", _autoplan_week), ("po_", _purchase_order)]
+                  ("autoplan_", _autoplan_week), ("po_", _purchase_order),
+                  ("missed_", _missed_posts)]
 
 
 def dress(card: dict) -> dict:

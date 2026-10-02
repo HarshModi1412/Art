@@ -1968,6 +1968,66 @@ def get_post(email: str, post_id: str) -> dict | None:
 
 
 PENDING_WINDOW_DAYS = 7
+# How far back the "we missed N posts" line looks. Older drafts are not
+# mentioned at all: a line that keeps a month-old miss alive is just noise.
+MISSED_LOOKBACK_DAYS = 7
+MISSED_SEEN_KEY = "social_missed_dismissed"
+
+
+def is_missed(post: dict, now) -> bool:
+    """A draft whose moment has gone: planned for a day before today, or so
+    far past its time today that the publisher would refuse to post it late
+    (publisher.GRACE_HOURS). Approving one of these would not send it, so the
+    Approval panel does not offer it."""
+    from datetime import datetime, timedelta
+    from backend.core import publisher
+    try:
+        when = datetime.fromisoformat(str(post.get("scheduled_at") or "")[:19])
+    except ValueError:
+        return False
+    return when.date() < now.date() or when < now - timedelta(hours=publisher.GRACE_HOURS)
+
+
+def _missed_notice(email: str, missed: list[dict], now) -> list[dict]:
+    """ONE line for every draft that slipped past, instead of a card each.
+
+    A seller who opens the app on the 4th to a plan made on the 1st used to
+    find the 1st-3rd waiting as "Overdue" cards to approve, ahead of the posts
+    that can still go out. Approving them could not post them, and they buried
+    the ones that could. The id carries the newest miss and the count, so a
+    dismissed line stays dismissed until something new is missed."""
+    from datetime import datetime, timedelta
+    floor = (now - timedelta(days=MISSED_LOOKBACK_DAYS)).date()
+    dates = []
+    for p in missed:
+        try:
+            d = datetime.fromisoformat(str(p.get("scheduled_at") or "")[:19])
+        except ValueError:
+            continue
+        if d.date() >= floor:
+            dates.append(d)
+    if not dates:
+        return []
+    dates.sort()
+    n = len(dates)
+    nid = f"missed_{dates[-1].strftime('%Y%m%d%H%M')}_{n}"
+    if user_store.get_key((email or "").lower(), MISSED_SEEN_KEY, "") == nid:
+        return []
+    fmt = lambda d: d.strftime("%a %d %b").replace(" 0", " ")
+    span = fmt(dates[0]) if dates[0].date() == dates[-1].date() else f"{fmt(dates[0])} to {fmt(dates[-1])}"
+    return [{
+        "id": nid, "module": "social", "notice": True, "missed": n,
+        "title": f"We missed {n} post{'' if n == 1 else 's'}",
+        "detail": (f"Planned for {span} and never approved, so "
+                   f"{'it' if n == 1 else 'they'} did not go out. "
+                   "Everything below can still be posted."),
+        # leads the Social Media Manager's desk (dress_all sorts by count)
+        "count": 5000,
+    }]
+
+
+def dismiss_missed_notice(email: str, notice_id: str) -> None:
+    user_store.set_key((email or "").lower(), MISSED_SEEN_KEY, str(notice_id))
 
 
 def pending_insight_cards(email: str) -> list[dict]:
@@ -1979,9 +2039,11 @@ def pending_insight_cards(email: str) -> list[dict]:
     already uses (/api/social/upcoming), so a seller sees one consistent
     "what's coming up" window everywhere, not two different ones.
 
-    Overdue drafts (scheduled_at already in the past) are included too --
-    those are MORE urgent than a fresh one, not less; they just never got a
-    decision. Posts further out than the window are not orphaned: they're
+    Drafts whose day has gone (is_missed) are NOT cards: approving them could
+    not post them, and they buried the ones that can still go out. They become
+    one "We missed N posts" line at the top (_missed_notice). A draft from
+    earlier today that is still within the publisher's grace window stays a
+    card, marked overdue. Posts further out than the window are not orphaned: they're
     still fully approvable by opening them from the calendar, which is what
     "explain me complete logic" below documents."""
     from datetime import datetime, timedelta
@@ -1995,6 +2057,7 @@ def pending_insight_cards(email: str) -> list[dict]:
         can_draw = bool(studio.image_engines())
     except Exception:  # noqa: BLE001
         can_draw = False
+    missed = []
     for p in _posts(email):
         if p.get("state") != "draft":
             continue
@@ -2002,6 +2065,10 @@ def pending_insight_cards(email: str) -> list[dict]:
         try:
             when = datetime.fromisoformat(when_raw)
         except ValueError:
+            continue
+        # Its day has gone: one summary line, not a card to approve.
+        if is_missed(p, _now):
+            missed.append(p)
             continue
         # The weekly auto-plan runs on Saturday for the week after, so its
         # Sunday post is eight days out — past the usual window. Everything it
@@ -2039,7 +2106,7 @@ def pending_insight_cards(email: str) -> list[dict]:
             **_card_kind(p, can_draw),
         })
     cards.sort(key=lambda c: c["scheduled_at"])
-    return _autoplan_summary_cards(email, cards) + cards
+    return _missed_notice(email, missed, _now) + _autoplan_summary_cards(email, cards) + cards
 
 
 def _autoplan_summary_cards(email: str, cards: list[dict]) -> list[dict]:

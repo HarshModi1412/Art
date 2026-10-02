@@ -263,6 +263,12 @@ check("and says how many days were left", "still ahead" in b7["note"], b7["note"
 # =========================================================================
 print("\n== 5. the Approval panel: Approve / Details / Cancel ==")
 # =========================================================================
+# Read the panel on the Friday the week was planned. The week is a fixed
+# date, and once it is in the past its posts are, correctly, "missed": one
+# summary line, not cards (scripts/test_missed_posts.py covers that).
+from backend.core import localtime  # noqa: E402
+_real_now = localtime.now
+localtime.now = lambda email="": FRI
 cards = social.pending_insight_cards(e2)
 ids = [x["id"] for x in cards]
 check("a header card for the week", f"autoplan_{MON.isoformat()}" in ids, ids)
@@ -281,6 +287,7 @@ check("the week header is dressed by the Social Media Manager",
       head["manager"] == "social" and "planned" in head["headline"], head.get("headline"))
 soc = [x for x in dressed if x["manager"] == "social"]
 check("and leads its desk's cards", soc[0]["id"].startswith("autoplan_"), [x["id"] for x in soc][:3])
+localtime.now = _real_now
 
 # =========================================================================
 print("\n== 6. endpoints: settings, run now, approve, reel task, clip, schedule ==")

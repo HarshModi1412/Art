@@ -2739,7 +2739,7 @@ function runInBackground(id, { label, run, onDone, card } = {}) {
   clearFailure(id);
   animateCardOut(id);
   if (state.lastState) state.lastState.insights = insights.filter((x) => x.id !== id);
-  paintApprovalCount((((state.lastState || {}).insights) || []).filter((i) => !i.summary).length);
+  paintApprovalCount((((state.lastState || {}).insights) || []).filter(isDecision).length);
   _jobs.push({ id, label: label || "Working", run, card: keep, onDone, state: "waiting" });
   syncBulkBar();
   paintWorkStrip();
@@ -2754,7 +2754,7 @@ function runInBackground(id, { label, run, onDone, card } = {}) {
 function syncBulkBar() {
   const bar = document.querySelector(".ap-bulk");
   if (!bar) return;
-  const left = (((state.lastState || {}).insights) || []).filter((i) => !i.summary).length;
+  const left = (((state.lastState || {}).insights) || []).filter(isDecision).length;
   if (left < 2) { bar.remove(); return; }
   const all = $("apAll");
   if (all && !all.disabled) all.textContent = `✓ Approve all ${left}`;
@@ -2929,6 +2929,12 @@ function paintApprovalCount(n) {
 }
 
 // ---------- approvals ----------
+/* What the seller actually decides. The weekly plan's header card only
+   summarises posts already in the list, and the "we missed N posts" line is
+   information, not a question; counting either would make "Approve all 7"
+   agree to things that are not there. */
+function isDecision(i) { return !i.summary && !i.notice; }
+
 function renderApprovals(insights) {
   const list = $("approvalList");
   // Eleven places paint this panel, and any of them could be holding a list
@@ -2948,7 +2954,7 @@ function renderApprovals(insights) {
   }
   const hist = (state.lastState && state.lastState.history) || { approved: [], dismissed: [] };
   const decidedCount = (hist.approved || []).length + (hist.dismissed || []).length;
-  paintApprovalCount((insights || []).filter((i) => !i.summary).length);
+  paintApprovalCount((insights || []).filter(isDecision).length);
   if (!insights || !insights.length) {
     list.innerHTML = `<div class="ap-empty">${decidedCount ? "All caught up: nothing pending. Check <b>History</b> for what you've handled." : "No pending insights. Upload data or check back after new activity."}</div>`;
     return;
@@ -2961,7 +2967,7 @@ function renderApprovals(insights) {
      times to agree with all of them. The count is in the label so the tap is
      never ambiguous about how much it is agreeing to. The weekly plan's header
      card is not counted: its posts are already in the list. */
-  const actionable = insights.filter((i) => !i.summary);
+  const actionable = insights.filter(isDecision);
   const bulk = actionable.length > 1 ? `
     <div class="ap-bulk">
       <button class="btn approve sm" id="apAll">✓ Approve all ${actionable.length}</button>
@@ -2981,6 +2987,18 @@ function renderApprovals(insights) {
            <span>${esc(i.manager_remit || "")}</span>
          </div>` : "";
     lastMgr = i.manager || lastMgr;
+
+    /* Drafts whose day went by while nobody was looking. One line, not a
+       card each: they cannot be posted now, and as cards they sat on top of
+       the posts that still can. */
+    if (i.notice) {
+      return head + `
+      <div class="ap-missed" data-ins="${esc(i.id)}" role="note">
+        ${sic("alert")}
+        <span><b>${esc(i.headline || i.title)}.</b> ${esc(i.body || i.detail || "")}</span>
+        <button class="ap-missed-x" data-missed="${esc(i.id)}" aria-label="Dismiss this note">×</button>
+      </div>`;
+    }
 
     // The week the Social Media Manager planned on its own: what it found and
     // one decision for all of it, above the posts themselves.
@@ -3047,6 +3065,16 @@ function renderApprovals(insights) {
   list.querySelectorAll("[data-reject]").forEach((b) => b.onclick = () => decide(b.dataset.reject, "disapprove"));
   list.querySelectorAll("[data-cancel]").forEach((b) => b.onclick = () => decide(b.dataset.cancel, "cancel"));
   list.querySelectorAll("[data-details]").forEach((b) => b.onclick = () => openDetails(b.dataset.details));
+  list.querySelectorAll("[data-missed]").forEach((b) => b.onclick = () => {
+    const id = b.dataset.missed;
+    const row = b.closest(".ap-missed");
+    if (row) row.remove();
+    if (state.lastState) state.lastState.insights = (state.lastState.insights || []).filter((x) => x.id !== id);
+    // put away on the server too, so it does not come back on the next load;
+    // a failure only means it shows again, so it is not worth a toast
+    api(`/api/smart/insight/${encodeURIComponent(id)}/decision`,
+        { method: "POST", json: { decision: "disapprove" } }).catch(() => {});
+  });
   list.querySelectorAll("[data-apweek]").forEach((b) => b.onclick = () => {
     const card = insights.find((x) => x.id === b.dataset.apweek);
     if (card) approveWeek(card);
