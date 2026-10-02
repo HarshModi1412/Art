@@ -790,3 +790,34 @@ table.tbl thead th, th { letter-spacing: .03em; }
   .chart-card { padding: 16px 14px 10px; border-radius: 20px; }
   .chart-card h4 { font-size: .9375rem; }
 }
+
+/* ==========================================================================
+   POP-UP SPACING — one rule set for every dialog, sheet, drawer and card.
+   The column-mapping dialog read as "no padding": a wide preview table ran to
+   both edges of the content box, its first column sat on the border, and the
+   buttons and the error box were stacked against it with 10-14px between
+   them. Each pop-up had grown its own numbers (14px to 26px). This is the one
+   place they are set, after every other stylesheet that touches them.
+   ========================================================================== */
+.modal { padding: 28px 30px 30px; }
+.modal-head { margin-bottom: 14px; gap: 12px; }
+.modal-actions { margin-top: 22px; }
+.modal .err { margin-top: 16px; padding: 10px 14px; }
+.modal .table-scroll { margin: 16px 0; }
+/* the first and last column are not glued to the table's border. Wide
+   screens only: below 900px each row is a card (smart.css) and its first
+   cell is the card's title, which must line up with the lines under it. */
+@media (min-width: 901px) {
+  .modal .table-scroll th:first-child, .modal .table-scroll td:first-child { padding-left: 16px; }
+  .modal .table-scroll th:last-child,  .modal .table-scroll td:last-child  { padding-right: 16px; }
+}
+.drawer { padding: 24px 24px 28px; }
+.cgpt-card { padding: 26px 26px 24px; }
+.busy-box { padding: 16px 18px; }
+@media (max-width: 900px) {
+  .modal, .modal.wide { padding: 24px 22px calc(28px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 640px) {
+  .jr-body { padding: 20px 20px 8px; }
+  .jr-foot { padding-left: 20px; padding-right: 20px; }
+}
