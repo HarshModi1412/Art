@@ -829,6 +829,18 @@ def at_risk_customers(txns: pd.DataFrame, limit: int = 60) -> list[dict]:
         return []
     at_risk.sort(key=lambda r: float(r[idx["monetary"]] or 0), reverse=True)
     at_risk_ids = [r[idx["customer_id"]] for r in at_risk[:max(1, int(limit))]]
+    return customer_profiles(txns, at_risk_ids, by_id, idx, limit=limit)
+
+
+def customer_profiles(txns: pd.DataFrame, ids: list, by_id: dict, idx: dict,
+                      limit: int = 60) -> list[dict]:
+    """The marketing profile for each customer in `ids` (see at_risk_customers
+    for what is in one). `by_id` / `idx` are the RFM rows keyed by customer id
+    and the RFM column index, so callers that already ran RFM do not run it
+    twice."""
+    at_risk_ids = list(ids)
+    if not at_risk_ids:
+        return []
 
     df = txns
     overall_avg_amount = df.groupby("order_id")["amount"].sum().mean() if "order_id" in df.columns else df["amount"].mean()
@@ -902,9 +914,25 @@ def at_risk_customers(txns: pd.DataFrame, limit: int = 60) -> list[dict]:
             if len(names):
                 display_name = str(names.iloc[0]).strip() or None
 
+        # Contact details, newest first: a customer who changed number told the
+        # shop on their latest order, not their first.
+        phone = email_addr = ""
+        for col, attr in (("customer_phone", "phone"), ("customer_email", "email")):
+            if col in cust_txns.columns:
+                vals = cust_txns[col].dropna().astype(str).str.strip()
+                vals = vals[vals != ""]
+                if len(vals):
+                    if attr == "phone":
+                        phone = vals.iloc[-1]
+                    else:
+                        email_addr = vals.iloc[-1]
+
         profiles.append({
             "customer_id": str(cid),
             "customer_name": display_name,
+            "phone": phone,
+            "email": email_addr,
+            "segment": str(row[idx["segment"]]),
             "recency_days": int(row[idx["recency"]]),
             "frequency": frequency,
             "monetary": float(row[idx["monetary"]]),
@@ -923,3 +951,43 @@ def at_risk_customers(txns: pd.DataFrame, limit: int = 60) -> list[dict]:
     # handful we built, and costs nothing
     profiles.sort(key=lambda p: p["monetary"], reverse=True)
     return profiles[:limit]
+
+
+def campaign_audience(txns: pd.DataFrame, reason: str = "winback",
+                      limit: int = 150) -> list[dict]:
+    """Who a Marketing Campaign should reach, by why it is being sent.
+
+      winback  -- customers who have gone quiet: the At Risk segment, plus the
+                  Hibernating ones who last bought within a year (beyond that
+                  the shop is a stranger to them, and a discount reads as spam).
+      festival -- a festival offer is for the people most likely to buy:
+                  Champions and Loyal customers, anyone in the top fifth by
+                  spend, AND the At Risk group, because a festival is the most
+                  natural excuse there is to get back in touch.
+
+    Highest spend first, so if the list is capped it keeps the customers worth
+    the most."""
+    rfm_result = calculate_rfm(txns)
+    if not rfm_result.get("available"):
+        return []
+    cols = rfm_result["columns"]
+    rows = rfm_result["rows"]
+    idx = {c: i for i, c in enumerate(cols)}
+    by_id = {r[idx["customer_id"]]: r for r in rows}
+
+    def seg(r):
+        return r[idx["segment"]]
+
+    if reason == "festival":
+        spend = sorted((float(r[idx["monetary"]] or 0) for r in rows), reverse=True)
+        cutoff = spend[max(0, len(spend) // 5 - 1)] if spend else 0
+        chosen = [r for r in rows
+                  if seg(r) in ("Champions", "Loyal / Potential", "At Risk")
+                  or float(r[idx["monetary"]] or 0) >= cutoff]
+    else:
+        chosen = [r for r in rows
+                  if seg(r) == "At Risk"
+                  or (seg(r) == "Hibernating" and int(r[idx["recency"]]) <= 365)]
+    chosen.sort(key=lambda r: float(r[idx["monetary"]] or 0), reverse=True)
+    ids = [r[idx["customer_id"]] for r in chosen[:max(1, int(limit))]]
+    return customer_profiles(txns, ids, by_id, idx, limit=limit)

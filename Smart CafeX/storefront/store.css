@@ -578,6 +578,15 @@ html:not(.m-hscroll) .rail-nav { display: none; }
 .sum { display: grid; gap: 11px; margin-bottom: 20px; font-size: 14px; }
 .sum div { display: flex; justify-content: space-between; }
 .sum .tot { border-top: 1px solid var(--line); padding-top: 14px; font-family: var(--fh); font-size: 19px; font-weight: 700; }
+.sum .disc { color: #1f7a4d; font-weight: 600; }
+.coupon { margin: 0 0 18px; }
+.coupon-row { display: flex; gap: 8px; }
+.coupon-row input { flex: 1; min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: transparent; color: var(--ink); font: inherit; text-transform: uppercase; letter-spacing: .04em; }
+.coupon-err { color: #b3261e; margin-top: 7px; }
+.coupon.on { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px;
+  border: 1px dashed #1f7a4d; border-radius: 8px; color: #1f7a4d; font-size: 13px; }
+.coupon.on svg { width: 14px; height: 14px; vertical-align: -2px; }
 .ship-bar { height: 2px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 14px 0 8px; }
 .ship-bar i { display: block; height: 100%; background: var(--accent); transition: width .6s var(--ease-out); }
 

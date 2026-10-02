@@ -1,468 +1,441 @@
-# One Tap Manager: go-to-market plan, version 2
+# One Tap Manager: go-to-market plan, version 3
 
-Written 2 October 2026. Version 2 replaces version 1. It adds the new offer (take a shop from Instagram DMs and WhatsApp chats to a real brand), India alongside the US, and strict rules for choosing and scraping leads.
+Written 2 October 2026. Version 3 replaces versions 1 and 2.
 
-Built from `Product.md`, `Brand.md`, the code, Harsh's CV, the lead list `OneTapManager_500_Instagram_Leads_1.xlsx`, and the Hormozi playbooks named in brackets.
+**The premise (Harsh's call):** a website is not a moat. Anyone can sell a website. The moat is **a system that runs the business**: it knows every customer, notices who went quiet, writes the message, tracks stock, plans the posts, and gets smarter every month. So we lead with the system, not the website.
 
-Numbers marked **(assumption)** are planning guesses. Replace them with your own after week 1.
+- **The entry is a free Win-Back Session**, done on the seller's screen, with them.
+- **If they have order data**, the session shows the system working on their own shop. We sell the system.
+- **If they have no data**, the session shows them what they are missing. We sell the website as the way into the system, because a website captures every order.
+
+Built from `Product.md`, `Brand.md`, the code, Harsh's CV, the lead list, and the Hormozi playbooks named in brackets. Numbers marked **(assumption)** are planning guesses: replace them with your own after week 1.
 
 ---
 
 ## 1. The short answer
 
-**The offer changed, so the plan has two tracks:**
-
-| | **Launch track** | **Grow track** |
-|---|---|---|
-| Who | Sells through Instagram DMs and WhatsApp. No website | Already has a website (Shopify, Dukaan, WooCommerce, Wix) |
-| What they buy | "Turn my DM shop into a real brand": website, Instagram run properly, the app doing the daily work | "Tell me what to do each morning and do most of it": win-back, reorder, posts |
-| First win (activation point) | **First order on their own website** within 7 days | **First win-back message sent** on day 1 |
-| India | **Ready now. Lead with this.** | Ready |
-| US | **Not ready. Do not sell yet** (section 3) | Ready to test (the five-seller test) |
-
-**Where to spend October** (assumption, revisit on 1 November): about 70% of outreach on **India Launch**, 30% on **US Grow**.
-
-Why India Launch first:
-
-1. **The product is ready for it.** UPI, cash on delivery and Razorpay work. The "no website? build one" setup flow exists, in English and Hindi.
-2. **You already have 1,094 Indian leads.**
-3. **The calendar.** Diwali (around 8 November 2026) is the biggest selling season for clothing, jewellery and attar. "Get your website live before Diwali" is a real deadline, not fake urgency.
-4. **Hormozi Stage 0:** go where you can get proof fastest. [lesson03] Your evenings are India's evenings, and the language is yours.
-
-**The five moves:**
-
-1. Sort the lead list (done: `D:\Claude\leads\OTM_Leads_Triaged.xlsx`), add the missing data to the top 581, and score them with the rules in section 6.
-2. Sell a **Founding Brand Launch**: 20 spots, free website preview, setup done with you, 60 days free. [lesson03, lesson04, Fast Cash]
-3. Make the first win happen for every seller: a **launch sale** to their own followers and WhatsApp contacts in week 1. [Fast Cash, Retention]
-4. **Film the moment** each seller sees their website live. That is your best ad. [Marketing Machine, "upon delivery" ads]
-5. No paid ads until 3 sellers have real launch results. Then boost only posts that already beat your average. [lesson04, GOATed Ads]
-
----
-
-## 2. The new positioning
-
-### What you sell, in one line
-
-> **"From DM shop to real brand, before Diwali."**
-> Your own website with UPI and COD, an Instagram that posts itself, and an app that tracks stock and brings customers back. You approve, it does the work. No cut of your sales, ever.
-
-### The Value Equation [lesson04, copywriting-frameworks.md]
-
-| Lever | A DM and WhatsApp seller today | After the Brand Launch |
-|---|---|---|
-| **Dream outcome** | Wants to look like a "real brand" and sell more without living in DMs | Own website, own domain, steady posts, repeat customers |
-| **Perceived likelihood** | "Websites are for big brands. Mine would look bad" | You show them **their own** website preview before they say yes |
-| **Time delay** | Freelancer websites take weeks | Live in 1 session; first orders in week 1 |
-| **Effort and sacrifice** | Answering "price?" all day, writing captions, guessing stock | Shoppers see prices and order on the site. Posts are planned and scheduled. Stock goes down by itself |
-
-### What you can promise, and what you cannot
-
-Promise only what ships (`Product.md`, section 9, "Honest limits"). The `Brand.md` honesty rules apply to every DM and every ad.
-
-| Say this (it ships) | Never say this (not live yet) |
+| | What happens |
 |---|---|
-| Own website, 8 themes, cart, COD, UPI to your own UPI ID, Razorpay | "We run your WhatsApp" (WhatsApp sending is switched off) |
-| Instagram posts planned, captioned, scheduled and published | "We manage your ads" (ad figures are demo data until platform review) |
-| AI product photos and short clips, labelled "AI generated" | "Shoppers pay in one tap with UPI" (the "Open UPI app" link is not tested on real phones yet) |
-| Stock that goes down by itself, reorder alerts, purchase orders | Any sales figure that hasn't happened ("sellers get 40% more orders") |
-| Win-back messages written for you | "AI agents run your whole business" (say: "the app does most of the work, you approve") |
-| GST invoices and GSTR-1 file | |
+| **The hook** | "Customers who bought once and went quiet: let's find them and bring them back. Free, 20 minutes, on your screen, with me." |
+| **Branch A: has data** | Upload their orders. The app finds the quiet customers and writes a message for each. **They send the first 5 to 10 messages on WhatsApp while we're on the call.** Then we show what else the system does. Sell: the system |
+| **Branch B: no data** | Show a sample shop with data, labelled as a sample. Ask: "Could you list your 20 quiet customers right now?" Send 5 by hand from their chats. Sell: website + system, so every order is captured from now on |
+| **The moat** | The longer a shop uses the system, the more it knows about their customers and stock. Leaving means losing that |
+| **Markets** | India: both branches ready. US: Branch A ready to test; Branch B on hold (card checkout off) |
 
-When your new `Product.md` lands, update this table from it first.
+**Why this is a strong Hormozi entry offer:**
 
----
-
-## 3. Market and track readiness
-
-| Track | Status | What blocks it |
-|---|---|---|
-| **India Launch** | Ready | Test the UPI "Open app" link on GPay, PhonePe and Paytm before promoting it. Tell sellers UPI orders wait as "Payment to check" until they tap "Money received" |
-| **India Grow** | Ready | Shopify and Amazon connectors, or sales file upload |
-| **US Grow** | Ready to test | Shopify API version pinned to `2024-07` (`backend/core/commerce.py:124`). Win-back emails have no unsubscribe link yet, which US law requires. US sample shop still in rupees |
-| **US Launch** | **Not ready** | Card checkout is off: `"charge_ready": {"razorpay": True, "stripe": False, "paypal": False}` (`backend/core/store_payments.py:196`). Checkout asks for a "PIN code". **Do not sell US websites until a US shopper can pay by card end to end** |
-
-**Shared blockers** from version 1 still stand: `Brand.md` still says "Free forever" and "Max ₹999"; nothing renews automatically (a seller re-pays every 30 days); there is no per-account trial extension for founders.
+- It is the **"reveal the problem" free offer** (the chiropractor's posture check): it shows a problem only the paid product fixes. [lesson03]
+- It **gives a result before they buy**: replies, sometimes an order, during the call. That is the strongest proof there is. [Proof Checklist]
+- **Win-back is the cheapest growth play there is**: selling to people who already bought. It is Hormozi's own "Fast Cash" and "follow up" play, aimed at their shop. [Fast Cash, LTV #3]
+- **Branch B's realisation is a built-in close**: "The reason you can't do this is the reason you need it." [Closing, "Reason" close]
 
 ---
 
-## 4. The offer stack (India Launch)
+## 2. Why the system is the moat
 
-Hormozi's rule: have a free entry, a core offer, a premium anchor at 10x, and a downsell only for people who don't qualify. [LTV "Crazy 8", Pricing play #9]
+A website is a commodity. Shopify, Dukaan, Wix and any freelancer can build one. Competing on websites means competing on price.
 
-### Free: the Brand Score and website preview ("reveal the problem" [lesson03])
+A system that **acts on the data** every week is different:
 
-1. **Brand Score**: a quick score out of 10 on what a shopper sees: bio, link, highlights, price clarity, how hard it is to order, posting consistency. Send 3 fixes, free.
-2. **Website preview**: with their permission, you put 3 of their products into a preview shop **in your own demo account** and send them a screen recording or screenshots. Nothing goes live. Their real site gets built in their own account on the call.
+1. **It compounds.** Every order teaches it more about who buys what, when, and who is slipping away. Month 6 is more useful than month 1. [Retention: "provide on-going value to get on-going customers"]
+2. **It creates a weekly habit.** The weekly win-back list arrives; the seller approves and sends. Repeat purchases for them, renewals for us. [LTV #3, "add recurring"]
+3. **Leaving costs something.** Their customer history, stock levels and post plans live in it.
+4. **It is the "team" in your brand promise.** `Brand.md`: "You already have the team's knowledge in your data. You are missing the team."
 
-Showing them their own website beats any promise. [Proof Checklist: "get results before they buy"]
+So the free session sells the system. The website is only the pipe for sellers who don't have one yet.
 
-### Core: the Founding Brand Launch (first 20 sellers)
+---
 
-| Piece | What they get |
+## 3. What the app does today (so you only promise what ships)
+
+Checked in the code on 2 October 2026:
+
+| In the session you can say | Where it comes from |
 |---|---|
-| Website | Built with them on a 30 to 45 minute call: their products (up to 25), theme, UPI, COD, Razorpay if they have it, delivery, legal owner details |
-| Web address | `onetapmanager.com/<shop name>`, or help connecting their own domain |
-| Instagram fix | Bio rewritten, link to the website, "How to order" and "Reviews" highlights |
-| 2 weeks of posts | Planned and scheduled in the app, using their own product photos |
-| **Launch sale** | You plan their 5-day website launch to their followers and WhatsApp contacts (section 9). This is how they get first orders |
-| Check-ins | Day 3, day 7, day 30 |
-| Price | **Setup free. 60 days of Pro Max free.** Then ₹1,299 a month (or ₹700 for Pro) |
-| The exchange | Honest feedback, permission to film the "first look" at their site, and a short video review if it helped [lesson03, "the 4 Rs"] |
+| "Upload any order file; the app suggests which column is what" | `backend/core/mapper.py` needs at least a date and an amount; customer, phone and email are picked up when present |
+| "These are the customers slipping away, ranked by what they spent" | `analytics.at_risk_customers`: customers grouped by how recently and often they buy and how much they spend; the "At Risk" group, highest spenders first |
+| "Each message is written for that customer: their favourite item, and what usually goes with it" | Customer profiles feed the AI message writer (favourite item, cross-sell item) |
+| "Tap Send on WhatsApp: it opens WhatsApp with the message already typed" | `campaigns.py`: while WhatsApp sending is off, every customer with a phone gets a `wa.me` link with the message filled in |
+| "It counts who came back" | `winback_proof` logs every send and measures returns against it |
+| "It can prepare this every week for you to approve" | `winback_auto.py`: a weekly batch, skipping anyone messaged recently |
 
-**The cap of 20 is real.** Each launch takes about 2 hours of your time (assumption). 20 launches is about 40 hours over 4 weeks, around a full-time job. Say so. It is honest scarcity.
+**Never say:**
 
-### After the first 20: price ladder [lesson04; LTV: "nudge price 20% every 10 sales"]
+- "We message your customers automatically on WhatsApp." The seller taps send for each one.
+- Any result you have not seen. Say "let's see who replies," not "you'll get 5 orders."
+- "We run your ads." Ad figures are demo data until platform review.
 
-| Sellers | Setup fee | Free period |
-|---|---|---|
-| 1 to 20 | ₹0 | 60 days |
-| 21 to 30 | ₹1,999 | 30 days |
-| 31 to 40 | ₹2,499 | 30 days |
-| 41+ | ₹2,999, and keep raising until sales drop noticeably | 7-day trial |
+**What a seller needs for Branch A (assumption, check after 10 sessions):** at least about 40 customers over 3+ months, with a name or phone for each. With fewer, the "slipping away" group is too small to be convincing. Treat it as Branch B with some data.
 
-### Premium anchor: Brand Partner (cap: 3 sellers)
+**Test before your first call:**
 
-**₹14,999 a month.** You run it with them each month: a 45-minute numbers review, festival campaigns planned for them, weekly posts approved for them, a product photo plan. About 10x the core offer. [Pricing play #9] Even if few buy it, it makes the core offer feel easy. **Only offer it if you would be happy to do it.** Hormozi: "if you feel stressed when people buy it, keep raising the price."
-
-### Add-ons (cross-sell [LTV #4])
-
-- AI credit packs (₹299, ₹749, ₹1,999), already in the app
-- Annual Pro Max: ₹12,990 (two months free). Cash up front, and fewer people leave. [Retention #6, Pricing play #5]
-
-### Downsell (only for people who do not qualify for the core)
-
-Self-serve: the 7-day trial, no setup help. Never offer this to a qualified seller. [LTV #7]
-
-### US Grow offer (unchanged from version 1)
-
-Free 15-minute "Shop Leak Audit", setup done with you, 60 days free, $10 a month locked for life, capped at 20. Later, test "Pro with an analyst" at about $99 a month.
+- Upload a real **Shiprocket** export, a **Razorpay** payments export, a **Meesho** order report, a **Dukaan** export and a **Shopify** export. Confirm each maps and produces a win-back list. Indian DM sellers often have one of the first three even without a website.
+- Tap "Send on WhatsApp" on a phone and confirm the message arrives typed.
+- Check that an AI message is generated for a real-looking customer row.
 
 ---
 
-## 5. Your lead list: what is wrong with it, and what I did
+## 4. The offer stack
 
-### What the scrape gives you, and what it misses
+### Free entry: the Win-Back Session (20 to 30 minutes, on their screen)
 
-`OneTapManager_500_Instagram_Leads_1.xlsx` has 500 primary leads plus 594 buffer leads, found through seller hashtags.
+> "Let's find the customers who bought from you and went quiet, and bring a few back today. Free, on your screen, with me. You send the first messages while we're on the call."
 
-| Problem | Evidence | Why it matters |
+### Core product: the One Tap system
+
+What they buy is **the system**: the weekly win-back list, stock and reorder alerts, the Instagram planner, sales analytics, GST invoices (India). Founding sellers (first 20 per market):
+
+| | India | US |
 |---|---|---|
-| No follower count, bio, link in bio, email or phone | The "Read me" tab says enrichment hit the Apify monthly limit | You cannot tell **Launch** sellers (no website) from **Grow** sellers (has a website). That is now the most important field |
-| Weak activity signal | 272 of the primary 500 were seen in only 1 post. Median top-post likes: 6. The 594 buffer leads were all seen in 1 post, median 1 like | Many are tiny or inactive |
-| No last-post date | | You may DM shops that stopped selling months ago |
-| Off-target accounts mixed in | 51 wholesalers ("suratsareewholesaler", "kurtiwholesaler", names with "wholesale"); home bakers and chocolatiers; candles, pottery, resin art | Wholesalers sell to resellers, not shoppers. Food is perishable and local. Both need different offers |
+| Free period | 60 days | 60 days |
+| Then (locked for life) | ₹1,299 a month (Pro Max) or ₹700 (Pro) | $12.99 (Pro Max) or $10 (Pro) |
+| Annual option | ₹12,990 a year (2 months free) [Pricing play #5, Retention #6] | $129 a year |
+| The exchange | Honest feedback, permission to share results, a short video if it helped [lesson03, "the 4 Rs"] | Same |
 
-### What I built: `D:\Claude\leads\OTM_Leads_Triaged.xlsx`
+### Branch B add-on: the website, sold as the way into the system
 
-All 1,094 leads, sorted, with a rough pre-score based on the data you have (niche, posts seen, likes, name, location):
+Never pitch it as "a website". Pitch it as: **"Your website is how the system sees every order."**
 
-| Tier | Count | What to do |
-|---|---|---|
-| **A** | 168 (153 from your primary list) | Enrich first. DM personally this week |
-| **B** | 413 | Enrich, re-score, DM after A |
-| **C** | 462 | Skip for now. Most are tiny or inactive |
-| **Park: wholesale** | 51 | Different business. Hold for a later offer |
+| Branch B sellers | Website setup (done with you, about 2 hours) |
+|---|---|
+| 1 to 10 | Free (they become your proof that the system works for DM shops) |
+| 11 to 20 | ₹1,999 |
+| 21+ | ₹2,999, then raise about 20% every 10 sales until sales drop [LTV: "nudge the price 20% every 10 sales"] |
 
-The sheet also has:
+Setup includes a **5-day launch sale** to their followers and WhatsApp contacts. It brings first orders, and every order fills the system with data (section 9).
 
-- **Empty columns to fill**, ready for enrichment (orange headers)
-- **CRM columns** (green): DM dates, reply, preview, call, signup, first website order, paid, their exact words, and a Status dropdown
-- **"Scoring rules"** tab with the full scoring below
+### Premium anchor: Analyst on call (cap: 3 per market)
 
-The pre-score is a rough first sort. **The final score needs the enriched data.** Do not treat a pre-score A as a qualified lead until you have opened the profile.
+A monthly 45-minute numbers review with you, festival and holiday campaigns planned for them, and the weekly win-back reviewed before it goes out. **India ₹14,999 a month, US $149 a month**, about 10x the core price. [Pricing play #9] Mention it once on every call. It makes the core offer feel easy. Only keep it if you are happy when someone buys it.
 
-Keep the `leads` folder out of git. It holds other people's data.
+### Downsell (only for people who don't qualify)
+
+Self-serve 7-day trial, no session follow-up. Never offer it to a qualified seller. [LTV #7]
+
+### Quarterly add-on (later)
+
+"Festival Win-Back, done for you": you plan and write a Diwali or Black Friday win-back campaign for them. Sold to existing customers once a quarter. [Fast Cash, "run them every 90 days"]
 
 ---
 
-## 6. Lead rules: who to contact, and how to scrape
+## 5. The Win-Back Session, step by step
+
+Hormozi's selling structure: understand what they want, put it next to their options, help them reach a real decision. [Closing, "Power"]
+
+**The day before**, send:
+
+> "Looking forward to it! Before we talk, find any file with your past orders: Shopify / Dukaan / Instamojo export, Shiprocket or courier report, Razorpay payments, Meesho orders, an Excel sheet or Google Form. If orders only live in WhatsApp, that's fine too, we'll work with that. You'll upload it yourself; I never handle your customers' data."
+
+### 0:00 Frame (1 minute)
+
+> "Plan: a couple of questions, then we find your quiet customers and you send a few messages. At the end you decide if you want the app to do this every week. Fair?"
+
+### 1:00 Discovery (4 minutes): write down their exact words
+
+1. "Roughly how many customers have bought from you, ever?"
+2. "When a regular stops buying, what happens?"
+3. "Who bought from you last Diwali [US: last Black Friday]? Have you messaged them this year?"
+4. "Where do your orders get recorded?"
+5. "If you could bring back 1 in 10 of your old customers this month, what would that mean?" [lesson04, "magic question"]
+
+### 5:00 Find the data (3 minutes)
+
+They open their file and upload it on their own screen. The app suggests the column mapping; they confirm it. **This decides the branch.**
+
+### Branch A: they have data (15 minutes)
+
+1. **Open Today.** Point at the win-back card: "[X] customers who used to buy are slipping away. Together they spent [₹Y]." Use their real numbers only.
+2. **Open the list.** Scroll it with them: names they recognise, last bought, favourite item. Let them react. ("Oh, Priya used to order every month!")
+3. **Show one written message.** Read it out. Let them edit the tone.
+4. **They send 5 to 10 now.** They tap "Send on WhatsApp" for each, on their phone. **This is the activation moment.** [Retention #1]
+5. **While waiting for replies, show two more things**, briefly:
+   - best sellers and what is running low (stock, reorder);
+   - "Every week this list builds itself. You approve, you send."
+6. **Check WhatsApp.** If someone already replied, stop and enjoy it with them. It sells better than anything you can say.
+
+### Branch B: no usable data (15 minutes)
+
+1. **Show the sample shop**, clearly labelled: "This is a sample shop, not real customers." Load the app's sample data and open Today: the win-back card, the list, a written message, the low-stock alert.
+2. **The question:**
+   > "This shop can see exactly who went quiet. Could you list your 20 quiet customers right now?"
+   Let the silence work.
+3. **Win-back by hand.** "Let's do 5 anyway." Open their WhatsApp, scroll to people who bought 2 to 6 months ago, and write a short personal message together. They send it.
+4. **The realisation** [Closing, "Reason" close]:
+   > "That took 10 minutes for 5 people. You have maybe [200] past customers. The reason you can't do this for all of them is that your orders live in chats, where no system can see them. The fix is simple: take orders on your own site. Every order then lands in the system, and in a month or two it can do what you saw in the sample shop, every week, by itself."
+5. **Offer:** website + system, with the launch sale to fill it fast.
+6. **US Branch B:** card checkout is not live yet. Say so honestly, offer the 5-by-hand win-back as a gift, and put them on a "tell me when it's ready" list.
+
+### 25:00 Close (3 minutes)
+
+- "On a scale of 1 to 10, how useful was that?" If under 10: "What would make it a 10?" [Closing, "1 to 10"]
+- Anything that isn't yes: "What's your main concern?" [Closing]
+- Mention Analyst on call once, as the anchor. Then confirm the founding offer.
+- Once they say yes, **stop selling.** [Closing, rule 26]
+
+### After yes
+
+- **Branch A:** switch on the weekly win-back. Book a 10-minute day-4 check-in: "How many replied? Any orders?"
+- **Branch B:** book the website setup session within 72 hours. [Lead Nurture] Pick the launch-sale date.
+
+**With permission, record the session.** The "before" (no idea who went quiet), the "during" (sending), and the "after" (replies, orders) make a complete customer-journey ad. [Marketing Machine, "lifecycle ads"]
+
+---
+
+## 6. Who to contact: lead rules for version 3
+
+Version 3 changes what "a good lead" means. We no longer want sellers *without* websites. We want **sellers with past customers worth winning back.** The link in bio now predicts the **branch**, not whether to contact them.
 
 ### Hard excludes (never contact)
 
-- Not a product seller: services, salons, makeup artists, agencies, coaches, quote or meme pages
-- Private account, or no post in the last 45 days
-- Under 300 followers (no audience; a launch sale would get no orders)
-- Over 150,000 followers (has a team or an agency)
-- Only reposts other brands' photos (catalogue reseller or dropshipper)
-- Bio says "wholesale only", "MOQ" or "resellers welcome" (move to the wholesale tab)
-- Anyone who has told you "not interested" (keep a do-not-contact list forever)
+- Not a product seller: services, salons, makeup artists, agencies, coaches, meme pages
+- Private, or no post in 45 days
+- Under 300 followers, or over 150,000 followers
+- **Selling for under 6 months** (not enough past customers to win back)
+- Wholesale only, "MOQ" or "resellers welcome" (parked for a later offer)
+- Anyone who said "not interested" (keep a do-not-contact list forever)
 
-### The final score (100 points)
+### Final score (100 points, after enrichment)
 
 | Group | Signal | Points |
 |---|---|---|
-| **Fit (35)** | Core niche: clothing, jewellery, fragrance | 15 (beauty 10, lifestyle 6, food 2) |
-| | 1,000 to 50,000 followers | 15 (300 to 1,000 or 50k to 150k: 7) |
+| **Fit (30)** | Core niche: clothing, jewellery, fragrance (beauty 10, lifestyle 6, food 2) | 15 |
+| | 1,000 to 50,000 followers (300 to 1,000 or 50k to 150k: 7) | 10 |
 | | Business account with a shop category | 5 |
-| **Pain (30)** | **Launch:** no website; link is wa.me, Linktree, Google Form, Meesho, or empty | 15 |
-| | **Grow:** Shopify, WooCommerce, Wix, Dukaan, Instamojo or own domain | 10 |
-| | Bio says "DM to order", "WhatsApp to order" or "COD available" | 10 |
-| | 3+ "price?", "pp", "rate?" or "dm" comments across the last 12 posts | 5 |
-| **Activity (25)** | 8+ posts in the last 30 days (4 to 7: 5 points) | 10 |
-| | Posted a reel in the last 30 days | 5 |
+| **Past customers (35): the new core** | Selling 12+ months (first post a year ago, or 150+ posts); 6 to 12 months: 5 | 10 |
+| | "Reviews", "feedback" or "customer love" highlight, or "ordered again" / "repeat customer" in posts | 10 |
+| | Ships pan-India / US-wide, or offers COD (a courier export probably exists) | 5 |
+| | 3+ "price?", "pp" or "available?" comments across the last 12 posts (live demand) | 10 |
+| **Activity (25)** | 8+ posts in the last 30 days (4 to 7: 5) | 10 |
+| | Reel in the last 30 days | 5 |
 | | Average 5+ comments on the last 12 posts | 5 |
 | | Replies to customers in comments | 5 |
 | **Reach (10)** | Public business email or phone | 5 |
-| | Has a "reviews", "feedback" or "customer love" highlight | 5 |
+| | Bio in a language you can write naturally (English, Hindi, Hinglish) | 5 |
 
-**Tiers:** A is 70+ (make the preview before you DM). B is 50 to 69 (DM, offer the preview). C is under 50 (follow and engage only; re-score in 30 days).
+**Tiers:** A is 70+ (DM this week). B is 50 to 69 (DM after A). C is under 50 (follow and engage; re-score in 30 days).
 
-**Red flags (drop one tier):** engagement under 0.3% with 10,000+ followers (bought followers); the same photos on many accounts (catalogue reseller).
+**Red flags (drop a tier):** engagement under 0.3% with 10,000+ followers (bought followers); the same photos on many accounts (catalogue reseller).
 
-**The best single signal for the Launch track:** lots of "price?" comments plus "DM to order" in the bio. That seller is drowning in DMs and is your perfect customer.
+### Predict the branch from the link in bio
+
+| Link | Likely branch | Why |
+|---|---|---|
+| Shopify, WooCommerce, Wix, Dukaan, Instamojo, own domain | **A** | Orders are exportable |
+| Meesho, Amazon, Flipkart | **A** (marketplace report) | Order reports exist, but often without customer phones. Check on the call |
+| `wa.me`, WhatsApp number, Linktree, Google Form, nothing | **B, or A if they use Shiprocket or Razorpay** | Ask before the call |
+
+**Week 1 priority: likely-A leads first.** A shows the system working on real data during the call, which is the fastest proof. [lesson03] Mix in B leads from week 1 so you learn both scripts.
 
 ### What to scrape for every lead
 
-| Field | Why |
-|---|---|
-| Followers, following, total posts | Size band and red flags |
-| Business account (Y/N) and business category | Confirms a shop |
-| Bio text | "DM to order", "COD", "WhatsApp", "wholesale", city, language |
-| **Link in bio (external URL)** | **Decides the track** |
-| Last 12 posts: date, likes, comments, reel or not | Activity, engagement rate |
-| Public email and phone | Second channel, only after they reply on Instagram |
-| Highlight titles | "Reviews" means existing customers and proof |
-| Comments on the last 12 posts (optional, costs more) | Count price questions |
-| Location or city | India or US, regional language |
+Followers, following, total posts, **first post date**, business account and category, **bio text**, **link in bio**, last 12 posts (date, likes, comments, reel or not), **highlight titles**, public email and phone, location. Optional (costs more): comments on the last 12 posts, to count price questions and "ordered again" mentions.
 
-**Sort the link into a type:**
+### Better sources than broad hashtags
 
-| Link contains | Type | Track |
-|---|---|---|
-| nothing, `wa.me`, `api.whatsapp.com` | WhatsApp only | Launch |
-| `linktr.ee`, `bio.link`, `beacons.ai` | Link page | Launch (open it to check) |
-| `forms.gle`, `docs.google.com/forms` | Order form | Launch |
-| `meesho.com`, `amazon.in`, `flipkart.com` | Marketplace only | Launch (they rent, don't own) |
-| `mydukaan.io`, `dukaan.app`, `instamojo` | Light store | Grow, or upgrade to Launch |
-| `myshopify.com` or the page loads `cdn.shopify.com` | Shopify | Grow |
-| `wp-content` and `woocommerce` in the page | WooCommerce | Grow |
-| `wixsite.com` or `wixstatic` | Wix | Grow |
-
-### How to scrape
-
-1. **Enrich what you have first.** Run Apify's Instagram Profile Scraper on the 581 A and B handles before scraping anything new. It returns followers, bio, external URL, business category and recent posts. Doing A and B first saves credits.
-2. **Then scrape new leads with better sources than broad hashtags:**
-   - **Intent hashtags** (they name the pain): `#dmtoorder`, `#dmforprice`, `#dmfororders`, `#whatsappfororders`, `#codavailable`, `#cashondelivery`, `#shippingallindia`, `#freeshippingindia`
-   - **Niche plus city** (local, real shops): `#suratkurtis`, `#jaipurijewellery`, `#bangaloreboutique`, `#hyderabadboutique`, `#mumbaiboutique`, `#lucknowchikankari`, `#attarlucknow`
-   - **Lookalikes:** take your 10 best-fit sellers and collect the "suggested accounts" and the accounts that follow them. Fit sellers cluster.
-   - **US:** `#boutiqueowner`, `#shopsmall`, `#handmadejewelry`, `#jewelrybusiness`, `#indieperfume`, `#perfumeoil`, then keep only accounts with a Shopify link and a US location
-3. **Search bios, not just hashtags.** Keyword search for "DM to order", "COD available", "WhatsApp for orders" finds exactly the Launch seller.
-4. **Every 30 days:** re-scrape active leads (last post date, followers), remove duplicates by handle, and never re-add anyone on the do-not-contact list.
+- **Repeat-customer signals:** `#happycustomer`, `#customerreview`, `#customerlove`, `#repeatcustomer`, `#thankyouforshopping`, `#feedbackfriday`. Sellers who post reviews **have customers to win back.**
+- **Shipping and COD signals (India):** `#codavailable`, `#shippingallindia`, `#panindiadelivery`, `#cashondelivery`
+- **Niche plus city:** `#suratkurtis`, `#jaipurijewellery`, `#bangaloreboutique`, `#lucknowchikankari`, `#attarlucknow`
+- **Lookalikes:** the "suggested accounts" and followers of your 10 best-fit sellers
+- **US:** `#boutiqueowner`, `#shopsmall`, `#handmadejewelry`, `#indieperfume`, plus a Shopify link and a US location
+- **Bio search:** "DM to order", "COD available", "worldwide shipping", "since 2019"
 
 ### Data rules
 
-- Business accounts and public business data only. No personal accounts.
-- Store only what you need for outreach. Delete a seller's data when they ask (India's DPDP Act, and good manners).
-- Scraping is against Instagram's terms. Never scrape while logged in with your own or the brand's Instagram account. Use the scraper's own sessions so your selling account is never at risk.
+- Business accounts and public business data only.
+- Keep only what outreach needs. Delete a seller's data when asked (India's DPDP Act).
+- Scraping is against Instagram's terms. Never scrape while logged in with your own or the brand's account.
+- **The seller always uploads their customers' data themselves, into their own account.** Never collect customer files by DM or email.
+
+### Your current list
+
+`D:\Claude\leads\OTM_Leads_Triaged_v3.xlsx` holds all 1,094 leads with a rough pre-score: **168 A, 413 B, 462 C, 51 wholesale parked.** Its columns match version 3: likely branch, where orders are recorded, and session results (messages sent, replies, orders, weekly win-back on). It replaces `OTM_Leads_Triaged.xlsx`. The pre-score comes from weak scrape data. Enrich the 581 A and B leads first (Apify Instagram Profile Scraper), then re-score with the table above.
 
 ---
 
-## 7. Outreach for the Launch track (India)
+## 7. Outreach scripts
 
 ### Channels, in order
 
-| Rank | Channel | Notes |
-|---|---|---|
-| 1 | **Instagram DM** to scored A and B leads | Engage first. 30 a day, rising slowly |
-| 2 | **Warm network** (family, school friends in Gujarat, Great Lakes alumni, colleagues) | "Do you know a shop owner who sells on Instagram?" Introductions convert best [lesson03] |
-| 3 | **In person, weekends** | Bengaluru boutiques: show a preview on your phone. In-person proof beats virtual [Proof Checklist] |
-| 4 | **WhatsApp** | **Only after they reply** on Instagram or share their number. Cold WhatsApp pitches get reported, and reported numbers get banned |
-| 5 | Organic content | Section 10 |
+1. **Instagram DM** to scored leads: engage first, 30 a day rising slowly (India); 15 a day (US)
+2. **Warm network:** "Do you know a shop owner who sells on Instagram?" [lesson03]
+3. **In person, weekends:** Bengaluru boutiques; run the session on their phone at the counter [Proof Checklist: in person beats virtual]
+4. **WhatsApp:** only after they reply on Instagram or share their number
+5. **Cold email (US, week 2+):** separate sending domain, postal address and opt-out line in every email
 
 ### Step 0: engage before you DM
 
-Follow, like 2 or 3 posts, leave one real comment about a product. DM a day or two later.
+Follow, like 2 or 3 posts, one real comment about a product. DM a day or two later.
 
-### DM 1: the preview offer (English)
+### DM 1: the win-back offer (English)
 
 > Hi [Name], the [specific product] in your last post is lovely.
 >
-> Quick question: do your orders still come only through DMs and WhatsApp?
+> Quick question: when a customer buys once and goes quiet, does anyone message them?
 >
-> I built an app that gives small shops their own website (UPI and COD), keeps Instagram posting and tracks stock. I'm setting up 20 shops for free before Diwali. Can I make a free preview of your website with 3 of your products? Only you see it. Nothing goes live without your OK.
+> I built an app that finds those customers and writes the message to bring each one back. I'm doing free 20-minute win-back sessions for 20 shops before Diwali: on your screen, with me, and you send the first messages while we're on the call. Want one?
 
 ### DM 1 (Hinglish)
 
 > Hi [Name], aapka [product] bahut sundar hai.
 >
-> Ek sawaal: orders abhi sirf DM aur WhatsApp pe aate hain?
+> Ek sawaal: jo customer ek baar khareed ke wapas nahi aata, use koi message karta hai?
 >
-> Maine ek app banaya hai jo chhote shops ko apni website deta hai (UPI aur COD ke saath), Instagram posts schedule karta hai aur stock track karta hai. Diwali se pehle 20 shops free mein set up kar raha hoon. Kya main aapke 3 products ke saath aapki website ka free preview bana doon? Sirf aap dekhenge, aapke OK ke bina kuch live nahi hoga.
+> Maine ek app banaya hai jo aise customers dhoondta hai aur har ek ke liye wapas bulane ka message likh deta hai. Diwali se pehle 20 shops ke saath free win-back session kar raha hoon: aapki screen pe, mere saath, 20 minute. Call pe hi aap pehle messages bhej denge. Karna hai?
 
-### Short opener (for busy accounts)
+### The festival opener (from mid-October)
 
-> Hi [Name], love the [product]. How many "price?" messages do you answer in a day?
+> India: "Hi [Name], [compliment]. Quick question: the customers who bought from you last Diwali, has anyone messaged them this year?"
+>
+> US: "Hi [Name], [compliment]. Quick one: the people who bought from you last Black Friday, has anyone messaged them this year?"
 
-If they reply, send the middle and last paragraph of DM 1.
+If they reply, send the last paragraph of DM 1.
+
+### When they say yes: the branch question
+
+> "Amazing. Where do your orders get recorded? Shopify / Dukaan, Shiprocket, Razorpay, Meesho, an Excel sheet, or mostly WhatsApp? Any of those works. [Today 8 pm] or [tomorrow 7 pm]?"
+
+Book inside 72 hours. Reply to every message within minutes during your evening window. [Lead Nurture: 78% of customers buy from whoever responds first]
 
 ### Rules for every DM
 
-- The first line is about them, never about you.
+- The first line is about them. Your day job goes in the **second** line, never the first.
 - No link in DM 1. Under 70 words. One question.
-- Use their language. If their captions are in Hindi or Hinglish, write in Hinglish.
-- Never paste the same message twice. Instagram limits accounts that do.
+- Write in their language. Never paste the same message twice.
+- Never claim a result you haven't seen.
 
 ### Follow-ups (only if no reply)
 
-- **Day 3:** "Hi [Name], bumping this in case it got buried. Happy to send the preview, no strings."
-- **Day 7 (give value, no ask):** one specific Brand Score tip. Example: "Small tip: put your price in the first line of each caption. It cuts 'price?' DMs and people who see a price are more likely to order."
-- **Day 14 (last):** "Last message from me. If the timing's wrong, no problem at all. If you ever want the free website preview, just reply 'preview'."
+- **Day 3:** "Hi [Name], bumping this in case it got buried. Happy to do the session any evening this week."
+- **Day 7 (value, no ask):** "Small tip that works: message a customer 60 to 90 days after their last order, about the exact thing they bought, not a generic discount. After about 4 to 5 months most have moved on."
+- **Day 14 (last):** "Last message from me. If you ever want to find your quiet customers, just reply 'session'."
 
-### When they say yes
-
-1. Ask for 3 product photos with names and prices (or take them from their posts, with their OK).
-2. Build the preview in your demo account. Send a 30-second screen recording **within 24 hours** (speed wins the sale [Lead Nurture]).
-3. "Want to make this your real website? 30 minutes on a call, I'll set it up with you. [Today 8 pm] or [tomorrow 7 pm]?" Book inside 72 hours. [Lead Nurture]
-
-### Replies to common pushback [Closing]
+### Replies to pushback [Closing]
 
 | They say | You say |
 |---|---|
-| "Price kitna hai?" | "Founding shops: setup free, 60 days free. After that ₹1,299 a month, cancel any time. We never take a cut of your sales." |
-| "Instagram pe hi sell ho jata hai" | "Totally, and the website doesn't replace that. It means a shopper who sees your post can see the price and order at 2 am without waiting for you to reply. Your Instagram is the shop window; the website is the counter." |
-| "Mere paas Meesho / Dukaan hai" | "Great, keep it. On Meesho the customer belongs to Meesho. Your own site keeps the customer, so you can bring them back next festival." |
-| "Time nahi hai" | "That's exactly why. It's one 30-minute call, I do most of the setup with you, and after that the app does the daily work." [Closing, "Reason" close] |
-| "Sochke batati hoon" | "Of course. What's your main concern? Price, time, or whether customers will actually use it?" [Closing, "Main concern"] |
-| "Fraud toh nahi?" | "Fair question. Payments go straight to your own UPI ID or Razorpay account, never through us. No card needed to start, and you can delete everything from the Account tab." |
-| "Not interested" | "No problem at all, thank you for replying. All the best for the festive season." Mark do-not-contact. |
-
-### Grow-track DMs (India sellers with a website, and US)
-
-Use the version 1 "Shop Leak Audit" DM, adapted: "do you know how many customers bought once and never came back?" Free 15-minute audit, setup done with you, 60 days free.
+| "Mere paas data nahi hai" / "I don't track orders" | "Perfect, that's exactly what the session will show you. Bring your WhatsApp; we'll do it by hand and you'll see what you're missing." |
+| "Price kitna hai?" / "How much?" | "The session is free, full stop. If you want the app to do it every week: 60 days free for founding shops, then ₹1,299 a month [US: $12.99], locked for life. No cut of your sales, ever." |
+| "I already message my customers" | "Love that. The session will show who you missed. Most shops miss the ones who bought once." |
+| "Time nahi hai" / "No time" | "That's exactly why. 20 minutes, and after that the list builds itself every week." [Closing, "Reason" close] |
+| "Is my data safe?" | "You upload it yourself, into your own account. I never see the file. You can delete everything from the Account tab any time." |
+| "Sochke batati hoon" / "Let me think" | "Of course. What's your main concern?" [Closing] |
+| "Not interested" | "No problem at all, thank you for replying. All the best for the season." Mark do-not-contact |
 
 ---
 
-## 8. The Launch call (30 to 45 minutes)
+## 8. Your resume: how to use it
 
-Hormozi's structure: understand what they want, put it next to their options, help them make a real decision. [Closing, "Power"]
+> "By day I'm a supply chain analyst. I analyze inventory for a $4 billion portfolio and spot which customers are slipping away. I built One Tap Manager to do that for small shops."
 
-**Before the call**, send: "Looking forward to it. Keep 10 to 25 product photos with names and prices handy, and your UPI ID. Payments always go straight to you."
-
-**1. Frame (1 minute)**
-> "Plan: a few questions about the shop, then we build your website together. At the end you decide if you want it live. Fair?"
-
-**2. Discovery (5 minutes)** Write down their exact words. They become your ad copy.
-1. "How do orders come in today? How many DMs a day?"
-2. "How much time goes on 'price?' and 'available?' messages?"
-3. "How do you keep track of who bought and what's in stock?"
-4. "What do COD returns cost you?"
-5. "When you picture your shop as a real brand, what does it look like?"
-6. "If this worked perfectly, what would change for you by Diwali?" [lesson04, "magic question"]
-
-**3. Build part 1 together (20 minutes)**
-They sign up on their own phone. The app's setup runs: shop name, products, look, web address, WhatsApp, owner details, delivery, preview, publish, UPI. Let them drive. Help only when stuck, and note every stall.
-
-**4. The reveal (2 minutes): film this, with permission**
-Their site goes live. Ask: "Can I record your reaction for 10 seconds?" These reactions are the strongest ads you will ever have. [Marketing Machine, "upon delivery" ads; GOATed Ads, demonstration]
-
-**5. The launch sale plan (5 minutes)** Section 9. Pick the launch date together.
-
-**6. Close**
-- "On a scale of 1 to 10, how happy are you with it?" Anything under 10: "What would make it a 10?" [Closing, "1 to 10"]
-- Mention the Brand Partner tier once, as the anchor. Then confirm the founding offer.
-- Once they say yes, stop selling. [Closing, rule 26]
+Customer grouping and forecasting are literally on your CV. Use the line in your bio, the **second** line of a DM, at the start of each session, and in the "analyst" ad. Before naming Lam Research in public, check its outside-work and social media policy and your IP clause. Until then, say "a semiconductor company".
 
 ---
 
-## 9. Making the first win happen: the seller's launch sale
+## 9. After the session: making the first win stick
 
-The Launch track's activation point is **the first order on their own website**. Sellers who reach the first win stay. [Retention #1 and #2] So the setup includes a 5-day **launch sale**: a Fast Cash play for *their* shop, aimed at their warmest audience: followers, past WhatsApp buyers, and saved contacts. [Fast Cash]
+### Branch A activation [Retention #1 and #2]
 
-| Day | Instagram | WhatsApp (from their own phone) |
+| When | What |
+|---|---|
+| On the call | 5 to 10 win-back messages sent (activation 1) |
+| Day 1 to 3 | They send the rest of the list |
+| Day 4 check-in | "How many replied? Any orders?" Capture screenshots, with permission |
+| Day 7 | Weekly win-back switched on (activation 2: the habit) |
+| Day 14 | Ask for a 60-second video: before, doubt, after [Marketing Machine, 6-point script] |
+| Day 45 to 60 | Convert to paid before the free period ends. Show them the "brought back" numbers from `winback_proof` |
+
+### Branch B activation: the launch sale fills the system
+
+The website goes live in the setup session. Then a 5-day launch sale to their warmest audience brings first orders, and **every order becomes data for the system.** [Fast Cash, aimed at their followers]
+
+| Day | Instagram | WhatsApp (their own phone) |
 |---|---|---|
-| -2 | Story: "Something big is coming on [day]" | Status: same teaser |
-| 0 | Post plus Story with link sticker: "We're live! Order on our website. Launch offer: [free shipping / a gift] for the first 50 orders" | Broadcast list to past buyers, plus Status with the link |
-| 1 | Story: a product from the site, with its price | Reply to every question with the product link, not a long chat |
-| 2 | Story: "[X] orders already, thank you!" (real number only) | Status update |
-| 4 | Story: "Last day for the launch offer" | Final broadcast |
-| 5 | Story: "Launch offer closed. Thank you!" | |
+| -2 | Story: "Something big is coming" | Status teaser |
+| 0 | Post + Story link sticker: "We're live! Launch offer for the first 50 orders" | Broadcast to past buyers, Status with link |
+| 1 | Story: a product with its price and link | Answer every "price?" with the product link |
+| 2 | Story: "[X] orders already" (real number only) | Status update |
+| 4 | Story: "Last day of the launch offer" | Final broadcast |
 
-From the next day on, every "price?" comment and DM gets the product link. That habit is what moves the shop from chat to brand.
+From then on every "price?" gets the product link, so every order lands in the system. **Day 30 to 60: their first real win-back from their own data.** That is the "aha" from the session, now with their own customers, and the moment they decide to pay.
 
-**You capture:** the order count, screenshots of the first orders (with the seller's OK), and a 60-second video on day 7 using the 6-point script: before (feeling), before (numbers), doubt, why they tried anyway, after (numbers), after (feeling). [Marketing Machine]
+**Risk:** Branch B sellers reach the "aha" late. Keep them engaged until then with the Instagram planner and stock tracking, and a check-in on day 7, 21 and 45.
 
 ---
 
-## 10. Content and ads
+## 10. Market readiness
 
-### Organic content (start now, 3 to 4 posts a week, both markets)
+| | Branch A | Branch B |
+|---|---|---|
+| **India** | Ready. Test real Shiprocket, Razorpay, Meesho and Dukaan exports first | Ready. Test UPI checkout on GPay, PhonePe and Paytm |
+| **US** | Ready to test. Shopify API pinned to `2024-07` (`backend/core/commerce.py:124`). Win-back **email** has no unsubscribe link yet (required by US law), so US sellers use the WhatsApp links or export the list to Shopify Email / Klaviyo | **On hold.** Card checkout off: `"charge_ready": {"razorpay": True, "stripe": False, "paypal": False}` (`backend/core/store_payments.py:196`). Checkout asks for a "PIN code" |
 
-- **India: Hinglish reels.** US: the 12 existing US scripts, run Grow-track posts first.
-- **Weekly series: "DM shop to brand"**, one real seller per episode (with permission): their Instagram before, the website after, the first orders.
-- **Build in public:** "0 / 20 shops live before Diwali," with a daily Story counter. With zero customers, honesty is your proof.
+**October split (assumption):** about 70% India, 30% US. Diwali (around 8 November) and Black Friday (27 November) both make the win-back timely: "message last year's festive buyers."
+
+**Shared fixes still open:** `Brand.md` still says "Free forever" and "Max ₹999"; nothing renews automatically; no per-account trial extension for 60-day founders.
+
+---
+
+## 11. Content and ads
+
+### Organic (start now, 3 to 4 posts a week)
+
+- **Series: "Win-back Wednesday."** Each week, one real session (with permission): how many quiet customers, how many messages sent, how many replied. Real numbers only, labelled with the shop's permission.
+- **Build in public:** "20 shops, 20 win-back sessions before Diwali," with a daily Story counter.
+- **India** in Hinglish; **US** from the existing US scripts, win-back posts first.
 - Every Friday, check 3-second hold, shares and saves. Make more of the top one. [Hooks, 70-20-10]
 
-### Hooks to test [Hooks, GOATed Ads]
+### Hooks [Hooks, GOATed Ads]
 
 | # | Hook | Type | Market |
 |---|---|---|---|
-| 1 | "Still taking orders in DMs? Watch this before Diwali." | Command | IN |
-| 2 | "'Price?' comment ka reply dete dete din nikal jaata hai?" | Question | IN |
-| 3 | "Your Instagram is your shop window. Your DMs are not a checkout." | Statement | IN, US |
-| 4 | "I turned this saree shop's DMs into a website in 30 minutes." (real seller only) | Story | IN |
-| 5 | "Watch her see her own website for the first time." (real seller only) | Story | IN |
-| 6 | "Meesho pe customer Meesho ka hota hai. Apni website pe, aapka." | Statement | IN |
-| 7 | "3 things every Instagram shop needs before Diwali." | List | IN |
-| 8 | "By day I analyze a $4 billion inventory. At night I build websites for small shops." | Story | IN, US |
-| 9 | "How many of your customers bought once and never came back?" | Question | US, IN Grow |
-| 10 | "Shopify owners: your next orders might already be in your customer list." | Label | US |
+| 1 | "Who bought from you last Diwali? Has anyone messaged them this year?" | Question | IN |
+| 2 | "Your next 10 orders are sitting in your old chats." | Statement | IN |
+| 3 | "Naye customers ke peeche bhaagne se pehle, purane customers ko yaad karo." | Command | IN |
+| 4 | "The cheapest customer you'll ever get is one who already bought from you." | Statement | IN, US |
+| 5 | "Stop posting more. Message the people who already bought." | Command | IN, US |
+| 6 | "She sent 10 messages on our call. Watch what happened." (real session only) | Story | IN, US |
+| 7 | "Could you name your 20 customers who stopped buying? Most shop owners can't." | Question | IN, US |
+| 8 | "By day I analyze a $4 billion inventory. At night I find small shops' lost customers." | Story | IN, US |
+| 9 | "Who bought from you last Black Friday? Have you messaged them this year?" | Question | US |
+| 10 | "A website doesn't run your shop. This does." | Statement | IN, US |
 
 ### Four ad scripts (30 to 45 seconds) [GOATed Ads: hook, meat, CTA]
 
-**Ad A: "DM chaos to website" (demonstration, India)**
-- Hook: "Still taking orders in DMs?"
-- Meat: screen recording of a phone full of "price?" DMs, then the app's setup, then a live shop site with prices, cart, UPI and COD (sample shop, tagged SAMPLE SHOP DATA). "30 minutes. Your products, your prices, your UPI. Shoppers order while you sleep."
-- CTA: "I'm setting up 20 shops free before Diwali. Comment WEBSITE and I'll send you the details."
+**Ad A: "The live win-back" (demonstration, once you have one)**
+- Hook: hook 6.
+- Meat: screen recording from a real session (with permission): the list of quiet customers, the written message, the seller tapping send, a customer's reply.
+- CTA: "I'm doing free win-back sessions for 20 shops before Diwali. Comment WINBACK."
 
-**Ad B: "The reveal" (testimonial, once you have one)**
-- Hook: the seller's real reaction to her site going live.
-- Meat: her 20-second story: before (DMs all day), after (orders on the site).
-- CTA: same as Ad A. Expect this to beat everything else. [Marketing Machine: 40 of Hormozi's top 50 ads didn't feature him]
+**Ad B: "Last Diwali's buyers" (problem-aware, India, 15 October to 5 November)**
+- Hook: hook 1.
+- Meat: "Most shops spend Diwali chasing new followers. Your easiest orders are from people who already bought from you. One Tap Manager finds them, writes a message for each one, and you send it from your own WhatsApp." Sample shop, tagged SAMPLE SHOP DATA.
+- CTA: "Comment WINBACK and I'll do it with you, free."
 
-**Ad C: "Brand Score" (education, India and US)**
-- Hook: "3 things every Instagram shop needs before [Diwali / Black Friday]."
-- Meat: price in the first line of the caption; a "How to order" highlight; a link that takes the shopper to a product page, not a chat. Show each on a real profile.
-- CTA: "Comment SCORE and I'll score your shop for free."
+**Ad C: "What's in your chats" (for DM sellers, education)**
+- Hook: hook 7.
+- Meat: "If your orders live in WhatsApp, no app can see who went quiet. Here's what a shop that records every order sees each morning..." (sample shop). "The fix isn't working harder. It's getting every order into one place."
+- CTA: "Comment SESSION and I'll show you on your own shop."
 
 **Ad D: "The analyst" (story, both markets)**
 - Hook: hook 8.
-- Meat: "Big brands have a team. Small shops have one person doing six jobs. So I built One Tap Manager: your own website, posts that go out on time, stock that tracks itself. You approve, it does the work. No cut of your sales."
-- CTA: India: "Comment WEBSITE." US: "Comment AUDIT."
+- Meat: "Big brands have a team watching every customer and every stock level. A small shop has one person doing six jobs. One Tap Manager is that team: it finds who's slipping away, writes the message, tracks stock and plans the posts. You approve. No cut of your sales."
+- CTA: India: "Comment WINBACK." US: "Comment AUDIT."
 
-Set up the comment-keyword auto-DM (WEBSITE, SCORE, AUDIT) and test each one from a second account before posting.
-
-### Where to post
-
-- **India:** Instagram Reels and Stories, WhatsApp Status (yours), YouTube Shorts (re-upload the same reels).
-- **US:** Instagram Reels and Facebook Reels.
-- Facebook groups and Reddit: helpful answers only, with "Disclosure: I built One Tap Manager."
+Set up the auto-DM for every comment keyword (WINBACK, SESSION, AUDIT) and test each from a second account before posting.
 
 ### What to boost, and when
 
-**Do not spend until all four are true:** (1) 3 real seller launches you can show; (2) the auto-DM works; (3) a post beat your average on 3-second hold and shares; (4) the seller can sign up and pay without you.
+**No spend until all four are true:** (1) 3 real sessions with replies or orders you can show; (2) the auto-DM works; (3) a post beat your average on 3-second hold and shares; (4) a seller can sign up and pay without you.
 
 | Rule | India | US |
 |---|---|---|
-| What | Only your top 10% organic posts. Good organic posts make good ads [Marketing Machine] | Same |
-| Where | Meta Ads Manager, objective Messages or Leads (not the Boost button, which optimizes for likes) | Same |
-| Audience, first | People who engaged with your profile in the last 90 days [GOATed Ads: warmest first] | Same |
-| Audience, then | India, women 22 to 45, interests: online boutique, ethnic wear, jewellery, small business, Meesho, Instagram shopping | US, 25 to 54: Shopify, boutique, small business owner |
+| What | Only top 10% organic posts [Marketing Machine] | Same |
+| Where | Meta Ads Manager, objective Messages or Leads | Same |
+| Audience first | Profile engagers, last 90 days [GOATed Ads: warmest first] | Same |
+| Audience then | Women 22 to 45; online boutique, ethnic wear, jewellery, small business | 25 to 54; Shopify, boutique, small business owner |
 | Daily budget (assumption) | ₹300 to ₹500 per ad, 3 to 5 days | $5 to $10 per ad, 3 to 5 days |
 | First-month cap (assumption) | ₹10,000 | $150 |
-| Kill rule | No preview requests after ₹1,500: change the hook | No audits after $50: change the hook |
-| Scale rule | An ad bringing sellers in for less than one month's subscription: keep it, write 10 new hooks for it [GOATed Ads] | Same |
-
----
-
-## 11. Your resume: how to use it
-
-Your day job is your credibility: you analyze inventory for a $4B+ portfolio, and you know reorder points, demand forecasting and customer grouping by how recently and often they buy. For a shop owner, say it plainly:
-
-> "By day I'm a supply chain analyst at a semiconductor company. I built One Tap Manager so small shops get the same kind of help without a team."
-
-Put it in your bio, in the **second** line of a DM (never the first), at the start of calls, and in ad D.
-
-Before naming Lam Research in public, check its outside-work and social media policy and your contract's IP clause. Until then, say "a semiconductor company".
+| Kill rule | No session requests after ₹1,500: change the hook | No requests after $50: change the hook |
 
 ---
 
@@ -472,82 +445,81 @@ Today is Friday 2 October 2026.
 
 ### This weekend (3 and 4 October): get ready
 
-- [ ] Enrich the 168 Tier A leads (Apify Profile Scraper), fill the orange columns, apply the final score. Then do the 413 Tier B leads
-- [ ] Make a **demo account** for previews with a good theme ready
-- [ ] Test UPI checkout on GPay, PhonePe and Paytm with a real ₹1 order
+- [ ] Test real exports: Shiprocket, Razorpay, Meesho, Dukaan, Shopify (section 3)
+- [ ] Test "Send on WhatsApp" links on your phone, and an AI message for a real-looking customer
+- [ ] Test UPI checkout on GPay, PhonePe and Paytm (Branch B)
 - [ ] Per-account trial extension for 60-day founders (needs a small code change)
-- [ ] Update `Brand.md` pricing and plan names (Free and Max ₹999 are gone)
-- [ ] Instagram profile: bio with your analyst line, link, "How it works" highlight, auto-DM for WEBSITE
+- [ ] Enrich the 168 Tier A leads; re-score; mark the likely branch
+- [ ] Instagram bio with your analyst line; auto-DM for WINBACK
+- [ ] Update `Brand.md` pricing
 - [ ] Check your employer's outside-work policy
-- [ ] US: run the Shopify precondition check from the five-seller test
 
-### Week 1 (5 to 11 October): first previews
+### Week 1 (5 to 11 October): first sessions
 
-- [ ] India: 30 personal DMs a day from Tier A, plus 10 warm-network messages a day
-- [ ] US: 15 Grow-track DMs a day
-- [ ] Send every preview within 24 hours; book calls inside 72 hours, 7 to 10 pm IST
-- [ ] Goal: 10 previews sent, 4 websites live, 2 launch sales started
-- [ ] Post the build-in-public "0 / 20" reel; daily Story counter
+- [ ] India: 30 DMs a day, likely-A leads first, plus 10 warm-network messages a day
+- [ ] US: 15 DMs a day to Shopify sellers
+- [ ] Goal: 10 sessions, 6 of them Branch A with messages sent on the call
+- [ ] Start the "20 sessions before Diwali" Story counter
 
-### Week 2 (12 to 18 October): first wins
+### Week 2 (12 to 18 October): first proof
 
 - [ ] DMs up to 40 a day; start Tier B
-- [ ] Run launch sales with week-1 sellers; capture first orders and reactions
-- [ ] Fix the single biggest stall you saw on calls. Only that one [lesson03]
-- [ ] Goal: 8 websites live, 3 with a first website order
+- [ ] Day-4 check-ins: count replies and orders; screenshots with permission
+- [ ] First Branch B website setups and launch sales
+- [ ] Fix the single biggest stall you saw in sessions. Only that one [lesson03]
+- [ ] Goal: 15 sessions total, 3 sellers with a customer reply or order from win-back
 
-### Weeks 3 and 4 (19 October to 1 November): Diwali push
+### Weeks 3 and 4 (19 October to 1 November): the Diwali win-back
 
-- [ ] "Last chance to go live before Diwali" is a real deadline: use it in DMs and Stories
-- [ ] First "DM shop to brand" episode with a real seller
-- [ ] If the 4 conditions in section 10 are true, start boosting at ₹300 to ₹500 a day
-- [ ] Goal: 15 to 20 websites live, 3 video testimonials
+- [ ] Every Branch A seller: a "last Diwali's buyers" win-back in the week of 19 October
+- [ ] Run Ad B organically; boost if the four conditions are met
+- [ ] First "Win-back Wednesday" with a real seller
+- [ ] Goal: 20 founding sellers, 3 video testimonials
 
-### Diwali week (around 2 to 8 November)
+### November
 
-- [ ] Help every founding seller run a Diwali offer to past buyers through their website. Their results are your best proof
-- [ ] Close the founding 20. Move to the ₹1,999 setup tier
-
-### November, US: Black Friday (27 November) and Cyber Monday (30 November)
-
-- [ ] US Grow sellers: help each one send a pre-Black Friday win-back to past buyers
+- [ ] India: support sellers through Diwali week; close the founding 20
+- [ ] US: "last Black Friday's buyers" win-back for every US seller, week of 9 November
+- [ ] Day 45 to 60: convert founders to paid. Lead with their own "brought back" numbers
 
 ### Day 30 decision (about 1 November)
 
 | Result | Next step |
 |---|---|
-| 60%+ of launched sellers got a first website order in 7 days, and at least 1 pays at full price | Keep the Launch track. Raise the setup fee. Start the Brand Partner test |
-| Sellers stalled during setup | Fix setup before recruiting more |
-| Sites went live but got no orders | The launch sale or the audience is wrong. Raise the minimum follower count and look at what the sellers with orders did differently |
-| No one will pay after 60 days | Ask "what would it take?" and change the offer, not just the price [lesson04] |
+| 60%+ of Branch A sellers got a reply or order within 7 days, and half came back unprompted on day 2 or 3 | The entry works. Raise volume; test Analyst on call |
+| Sessions stalled on file upload | Fix mapping for the formats that failed before booking more |
+| Branch A sellers sent messages but got no replies | Look at the message, the timing, and which customers were picked. Ask sellers "what would make customers reply?" [lesson04, "what would it take?"] |
+| Branch B sellers don't buy the website | Sharpen the realisation step, or put them on the list and focus on A |
 
 ---
 
 ## 13. Numbers to track every Friday
 
-| Number | Launch (India), by week 4 (assumption) | Grow (US), by week 4 (assumption) |
+| Number | India, by week 4 (assumption) | US, by week 4 (assumption) |
 |---|---|---|
 | DMs sent | 700 | 300 |
 | Reply rate | 15%+ | 10%+ |
-| Previews or audits sent | 60 | 15 |
-| Calls held | 30 | 10 |
-| Live websites, or first win-back sent | 20 | 5 |
-| **First website order within 7 days** | 60% of live sites | n/a |
-| Returned on day 2 or 3 unprompted | 50% | 50% |
-| Paying after the free period | measured from day 60 | at least 1 |
+| Sessions held | 30 | 10 |
+| Share that were Branch A | 50%+ | 80%+ |
+| Messages sent on the call (average) | 8 | 8 |
+| Sellers with a customer reply within 24 hours | 60% of Branch A | 50% |
+| Orders from win-back within 7 days | track it; no target yet | same |
+| Weekly win-back switched on | 70% of Branch A | 70% |
+| Branch B websites live, and first website order | 8, 5 | on hold |
+| Founding sellers | 20 | 5 to 10 |
 | Video testimonials | 3+ | 1+ |
 
 ---
 
 ## 14. Sources used
 
-- `$100M Playbook: Fast Cash` (limited offers to the warmest audience: used for the seller's launch sale)
-- `$100M Playbook: Lifetime Value` (Crazy 8: cross-sell, downsell only to the unqualified, price nudges)
+- `$100M Playbook: Fast Cash` (selling to the warmest audience: the win-back, the launch sale, festival campaigns)
+- `$100M Playbook: Lifetime Value` (Crazy 8: recurring, follow-up reactivation, downsell only to the unqualified, price nudges)
 - `$100M Playbook: Pricing` (play #9 ultra high ticket anchor, play #5 annual billing)
-- `$100M Playbook: Marketing Machine` ("upon delivery" reaction ads, 6-point testimonial script)
+- `$100M Playbook: Retention` (activation points, onboarding, on-going value)
+- `$100M Playbook: Closing` (power, the "Reason", "Main concern" and "1 to 10" closes, rules of closing)
 - `$100M Playbook: Proof Checklist` (results before they buy, in person over virtual)
-- `$100M Playbook: Hooks` and `GOATed Ads` (hook types, awareness levels, hooks x meat x CTA)
-- `$100M Playbook: Closing` (main concern, reason, 1 to 10, rules of closing)
+- `$100M Playbook: Marketing Machine` (lifecycle ads, 6-point testimonial script)
+- `$100M Playbook: Hooks` and `GOATed Ads` (hook types, hooks x meat x CTA, warmest audiences first)
 - `$100M Playbook: Lead Nurture` (speed to contact, calls inside 72 hours)
-- `$100M Playbook: Retention` (activation point, onboarding, annual plans)
-- Acquisition Scaling Course, lesson 03 (Improvise) and lesson 04 (Monetize)
+- Acquisition Scaling Course, lesson 03 (Improvise: the "reveal the problem" free offer) and lesson 04 (Monetize: proof over promise, "what would it take?")

@@ -87,7 +87,7 @@ check("nor later that same day",
 nxt = winback_auto.due(EMAIL, datetime(2026, 9, 21, 10, 1))   # the next Monday
 check("but the next week's does", nxt is not None, str(nxt))
 
-section("It runs once a week, not once a tick")
+section("It runs every second week, not once a tick")
 
 user_store.set_key(EMAIL, winback_auto.STATE_KEY,
                    {"armed_at": datetime(2026, 9, 1, 9, 0).isoformat(timespec="seconds")})
@@ -100,8 +100,13 @@ check("not due again fifteen minutes later",
       winback_auto.due(EMAIL, datetime(2026, 9, 14, 10, 45)) is None)
 check("not due again that evening",
       winback_auto.due(EMAIL, datetime(2026, 9, 14, 21, 0)) is None)
-check("due again the following week",
-      winback_auto.due(EMAIL, datetime(2026, 9, 21, 10, 5)) is not None)
+check("NOT due the following week: campaigns are fortnightly",
+      winback_auto.due(EMAIL, datetime(2026, 9, 21, 10, 5)) is None)
+check("due again the week after that",
+      winback_auto.due(EMAIL, datetime(2026, 9, 28, 10, 5)) is not None)
+nt = winback_auto.next_trigger(datetime(2026, 9, 15, 9, 0), 0, 10, first)
+check("and the next run shown to the seller skips the off week",
+      nt.date().isoformat() == "2026-09-28", nt.isoformat())
 # A server that slept through three Mondays must wake up and run ONCE, against
 # today's data — not three times, and not against a customer list from three
 # weeks ago, half of whom may have bought since.
@@ -141,85 +146,117 @@ check("a recent one still does", "C3" in cooling)
 check("the cooldown is long enough to matter", winback_auto.COOLDOWN_DAYS >= 30,
       f"{winback_auto.COOLDOWN_DAYS} days")
 
-section("Building the batch")
+section("A run builds a campaign draft, through the campaign engine")
 
-from backend.core import analytics, smart  # noqa: E402
+from backend.core import analytics, campaign_engine, smart  # noqa: E402
 
-_pool = []
-analytics.at_risk_cached = lambda email, txns: list(_pool)
-smart.load_sales = lambda email, copy=True: ["one row"]   # just needs to be non-empty
+analytics.at_risk_cached = lambda email, txns, limit=60: []
 
-user_store.set_key(EMAIL, winback_proof.CAMPAIGNS_KEY, [])
-_pool = []
-b = winback_auto.build_batch(EMAIL)
-check("nobody at risk means no batch", not b["ok"])
-check("and it says why", "quiet" in b["reason"], b["reason"])
+_drafts = {}
+_built = []
+_sent = []
+_audience = {"n": 8, "unreachable": 0, "fail": ""}
+_festival = {"next": None}
 
-_pool = [customer(1)]
-b = winback_auto.build_batch(EMAIL)
-check("one lonely customer is not a campaign", not b["ok"], b["reason"])
-check("and it says so rather than showing a card", "not worth" in b["reason"], b["reason"])
 
-_pool = [customer(i) for i in range(1, 9)]
-b = winback_auto.build_batch(EMAIL)
-check("eight is a campaign", b["ok"])
-check("everyone is in it", len(b["rows"]) == 8, str(len(b["rows"])))
-check("each message is written", all(r.get("message") for r in b["rows"]))
-check("each carries a coupon", all(r.get("coupon_code") for r in b["rows"]))
-check("and the value at stake is totalled", b["value"] > 0, str(b["value"]))
+def fake_build(email, reason="winback", offer=None, occasion="", note="",
+               with_image=True, trigger="manual", limit=150):
+    fail = _audience["fail"]
+    if fail and (fail != "festival only" or reason == "festival"):
+        raise campaign_engine.CampaignError(fail)
+    _built.append({"reason": reason, "occasion": occasion, "offer": offer,
+                   "trigger": trigger, "limit": limit})
+    did = f"d{len(_built)}"
+    n = _audience["n"]
+    rows = [{**customer(i), "code": f"C{i}-XXXXX", "message": f"hi {i}"} for i in range(1, n + 1)]
+    _drafts[did] = {"id": did, "state": "draft", "reason": reason, "occasion": occasion,
+                    "rows": rows, "held_back": 2}
+    return {**_drafts[did], "counts": {"audience": n, "unreachable": _audience["unreachable"],
+                                       "value": 1000.0 * n, "phone": n, "email": n}}
 
-winback_proof.mark_sent(EMAIL, [customer(1), customer(2), customer(3)],
-                        channel="email", state="sent")
-b = winback_auto.build_batch(EMAIL)
-ids = {r["customer_id"] for r in b["rows"]}
-check("the three just contacted are left out", not ({"C1", "C2", "C3"} & ids), str(ids))
-check("the other five are in", len(b["rows"]) == 5, str(len(b["rows"])))
-check("and the seller is told how many were held back", b["skipped"] == 3, str(b["skipped"]))
 
-winback_proof.mark_sent(EMAIL, [customer(i) for i in range(4, 9)],
-                        channel="email", state="sent")
-b = winback_auto.build_batch(EMAIL)
-check("with everyone cooling down there is no batch at all", not b["ok"])
-check("and the reason names the cooldown", "contacted" in b["reason"], b["reason"])
+def fake_send(email, draft_id, channels=("whatsapp", "email")):
+    _sent.append((draft_id, channels))
+    _drafts[draft_id]["state"] = "sent"
+    return {"summary": f"{len(_drafts[draft_id]['rows'])} emails sent"}
 
-user_store.set_key(EMAIL, winback_proof.CAMPAIGNS_KEY, [])
-_pool = [customer(i, value=i * 100) for i in range(1, 90)]
-b = winback_auto.build_batch(EMAIL)
-check("a huge list is capped", len(b["rows"]) == winback_auto.MAX_BATCH, str(len(b["rows"])))
-check("and the cap keeps the most valuable customers, not the first ones",
-      min(float(r["monetary"]) for r in b["rows"]) > 100,
-      "a capped batch that drops the big spenders is worse than no cap")
 
-_pool = [{**customer(i), "email": "", "phone": ""} for i in range(1, 9)]
-b = winback_auto.build_batch(EMAIL)
-check("customers with no contact details produce no campaign", not b["ok"])
-check("and it says that, not 'nobody is at risk'", "email or phone" in b["reason"], b["reason"])
+campaign_engine.build = fake_build
+campaign_engine.send = fake_send
+campaign_engine.get_draft = lambda email, did: _drafts.get(did)
+campaign_engine.discard = lambda email, did: _drafts.pop(did, None)
+campaign_engine.upcoming_occasion = lambda email, horizon=21: _festival["next"]
+smart.load_sales = lambda email, copy=True: ["one row"]
 
-section("A run prepares, it never sends")
-
-user_store.set_key(EMAIL, winback_proof.CAMPAIGNS_KEY, [])
 user_store.set_key(EMAIL, winback_auto.STATE_KEY,
                    {"armed_at": datetime(2026, 9, 1, 9, 0).isoformat(timespec="seconds")})
-_pool = [customer(i) for i in range(1, 9)]
-
-sent_calls = []
-from backend.core import campaigns  # noqa: E402
-campaigns.send = lambda *a, **k: (sent_calls.append((a, k)) or
-                                  {"summary": "8 emails sent", "recipients": 8})
 
 res = winback_auto.run_if_due(EMAIL, trigger="manual")
 check("the run completes", not res.get("skipped"), str(res))
-check("it prepared a batch", res["ok"] and res["n"] == 8, str(res))
-check("NOTHING was sent", sent_calls == [], str(sent_calls))
-
+check("it prepared a campaign", res["ok"] and res["n"] == 8, str(res))
+check("a win-back one, with no festival coming", _built[-1]["reason"] == "winback", str(_built[-1]))
+check("using the seller's saved offer (10% by default)",
+      _built[-1]["offer"] == winback_auto.DEFAULT_OFFER, str(_built[-1]["offer"]))
+check("marked as automatic", _built[-1]["trigger"] == "auto")
+check("and capped to one send's worth", _built[-1]["limit"] == winback_auto.MAX_BATCH)
+check("NOTHING was sent", _sent == [], str(_sent))
 p = winback_auto.pending(EMAIL)
-check("the batch is waiting", p is not None and len(p["rows"]) == 8)
-check("with the exact messages that were prepared",
-      all(r.get("message") for r in p["rows"]),
+check("the campaign is waiting", p is not None and len(p["rows"]) == 8)
+check("with the exact messages and codes that were prepared",
+      all(r.get("message") and r.get("code") for r in p["rows"]),
       "approving must send what the seller was shown, not a fresh scan")
+check("and how many were held back by the cooldown", p.get("skipped_cooldown") == 2, str(p))
+
+winback_auto.save_config(EMAIL, {"offer": {"kind": "flat", "value": 200, "min_order": 999}})
+check("the offer can be changed", winback_auto.get_config(EMAIL)["offer"]["value"] == 200)
+try:
+    winback_auto.save_config(EMAIL, {"offer": {"kind": "percent", "value": 95}})
+    check("an absurd offer is refused", False, "it was saved")
+except ValueError as e:
+    check("an absurd offer is refused", "90" in str(e), str(e))
+
+section("A festival takes the slot when one is coming")
+
+_festival["next"] = {"name": "Diwali", "date": "2026-11-08", "days_away": 14}
+res = winback_auto.run_if_due(EMAIL, trigger="manual")
+check("a festival campaign is built", _built[-1]["reason"] == "festival"
+      and _built[-1]["occasion"] == "Diwali", str(_built[-1]))
+check("the new run replaces the old card, it does not stack",
+      len([d for d in _drafts.values() if d["state"] == "draft"]) == 1, str(list(_drafts)))
+check("and the offer it uses is the saved one",
+      _built[-1]["offer"]["value"] == 200, str(_built[-1]["offer"]))
+
+_audience["fail"] = "festival only"
+res = winback_auto.prepare(EMAIL, "festival", "Diwali")
+check("a festival with nobody to reach falls back to win-back, it does not skip the fortnight",
+      res["ok"] and _built[-1]["reason"] == "winback", str(res))
+campaign_engine.discard(EMAIL, res.get("draft_id"))
+_audience["fail"] = ""
+
+section("A run that finds nobody leaves no card")
+
+_festival["next"] = None
+_audience.update(n=1)
+res = winback_auto.run_if_due(EMAIL, trigger="manual")
+check("one lonely customer is not a campaign", not res["ok"], str(res))
+check("and it says so rather than showing a card", "not worth" in res["reason"], res["reason"])
+check("there is nothing waiting", winback_auto.pending(EMAIL) is None)
+check("and the draft it built was thrown away", not [d for d in _drafts.values() if d["state"] == "draft"])
+
+_audience.update(n=8, unreachable=8)
+res = winback_auto.run_if_due(EMAIL, trigger="manual")
+check("customers with no contact details produce no campaign", not res["ok"])
+check("and it says that, not 'nobody is at risk'", "email or phone" in res["reason"], res["reason"])
+
+_audience.update(n=8, unreachable=0, fail="Everyone this campaign would reach was contacted recently")
+res = winback_auto.run_if_due(EMAIL, trigger="manual")
+check("with everyone cooling down there is no campaign", not res["ok"])
+check("and the reason is the engine's", "contacted" in res["reason"], res["reason"])
+_audience["fail"] = ""
 
 section("The card in the Approval panel")
 
+winback_auto.run_if_due(EMAIL, trigger="manual")
 cards = []
 try:
     cards = smart.build_insights(EMAIL) or []
@@ -227,48 +264,59 @@ except Exception as e:  # noqa: BLE001
     check("insights build", False, str(e))
 ids = [c.get("id") for c in cards]
 check("the sending card appears", "winback_auto" in ids, str(ids))
-check("and the old download card does not, at the same time",
+check("and the old card does not, at the same time",
       not ("winback" in ids and "winback_auto" in ids),
       "two win-back cards means the seller decides the same thing twice")
 card = next((c for c in cards if c.get("id") == "winback_auto"), {})
 check("it says it will send, not download", "send" in (card.get("action_label") or "").lower(),
       card.get("action_label"))
 check("it names the number of people", "8" in (card.get("title") or ""), card.get("title"))
-check("it explains the messages are already written",
-      "written" in (card.get("detail") or ""), (card.get("detail") or "")[:80])
+check("it explains the messages are already written, with codes",
+      "written" in (card.get("detail") or "") and "code" in (card.get("detail") or ""),
+      (card.get("detail") or "")[:120])
 
 section("Approving is what sends")
 
 res = winback_auto.approve(EMAIL)
-check("the campaign went out", len(sent_calls) == 1, str(len(sent_calls)))
-check("with the batch that was waiting", len(sent_calls[0][0][1]) == 8)
+check("the campaign went out", len(_sent) == 1, str(_sent))
+check("the draft that was waiting", _drafts[_sent[0][0]]["state"] == "sent")
+check("on WhatsApp and email", set(_sent[0][1]) == {"whatsapp", "email"}, str(_sent[0][1]))
 check("and the summary comes back", "8 emails" in str(res.get("summary")), str(res))
-check("the batch is cleared so it cannot be sent twice",
-      winback_auto.pending(EMAIL) is None)
+check("the campaign is cleared so it cannot be sent twice", winback_auto.pending(EMAIL) is None)
 check("and the card is gone from the panel",
       "winback_auto" not in [c.get("id") for c in (smart.build_insights(EMAIL) or [])])
-
 try:
     winback_auto.approve(EMAIL)
     check("approving nothing is refused", False, "it went ahead")
 except ValueError as e:
     check("approving nothing is refused", "waiting" in str(e), str(e))
 
-section("Skipping a week")
+_festival["next"] = {"name": "Diwali", "date": "2026-11-08", "days_away": 14}
+winback_auto.run_if_due(EMAIL, trigger="manual")
+winback_auto.approve(EMAIL)
+winback_auto.run_if_due(EMAIL, trigger="manual")
+check("once a festival's campaign is sent, the next run is win-back again",
+      _built[-1]["reason"] == "winback", str(_built[-1]))
+_festival["next"] = None
+
+section("Skipping a fortnight")
 
 winback_auto.run_if_due(EMAIL, trigger="manual")
-check("a new batch is waiting", winback_auto.pending(EMAIL) is not None)
+check("a new campaign is waiting", winback_auto.pending(EMAIL) is not None)
 before = len(user_store.get_key(EMAIL, winback_proof.CAMPAIGNS_KEY, []) or [])
+did = winback_auto._state(EMAIL)["pending"]["draft_id"]
 winback_auto.clear_pending(EMAIL)
 check("skipping throws it away", winback_auto.pending(EMAIL) is None)
+check("and its draft with it", did not in _drafts)
 check("without marking anyone as contacted",
       len(user_store.get_key(EMAIL, winback_proof.CAMPAIGNS_KEY, []) or []) == before,
-      "a skipped batch must leave those customers eligible next week")
+      "a skipped campaign must leave those customers eligible next time")
 
 section("Status, for the settings screen")
 
 st = winback_auto.status(EMAIL)
-for k in ("enabled", "day", "hour", "day_name", "next_run_label", "tz_label", "cooldown_days"):
+for k in ("enabled", "day", "hour", "day_name", "next_run_label", "tz_label", "cooldown_days",
+          "every_weeks", "offer"):
     check(f"status carries {k}", k in st, str(list(st)))
 check("the next run is in the seller's own timezone, not the server's",
       bool(st["tz_label"]), st["tz_label"])

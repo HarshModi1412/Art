@@ -1038,6 +1038,81 @@ td { color: var(--text-2); }
 .mk-send-row { display: flex; align-items: baseline; gap: 8px; font-size: 0.78125rem;
   padding: 6px 0; border-bottom: 1px solid var(--border); }
 .mk-send-row:last-child { border-bottom: none; }
+.mk-send-row { flex-wrap: wrap; }
+
+/* Marketing Campaign: compose → review → result */
+.mc-card { margin-top: 14px; }
+.mc-h { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: 1rem; }
+.mc-h svg { width: 18px; height: 18px; color: var(--amber); }
+.mc-tag { display: inline-block; font-size: 0.6875rem; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: var(--amber-soft); color: var(--text); letter-spacing: .02em; vertical-align: middle; }
+.mc-step { display: flex; align-items: center; gap: 8px; margin: 18px 0 8px; font-weight: 600; font-size: 0.875rem; }
+.mc-n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: var(--primary-soft); color: var(--primary); font-size: 0.75rem; }
+.mc-reasons { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.mc-reason { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--border);
+  border-radius: var(--radius); cursor: pointer; transition: border-color .15s, background .15s; }
+.mc-reason input { position: absolute; opacity: 0; pointer-events: none; }
+.mc-reason span { font-size: 0.78125rem; color: var(--muted); }
+.mc-reason.on { border-color: var(--primary); background: var(--primary-soft); }
+.mc-reason:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mc-fest { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.mc-fest input { width: 100%; max-width: 320px; }
+.mc-offer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.mc-seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.mc-seg button { background: none; border: none; padding: 9px 14px; color: var(--text-2); cursor: pointer; font: inherit; font-size: 0.8125rem; }
+.mc-seg button.on { background: var(--primary); color: var(--on-primary); font-weight: 600; }
+.mc-val { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; flex: 1 1 140px; max-width: 220px; }
+.mc-note { width: 100%; }
+.mc-go { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 18px; }
+.mc-warn { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; padding: 10px 12px; border-radius: var(--radius);
+  background: var(--amber-soft); font-size: 0.8125rem; line-height: 1.5; }
+.mc-warn svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--amber); }
+.mc-draft-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.mc-counts { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0 4px; font-size: 0.8125rem; }
+.mc-counts span { display: inline-flex; align-items: center; gap: 5px; }
+.mc-counts svg { width: 15px; height: 15px; }
+.mc-review { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 18px; margin-top: 14px; }
+.mc-img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--border); display: block; }
+.mc-img.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 18px;
+  text-align: center; font-size: 0.78125rem; color: var(--muted); background: var(--surface-2); }
+.mc-img.empty svg { width: 28px; height: 28px; }
+.mc-pic-a { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mc-up { cursor: pointer; }
+.mc-msg-h { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+.mc-bubble { background: var(--green-soft); border-radius: 4px 14px 14px 14px; padding: 12px 14px; font-size: 0.875rem;
+  line-height: 1.55; overflow-wrap: anywhere; max-width: 460px; }
+#mcEditBox { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+#mcEditBox textarea, #mcEditBox input { width: 100%; }
+.mc-msg > .btn { margin-top: 10px; }
+.mc-who { margin-top: 16px; }
+.mc-rows { display: flex; flex-direction: column; margin-top: 8px; max-height: 360px; overflow: auto; }
+.mc-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center;
+  padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 0.8125rem; }
+.mc-row > div { display: flex; flex-direction: column; min-width: 0; }
+.mc-row code { font-size: 0.75rem; padding: 2px 6px; border-radius: 6px; background: var(--surface-2); }
+.mc-ch { display: inline-flex; gap: 4px; }
+.mc-ch svg { width: 15px; height: 15px; color: var(--muted); }
+.mc-send { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 16px; }
+.mc-chk { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius); cursor: pointer; font-size: 0.8125rem; }
+.mc-chk svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+.mc-chk input { margin-top: 3px; width: auto; flex: none; }
+.mc-chk > span { flex: 1; min-width: 0; }
+.mc-reason input { width: auto; }
+.mc-taps { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.mc-tap { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius); text-decoration: none; color: inherit; }
+.mc-tap > span:first-of-type { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.mc-tap svg { width: 18px; height: 18px; color: var(--green); flex: none; }
+.mc-tap-s { font-size: 0.75rem; font-weight: 600; color: var(--green); }
+.mc-tap.done { opacity: .55; }
+@media (max-width: 640px) {
+  .mc-review { grid-template-columns: 1fr; }
+  .mc-pic { max-width: 280px; }
+  .mc-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .mc-row .mc-ch { display: none; }
+}
 
 /* content editor */
 .cc-grid { display: grid; grid-template-columns: 320px 1fr; gap: 18px; }

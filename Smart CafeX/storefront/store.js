@@ -24,6 +24,10 @@ const HANDLE = (window.__STORE_HANDLE__
   || decodeURIComponent(location.pathname.split("/s/")[1] || "").replace(/\/.*$/, ""));
 const LS_CART = "cs_cart_" + HANDLE;
 const LS_TOKEN = "cs_tok_" + HANDLE;
+// A Marketing Campaign code. The message a shopper gets links here with
+// ?code=..., and it is remembered until it is used, so it is still applied
+// when they come back tomorrow from a bookmark without the query string.
+const LS_CODE = "cs_code_" + HANDLE;
 const QS = new URLSearchParams(location.search);
 // The builder's live preview loads this page with ?preview=<seller token> so an
 // unpublished site renders for its owner and nobody else. ?edit=1 turns the
@@ -35,6 +39,7 @@ const S = {
   data: null, style: null, site: null, products: [], icons: {},
   token: null, customer: null,
   cart: {}, route: { name: "home" }, filter: "", query: "", selected: "",
+  coupon: "",
 };
 
 /* ---------------------------------------------------------------- helpers */
@@ -1048,15 +1053,45 @@ function viewCheckout() {
         <div class="sum" style="margin-top:22px">
           <div><span>Subtotal</span><span>${money(priced.subtotal)}</span></div>
           <div><span>Shipping</span><span>${priced.shipping ? money(priced.shipping) : "Free"}</span></div>
+          ${priced.discount ? `<div class="disc"><span>Code ${esc(priced.coupon)}</span><span>−${money(priced.discount)}</span></div>` : ""}
           ${priced.gst_percent ? `<div><span>GST (${priced.gst_percent}%)${priced.gst_inclusive ? " incl." : ""}</span><span>${money(priced.tax)}</span></div>` : ""}
           <div class="tot"><span>Total</span><span>${money(priced.total)}</span></div>
         </div>
+        ${couponBox(priced)}
         <button class="b p blk" id="placeBtn">${payButtonLabel(priced)}${ic("arrow-right")}</button>
         <div class="err" id="coErr" hidden></div>
         ${c.order_note ? `<p class="tiny muted" style="margin:16px 0 0">${esc(c.order_note)}</p>` : ""}
         ${trustBlock()}
       </div>
     </div></div>` + footer();
+}
+
+/* The discount code box. Applied codes show as a line in the summary above
+   with a Remove link; a code that did not apply says why, in the shop's own
+   words, and the cart stays priced without it. */
+function couponBox(priced) {
+  if (priced.coupon) {
+    return `<div class="coupon on"><span>${ic("check")} Code <b>${esc(priced.coupon)}</b> applied</span>
+      <a href="#" class="ul tiny" id="couponRemove">Remove</a></div>`;
+  }
+  return `<div class="coupon">
+      <div class="coupon-row">
+        <input id="couponIn" placeholder="Discount code" value="${esc(S.coupon || "")}" autocomplete="off" autocapitalize="characters" />
+        <button class="b g s" id="couponApply" type="button">Apply</button>
+      </div>
+      ${priced.coupon_error ? `<div class="tiny coupon-err">${esc(priced.coupon_error)}</div>` : ""}
+    </div>`;
+}
+
+async function applyCoupon(code) {
+  S.coupon = String(code || "").trim().toUpperCase();
+  store(LS_CODE, S.coupon || null);
+  try {
+    S.priced = await api("/cart", { method: "POST", json: { lines: cartLines(), coupon: S.coupon } });
+    el("app").innerHTML = viewCheckout();
+    bindView(); afterRender();
+    if (S.priced.coupon) toast(`Code applied: ${money(S.priced.discount)} off`, "check");
+  } catch (e) { toast(e.message, "close"); }
 }
 
 /* Who you are actually paying. A shopper handing money to a brand they have
@@ -1426,7 +1461,7 @@ function openPolicy(kind) {
    and make the account quietly afterwards. */
 async function startCheckout() {
   try {
-    S.priced = await api("/cart", { method: "POST", json: { lines: cartLines() } });
+    S.priced = await api("/cart", { method: "POST", json: { lines: cartLines(), coupon: S.coupon || "" } });
     (S.priced.issues || []).forEach((i) => {
       const k = cartKey(i.product_id, i.variant_id || "");
       if (i.reason === "out_of_stock") { delete S.cart[k]; toast(`${i.name} sold out, so it was removed`, "close"); }
@@ -1460,7 +1495,8 @@ function loadRazorpay() {
 async function collectPayment(pay) {
   const ok = await loadRazorpay();
   if (!ok) throw new Error("Could not reach the payment window. Check your connection and try again.");
-  const o = await api("/pay", { method: "POST", json: { lines: cartLines(), payment: pay } });
+  const o = await api("/pay", { method: "POST", json: { lines: cartLines(), payment: pay,
+                                                          coupon: (S.priced || {}).coupon || "" } });
   return new Promise((resolve, reject) => {
     const rz = new window.Razorpay({
       key: o.key_id,
@@ -1513,6 +1549,7 @@ async function placeOrder() {
       method: "POST",
       json: {
         lines: cartLines(), payment: pay, note: el("coNote").value,
+        coupon: (S.priced || {}).coupon || "",
         ...paid,
         guest: !S.customer,
         name: el("coName").value,
@@ -1531,6 +1568,7 @@ async function placeOrder() {
     if (r.token && !S.token) { S.token = r.token; store(LS_TOKEN, r.token); }
     if (r.customer) S.customer = r.customer;
     S.cart = {}; saveCart();
+    if (r.order && r.order.coupon) { S.coupon = ""; store(LS_CODE, null); }
     await refreshCatalogue();
     el("app").innerHTML = viewDone(r.order);
     bindView(); afterRender();
@@ -1688,6 +1726,12 @@ function bindView() {
   const cl = el("coLogin");
   if (cl) cl.onclick = (e) => { e.preventDefault(); openAuth(() => loadMe(true)); };
   const pb = el("placeBtn"); if (pb) pb.onclick = placeOrder;
+  const ca = el("couponApply");
+  if (ca) ca.onclick = () => applyCoupon((el("couponIn") || {}).value || "");
+  const ci = el("couponIn");
+  if (ci) ci.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); applyCoupon(ci.value); } };
+  const cr = el("couponRemove");
+  if (cr) cr.onclick = (e) => { e.preventDefault(); applyCoupon(""); };
   document.querySelectorAll(".pay-opt").forEach((n) => n.onclick = () => {
     document.querySelectorAll(".pay-opt").forEach((x) => x.classList.remove("on"));
     n.classList.add("on");
@@ -1787,6 +1831,9 @@ function scrollToRegion(key) {
   applyTheme(S.style, S.site);
   S.cart = migrateCart(store(LS_CART) || {});
   S.token = store(LS_TOKEN);
+  const qcode = (QS.get("code") || "").trim().toUpperCase();
+  if (qcode) store(LS_CODE, qcode);
+  S.coupon = store(LS_CODE) || "";
   readHash();
   el("boot").hidden = true; el("app").hidden = false;
   // The server put a plain-HTML copy of this page in the document so that a
@@ -1800,6 +1847,7 @@ function scrollToRegion(key) {
   runPreloader();
   post({ type: "ready" });
   if (S.token) loadMe(S.route.name === "orders");
+  if (qcode && !EDIT) setTimeout(() => toast(`Your code ${qcode} will be applied at checkout`, "check", 4200), 900);
   // the emailed reset link comes back as ?reset=<token>
   const rt = QS.get("reset");
   if (rt) setTimeout(() => openReset(rt), 400);

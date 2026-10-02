@@ -1,0 +1,529 @@
+"""
+Marketing Campaign — build a draft, let the seller look, then send it.
+
+The pipeline the Marketing Campaign screen and the every-second-Monday job
+(winback_auto) both run:
+
+  reason + offer  ->  audience (analytics.campaign_audience)
+                  ->  minus anyone contacted recently (cooldown)
+                  ->  one real discount code each (discounts.issue)
+                  ->  the words, once per campaign (campaign_writer)
+                  ->  one picture (campaign_image), or a request for one
+                  ->  a DRAFT the seller reviews
+  approve         ->  WhatsApp (automatic when connected and Meta approved the
+                      template, tap-to-send links otherwise) + email
+                  ->  recorded for measurement (winback_proof), and every
+                      redeemed code is counted against the campaign
+
+Nothing reaches a customer until a person presses Send.
+"""
+from __future__ import annotations
+
+import html as _html
+import logging
+import secrets
+from datetime import date
+
+import pandas as pd
+
+from backend.core import campaigns, messaging, user_store, winback_proof
+
+log = logging.getLogger("campaign_engine")
+
+DRAFTS_KEY = "campaign_drafts"
+MAX_DRAFTS = 4
+MAX_AUDIENCE = 150
+COOLDOWN = {"winback": 45, "festival": 14}
+_SAMPLE_DOMAINS = ("example.com", "example.org", "example.net")
+
+
+class CampaignError(ValueError):
+    """Something the seller must fix before the campaign can be built or sent."""
+
+
+# ------------------------------------------------------------------- drafts
+def _drafts(email: str) -> dict:
+    d = user_store.get_key(email, DRAFTS_KEY, {}) or {}
+    return d if isinstance(d, dict) else {}
+
+
+def _save_draft(email: str, draft: dict) -> None:
+    d = dict(_drafts(email))
+    d[draft["id"]] = draft
+    if len(d) > MAX_DRAFTS:
+        order = sorted(d, key=lambda k: d[k].get("created_at") or "")
+        for k in order[:len(d) - MAX_DRAFTS]:
+            if k != draft["id"]:
+                d.pop(k, None)
+    user_store.set_key(email, DRAFTS_KEY, d)
+
+
+def get_draft(email: str, draft_id: str) -> dict | None:
+    d = _drafts(email).get(draft_id)
+    return d if isinstance(d, dict) else None
+
+
+def latest_draft(email: str) -> dict | None:
+    rows = [d for d in _drafts(email).values()
+            if isinstance(d, dict) and d.get("state") == "draft"]
+    return max(rows, key=lambda d: d.get("created_at") or "") if rows else None
+
+
+def discard(email: str, draft_id: str) -> None:
+    d = dict(_drafts(email))
+    if d.pop(draft_id, None) is not None:
+        user_store.set_key(email, DRAFTS_KEY, d)
+
+
+# ------------------------------------------------------------------ helpers
+def _symbol(email: str) -> str:
+    try:
+        from backend.core import currency, sitebuilder
+        ccy = ((sitebuilder.get_site(email) or {}).get("commerce") or {}).get("currency") or "INR"
+        return currency.symbol(ccy) or "₹"
+    except Exception:  # noqa: BLE001
+        return "₹"
+
+
+def _base() -> str:
+    from backend.core import publicurl
+    return (publicurl.configured() or messaging.APP_URL).rstrip("/")
+
+
+def store_link(email: str) -> str:
+    """The seller's live shop, or "" when it is not published (a code that
+    cannot be used online is still good to show in person)."""
+    try:
+        from backend.core import sitebuilder
+        site = sitebuilder.get_site(email) or {}
+        if not site.get("published") or not site.get("handle"):
+            return ""
+        if site.get("custom_domain"):
+            return f"https://{site['custom_domain']}/"
+        return f"{_base()}/s/{site['handle']}"
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def absolute(url: str) -> str:
+    if not url or url.startswith("http"):
+        return url or ""
+    return f"{_base()}/{url.lstrip('/')}"
+
+
+def _sells(txns, names: dict) -> str:
+    """What the shop sells, in a few words, for the AI brief and the picture."""
+    from backend.core import campaign_writer as cw
+    for col in ("category", "subcategory"):
+        if col in txns.columns:
+            top = txns.groupby(col)["amount"].sum().sort_values(ascending=False).head(3)
+            vals = [str(v).strip() for v in top.index
+                    if str(v).strip() and str(v).lower() not in ("nan", "none", "")]
+            if vals:
+                return ", ".join(v.lower() for v in vals)
+    if "product" in txns.columns:
+        top = txns.groupby("product")["amount"].sum().sort_values(ascending=False).head(3)
+        vals = [v for v in (cw.clean_product_name(x, names) for x in top.index) if v]
+        if vals:
+            return ", ".join(vals)
+    return "products"
+
+
+def upcoming_occasion(email: str, horizon: int = 30) -> dict | None:
+    """The next festival worth a campaign, from the social calendar."""
+    try:
+        from backend.core import localtime, social
+        cat = (social.get_settings(email) or {}).get("category") or ""
+        fest = social.upcoming_festivals(localtime.today(email), cat, horizon_days=horizon)
+        return fest[0] if fest else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def upcoming_occasions(email: str, horizon: int = 60) -> list[dict]:
+    try:
+        from backend.core import localtime, social
+        cat = (social.get_settings(email) or {}).get("category") or ""
+        return [{"name": f["name"], "date": f["date"], "days_away": f["days_away"]}
+                for f in social.upcoming_festivals(localtime.today(email), cat,
+                                                   horizon_days=horizon)][:6]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def is_sample(addr: str) -> bool:
+    a = (addr or "").lower()
+    # Only the reserved example domains (RFC 2606) that the sample dataset uses.
+    return a.split("@")[-1] in _SAMPLE_DOMAINS
+
+
+def pitch(reason: str, product: str, occasion: str) -> str:
+    """The one-line middle of the WhatsApp API template (no newlines allowed)."""
+    if reason == "festival":
+        return (f"{occasion} is almost here, and we would love to be part of it. "
+                + (f"You loved the {product}, so we think you will like what is new."
+                   if product else "Here is a little something to celebrate with."))
+    return ("It has been a while and we have missed you. "
+            + (f"Since you liked the {product}, we saved something for your next order."
+               if product else "We saved something special for your next order."))
+
+
+# -------------------------------------------------------------------- build
+def build(email: str, reason: str = "winback", offer: dict | None = None,
+          occasion: str = "", note: str = "", with_image: bool = True,
+          trigger: str = "manual", limit: int = MAX_AUDIENCE) -> dict:
+    """Build a campaign draft. Raises CampaignError with a seller-facing reason."""
+    from backend.core import (analytics, brandname, campaign_image, discounts, smart,
+                              winback_auto)
+    from backend.core import campaign_writer as cw
+
+    reason = "festival" if reason == "festival" else "winback"
+    try:
+        offer = discounts.clean_offer(offer)
+    except discounts.DiscountError as e:
+        raise CampaignError(str(e))
+
+    txns = smart.load_sales(email)
+    if txns is None or not len(txns):
+        raise CampaignError("Upload your sales first. A campaign is built from who bought what.")
+
+    fest = None
+    occasion = (occasion or "").strip()[:40]
+    if reason == "festival" and not occasion:
+        fest = upcoming_occasion(email)
+        occasion = (fest or {}).get("name") or ""
+        if not occasion:
+            raise CampaignError("Which festival or occasion is this for? Type its name.")
+
+    cap = max(1, min(int(limit), MAX_AUDIENCE))
+    cooling = winback_auto.recently_contacted(email, days=COOLDOWN[reason])
+    # Ask for enough to still fill the campaign after the cooldown takes its
+    # share, then cap: the most valuable customers NOT recently contacted.
+    audience = analytics.campaign_audience(txns, reason, limit=cap + len(cooling))
+    fresh = [c for c in audience if str(c.get("customer_id") or "") not in cooling]
+    held_back = len(audience) - len(fresh)
+    fresh = fresh[:cap]
+    if not fresh:
+        if held_back:
+            raise CampaignError(f"Everyone this campaign would reach was contacted in the last "
+                                f"{COOLDOWN[reason]} days. Give them a break and try again later.")
+        raise CampaignError("Nobody has gone quiet yet, so there is nobody to win back. "
+                            "Try a festival campaign for your best customers instead."
+                            if reason == "winback" else
+                            "There are no customers in your sales data yet.")
+
+    names = cw.catalogue_names(email)
+    for c in fresh:
+        c["product_display"] = cw.clean_product_name(c.get("favorite_item"), names)
+
+    campaign_id = secrets.token_hex(6)
+    try:
+        codes = discounts.issue(email, campaign_id, fresh, offer,
+                                prefix_fallback="FEST" if reason == "festival" else "BACK")
+    except discounts.DiscountError as e:
+        raise CampaignError(str(e))
+    valid_until = next(iter(codes.values()))["valid_until"] if codes else ""
+    try:
+        expiry_label = date.fromisoformat(valid_until).strftime("%d %b").lstrip("0")
+    except ValueError:
+        expiry_label = valid_until
+
+    resolved = brandname.resolve(email)
+    sym = _symbol(email)
+    val = offer["value"]
+    ctx = {
+        "reason": reason, "occasion": occasion, "note": (note or "").strip()[:300],
+        # Until the seller names the shop the preview SAYS so, rather than
+        # signing a customer message "us"; send() refuses without a name.
+        "brand": (resolved.get("name") if resolved.get("ready") else "") or "[your shop name]",
+        "brand_ready": bool(resolved.get("ready")),
+        "sells": _sells(txns, names), "offer": offer,
+        "offer_label": discounts.offer_label(offer, sym),
+        "offer_short": f"{val:g}% OFF" if offer["kind"] == "percent" else f"{sym}{val:g} OFF",
+        "expiry_label": expiry_label, "valid_until": valid_until,
+        "link": store_link(email), "symbol": sym,
+    }
+    copy = cw.write(email, ctx)
+
+    rows = []
+    for c in fresh:
+        row = {"customer_id": str(c["customer_id"]),
+               "customer_name": c.get("customer_name") or "",
+               "phone": c.get("phone") or "", "email": c.get("email") or "",
+               "segment": c.get("segment") or "", "monetary": c.get("monetary") or 0,
+               "recency_days": c.get("recency_days") or 0,
+               "favorite_item": c.get("favorite_item") or "",
+               "product_display": c["product_display"],
+               "code": (codes.get(str(c["customer_id"])) or {}).get("code") or ""}
+        row.update(cw.message_for(copy, row, ctx))
+        row["pitch"] = pitch(reason, row["product_display"], occasion)
+        rows.append(row)
+
+    image = {"url": "", "source": "", "needs_upload": False, "reason": ""}
+    if with_image:
+        try:
+            image.update(campaign_image.generate(email, ctx))
+        except campaign_image.NeedsUpload as e:
+            image.update({"needs_upload": True, "reason": str(e)})
+        except Exception as e:  # noqa: BLE001
+            log.warning("campaign image crashed for %s: %s", email, e)
+            image.update({"needs_upload": True,
+                          "reason": "The AI picture could not be made. Add a photo of your own."})
+    else:
+        image.update({"needs_upload": True, "reason": "Add a picture for this campaign."})
+
+    draft = {
+        "id": campaign_id, "state": "draft", "trigger": trigger,
+        "created_at": pd.Timestamp.now().isoformat(timespec="seconds"),
+        "reason": reason, "occasion": occasion, "offer": offer, "ctx": ctx,
+        "copy": copy, "image": image, "rows": rows, "held_back": held_back,
+        "festival": ({"name": fest.get("name"), "date": fest.get("date"),
+                      "days_away": fest.get("days_away")} if fest else None),
+    }
+    _save_draft(email, draft)
+    return public_draft(email, draft)
+
+
+def counts(rows: list[dict]) -> dict:
+    phones = sum(1 for r in rows if r.get("phone"))
+    emails = sum(1 for r in rows if r.get("email") and not is_sample(r["email"]))
+    return {"audience": len(rows), "phone": phones, "email": emails,
+            "unreachable": sum(1 for r in rows if not r.get("phone")
+                               and not (r.get("email") and not is_sample(r["email"]))),
+            "value": round(sum(float(r.get("monetary") or 0) for r in rows), 2)}
+
+
+def public_draft(email: str, draft: dict) -> dict:
+    """The draft as the screen needs it, with live counts and channel state."""
+    from backend.core import campaign_image, whatsapp
+    return {**draft, "counts": counts(draft.get("rows") or []),
+            "whatsapp": whatsapp.status(email),
+            "email_ready": messaging.smtp_configured(),
+            "image_allowance": campaign_image.allowance(email)}
+
+
+def update_draft(email: str, draft_id: str, patch: dict) -> dict:
+    """Seller edits before sending: the words, the picture, who is in it."""
+    from backend.core import campaign_writer as cw
+    draft = get_draft(email, draft_id)
+    if not draft or draft.get("state") != "draft":
+        raise CampaignError("That campaign is no longer a draft.")
+    copy = dict(draft["copy"])
+    for k in ("whatsapp", "whatsapp_generic"):
+        if patch.get(k) is not None:
+            t = str(patch[k]).strip()
+            if not cw.valid_template(t, allow_product=(k == "whatsapp")):
+                raise CampaignError("Keep {code} and {offer} in the message"
+                                    + ("" if k == "whatsapp" else ", and leave out {product}")
+                                    + ". Use only the {placeholders} listed under the box.")
+            copy[k] = t
+            copy["source"] = "edited"
+    if patch.get("email_subject"):
+        copy["email_subject"] = str(patch["email_subject"]).strip()[:120]
+    if patch.get("remove"):
+        drop = {str(x) for x in patch["remove"]}
+        draft["rows"] = [r for r in draft["rows"] if r["customer_id"] not in drop]
+        if not draft["rows"]:
+            raise CampaignError("That would leave nobody in the campaign.")
+    if patch.get("image_url"):
+        draft["image"] = {"url": str(patch["image_url"]),
+                          "source": patch.get("image_source") or "upload",
+                          "needs_upload": False, "reason": ""}
+    draft["copy"] = copy
+    for r in draft["rows"]:
+        r.update(cw.message_for(copy, r, draft["ctx"]))
+    _save_draft(email, draft)
+    return public_draft(email, draft)
+
+
+def regenerate_image(email: str, draft_id: str) -> dict:
+    from backend.core import campaign_image
+    draft = get_draft(email, draft_id)
+    if not draft or draft.get("state") != "draft":
+        raise CampaignError("That campaign is no longer a draft.")
+    try:
+        draft["image"] = {**campaign_image.generate(email, draft["ctx"]),
+                          "needs_upload": False, "reason": ""}
+    except campaign_image.NeedsUpload as e:
+        img = draft.get("image") or {}
+        draft["image"] = {**img, "needs_upload": not img.get("url"), "reason": str(e)}
+        _save_draft(email, draft)
+        raise CampaignError(str(e))
+    _save_draft(email, draft)
+    return public_draft(email, draft)
+
+
+# --------------------------------------------------------------------- send
+def campaign_html(brand: str, row: dict, ctx: dict, image_url: str) -> str:
+    esc = _html.escape
+    link = row.get("shop_link") or ""
+    paras = "".join(
+        f'<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#2b2f3a">{esc(line)}</p>'
+        for line in (row.get("message") or "").replace("*", "").split("\n")
+        if line.strip() and line.strip() != link)
+    img = (f'<img src="{esc(image_url)}" alt="" width="472" style="display:block;width:100%;'
+           f'max-width:472px;border-radius:12px;margin:0 0 22px">' if image_url else "")
+    code = ""
+    if row.get("code"):
+        code = (f'<div style="margin:6px 0 22px;padding:16px;border:2px dashed #b08a3e;'
+                f'border-radius:10px;text-align:center"><div style="font-size:12px;'
+                f'letter-spacing:.12em;text-transform:uppercase;color:#6b7186">Your code · '
+                f'{esc(ctx.get("offer_label") or "")}</div><div style="font-size:24px;'
+                f'font-weight:700;letter-spacing:.08em;margin-top:6px;color:#1b1d24">'
+                f'{esc(row["code"])}</div><div style="font-size:12px;color:#6b7186;margin-top:4px">'
+                f'Valid till {esc(ctx.get("expiry_label") or "")}</div></div>')
+    btn = (f'<a href="{esc(link)}" style="display:inline-block;background:#1b1d24;color:#fff;'
+           f'text-decoration:none;padding:13px 26px;border-radius:999px;font-weight:600;'
+           f'font-size:15px">Shop now</a>') if link else ""
+    return (f'<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
+            f'max-width:520px;margin:0 auto;padding:32px 24px"><p style="margin:0 0 22px;'
+            f'font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#6b7186">'
+            f'{esc(brand)}</p>{img}{paras}{code}{btn}</div>')
+
+
+def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "email")) -> dict:
+    """Send an approved draft. Email goes out now; WhatsApp sends itself when
+    the seller's template is approved, and comes back as tap-to-send links
+    otherwise. Every outcome is reported per customer."""
+    from backend.core import brandname, whatsapp
+    from backend.core import campaign_writer as cw
+
+    draft = get_draft(email, draft_id)
+    if not draft:
+        raise CampaignError("That campaign could not be found. Build it again.")
+    if draft.get("state") == "sent":
+        raise CampaignError("This campaign has already been sent.")
+    try:
+        brand = brandname.require(email)
+    except ValueError as e:
+        raise CampaignError(str(e))
+    channels = tuple(c for c in channels if c in ("whatsapp", "email")) or ("whatsapp", "email")
+    ctx = {**draft["ctx"], "brand": brand}
+    image_url = absolute((draft.get("image") or {}).get("url") or "")
+    wa = whatsapp.status(email)
+    wa_auto = "whatsapp" in channels and wa["mode"] == "auto"
+    if wa_auto and wa.get("template_header") and not image_url:
+        raise CampaignError("Add a picture first: your WhatsApp template sends one with every message.")
+
+    results, n_mail, n_wa, n_links, skipped, sample = [], 0, 0, 0, 0, 0
+    for r in draft["rows"]:
+        r.update(cw.message_for(draft["copy"], r, ctx))
+        to = (r.get("email") or "").strip()
+        phone = (r.get("phone") or "").strip()
+        entry = {"customer_id": r["customer_id"], "customer_name": r.get("customer_name") or "",
+                 "email": to, "phone": phone, "code": r.get("code") or "",
+                 "message": r["message"], "email_sent": False, "whatsapp_sent": False,
+                 "wa_link": "", "error": ""}
+        reachable = False
+        if "email" in channels and to:
+            if is_sample(to):
+                sample += 1
+                entry["error"] = "sample customer, not emailed"
+            else:
+                reachable = True
+                try:
+                    res = messaging.send(
+                        to_email=to,
+                        subject=r.get("email_subject") or f"A little something from {brand}",
+                        text=r["message"].replace("*", ""),
+                        html=campaign_html(brand, r, ctx, image_url))
+                    entry["email_sent"] = bool(res.get("email"))
+                    n_mail += int(entry["email_sent"])
+                except Exception as e:  # noqa: BLE001 — one bad address, not the batch
+                    log.warning("campaign email to %s failed: %s", to, e)
+        if "whatsapp" in channels and phone:
+            reachable = True
+            if wa_auto:
+                try:
+                    whatsapp.send_campaign_message(
+                        email, phone,
+                        [cw.first_name(r.get("customer_name")) or "there", brand,
+                         r.get("pitch") or "", r.get("code") or "",
+                         ctx.get("offer_label") or "", ctx.get("expiry_label") or "",
+                         r.get("shop_link") or ctx.get("link") or "-"],
+                        image_url)
+                    entry["whatsapp_sent"] = True
+                    n_wa += 1
+                except whatsapp.WhatsAppError as e:
+                    entry["error"] = str(e)[:160]
+                    entry["wa_link"] = campaigns.wa_link(phone, r["message"])
+                    n_links += int(bool(entry["wa_link"]))
+            else:
+                entry["wa_link"] = campaigns.wa_link(phone, r["message"])
+                n_links += int(bool(entry["wa_link"]))
+        if not reachable:
+            skipped += 1
+            entry["error"] = entry["error"] or "no phone or email on file"
+        results.append(entry)
+
+    stamp = pd.Timestamp.now().isoformat(timespec="seconds")
+    delivered = [r for r in results if r["email_sent"] or r["whatsapp_sent"]]
+    prepared = [r for r in results if r["wa_link"] and not (r["email_sent"] or r["whatsapp_sent"])]
+    by_id = {r["customer_id"]: r for r in draft["rows"]}
+    proof_id = pending_id = None
+    if delivered:
+        try:
+            proof_id = winback_proof.mark_sent(
+                email, [by_id[c["customer_id"]] for c in delivered],
+                channel="whatsapp" if n_wa else "email", state="sent",
+                note=f"campaign {draft_id}").get("id")
+        except Exception as e:  # noqa: BLE001
+            log.warning("could not record campaign for measurement: %s", e)
+    if prepared:
+        try:
+            pending_id = winback_proof.mark_sent(
+                email, [by_id[c["customer_id"]] for c in prepared],
+                channel="whatsapp", state="pending",
+                note=f"campaign {draft_id}: tap-to-send links").get("id")
+        except Exception as e:  # noqa: BLE001
+            log.warning("could not record prepared campaign: %s", e)
+
+    if delivered or prepared:
+        log_rows = campaigns._log(email)  # noqa: SLF001 — same history, one log
+        log_rows.append({
+            "at": stamp, "brand": brand, "campaign_id": draft_id,
+            "reason": draft["reason"], "occasion": draft.get("occasion") or "",
+            "offer_label": ctx.get("offer_label") or "", "image_url": image_url,
+            "recipients": len(results), "delivered": len(delivered),
+            "prepared": len(prepared), "email_sent": n_mail, "whatsapp_sent": n_wa,
+            "wa_links": n_links, "skipped": skipped, "channels": list(channels),
+            "whatsapp_live": wa_auto, "state": "sent" if delivered else "pending",
+        })
+        campaigns._save_log(email, log_rows)  # noqa: SLF001
+        draft["state"] = "sent"
+        draft["sent_at"] = stamp
+        draft["proof_id"], draft["pending_proof_id"] = proof_id, pending_id
+        _save_draft(email, draft)
+
+    bits = []
+    if n_wa:
+        bits.append(f"{n_wa} WhatsApp message{'s' if n_wa != 1 else ''} sent")
+    if n_mail:
+        bits.append(f"{n_mail} email{'s' if n_mail != 1 else ''} sent")
+    if n_links:
+        bits.append(f"{n_links} WhatsApp message{'s' if n_links != 1 else ''} ready to tap send")
+    if skipped:
+        bits.append(f"{skipped} with no phone or email")
+    if sample:
+        bits.append(f"{sample} sample customer{'s' if sample != 1 else ''} not emailed")
+    summary = (" · ".join(bits) + ".") if bits else "Nothing went out."
+    if not (delivered or prepared):
+        summary = ("Nothing went out. None of these customers have a phone number or email "
+                   "on file. Map those columns when you upload sales, or take orders on "
+                   "your website, which collects them for you.")
+    return {"sent_at": stamp, "campaign_id": draft_id, "results": results,
+            "email_sent": n_mail, "whatsapp_sent": n_wa, "wa_links": n_links,
+            "skipped": skipped, "sample": sample, "delivered": len(delivered),
+            "prepared": len(prepared), "whatsapp_auto": wa_auto,
+            "email_ready": messaging.smtp_configured(),
+            "pending_campaign_id": pending_id, "summary": summary}
+
+
+def history(email: str, limit: int = 30) -> list[dict]:
+    """Past campaigns, each with what its codes brought back."""
+    from backend.core import discounts
+    out = []
+    for h in campaigns.history(email, limit):
+        cid = h.get("campaign_id")
+        out.append({**h, "codes": discounts.campaign_stats(email, cid) if cid else None})
+    return out

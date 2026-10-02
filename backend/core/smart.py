@@ -351,16 +351,21 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
             n = len(waiting.get("rows") or [])
             reach = int(waiting.get("reachable") or 0)
             cooled = int(waiting.get("skipped_cooldown") or 0)
-            detail = (f"{n} regulars have gone quiet. The messages are written — each one "
-                      f"names what that customer actually bought — and {reach} of them have "
-                      f"an email or phone on file. Approve and they go out from your own "
-                      f"address.")
+            festival = waiting.get("kind") == "festival" and waiting.get("occasion")
+            who = (f"Your {n} best and at-risk customers, for {waiting['occasion']}."
+                   if festival else f"{n} regulars have gone quiet.")
+            detail = (f"{who} The messages are written, each one names what that "
+                      f"customer actually bought and carries their own discount code "
+                      f"that works on your website, and {reach} of them have a phone or "
+                      f"email on file. Approve and they go out on WhatsApp and email.")
             if cooled:
-                detail += (f" {cooled} more were left out because they were already "
-                           f"contacted in the last {winback_auto.COOLDOWN_DAYS} days.")
+                detail += (f" {cooled} more were left out because they were contacted "
+                           f"recently.")
+            title = (f"Send your {waiting['occasion']} offer to {reach or n} customers"
+                     if festival else f"Send this fortnight's win-back to {reach or n} customers")
             out.append({
                 "id": "winback_auto", "module": "marketing", "page": "winback", "icon": "mail",
-                "title": f"Send this week's win-back to {reach or n} customers",
+                "title": title,
                 "detail": detail,
                 "action_label": "Approve → send now", "count": reach or n,
                 "value": round(float(waiting.get("value") or 0), 2) or None,
@@ -372,11 +377,11 @@ def build_insights(email: str, include_decided: bool = False) -> list[dict]:
                 out.append({
                     "id": "winback", "module": "sales", "page": "winback", "icon": "mail",
                     "title": f"Win back {len(at_risk)} at-risk customers",
-                    "detail": (f"{len(at_risk)} regulars haven't visited in a while. Approve to generate a "
-                               "ready-to-send message + personalised coupon for each, exported to Excel."),
-                    "action_label": "Approve → download campaign", "count": len(at_risk),
+                    "detail": (f"{len(at_risk)} regulars haven't ordered in a while. Set one "
+                               "discount and each of them gets a message on WhatsApp and email "
+                               "with their own code, which works on your website."),
+                    "action_label": "Approve → build the campaign", "count": len(at_risk),
                     "value": round(sum(float(c.get("monetary") or 0) for c in at_risk), 2) or None,
-                    "has_download": True,
                 })
     if review is not None and len(review):
         pt = get_product_type(email)

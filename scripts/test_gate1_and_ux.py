@@ -227,8 +227,10 @@ _ids = [ln.split('id: "')[1].split('"')[0]
 check("the order is the one the seller asked for",
       _ids[:8] == ["sales", "subcategory", "orders", "products", "inventory",
                    "supply", "studio", "social"], _ids[:8])
-check("Marketing is off the home grid", 'id: "marketing"' in JS and
-      JS.split('id: "marketing"')[1].split("},")[0].count("offGrid") == 1)
+_mk = JS.split('id: "marketing"')[1].split("},")[0] if 'id: "marketing"' in JS else ""
+check("Marketing Campaign is ON the home grid, under Bring in more customers",
+      _mk and "offGrid" not in _mk and 'name: "Marketing Campaign"' in _mk
+      and 'group: "grow"' in _mk)
 check("so is Billing & GST", JS.split('id: "gst"')[1].split("},")[0].count("offGrid") == 1)
 check("but the grid filters on offGrid rather than deleting them",
       "!m.offGrid" in JS)

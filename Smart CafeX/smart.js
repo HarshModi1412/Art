@@ -3908,6 +3908,10 @@ async function decide(id, decision) {
     if (card) return approveWeek(card);
   }
   if (id && id.startsWith("po_") && decision === "approve") return approvePo(id.slice(3));
+  // The standing win-back card no longer exports a spreadsheet of codes that
+  // checkout would not accept: approving it opens the campaign builder, where
+  // the seller sets the one offer and every code is real.
+  if (id === "winback" && decision === "approve") return openModule("marketing");
   if (id && id.startsWith("po_") && decision === "cancel") {
     // The confirm stays: cancelling an order is not something to do by
     // accident. Everything after the seller says yes is background work.
@@ -4045,8 +4049,9 @@ function openDetailsModule(id) {
   if (id === "reorder") return openModule("supply");
   if (id === "complaints") return openModule("complaints");
   if (id === "reputation") return openModule("review");
-  // Win-back details opens the editable table popup (approve is a direct download now).
-  if (id === "winback") return openWinbackEditor();
+  // Both win-back cards open the Marketing Campaign screen: the standing one to
+  // build a campaign there, the automatic one to review the draft it prepared.
+  if (id === "winback" || id === "winback_auto") return openModule("marketing");
   if (id && id.startsWith("content_")) return openContentEditor(id);
   if (id && id.startsWith("post_")) return openSocialPostDetails(id.slice("post_".length));
   return openModule("sales");
@@ -4120,10 +4125,14 @@ function openMapModal(d) {
         ? "We could not tell which columns these are from their names, so please check the "
           + "highlighted ones against the preview below. Getting these two right is what "
           + "makes every number afterwards correct."
-        : "Tell us which column is which. Date and Amount are required.";
+        : "Tell us which column is which. Date and Amount are required. "
+          + "If your file has customer phone numbers or emails, map them too, "
+          + "that is what lets a Marketing Campaign reach your customers.";
   const labelFor = { date: "Date", amount: "Amount", customer_id: "Customer ID", customer_name: "Customer Name",
     order_id: "Order ID", product: "Product", category: "Category", subcategory: "Sub-category", quantity: "Quantity",
-    review: "Review text", rating: "Rating" };
+    review: "Review text", rating: "Rating",
+    customer_phone: "Customer phone (optional)",
+    customer_email: "Customer email (optional)" };
   const opts = (sel) => `<option value="">–</option>` + d.columns.map((c) => `<option ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
   $("mapGrid").innerHTML = d.roles.map((r) => `
     <label class="${confirm.includes(r) ? "map-check" : ""}">${labelFor[r] || r}${d.required.includes(r) ? " *" : ""}
@@ -6830,6 +6839,7 @@ async function openAccount() {
     ["payments",  "Payments",       '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="16.5" cy="12" r="1.2"/><path d="M3 9h13"/>'],
     ["email",     "Email",          '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>'],
     ["instagram", "Instagram",      '<rect x="4" y="4" width="16" height="16" rx="4.5"/><circle cx="12" cy="12" r="3.6"/><circle cx="17" cy="7" r="1"/>'],
+    ["whatsapp",  "WhatsApp",       '<path d="M20 11.5a8 8 0 0 1-11.8 7L4 20l1.5-4.1A8 8 0 1 1 20 11.5Z"/><path d="M9 9.2c.3 1.9 2 3.6 3.9 3.9l1-.9 1.6.8"/>'],
     ["api",       cg.enabled ? "ChatGPT & AI keys" : "API keys", '<circle cx="8" cy="12" r="3.4"/><path d="M11.2 12H20l-2.2 2.2M20 12l-2.2-2.2"/>'],
     ["danger",    "Account",        '<circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/>'],
   ];
@@ -6866,6 +6876,9 @@ async function openAccount() {
         <div class="acc2-pane" data-pane="payments">${paymentsHtml}</div>
         <div class="acc2-pane" data-pane="email">${emailHtml}</div>
         <div class="acc2-pane" data-pane="instagram">${igHtml}</div>
+        <div class="acc2-pane" data-pane="whatsapp"><section class="acc-sec">
+          <h4 style="margin-top:0;">WhatsApp for your campaigns</h4>
+          <div id="waSlot"><div class="ap-empty">Checking WhatsApp…</div></div></section></div>
         <div class="acc2-pane" data-pane="api">${apiHtml}</div>
         <div class="acc2-pane" data-pane="danger">${dangerHtml}</div>
       </div>
@@ -6885,6 +6898,7 @@ async function openAccount() {
       navs.forEach((n) => n.classList.toggle("active", n === b));
       panes.forEach((p) => p.classList.toggle("active", p.dataset.pane === b.dataset.nav));
       if (body) body.scrollTop = 0;
+      if (b.dataset.nav === "whatsapp") fillWhatsAppPane();
       // The slot only becomes visible when its own pane opens, so re-home the
       // control then: findSlot() prefers whichever slot is actually on screen.
       if (window.cxCookieSettings) window.cxCookieSettings();
@@ -7942,88 +7956,406 @@ function renderActions(insights) {
   }).join("")}</div>`;
 }
 
-// ---------- MODULE: Marketing ----------
-// Win-back used to surface only as an Approval-panel card, and only when the
-// insight engine decided to generate one -- so a seller who wanted to check
-// on it between those moments had nowhere to go. This gives it a permanent
-// home: open it any time and it fetches the current at-risk list itself,
-// same endpoint the panel card uses, no waiting for an insight to appear.
+// ---------- MODULE: Marketing Campaign ----------
+/* One screen, three moments: COMPOSE (why, what offer), REVIEW (the draft the
+   server built: picture, message, every customer with their own code) and
+   RESULT (what went out, and the tap-to-send WhatsApp list when automatic
+   sending is not connected). The automatic every-second-Monday campaign lands
+   here as a draft too, so the seller reviews it the same way. */
+let _mc = { state: null, draft: null, result: null, kind: "flat" };
+
 async function openMarketing() {
   await openCached("marketing", "Marketing Campaign",
-    async () => {
-      const [wb, proof, sends, auto] = await Promise.all([
-        api("/api/rfm/winback", { method: "POST" }).catch((e) => ({ customers: [], _error: e.message })),
-        api("/api/rfm/winback/proof").catch(() => null),
-        api("/api/rfm/winback/sends").catch(() => null),
-        api("/api/winback/auto").catch(() => null),
-      ]);
-      return { wb, proof, sends, auto };
-    },
-    (d) => renderMarketing(d.wb, d.proof, d.sends, d.auto));
+    () => api("/api/campaign/state"),
+    (d) => renderMarketing(d));
 }
 
-/* ------------------------------------------- the weekly win-back strip -----
-   Win-back used to be a thing the seller had to remember to do. Nobody
-   remembers on a Tuesday, and a customer who went quiet 70 days ago is
-   reachable while the same customer at 140 days is a stranger — so the value
-   of the feature was mostly theoretical.
+function mcMoney(sym, v) { return `${sym || "₹"}${fmt(Number(v) || 0)}`; }
 
-   It now runs itself weekly and leaves ONE card in the Approval panel. This
-   strip is where that schedule is visible and changeable, and where the
-   cooldown is stated: without saying it out loud, a seller cannot tell the
-   difference between "we are being careful with your customers" and "it is
-   broken and only found four people". */
-function winbackStrip(a) {
+/* *bold* in a WhatsApp message, shown the way WhatsApp will show it */
+function mcWa(text) {
+  return esc(text || "").replace(/\*([^*\n]+)\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
+}
+
+function renderMarketing(d) {
+  _mc.state = d;
+  _mc.draft = d.draft || null;
+  _mc.result = null;
+  const intro = `<p class="muted" style="margin-top:0;">Set one offer, and every customer it is
+    for gets a message on WhatsApp and email with their <b>own discount code</b>. The code works at
+    checkout on your website, and every code that gets used is counted below as a customer won back.</p>`;
+  const body = _mc.draft ? mcDraftHtml(_mc.draft) : mcComposeHtml(d);
+  moduleShell("Marketing Campaign", `
+    ${intro}
+    ${mcAutoStrip(d.auto)}
+    <div id="mcMain">${body}</div>
+    ${mcHistoryHtml(d.history || [], d.symbol)}`);
+  wireMcAuto();
+  if (_mc.draft) wireMcDraft(); else wireMcCompose();
+}
+
+/* ------------------------------------------------------------ compose ---- */
+function mcComposeHtml(d) {
+  const sym = d.symbol || "₹";
+  const cov = d.coverage || {};
+  const occ = d.occasions || [];
+  const reach = cov.customers
+    ? (cov.phone || cov.email
+        ? `<p class="muted tiny" style="margin:10px 0 0;">${sic("check")} ${fmt(cov.phone || 0)} of your
+            ${fmt(cov.customers)} customers have a phone number, ${fmt(cov.email || 0)} an email.</p>`
+        : `<div class="mc-warn">${sic("bell")}<span><b>None of your customers have a phone number or email
+            yet,</b> so a campaign would have nobody to reach. When you upload sales, map the
+            <b>Customer phone</b> and <b>Customer email</b> columns (re-upload the same file and map
+            them now). Orders on your website collect them automatically.</span></div>`)
+    : `<div class="mc-warn">${sic("bell")}<span>Upload your sales first. A campaign is built from who
+        bought what.</span></div>`;
+  return `
+    <div class="card mc-card">
+      <h4 class="mc-h">${sic("gift")}New campaign</h4>
+      <div class="mc-step"><span class="mc-n">1</span>Why are you sending it?</div>
+      <div class="mc-reasons" role="radiogroup">
+        <label class="mc-reason on"><input type="radio" name="mcReason" value="winback" checked>
+          <b>Win back quiet customers</b>
+          <span>People who used to buy from you and have stopped.</span></label>
+        <label class="mc-reason"><input type="radio" name="mcReason" value="festival">
+          <b>Festival offer</b>
+          <span>Your best customers, plus the ones drifting away.</span></label>
+      </div>
+      <div id="mcFest" class="mc-fest" hidden>
+        <label>Festival or occasion
+          <input id="mcOccasion" list="mcOccList" value="${esc((occ[0] || {}).name || "")}"
+            placeholder="e.g. Diwali, Eid, Black Friday" maxlength="40"></label>
+        <datalist id="mcOccList">${occ.map((o) => `<option value="${esc(o.name)}">`).join("")}</datalist>
+        ${occ.length ? `<span class="muted tiny">Coming up: ${occ.slice(0, 3).map((o) =>
+          `${esc(o.name)} in ${fmt(o.days_away)} days`).join(", ")}</span>` : ""}
+      </div>
+
+      <div class="mc-step"><span class="mc-n">2</span>The offer, the same for everyone</div>
+      <div class="mc-offer">
+        <div class="mc-seg" role="group" aria-label="Discount type">
+          <button type="button" data-kind="flat" class="on">${esc(sym)} off</button>
+          <button type="button" data-kind="percent">% off</button>
+        </div>
+        <label class="mc-val"><span id="mcValLbl">Amount off</span>
+          <input id="mcValue" type="number" min="1" step="1" inputmode="decimal" placeholder="200"></label>
+        <label class="mc-val"><span>Minimum order <span class="muted">(optional)</span></span>
+          <input id="mcMin" type="number" min="0" step="1" inputmode="decimal" placeholder="999"></label>
+      </div>
+      <p class="muted tiny" style="margin:6px 0 0;">Each customer gets their own code. It works once,
+        for 14 days, at checkout on your website.</p>
+
+      <div class="mc-step"><span class="mc-n">3</span>Anything to mention? <span class="muted">(optional)</span></div>
+      <input id="mcNote" class="mc-note" maxlength="300"
+        placeholder="e.g. the new monsoon collection is in, free delivery this week">
+
+      <div class="mc-go">
+        <button class="btn primary" id="mcBuild">${sic("spark")}Build the campaign</button>
+        <span class="muted tiny">Nothing is sent yet. You see every message first.</span>
+      </div>
+      <div class="err" id="mcErr" hidden></div>
+      ${reach}
+    </div>`;
+}
+
+function wireMcCompose() {
+  document.querySelectorAll(".mc-reason input").forEach((r) => r.onchange = () => {
+    document.querySelectorAll(".mc-reason").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked));
+    $("mcFest").hidden = r.value !== "festival" || !r.checked;
+  });
+  document.querySelectorAll(".mc-seg button").forEach((b) => b.onclick = () => {
+    _mc.kind = b.dataset.kind;
+    document.querySelectorAll(".mc-seg button").forEach((x) => x.classList.toggle("on", x === b));
+    $("mcValLbl").textContent = _mc.kind === "percent" ? "Percent off" : "Amount off";
+    $("mcValue").placeholder = _mc.kind === "percent" ? "15" : "200";
+  });
+  _mc.kind = "flat";
+  const go = $("mcBuild");
+  if (go) go.onclick = buildCampaign;
+}
+
+async function buildCampaign() {
+  const err = $("mcErr"); err.hidden = true;
+  const reason = (document.querySelector('input[name="mcReason"]:checked') || {}).value || "winback";
+  const value = Number($("mcValue").value);
+  if (!value || value <= 0) { err.textContent = "Enter the discount first."; err.hidden = false; $("mcValue").focus(); return; }
+  if (_mc.kind === "percent" && value > 90) { err.textContent = "A percentage discount can be at most 90%."; err.hidden = false; return; }
+  const btn = $("mcBuild");
+  btn.disabled = true;
+  btn.innerHTML = `${sic("spark")}Writing the messages and making the picture…`;
+  try {
+    const draft = await api("/api/campaign/build", { method: "POST", json: {
+      reason, occasion: reason === "festival" ? ($("mcOccasion").value || "").trim() : "",
+      note: ($("mcNote").value || "").trim(),
+      offer: { kind: _mc.kind, value, min_order: Number($("mcMin").value) || 0 },
+    }});
+    _mc.draft = draft;
+    warmModClearAll();
+    $("mcMain").innerHTML = mcDraftHtml(draft);
+    wireMcDraft();
+    $("mcMain").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (e) {
+    err.textContent = e.message; err.hidden = false;
+    btn.disabled = false; btn.innerHTML = `${sic("spark")}Build the campaign`;
+  }
+}
+
+/* ------------------------------------------------------------- review ---- */
+function mcDraftHtml(d) {
+  const c = d.counts || {};
+  const ctx = d.ctx || {};
+  const wa = d.whatsapp || {};
+  const img = d.image || {};
+  const allow = d.image_allowance || {};
+  const sample = (d.rows || [])[0] || {};
+  const title = d.reason === "festival" ? `${esc(d.occasion || "Festival")} offer` : "Win-back campaign";
+  const auto = d.trigger === "auto";
+  const left = allow.left == null ? "" : ` (${fmt(allow.left)} left this month)`;
+  const imgBlock = img.url
+    ? `<img src="${esc(img.url)}" alt="Campaign picture" class="mc-img">`
+    : `<div class="mc-img empty">${sic("image")}<span>${esc(img.reason || "Add a picture for this campaign.")}</span></div>`;
+  const waLine = wa.mode === "auto"
+    ? `${sic("check")} Sends automatically from ${esc(wa.display_number || "+" + wa.number)}`
+    : wa.mode === "waiting"
+      ? `Waiting for Meta to approve your template. Until then each message opens in WhatsApp for you to tap send.`
+      : `Each message opens in WhatsApp already written, you tap send.
+         <a href="#" id="mcWaSetup">Send automatically</a>`;
+  const brandWarn = ctx.brand_ready ? "" :
+    `<div class="mc-warn">${sic("bell")}<span><b>Add your shop name before sending.</b> These messages
+      are signed with it. Set it in Product Studio → Brand.</span></div>`;
+  const rows = d.rows || [];
+  return `
+    <div class="card mc-card mc-draft">
+      <div class="mc-draft-h">
+        <div>
+          <h4 class="mc-h">${sic("gift")}${title}${auto ? ` <span class="mc-tag">prepared for you</span>` : ""}</h4>
+          <p class="muted tiny" style="margin:2px 0 0;">${esc(ctx.offer_label || "")} · codes valid till
+            ${esc(ctx.expiry_label || "")}${ctx.link ? "" : " · your website is not published yet, so codes can only be used in person"}</p>
+        </div>
+        <button class="btn ghost sm" id="mcDiscard">${sic("close")}Discard</button>
+      </div>
+      <div class="mc-counts">
+        <span><b>${fmt(c.audience || 0)}</b> customers</span>
+        <span>${sic("whatsapp")}<b>${fmt(c.phone || 0)}</b> on WhatsApp</span>
+        <span>${sic("mail")}<b>${fmt(c.email || 0)}</b> by email</span>
+        ${c.unreachable ? `<span class="muted"><b>${fmt(c.unreachable)}</b> no contact</span>` : ""}
+        ${d.held_back ? `<span class="muted">${fmt(d.held_back)} left out, contacted recently</span>` : ""}
+      </div>
+      ${brandWarn}
+      <div class="mc-review">
+        <div class="mc-pic">
+          ${imgBlock}
+          <div class="mc-pic-a">
+            <button class="btn ghost sm" id="mcImgAi">${sic("spark")}${img.url && img.source === "ai" ? "Make another" : "Make with AI"}${esc(left)}</button>
+            <label class="btn ghost sm mc-up">${sic("camera")}Upload a photo
+              <input type="file" id="mcImgFile" accept="image/png,image/jpeg,image/webp" hidden></label>
+          </div>
+        </div>
+        <div class="mc-msg">
+          <div class="mc-msg-h"><b>What ${esc(sample.customer_name || "a customer")} gets</b>
+            <span class="muted tiny">${d.copy && d.copy.source === "template" ? "written from our templates" : d.copy && d.copy.source === "edited" ? "your edit" : "written by AI"}</span></div>
+          <div class="mc-bubble">${mcWa(sample.message)}</div>
+          <p class="muted tiny" style="margin:6px 0 0;">Email subject: ${esc(sample.email_subject || "")}</p>
+          <button class="btn ghost sm" id="mcEdit">${sic("edit")}Edit the message</button>
+          <div id="mcEditBox" hidden>
+            <label class="tiny">WhatsApp and email message
+              <textarea id="mcTpl" rows="7">${esc((d.copy || {}).whatsapp || "")}</textarea></label>
+            <label class="tiny">For customers whose favourite product we do not know
+              <textarea id="mcTplGen" rows="5">${esc((d.copy || {}).whatsapp_generic || "")}</textarea></label>
+            <label class="tiny">Email subject <input id="mcSubj" value="${esc((d.copy || {}).email_subject || "")}"></label>
+            <p class="muted tiny">Placeholders: {name} {product} {offer} {code} {expiry} {link} {brand}${d.reason === "festival" ? " {occasion}" : ""}.
+              {code} and {offer} must stay in.</p>
+            <button class="btn primary sm" id="mcSaveTpl">Save message</button>
+          </div>
+        </div>
+      </div>
+
+      <details class="sm-fold mc-who"${rows.length <= 12 ? " open" : ""}>
+        <summary>Who gets it, and their codes (${fmt(rows.length)})</summary>
+        <div class="mc-rows">
+          ${rows.map((r) => `<div class="mc-row">
+            <div><b>${esc(r.customer_name || r.customer_id)}</b>
+              <span class="muted tiny">${esc(r.product_display || "–")}${r.segment ? ` · ${esc(r.segment)}` : ""}</span></div>
+            <code>${esc(r.code)}</code>
+            <span class="mc-ch">${r.phone ? sic("whatsapp") : ""}${r.email ? sic("mail") : ""}${!r.phone && !r.email ? `<span class="muted tiny">no contact</span>` : ""}</span>
+            <button class="btn ghost tiny" data-mcrm="${esc(r.customer_id)}" aria-label="Leave ${esc(r.customer_name || "this customer")} out">${sic("close")}</button>
+          </div>`).join("")}
+        </div>
+      </details>
+
+      <div class="mc-send">
+        <label class="mc-chk"><input type="checkbox" id="mcChWa" checked>${sic("whatsapp")}<span><b>WhatsApp</b><br><span class="muted tiny">${waLine}</span></span></label>
+        <label class="mc-chk"><input type="checkbox" id="mcChMail" ${d.email_ready ? "checked" : ""}>${sic("mail")}<span><b>Email</b><br><span class="muted tiny">${d.email_ready
+          ? "Sent with the picture, the code and a Shop now button."
+          : "Email sending is not set up on this server yet."}</span></span></label>
+      </div>
+      ${(c.audience || 0) - (c.unreachable || 0) > 0 ? "" : `<div class="mc-warn">${sic("bell")}<span><b>None of these
+        customers have a phone number or email on file,</b> so there is nobody to send to. Upload your
+        sales again and map the <b>Customer phone</b> and <b>Customer email</b> columns, or take orders
+        on your website, which collects them for you.</span></div>`}
+      <div class="mc-go">
+        <button class="btn primary" id="mcSend"${(c.audience || 0) - (c.unreachable || 0) > 0 ? "" : " disabled"}>${sic("arrow-right")}Send to ${fmt((c.audience || 0) - (c.unreachable || 0))} customers</button>
+        <span class="muted tiny">Codes start working as soon as you send.</span>
+      </div>
+      <div class="err" id="mcErr" hidden></div>
+    </div>`;
+}
+
+function wireMcDraft() {
+  const d = _mc.draft;
+  const err = (m) => { const e = $("mcErr"); if (e) { e.textContent = m; e.hidden = false; } else toast(m, 6000); };
+  const repaint = (nd) => { _mc.draft = nd; warmModClearAll(); $("mcMain").innerHTML = mcDraftHtml(nd); wireMcDraft(); };
+
+  $("mcDiscard").onclick = async () => {
+    if (!confirm("Discard this campaign? Nothing has been sent, and its codes will never work.")) return;
+    try {
+      await api(`/api/campaign/${d.id}/discard`, { method: "POST" });
+      warmModClearAll(); refreshApprovals(true); openMarketing();
+    } catch (e) { err(e.message); }
+  };
+  $("mcEdit").onclick = () => { const b = $("mcEditBox"); b.hidden = !b.hidden; };
+  $("mcSaveTpl").onclick = async () => {
+    try {
+      repaint(await api(`/api/campaign/${d.id}/update`, { method: "POST", json: {
+        whatsapp: $("mcTpl").value, whatsapp_generic: $("mcTplGen").value, email_subject: $("mcSubj").value } }));
+      toast("Message saved");
+    } catch (e) { err(e.message); }
+  };
+  document.querySelectorAll("[data-mcrm]").forEach((b) => b.onclick = async () => {
+    try { repaint(await api(`/api/campaign/${d.id}/update`, { method: "POST", json: { remove: [b.dataset.mcrm] } })); }
+    catch (e) { err(e.message); }
+  });
+  $("mcImgAi").onclick = async () => {
+    const b = $("mcImgAi"); b.disabled = true; b.textContent = "Making the picture…";
+    try { repaint(await api(`/api/campaign/${d.id}/image`, { method: "POST" })); }
+    catch (e) { err(e.message); b.disabled = false; b.innerHTML = `${sic("spark")}Make with AI`; }
+  };
+  $("mcImgFile").onchange = async (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    const fd = new FormData(); fd.append("file", f);
+    try { toast("Uploading…"); repaint(await apiUpload(`/api/campaign/${d.id}/image/upload`, fd)); }
+    catch (e) { err(e.message); }
+  };
+  const ws = $("mcWaSetup");
+  if (ws) ws.onclick = (e) => { e.preventDefault(); openWhatsAppSetup(); };
+  $("mcSend").onclick = async () => {
+    const channels = [];
+    if ($("mcChWa").checked) channels.push("whatsapp");
+    if ($("mcChMail").checked) channels.push("email");
+    if (!channels.length) return err("Pick WhatsApp, email or both.");
+    const n = ((d.counts || {}).audience || 0) - ((d.counts || {}).unreachable || 0);
+    if (!confirm(`Send this campaign to ${n} customers now?`)) return;
+    const b = $("mcSend"); b.disabled = true; b.textContent = "Sending…";
+    try {
+      const r = await api(`/api/campaign/${d.id}/send`, { method: "POST", json: { channels } });
+      _mc.result = r;
+      warmModClearAll(); refreshApprovals(true);
+      $("mcMain").innerHTML = mcResultHtml(r);
+      wireMcResult(r);
+    } catch (e) { err(e.message); b.disabled = false; b.innerHTML = `${sic("arrow-right")}Send`; }
+  };
+}
+
+/* ------------------------------------------------------------- result ---- */
+function mcResultHtml(r) {
+  const links = (r.results || []).filter((x) => x.wa_link);
+  return `
+    <div class="card mc-card">
+      <h4 class="mc-h">${sic("check")}Campaign sent</h4>
+      <p style="margin:4px 0 12px;">${esc(r.summary || "")}</p>
+      ${links.length ? `
+        <p class="muted tiny" style="margin:0 0 10px;">Tap each one: WhatsApp opens with the message
+          already written, press send, come back for the next. ${(_mc.draft && _mc.draft.image && _mc.draft.image.url)
+            ? `<a href="${esc(_mc.draft.image.url)}" download target="_blank" rel="noopener">Save the picture</a> to attach it.` : ""}</p>
+        <div class="mc-taps">
+          ${links.map((x, i) => `<a class="mc-tap" href="${esc(x.wa_link)}" target="_blank" rel="noopener" data-tap="${i}">
+            ${sic("whatsapp")}<span><b>${esc(x.customer_name || x.phone)}</b><span class="muted tiny">${esc(x.code)}</span></span>
+            <span class="mc-tap-s">Send</span></a>`).join("")}
+        </div>
+        ${r.pending_campaign_id ? `<div class="mc-go"><button class="btn primary" id="mcTapDone">${sic("check")}I have sent them</button>
+          <span class="muted tiny">Until you say so, these are not counted as contacted.</span></div>` : ""}` : ""}
+      <div class="mc-go"><button class="btn ghost" id="mcNew">${sic("plus")}Start another campaign</button></div>
+    </div>`;
+}
+
+function wireMcResult(r) {
+  document.querySelectorAll("[data-tap]").forEach((a) => a.addEventListener("click", () => {
+    a.classList.add("done");
+    a.querySelector(".mc-tap-s").textContent = "Opened";
+  }));
+  const done = $("mcTapDone");
+  if (done) done.onclick = async () => {
+    try {
+      await api("/api/rfm/winback/confirm", { method: "POST", json: { campaign_id: r.pending_campaign_id } });
+      toast("Marked as sent. Every code they use is counted below.");
+      done.disabled = true;
+    } catch (e) { toast(e.message, 6000); }
+  };
+  $("mcNew").onclick = () => { warmModClearAll(); openMarketing(); };
+}
+
+/* ------------------------------------------------------------ history ---- */
+function mcHistoryHtml(rows, sym) {
+  if (!rows.length) return "";
+  return `
+    <details class="sm-fold" open>
+      <summary>Past campaigns (${rows.length})</summary>
+      <div class="mk-sends">
+        ${rows.slice(0, 20).map((s) => {
+          const codes = s.codes || null;
+          const what = s.reason === "festival" ? `${s.occasion || "Festival"} offer`
+            : s.reason === "winback" ? "Win-back" : "Win-back";
+          return `<div class="mk-send-row">
+            <b>${esc(what)}${s.offer_label ? ` · ${esc(s.offer_label)}` : ""}</b>
+            <span class="muted tiny">${esc(String(s.at || "").slice(0, 10))}
+              · ${fmt(s.delivered || 0)} sent${s.prepared ? ` · ${fmt(s.prepared)} by tap-to-send` : ""}
+              ${codes && codes.issued ? ` · <b>${fmt(codes.redeemed)} of ${fmt(codes.issued)} codes used</b>${codes.revenue ? `, ${mcMoney(sym, codes.revenue)} in orders` : ""}` : ""}</span>
+          </div>`;
+        }).join("")}
+      </div>
+    </details>`;
+}
+
+/* -------------------------------------------- every second Monday ------ */
+function mcAutoStrip(a) {
   if (!a) return "";
   const hr = (h) => { const n = Number(h) || 0; return `${((n + 11) % 12) + 1}${n < 12 ? "AM" : "PM"}`; };
   const p = a.pending;
+  const o = a.offer || {};
+  const offer = o.kind === "percent" ? `${o.value}% off` : `${(_mc.state || {}).symbol || "₹"}${o.value} off`;
   const last = a.last || null;
   const head = p
-    ? `<b>${fmt(p.reachable || p.n)} message${(p.reachable || p.n) === 1 ? "" : "s"} are written and waiting for you</b>
-       <span class="muted tiny">Prepared ${esc(String(p.at || "").slice(0, 10))}. Approve them in the panel on the right and they go out from your own email address.${
-         p.skipped_cooldown ? `${fmt(p.skipped_cooldown)} more were left out, they were contacted within the last ${a.cooldown_days} days.` : ""}</span>`
+    ? `<b>Your ${p.kind === "festival" && p.occasion ? esc(p.occasion) + " offer" : "win-back campaign"} is ready</b>
+       <span class="muted tiny">Prepared ${esc(String(p.at || "").slice(0, 10))} for ${fmt(p.reachable || p.n)} customers. Review it below, or approve it in the panel.</span>`
     : a.enabled
-      ? `<b>Checks every ${esc(a.day_name)} at ${esc(hr(a.hour))}${a.tz_label ? `${esc(a.tz_label)}` : ""}</b>
-         <span class="muted tiny">It reads your sales for customers who have gone quiet, writes each message against what that person actually bought, and puts one card in your Approval panel. Nothing is ever sent until you approve it. Anyone contacted in the last ${a.cooldown_days} days is left alone.
+      ? `<b>A campaign every second ${esc(a.day_name)} at ${esc(hr(a.hour))}${a.tz_label ? ` ${esc(a.tz_label)}` : ""}</b>
+         <span class="muted tiny">A festival offer when a festival is coming, a win-back campaign otherwise, with ${esc(offer)}.
+           It waits for your approval, nothing is sent on its own.
            ${last && !last.ok && last.reason ? `Last check: ${esc(last.reason)}.` : ""}
-           ${a.next_run_label ? `Next check ${esc(a.next_run_label)}.` : ""}</span>`
-      : `<b>Automatic win-back is off</b>
-         <span class="muted tiny">Turn it on and it finds your quiet customers every week for you.</span>`;
+           ${a.next_run_label ? `Next one ${esc(a.next_run_label)}.` : ""}</span>`
+      : `<b>Automatic campaigns are off</b>
+         <span class="muted tiny">Turn them on and a campaign is prepared for you every second week.</span>`;
   return `
-    <div class="ap-strip ${p ? "on" : (a.enabled ? "on" : "off")}">
+    <div class="ap-strip ${p || a.enabled ? "on" : "off"}">
       <div class="ap-strip-t">${sic(p ? "bell" : "clock")}<div>${head}</div></div>
       <div class="ap-strip-a">
-        ${p ? `<button class="btn ghost sm" id="wbaSkip" title="Throw this batch away, these customers stay eligible next week">Skip this week</button>`
-            : `<button class="btn primary sm" id="wbaRun">${sic("refresh")}Check now</button>`}
-        <button class="btn ghost sm" id="wbaChange">${sic("settings")}${a.enabled ? "Change day" : "Turn on"}</button>
+        ${p ? "" : `<button class="btn ghost sm" id="wbaRun">${sic("refresh")}Prepare one now</button>`}
+        <button class="btn ghost sm" id="wbaChange">${a.enabled ? "Change" : "Turn on"}</button>
       </div>
     </div>`;
 }
 
-function wireWinbackStrip() {
+function wireMcAuto() {
   const run = $("wbaRun");
   if (run) run.onclick = async () => {
-    run.disabled = true; run.textContent = "Checking…";
+    run.disabled = true; run.textContent = "Preparing…";
     try {
       const r = await api("/api/winback/auto/run", { method: "POST" });
       const res = r.run || {};
-      toast(res.ok ? `${res.reachable || res.n} customers ready, approve them in the panel`
+      toast(res.ok ? `Campaign ready for ${res.reachable || res.n} customers. Review it below.`
                    : `Nothing to send: ${res.reason || "no one has gone quiet"}`, 6000);
-      warmModClearAll();
-      openMarketing();
-      refreshApprovals(true);
+      warmModClearAll(); refreshApprovals(true); openMarketing();
     } catch (e) { toast(e.message, 6000); run.disabled = false; }
-  };
-  const skip = $("wbaSkip");
-  if (skip) skip.onclick = async () => {
-    if (!confirm("Throw away this week's win-back batch? Nothing is sent, and these customers will be eligible again next week.")) return;
-    try {
-      await api("/api/winback/auto/skip", { method: "POST" });
-      toast("Skipped. Nobody was contacted.");
-      warmModClearAll();
-      openMarketing();
-      refreshApprovals(true);
-    } catch (e) { toast(e.message, 6000); }
   };
   const ch = $("wbaChange");
   if (ch) ch.onclick = openWinbackAutoSetup;
@@ -8032,22 +8364,32 @@ function wireWinbackStrip() {
 async function openWinbackAutoSetup() {
   let a;
   try { a = await api("/api/winback/auto"); } catch (e) { return toast(e.message); }
+  const sym = (_mc.state || {}).symbol || "₹";
+  const o = a.offer || { kind: "percent", value: 10, min_order: 0 };
   const days = (a.day_names || []).map((d, i) =>
-    `<option value="${i}"${i === a.day ? "selected" : ""}>${esc(d)}</option>`).join("");
+    `<option value="${i}"${i === a.day ? " selected" : ""}>${esc(d)}</option>`).join("");
   const hours = Array.from({ length: 24 }, (_, h) =>
-    `<option value="${h}"${h === a.hour ? "selected" : ""}>${((h + 11) % 12) + 1}${h < 12 ? "AM" : "PM"}</option>`).join("");
-  openModal("Automatic win-back", `
+    `<option value="${h}"${h === a.hour ? " selected" : ""}>${((h + 11) % 12) + 1}${h < 12 ? "AM" : "PM"}</option>`).join("");
+  openModal("Automatic campaigns", `
     <label class="site-toggle" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-      <input type="checkbox" id="wbaOn"${a.enabled ? "checked" : ""} />
-      <span class="tsw"></span><b>Look for quiet customers every week</b>
+      <input type="checkbox" id="wbaOn"${a.enabled ? " checked" : ""} />
+      <span class="tsw"></span><b>Prepare a campaign every second week</b>
     </label>
     <div class="grid-2">
       <label>Day <select id="wbaDay">${days}</select></label>
       <label>Time <select id="wbaHour">${hours}</select></label>
     </div>
-    <p class="muted tiny" style="margin-top:10px;">Times are ${esc(a.tz_label || "your local time")}.
-      Anyone already contacted in the last ${a.cooldown_days} days is skipped, so the same
-      customer never gets two of these close together. Nothing is sent without your approval.</p>
+    <div class="grid-2" style="margin-top:10px;">
+      <label>Offer <select id="wbaKind"><option value="flat"${o.kind === "flat" ? " selected" : ""}>${esc(sym)} off</option>
+        <option value="percent"${o.kind === "percent" ? " selected" : ""}>% off</option></select></label>
+      <label>Discount <input id="wbaVal" type="number" min="1" value="${esc(o.value)}"></label>
+    </div>
+    <label style="margin-top:10px;display:block;">Minimum order (optional)
+      <input id="wbaMin" type="number" min="0" value="${esc(o.min_order || "")}"></label>
+    <p class="muted tiny" style="margin-top:10px;">Times are ${esc(a.tz_label || "your local time")}. When a
+      festival is less than three weeks away it prepares a festival offer for your best customers,
+      otherwise a win-back campaign. Anyone contacted recently is left out. Nothing is sent
+      without your approval.</p>
     <div class="row" style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="btn ghost" data-mclose2>Cancel</button>
       <button class="btn primary" id="wbaSave">Save</button>
@@ -8059,72 +8401,107 @@ async function openWinbackAutoSetup() {
         enabled: $("wbaOn").checked,
         day: Number($("wbaDay").value),
         hour: Number($("wbaHour").value),
+        offer: { kind: $("wbaKind").value, value: Number($("wbaVal").value) || 0,
+                 min_order: Number($("wbaMin").value) || 0 },
       }});
-      closeModal();
-      toast("Saved");
-      warmModClearAll();
-      openMarketing();
+      closeModal(); toast("Saved"); warmModClearAll(); openMarketing();
     } catch (e) { toast(e.message, 6000); }
   };
 }
 
-function renderMarketing(wb, proof, sends, auto) {
-  const rows = (wb && wb.customers) || [];
-  const sendRows = (sends && sends.sends) || [];
+/* ------------------------------------------------- WhatsApp setup ------ */
+/* Lives in Account → WhatsApp, and opens as a popup from the campaign screen.
+   Step one works the minute it is saved (tap-to-send); step two is Meta's
+   official API, the only way WhatsApp lets a business message customers
+   automatically. */
+function whatsappSetupHtml(w) {
+  const badge = { auto: "Automatic", waiting: "Waiting for Meta", tap: "Tap-to-send", off: "Not set up" }[w.mode] || "";
+  return `
+    <p class="muted tiny" style="margin-top:0;"><span class="mc-tag">${esc(badge)}</span> ${esc(w.headline || "")}</p>
+    <h4 style="margin:12px 0 6px;">1. The number you send from</h4>
+    <p class="muted tiny" style="margin:0 0 8px;">The WhatsApp number your customers know your shop by.
+      With just this, every campaign message opens in WhatsApp already written, you tap send.</p>
+    <div style="display:flex;gap:8px;">
+      <input id="waNum" placeholder="+91 98765 43210" value="${esc(w.number ? "+" + w.number : "")}" style="flex:1;min-width:0;">
+      <button class="btn primary sm" id="waNumSave">Save</button>
+    </div>
 
-  const proofLine = proof && proof.headline && proof.totals && proof.totals.contacted
-    ? `<div class="today-proof">${sic("trend")}<span>${esc(proof.headline)}</span>
-         <button class="btn ghost tiny" id="mkProofMore">How this is counted</button></div>`
-    : "";
+    <h4 style="margin:18px 0 6px;">2. Send automatically <span class="muted tiny">(optional)</span></h4>
+    <p class="muted tiny" style="margin:0 0 8px;">WhatsApp only lets a business message customers
+      automatically through its official Business Platform. Setting it up is free; Meta charges a
+      small fee per marketing message. In
+      <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener">Meta for Developers</a>,
+      create a Business app and add <b>WhatsApp</b> to it, add your number, then copy the three values
+      below. The two IDs are under WhatsApp → API Setup. For the token, create a System User in
+      Business Settings and generate a permanent token with <i>whatsapp_business_messaging</i> and
+      <i>whatsapp_business_management</i>.</p>
+    ${w.connected ? `
+      <div class="ok-note">Connected${w.display_number ? ` as ${esc(w.display_number)}` : ""}.
+        Message template: <b>${esc(w.template_status || "not submitted")}</b>.
+        ${w.template_error ? `<br>${esc(w.template_error)}` : ""}</div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn ghost sm" id="waRefresh">${sic("refresh")}Check approval</button>
+        <button class="btn ghost sm" id="waOff">Disconnect</button>
+      </div>` : `
+      <label class="tiny" style="display:block;">Phone Number ID <input id="waPnid" inputmode="numeric" style="width:100%;"></label>
+      <label class="tiny" style="display:block;margin-top:6px;">WhatsApp Business Account ID <input id="waWaba" inputmode="numeric" style="width:100%;"></label>
+      <label class="tiny" style="display:block;margin-top:6px;">Permanent access token <input id="waTok" type="password" autocomplete="off" style="width:100%;"></label>
+      <button class="btn primary sm" id="waConnect" style="margin-top:10px;">Connect and submit the template</button>
+      <p class="muted tiny">We check these with Meta, then submit your campaign message template for
+        approval. Meta usually approves within minutes, sometimes up to a day.</p>`}
+    <div class="err" id="waErr" hidden></div>`;
+}
 
-  let body;
-  if (wb && wb._error) {
-    body = `<div class="ap-empty">${esc(wb._error)}</div>`;
-  } else if (!rows.length) {
-    body = `<div class="ap-empty">No customers are at risk of going quiet right now,
-      nice work. This list is built from your order history, so check back as it grows.</div>`;
-  } else {
-    body = `
-      <div class="card mk-card">
-        <h4 style="margin:0 0 4px;">${rows.length} customer${rows.length === 1 ? "" : "s"} have gone quiet</h4>
-        <p class="muted tiny" style="margin:0 0 12px;">Each one gets a written message
-          with their favourite item and a coupon, you edit every row before anything sends.</p>
-        <ul class="mk-list">
-          ${rows.slice(0, 8).map((r) => `<li><b>${esc(r.customer_name || "Customer")}</b>
-            <span class="muted tiny">${esc(r.favorite_item || "")}${r.favorite_item ? " · " : ""}last order ${esc(r.last_purchase_date || "–")}</span></li>`).join("")}
-        </ul>
-        ${rows.length > 8 ? `<p class="muted tiny">+ ${rows.length - 8} more</p>` : ""}
-        <button class="btn primary" id="mkReview">Review &amp; send</button>
-      </div>`;
-  }
+function wireWhatsAppSetup(onChange) {
+  const err = (m) => { const e = $("waErr"); if (e) { e.textContent = m; e.hidden = false; } else toast(m, 6000); };
+  $("waNumSave").onclick = async () => {
+    try {
+      await api("/api/whatsapp/number", { method: "POST", json: { number: $("waNum").value } });
+      toast("WhatsApp number saved"); onChange();
+    } catch (e) { err(e.message); }
+  };
+  const c = $("waConnect");
+  if (c) c.onclick = async () => {
+    c.disabled = true; c.textContent = "Checking with Meta…";
+    try {
+      await api("/api/whatsapp/connect", { method: "POST", json: {
+        phone_number_id: $("waPnid").value, waba_id: $("waWaba").value, token: $("waTok").value } });
+      toast("Connected. Your template is with Meta for approval."); onChange();
+    } catch (e) { err(e.message); c.disabled = false; c.textContent = "Connect and submit the template"; }
+  };
+  const rf = $("waRefresh");
+  if (rf) rf.onclick = async () => {
+    try {
+      const s = await api("/api/whatsapp/refresh", { method: "POST" });
+      toast(`Template: ${s.template_status || "unknown"}`); onChange();
+    } catch (e) { err(e.message); }
+  };
+  const off = $("waOff");
+  if (off) off.onclick = async () => {
+    if (!confirm("Disconnect automatic WhatsApp sending? Your number stays saved for tap-to-send.")) return;
+    try { await api("/api/whatsapp/disconnect", { method: "POST" }); onChange(); } catch (e) { err(e.message); }
+  };
+}
 
-  const pastCampaigns = sendRows.length ? `
-    <details class="sm-fold">
-      <summary>Past campaigns (${sendRows.length})</summary>
-      <div class="mk-sends">
-        ${sendRows.slice(0, 20).map((s) => `
-          <div class="mk-send-row">
-            <b>${esc((s.channels || []).join(" + ") || "–")}</b>
-            <span class="muted tiny">${esc(String(s.at || "").slice(0, 10))}
-              · ${fmt(s.recipients || 0)} sent
-              ${s.skipped ? ` · ${fmt(s.skipped)} skipped (no email/phone)` : ""}</span>
-          </div>`).join("")}
-      </div>
-    </details>` : "";
+async function openWhatsAppSetup() {
+  let w;
+  try { w = await api("/api/whatsapp"); } catch (e) { return toast(e.message); }
+  openModal("WhatsApp for your campaigns", whatsappSetupHtml(w));
+  wireWhatsAppSetup(() => {
+    closeModal(); warmModClearAll();
+    if (_currentModule === "marketing") openMarketing();
+  });
+}
 
-  moduleShell("Marketing Campaign", `
-    <p class="muted" style="margin-top:0;">Win-back campaigns for customers who used to
-      buy from you and have gone quiet, written and ready, one tap to send.</p>
-    ${winbackStrip(auto)}
-    ${proofLine}
-    ${body}
-    ${pastCampaigns}`);
-
-  wireWinbackStrip();
-  const m = $("mkProofMore");
-  if (m) m.onclick = () => toast(proof.method, 7000);
-  const rv = $("mkReview");
-  if (rv) rv.onclick = openWinbackEditor;
+/* Account → WhatsApp pane, drawn when the pane opens. */
+async function fillWhatsAppPane() {
+  const slot = $("waSlot");
+  if (!slot) return;
+  try {
+    const w = await api("/api/whatsapp");
+    slot.innerHTML = whatsappSetupHtml(w);
+    wireWhatsAppSetup(fillWhatsAppPane);
+  } catch (e) { slot.innerHTML = `<div class="ap-empty">${esc(e.message)}</div>`; }
 }
 
 // ---------- Win-back — approve = direct Excel download; details = editable popup ----------

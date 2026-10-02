@@ -272,11 +272,15 @@ def _clean_address(a: dict) -> dict:
 # =========================================================================
 # cart pricing
 # =========================================================================
-def price_cart(seller: str, lines: list[dict]) -> dict:
+def price_cart(seller: str, lines: list[dict], coupon: str = "") -> dict:
     """Server-side truth for a cart. `lines` is [{product_id, qty}].
 
     Unknown, unlisted and out-of-stock products are reported back rather than
-    silently dropped, so the storefront can tell the shopper what changed."""
+    silently dropped, so the storefront can tell the shopper what changed.
+
+    `coupon` is a Marketing Campaign code (backend/core/discounts.py). A code
+    that does not apply never fails the cart: it comes back as `coupon_error`
+    and the cart is priced without it, so a typo cannot block a sale."""
     seller = _norm_email(seller)
     site = sitebuilder.get_site(seller)
     c = site["commerce"]
@@ -343,6 +347,22 @@ def price_cart(seller: str, lines: list[dict]) -> dict:
         })
 
     subtotal = _money(sum(i["line_total"] for i in items))
+
+    discount, coupon_code, coupon_error = 0.0, "", ""
+    if str(coupon or "").strip() and items:
+        from backend.core import discounts
+        try:
+            from backend.core import currency
+            d = discounts.check(seller, coupon, subtotal,
+                                symbol=currency.symbol(c.get("currency") or "INR") or "")
+            discount, coupon_code = _money(d["amount"]), d["code"]
+        except discounts.DiscountError as e:
+            coupon_error = str(e)
+    # Everything below works on what the shopper actually pays for the goods.
+    # Free-shipping thresholds read the pre-discount subtotal: a shopper who
+    # filled their bag past the line should not lose free delivery for using
+    # the code the shop sent them.
+    goods = _money(subtotal - discount)
     ship = 0.0
     if items and c.get("shipping_fee"):
         free_above = _money(c.get("free_shipping_above"))
@@ -350,18 +370,19 @@ def price_cart(seller: str, lines: list[dict]) -> dict:
             ship = _money(c["shipping_fee"])
     gst_pct = _money(c.get("gst_percent"))
     if gst_pct and not c.get("gst_inclusive", True):
-        tax = _money(subtotal * gst_pct / 100.0)
+        tax = _money(goods * gst_pct / 100.0)
     elif gst_pct:
         # prices already include GST — show the component, don't add it again
-        tax = _money(subtotal - subtotal / (1 + gst_pct / 100.0))
+        tax = _money(goods - goods / (1 + gst_pct / 100.0))
     else:
         tax = 0.0
     added_tax = tax if (gst_pct and not c.get("gst_inclusive", True)) else 0.0
-    total = _money(subtotal + ship + added_tax)
+    total = _money(goods + ship + added_tax)
 
     return {
         "items": items, "issues": issues,
         "subtotal": subtotal, "shipping": ship,
+        "discount": discount, "coupon": coupon_code, "coupon_error": coupon_error,
         "gst_percent": gst_pct, "gst_inclusive": bool(c.get("gst_inclusive", True)),
         "tax": tax, "total": total,
         "currency": c.get("currency") or "INR",
@@ -386,6 +407,7 @@ def cart_fingerprint(priced: dict, payment: str) -> str:
     payload = {
         "payment": payment,
         "total": priced.get("total"),
+        "coupon": priced.get("coupon") or "",
         "items": [{"product_id": i.get("product_id"), "variant_id": i.get("variant_id"),
                    "qty": i.get("qty"), "unit_price": i.get("unit_price")}
                   for i in priced.get("items") or []],
@@ -413,13 +435,18 @@ def _next_order_no(seller: str) -> str:
 
 def place_order(seller: str, customer: dict, lines: list[dict],
                 address: dict, payment: str = "cod", note: str = "",
-                payment_ok: bool = False, payment_ref: str = "") -> dict:
+                payment_ok: bool = False, payment_ref: str = "",
+                coupon: str = "") -> dict:
     seller = _norm_email(seller)
     site = sitebuilder.get_site(seller)
     if not site.get("published"):
         raise StoreError("This store is not accepting orders right now.")
 
-    priced = price_cart(seller, lines)
+    priced = price_cart(seller, lines, coupon)
+    if coupon and priced.get("coupon_error"):
+        # The shopper saw a discounted total. Placing the order at full price
+        # without saying so would be the one thing worse than refusing.
+        raise StoreError(priced["coupon_error"] + " Remove the code to order at the full price.")
     if not priced["items"]:
         raise StoreError("Your cart is empty — nothing left in stock for these items.")
     if priced["min_order"] and priced["subtotal"] < priced["min_order"]:
@@ -469,6 +496,8 @@ def place_order(seller: str, customer: dict, lines: list[dict],
         "note": str(note or "").strip()[:300],
         "items": priced["items"],
         "subtotal": priced["subtotal"],
+        "discount": priced.get("discount") or 0.0,
+        "coupon": priced.get("coupon") or "",
         "shipping": priced["shipping"],
         "tax": priced["tax"],
         "gst_percent": priced["gst_percent"],
@@ -477,6 +506,15 @@ def place_order(seller: str, customer: dict, lines: list[dict],
         "currency": priced["currency"],
         "history": [{"at": _now(), "status": "new", "by": "shopper"}],
     }
+
+    if order["coupon"]:
+        from backend.core import discounts
+        try:
+            discounts.redeem(seller, order["coupon"], priced["subtotal"],
+                             order["order_no"], order["total"])
+        except discounts.DiscountError as e:
+            # used up by another order in the last few seconds
+            raise StoreError(f"{e} Remove the code to order at the full price.")
 
     rows = _orders(seller)
     rows.append(order)
@@ -571,6 +609,13 @@ def set_status(seller: str, order_id: str, status: str, by: str = "seller",
     # cancelling puts the stock back; un-cancelling takes it out again
     if status == "cancelled" and was != "cancelled":
         _consume_stock(seller, order["items"], sign=+1)
+        if order.get("coupon"):
+            # the shopper did not get the order, so they get their code back
+            try:
+                from backend.core import discounts
+                discounts.release(seller, order["coupon"], order.get("order_no") or "")
+            except Exception:  # noqa: BLE001
+                pass
     elif was == "cancelled" and status != "cancelled":
         _consume_stock(seller, order["items"], sign=-1)
     sync_sales(seller)
@@ -700,10 +745,14 @@ def site_sales_frame(seller: str) -> pd.DataFrame:
                 "quantity": int(it.get("qty") or 0),
                 "amount": _money(it.get("line_total")),
                 "channel": "site",
+                # a website order always has a phone and often an email, which
+                # is what a Marketing Campaign needs to reach this shopper again
+                "customer_phone": o.get("phone") or None,
+                "customer_email": o.get("customer_email") or None,
             })
     df = pd.DataFrame(rows, columns=["date", "order_id", "customer_id", "customer_name",
                                      "product", "category", "subcategory", "quantity",
-                                     "amount", "channel"])
+                                     "amount", "channel", "customer_phone", "customer_email"])
     if len(df):
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
         df = df.dropna(subset=["date"])

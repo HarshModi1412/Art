@@ -66,6 +66,22 @@ COOLDOWN_DAYS = 45        # leave a contacted customer alone for this long
 MIN_BATCH = 3             # below this it is not worth a card
 MAX_BATCH = 60            # one send, not a mailing list
 
+# EVERY SECOND MONDAY, not every Monday. A shop's customers hearing from it
+# weekly is a newsletter; fortnightly is a shop that remembers them. Each run
+# is a FESTIVAL campaign when a festival starts within FESTIVAL_HORIZON days
+# and has not had one yet, and a win-back campaign otherwise.
+EVERY_WEEKS = 2
+FESTIVAL_HORIZON = 21
+DEFAULT_OFFER = {"kind": "percent", "value": 10.0, "min_order": 0.0}
+
+
+def _offer(raw) -> dict:
+    from backend.core import discounts
+    try:
+        return discounts.clean_offer(raw) if raw else dict(DEFAULT_OFFER)
+    except discounts.DiscountError:
+        return dict(DEFAULT_OFFER)
+
 
 # ------------------------------------------------------------------ settings
 def get_config(email: str) -> dict:
@@ -79,12 +95,17 @@ def get_config(email: str) -> dict:
     except (TypeError, ValueError):
         hour = DEFAULT_HOUR
     return {"enabled": bool(s.get("enabled", True)), "day": day, "hour": hour,
-            "day_name": DAY_NAMES[day], "cooldown_days": COOLDOWN_DAYS}
+            "day_name": DAY_NAMES[day], "cooldown_days": COOLDOWN_DAYS,
+            "every_weeks": EVERY_WEEKS, "offer": _offer(s.get("offer"))}
 
 
 def save_config(email: str, patch: dict) -> dict:
     cur = get_config(email)
-    clean = {"enabled": cur["enabled"], "day": cur["day"], "hour": cur["hour"]}
+    clean = {"enabled": cur["enabled"], "day": cur["day"], "hour": cur["hour"],
+             "offer": cur["offer"]}
+    if patch.get("offer") is not None:
+        from backend.core import discounts
+        clean["offer"] = discounts.clean_offer(patch["offer"])   # raises with a reason
     if "enabled" in patch:
         clean["enabled"] = bool(patch["enabled"])
     if "day" in patch:
@@ -129,8 +150,19 @@ def _last_trigger(now: datetime, day: int, hour: int) -> datetime:
     return t
 
 
-def next_trigger(now: datetime, day: int, hour: int) -> datetime:
-    return _last_trigger(now, day, hour) + timedelta(days=7)
+def next_trigger(now: datetime, day: int, hour: int, last_run: str = "") -> datetime:
+    nxt = _last_trigger(now, day, hour) + timedelta(days=7)
+    prev = _parse_stamp(last_run)
+    while prev and nxt - prev < timedelta(days=7 * EVERY_WEEKS - 1):
+        nxt += timedelta(days=7)
+    return nxt
+
+
+def _parse_stamp(v) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(v)) if v else None
+    except ValueError:
+        return None
 
 
 def arm(email: str) -> dict:
@@ -164,6 +196,10 @@ def due(email: str, now: datetime | None = None) -> str | None:
         return None
     stamp = last.isoformat(timespec="hours")
     if st.get("last_trigger") == stamp:
+        return None
+    # Every second week: the trigger a week after the last run is skipped.
+    prev = _parse_stamp(st.get("last_trigger"))
+    if prev and last - prev < timedelta(days=7 * EVERY_WEEKS - 1):
         return None
     # NO CATCH-UP GUARD IS NEEDED HERE, and one used to be written that could
     # never fire. `_last_trigger` always returns the MOST RECENT trigger, so a
@@ -203,80 +239,75 @@ def recently_contacted(email: str, days: int = COOLDOWN_DAYS) -> set[str]:
 
 
 # --------------------------------------------------------------------- run
-def build_batch(email: str) -> dict:
-    """Who to reach this week, and what to say to each of them.
+def choose_reason(email: str) -> tuple[str, str]:
+    """('festival', name) when a festival is coming that has not had its
+    campaign yet, else ('winback', '')."""
+    from backend.core import campaign_engine
+    fest = campaign_engine.upcoming_occasion(email, horizon=FESTIVAL_HORIZON)
+    done = set(_state(email).get("festivals_done") or [])
+    if fest and fest.get("name") and fest["name"] not in done:
+        return "festival", fest["name"]
+    return "winback", ""
 
-    Reads the seller's own sales history — the same at-risk pool the Today
-    strip and the manual generator use, so the app never disagrees with
-    itself about who has gone quiet."""
-    from backend.core import analytics, smart, templates
 
-    txns = smart.load_sales(email)
-    if txns is None or not len(txns):
-        return {"ok": False, "reason": "no sales data yet", "rows": [], "skipped": 0}
-
+def prepare(email: str, reason: str = "", occasion: str = "") -> dict:
+    """Build this run's campaign as a draft (campaign_engine). Never sends."""
+    from backend.core import campaign_engine
+    if not reason:
+        reason, occasion = choose_reason(email)
+    cfg = get_config(email)
     try:
-        at_risk = analytics.at_risk_cached(email, txns) or []
-    except Exception as e:  # noqa: BLE001
-        log.warning("win-back scan failed for %s: %s", email, e)
-        return {"ok": False, "reason": str(e)[:120], "rows": [], "skipped": 0}
-    if not at_risk:
-        return {"ok": False, "reason": "nobody has gone quiet", "rows": [], "skipped": 0}
-
-    cooling = recently_contacted(email)
-    fresh = [c for c in at_risk if str(c.get("customer_id") or "") not in cooling]
-    skipped = len(at_risk) - len(fresh)
-
-    # Most valuable first: if the batch has to be capped, it should keep the
-    # customers worth the most, not the ones the dataframe happened to sort to
-    # the top.
-    fresh.sort(key=lambda c: float(c.get("monetary") or 0), reverse=True)
-    fresh = fresh[:MAX_BATCH]
-
-    if len(fresh) < MIN_BATCH:
-        return {"ok": False, "rows": [], "skipped": skipped,
-                "reason": (f"everyone at risk was already contacted in the last "
-                           f"{COOLDOWN_DAYS} days" if skipped and not fresh
-                           else f"only {len(fresh)} to reach, not worth a campaign yet")}
-
-    rows = templates.build_winback_messages(fresh)
-    reachable = [r for r in rows
-                 if str(r.get("email") or r.get("customer_email") or "").strip()
-                 or str(r.get("phone") or r.get("customer_phone") or "").strip()]
-    return {
-        "ok": bool(reachable),
-        "rows": rows,
-        "reachable": len(reachable),
-        "skipped": skipped,
-        "value": round(sum(float(r.get("monetary") or 0) for r in rows), 2),
-        "reason": "" if reachable else "none of them have an email or phone on file",
-    }
+        draft = campaign_engine.build(email, reason, cfg["offer"], occasion=occasion,
+                                      trigger="auto", limit=MAX_BATCH)
+    except campaign_engine.CampaignError as e:
+        if reason == "festival":
+            # nobody to reach for the festival is no reason to skip win-back
+            return prepare(email, "winback", "")
+        return {"ok": False, "reason": str(e), "n": 0}
+    c = draft["counts"]
+    reachable = c["audience"] - c["unreachable"]
+    why = ""
+    if c["audience"] < MIN_BATCH:
+        why = f"only {c['audience']} to reach, not worth a campaign yet"
+    elif not reachable:
+        why = "none of them have an email or phone on file"
+    if why:
+        campaign_engine.discard(email, draft["id"])
+        return {"ok": False, "reason": why, "n": c["audience"]}
+    return {"ok": True, "draft_id": draft["id"], "reason_kind": draft["reason"],
+            "occasion": draft.get("occasion") or "", "n": c["audience"],
+            "reachable": reachable, "value": c["value"],
+            "skipped": draft.get("held_back", 0), "reason": ""}
 
 
 def run_if_due(email: str, now: datetime | None = None, trigger: str = "auto") -> dict:
-    """Do this week's scan if its moment has come. Safe to call as often as
-    you like — it is a no-op every time but once a week."""
+    """Prepare this fortnight's campaign if its moment has come. Safe to call
+    as often as you like: a no-op every time but once every second week."""
     stamp = due(email, now) if trigger == "auto" else _now(email).isoformat(timespec="hours")
     if trigger == "auto" and not stamp:
         return {"skipped": True, "reason": "not due"}
 
-    batch = build_batch(email)
+    batch = prepare(email)
     st = _state(email)
+    old = (st.get("pending") or {}).get("draft_id")
+    if old and old != batch.get("draft_id"):
+        from backend.core import campaign_engine
+        campaign_engine.discard(email, old)       # a fresh run replaces the old card
     st["last_trigger"] = stamp
     st["last_run_at"] = _now(email).isoformat(timespec="seconds")
     run = {"at": st["last_run_at"], "trigger": trigger, "ok": batch["ok"],
-           "n": len(batch["rows"]), "reachable": batch.get("reachable", 0),
+           "n": batch.get("n", 0), "reachable": batch.get("reachable", 0),
            "skipped_cooldown": batch.get("skipped", 0),
-           "value": batch.get("value", 0), "reason": batch.get("reason", "")}
+           "value": batch.get("value", 0), "reason": batch.get("reason", ""),
+           "kind": batch.get("reason_kind", ""), "occasion": batch.get("occasion", "")}
     st["runs"] = (st.get("runs") or []) + [run]
-
     if batch["ok"]:
-        # The batch waits for a yes. Stored whole, so approving it sends exactly
-        # what was prepared rather than re-running the scan against data that
-        # has moved since — the seller approves what they were shown.
-        st["pending"] = {"at": st["last_run_at"], "rows": batch["rows"],
-                         "reachable": batch.get("reachable", 0),
-                         "value": batch.get("value", 0),
+        # The campaign waits for a yes. Stored as a draft, so approving it sends
+        # exactly what was prepared rather than re-running the scan against
+        # data that has moved since: the seller approves what they were shown.
+        st["pending"] = {"at": st["last_run_at"], "draft_id": batch["draft_id"],
+                         "kind": batch["reason_kind"], "occasion": batch["occasion"],
+                         "reachable": batch["reachable"], "value": batch["value"],
                          "skipped_cooldown": batch.get("skipped", 0)}
     else:
         st.pop("pending", None)
@@ -336,34 +367,39 @@ def run_due() -> dict:
 
 # ------------------------------------------------------------------ pending
 def pending(email: str) -> dict | None:
-    """The batch waiting for approval, if there is one."""
+    """The campaign waiting for approval, if there is one (with its rows)."""
     p = _state(email).get("pending")
-    return p if isinstance(p, dict) and p.get("rows") else None
+    if not isinstance(p, dict) or not p.get("draft_id"):
+        return None
+    from backend.core import campaign_engine
+    d = campaign_engine.get_draft(email, p["draft_id"])
+    if not d or d.get("state") != "draft" or not d.get("rows"):
+        return None
+    return {**p, "rows": d["rows"], "n": len(d["rows"])}
 
 
 def clear_pending(email: str) -> None:
     st = _state(email)
-    st.pop("pending", None)
+    p = st.pop("pending", None)
     _save_state(email, st)
+    if isinstance(p, dict) and p.get("draft_id"):
+        from backend.core import campaign_engine
+        campaign_engine.discard(email, p["draft_id"])
 
 
-def approve(email: str, channels: tuple[str, ...] = ("email", "whatsapp")) -> dict:
-    """Send the waiting batch. This is the only thing that puts a message in
+def approve(email: str, channels: tuple[str, ...] = ("whatsapp", "email")) -> dict:
+    """Send the waiting campaign. This is the only thing that puts a message in
     front of a customer, and it only runs because a person pressed a button."""
-    from backend.core import campaigns, sitebuilder
-
+    from backend.core import campaign_engine
     p = pending(email)
     if not p:
-        raise ValueError("There is no win-back campaign waiting.")
-    brand = ""
-    try:
-        brand = (sitebuilder.get_site(email) or {}).get("brand_name") or ""
-    except Exception:  # noqa: BLE001
-        brand = ""
-    res = campaigns.send(email, p["rows"], brand or "our shop", channels=channels)
-    clear_pending(email)
+        raise ValueError("There is no campaign waiting.")
+    res = campaign_engine.send(email, p["draft_id"], channels=channels)
     st = _state(email)
+    st.pop("pending", None)
     st["last_sent_at"] = _now(email).isoformat(timespec="seconds")
+    if p.get("kind") == "festival" and p.get("occasion"):
+        st["festivals_done"] = ((st.get("festivals_done") or []) + [p["occasion"]])[-12:]
     _save_state(email, st)
     return res
 
@@ -372,7 +408,7 @@ def status(email: str) -> dict:
     cfg = get_config(email)
     st = _state(email)
     now = _now(email)
-    nxt = next_trigger(now, cfg["day"], cfg["hour"])
+    nxt = next_trigger(now, cfg["day"], cfg["hour"], st.get("last_trigger") or "")
     runs = st.get("runs") or []
     p = pending(email)
     return {
@@ -384,6 +420,9 @@ def status(email: str) -> dict:
         "last_run_at": st.get("last_run_at", ""),
         "last_sent_at": st.get("last_sent_at", ""),
         "pending": ({"at": p["at"], "n": len(p["rows"]),
+                     "draft_id": p.get("draft_id") or "",
+                     "kind": p.get("kind") or "winback",
+                     "occasion": p.get("occasion") or "",
                      "reachable": p.get("reachable", 0),
                      "value": p.get("value", 0),
                      "skipped_cooldown": p.get("skipped_cooldown", 0)} if p else None),

@@ -79,7 +79,10 @@ def _fill(template: str, row: dict, brand: str) -> str:
         "{brand}": brand,
         "{item}": str(row.get("favorite_item") or "your favourite").strip(),
         "{days}": str(int(row.get("recency_days") or 0)),
-        "{coupon}": str(row.get("coupon") or "").strip(),
+        # the generator writes `coupon_code`; `coupon` is what an edited row
+        # from the popup may carry. Reading only `coupon` sent "here's  off".
+        "{coupon}": str(row.get("coupon") or row.get("coupon_code")
+                        or row.get("code") or "").strip(),
     }
     for k, v in subs.items():
         out = out.replace(k, v)

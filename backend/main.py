@@ -627,6 +627,7 @@ class StoreGatewayBody(BaseModel):
 class ShopPayBody(BaseModel):
     lines: list[dict] = []
     payment: str = "cod"
+    coupon: str | None = ""
 
 
 class SupplierBody(BaseModel):
@@ -4141,6 +4142,7 @@ class WinbackAutoBody(BaseModel):
     enabled: bool | None = None
     day: int | None = None
     hour: int | None = None
+    offer: dict | None = None        # the offer the automatic campaigns use
 
 
 @app.get("/api/winback/auto")
@@ -4154,8 +4156,11 @@ def winback_auto_save(body: WinbackAutoBody,
                       authorization: str | None = Header(default=None)):
     email = require_user(authorization)
     patch = {k: v for k, v in body.dict().items() if v is not None}
-    return {**winback_auto.save_config(email, patch),
-            "day_names": winback_auto.DAY_NAMES}
+    try:
+        saved = winback_auto.save_config(email, patch)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {**saved, "day_names": winback_auto.DAY_NAMES}
 
 
 @app.post("/api/winback/auto/run")
@@ -4176,6 +4181,193 @@ def winback_auto_skip(authorization: str | None = Header(default=None)):
     winback_auto.clear_pending(email)
     return {"ok": True, "status": winback_auto.status(email),
             "insights": smart.build_insights(email)}
+
+
+# ---------------------------------------------------------------------------
+# Marketing Campaign (backend/core/campaign_engine.py)
+# ---------------------------------------------------------------------------
+class CampaignBuildBody(BaseModel):
+    reason: str = "winback"              # "winback" | "festival"
+    offer: dict = {}                     # {kind: flat|percent, value, min_order}
+    occasion: str | None = ""
+    note: str | None = ""
+    with_image: bool = True
+
+
+class CampaignUpdateBody(BaseModel):
+    whatsapp: str | None = None
+    whatsapp_generic: str | None = None
+    email_subject: str | None = None
+    remove: list[str] | None = None
+
+
+class CampaignSendBody(BaseModel):
+    channels: list[str] = ["whatsapp", "email"]
+
+
+def _campaign_err(e: Exception) -> HTTPException:
+    return HTTPException(400, str(e))
+
+
+@app.get("/api/campaign/state")
+def campaign_state(authorization: str | None = Header(default=None)):
+    """Everything the Marketing Campaign screen opens with."""
+    email = require_user(authorization)
+    from backend.core import campaign_engine, campaign_image, whatsapp
+    draft = campaign_engine.latest_draft(email)
+    coverage = {"customers": 0, "phone": 0, "email": 0}
+    try:
+        txns = smart.load_sales(email, copy=False)
+        if txns is not None and len(txns) and "customer_id" in txns.columns:
+            coverage["customers"] = int(txns["customer_id"].nunique())
+            for col, k in (("customer_phone", "phone"), ("customer_email", "email")):
+                if col in txns.columns:
+                    coverage[k] = int(txns.dropna(subset=[col])["customer_id"].nunique())
+    except Exception:  # noqa: BLE001
+        pass
+    return {
+        "draft": campaign_engine.public_draft(email, draft) if draft else None,
+        "history": campaign_engine.history(email),
+        "occasions": campaign_engine.upcoming_occasions(email),
+        "whatsapp": whatsapp.status(email),
+        "email_ready": messaging.smtp_configured(),
+        "image_allowance": campaign_image.allowance(email),
+        "auto": winback_auto.status(email),
+        "coverage": coverage,
+        "store_link": campaign_engine.store_link(email),
+        "brand": brandname.resolve(email),
+        "symbol": campaign_engine._symbol(email),
+    }
+
+
+@app.post("/api/campaign/build")
+@memory.one_at_a_time
+def campaign_build(body: CampaignBuildBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    from backend.core import campaign_engine
+    if not billing.check_and_consume(email, "winback_campaign"):
+        raise _paywall("winback_campaign", email=email)
+    try:
+        return campaign_engine.build(email, body.reason, body.offer, occasion=body.occasion or "",
+                                     note=body.note or "", with_image=body.with_image)
+    except campaign_engine.CampaignError as e:
+        raise _campaign_err(e)
+
+
+@app.post("/api/campaign/{draft_id}/update")
+def campaign_update(draft_id: str, body: CampaignUpdateBody,
+                    authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    from backend.core import campaign_engine
+    try:
+        return campaign_engine.update_draft(email, draft_id,
+                                            {k: v for k, v in body.dict().items() if v is not None})
+    except campaign_engine.CampaignError as e:
+        raise _campaign_err(e)
+
+
+@app.post("/api/campaign/{draft_id}/image")
+def campaign_image_regen(draft_id: str, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    from backend.core import campaign_engine
+    try:
+        return campaign_engine.regenerate_image(email, draft_id)
+    except campaign_engine.CampaignError as e:
+        raise _campaign_err(e)
+
+
+@app.post("/api/campaign/{draft_id}/image/upload")
+async def campaign_image_upload(draft_id: str, file: UploadFile = File(...),
+                                authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    from backend.core import campaign_engine, campaign_image
+    data = await file.read(campaign_image.MAX_UPLOAD + 1)
+    try:
+        img = campaign_image.save_upload(email, data, file.content_type or "")
+        return campaign_engine.update_draft(email, draft_id,
+                                            {"image_url": img["url"], "image_source": "upload"})
+    except (ValueError, campaign_engine.CampaignError) as e:
+        raise _campaign_err(e)
+
+
+@app.post("/api/campaign/{draft_id}/send")
+def campaign_send(draft_id: str, body: CampaignSendBody,
+                  authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    from backend.core import campaign_engine
+    try:
+        res = campaign_engine.send(email, draft_id, tuple(body.channels or ()))
+    except campaign_engine.CampaignError as e:
+        raise _campaign_err(e)
+    # the automatic campaign's card goes once its draft has been sent by hand
+    p = (winback_auto._state(email).get("pending") or {})
+    if p.get("draft_id") == draft_id:
+        st = winback_auto._state(email)
+        st.pop("pending", None)
+        winback_auto._save_state(email, st)
+    cache.clear(email)
+    return res
+
+
+@app.post("/api/campaign/{draft_id}/discard")
+def campaign_discard(draft_id: str, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    from backend.core import campaign_engine
+    if (winback_auto._state(email).get("pending") or {}).get("draft_id") == draft_id:
+        winback_auto.clear_pending(email)
+    else:
+        campaign_engine.discard(email, draft_id)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp (backend/core/whatsapp.py)
+# ---------------------------------------------------------------------------
+class WhatsAppNumberBody(BaseModel):
+    number: str
+
+
+class WhatsAppConnectBody(BaseModel):
+    phone_number_id: str
+    waba_id: str
+    token: str
+
+
+@app.get("/api/whatsapp")
+def whatsapp_status(authorization: str | None = Header(default=None)):
+    from backend.core import whatsapp
+    return whatsapp.status(require_user(authorization))
+
+
+@app.post("/api/whatsapp/number")
+def whatsapp_number(body: WhatsAppNumberBody, authorization: str | None = Header(default=None)):
+    from backend.core import whatsapp
+    try:
+        return whatsapp.save_number(require_user(authorization), body.number)
+    except whatsapp.WhatsAppError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/whatsapp/connect")
+def whatsapp_connect(body: WhatsAppConnectBody, authorization: str | None = Header(default=None)):
+    from backend.core import whatsapp
+    try:
+        return whatsapp.connect(require_user(authorization), body.phone_number_id,
+                                body.waba_id, body.token)
+    except whatsapp.WhatsAppError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/whatsapp/refresh")
+def whatsapp_refresh(authorization: str | None = Header(default=None)):
+    from backend.core import whatsapp
+    return whatsapp.refresh(require_user(authorization))
+
+
+@app.post("/api/whatsapp/disconnect")
+def whatsapp_disconnect(authorization: str | None = Header(default=None)):
+    from backend.core import whatsapp
+    return whatsapp.disconnect(require_user(authorization))
 
 
 @app.get("/api/smart/insight/{insight_id}/download")
@@ -5499,12 +5691,14 @@ class ShopAuthBody(BaseModel):
 
 class ShopCartBody(BaseModel):
     lines: list[dict] = []
+    coupon: str | None = ""      # a Marketing Campaign code, see discounts.py
 
 
 class ShopOrderBody(BaseModel):
     lines: list[dict] = []
     address: dict = {}
     payment: str = "cod"
+    coupon: str | None = ""
     note: str | None = ""
     # Guest checkout: a shopper with no account still gives us these, because
     # the parcel cannot be delivered without them.
@@ -5607,7 +5801,7 @@ def shop_me(handle: str, x_store_token: str | None = Header(default=None)):
 @app.post("/api/shop/{handle}/cart")
 def shop_cart(handle: str, body: ShopCartBody):
     seller = _seller_for(handle)
-    return storefront.price_cart(seller, body.lines or [])
+    return storefront.price_cart(seller, body.lines or [], body.coupon or "")
 
 
 @app.post("/api/shop/{handle}/pay")
@@ -5620,9 +5814,11 @@ def shop_pay(handle: str, body: ShopPayBody):
     """
     seller = _seller_for(handle)
     site = sitebuilder.get_site(seller)
-    priced = storefront.price_cart(seller, body.lines or [])
+    priced = storefront.price_cart(seller, body.lines or [], body.coupon or "")
     if not priced["items"]:
         raise HTTPException(400, "Your cart is empty.")
+    if body.coupon and priced.get("coupon_error"):
+        raise HTTPException(400, priced["coupon_error"])
     pay = "prepaid" if body.payment == "prepaid" else "cod"
     due = store_payments.split_due(site["commerce"], priced["total"], pay)
     if due["online"] <= 0:
@@ -5669,7 +5865,7 @@ def shop_order(handle: str, body: ShopOrderBody,
     # Verify the payment here, server-side, against the seller's own secret —
     # everything the browser sent is attacker-controlled until this passes.
     paid = False
-    priced = storefront.price_cart(seller, body.lines or [])
+    priced = storefront.price_cart(seller, body.lines or [], body.coupon or "")
     pay = "prepaid" if body.payment == "prepaid" else "cod"
     due = store_payments.split_due(sitebuilder.get_site(seller)["commerce"], priced["total"], pay)
     if body.razorpay_payment_id:
@@ -5684,7 +5880,8 @@ def shop_order(handle: str, body: ShopOrderBody,
         order = storefront.place_order(seller, cust, body.lines or [], body.address or {},
                                        body.payment or "cod", body.note or "",
                                        payment_ok=paid,
-                                       payment_ref=body.razorpay_payment_id or "")
+                                       payment_ref=body.razorpay_payment_id or "",
+                                       coupon=body.coupon or "")
     except storefront.StoreError as e:
         raise HTTPException(400, str(e))
     if paid:

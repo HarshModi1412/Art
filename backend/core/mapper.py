@@ -7,6 +7,8 @@ In Streamlit this was an interactive widget flow; here it is split into:
 
 Canonical fields used by the rest of the app:
   date, customer_id, customer_name, order_id, product, category, subcategory, quantity, amount
+plus two optional contact fields, customer_phone and customer_email, which are
+what let a Marketing Campaign actually reach anybody (see CONTACT_ROLES).
 """
 import pandas as pd
 
@@ -33,7 +35,19 @@ ROLE_KEYWORDS = {
     "amount": ["finaltotal", "grandtotal", "nettotal", "linetotal", "totalamount",
                "subtotal", "netamount", "amount", "sales", "revenue", "total",
                "value", "spend", "price", "rate", "mrp"],
+    # Contact details. Optional, and the only two roles allowed to share a
+    # column with another one: plenty of shops key their customers BY phone
+    # number, so the same column is both Customer ID and Customer phone.
+    "customer_phone": ["customerphone", "customermobile", "billingphone", "shippingphone",
+                       "whatsapp", "mobilenumber", "mobileno", "phonenumber", "phoneno",
+                       "contactnumber", "contactno", "mobile", "phone", "contact"],
+    "customer_email": ["customeremail", "billingemail", "buyeremail", "emailaddress",
+                       "emailid", "email", "mail"],
 }
+
+# Roles that are assigned after everything else and may reuse a column. They
+# never take a column away from a role the analytics depend on.
+CONTACT_ROLES = ("customer_phone", "customer_email")
 
 REQUIRED = ["date", "amount"]
 
@@ -70,6 +84,8 @@ PRESETS = [
             "order_id": "name",
             "customer_name": "billingname",
             "customer_id": "email",
+            "customer_email": "email",
+            "customer_phone": "billingphone",
             "product": "lineitemname",
             "quantity": "lineitemquantity",
             "amount": "lineitemprice",
@@ -89,6 +105,8 @@ PRESETS = [
             "order_id": "ordernumber",
             "customer_name": "billingfirstname",
             "customer_id": "billingemail",
+            "customer_email": "billingemail",
+            "customer_phone": "billingphone",
             "product": "itemname",
             "quantity": "quantity",
             "amount": "itemcost",
@@ -162,6 +180,8 @@ def suggest_mapping(df: pd.DataFrame) -> dict:
     # collect all (role, col, rank) candidate matches
     candidates = []
     for role, keywords in ROLE_KEYWORDS.items():
+        if role in CONTACT_ROLES:
+            continue          # assigned last, below, and allowed to share
         for col in cols:
             n = norm(col)
             if role == "category" and "sub" in n:
@@ -238,13 +258,15 @@ def suggest_mapping(df: pd.DataFrame) -> dict:
     seen: dict[str, str] = {}
     for role in list(suggestion):
         col = suggestion[role]
-        if not col:
+        if not col or role in CONTACT_ROLES:
             continue
         if col in seen:
             suggestion[role] = None
             guessed.discard(role)
         else:
             seen[col] = role
+
+    suggestion.update(_suggest_contacts(df))
 
     # What the mapping screen needs in order to ASK instead of pre-filling: which
     # fields were guessed from data rather than recognised from a header, and
@@ -253,6 +275,62 @@ def suggest_mapping(df: pd.DataFrame) -> dict:
     suggestion["_needs_confirmation"] = sorted(
         [r for r in ("date", "amount") if r in guessed or not suggestion.get(r)])
     return suggestion
+
+
+def _looks_like(series: pd.Series, kind: str) -> bool:
+    """Do most non-empty values in this column look like phones / emails?
+    A header saying "Contact" is not enough on its own: it is often a name."""
+    vals = series.dropna().astype(str).str.strip()
+    vals = vals[vals != ""].head(200)
+    if vals.empty:
+        return False
+    if kind == "email":
+        ok = vals.str.contains(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", regex=True)
+    else:
+        digits = vals.str.replace(r"\D", "", regex=True).str.len()
+        ok = digits.between(7, 15)
+    return float(ok.mean()) >= 0.6
+
+
+def _suggest_contacts(df: pd.DataFrame) -> dict:
+    """Best phone and email column, by header first and then by content.
+    Either may be None -- both are optional, and a shop without them still
+    gets every chart; it just cannot be messaged from here."""
+    out: dict = {}
+    for role, kind in (("customer_phone", "phone"), ("customer_email", "email")):
+        best, best_rank = None, None
+        for col in df.columns:
+            n = _norm(col)
+            for rank, kw in enumerate(ROLE_KEYWORDS[role]):
+                if _norm(kw) in n:
+                    if (best_rank is None or rank < best_rank) and _looks_like(df[col], kind):
+                        best, best_rank = str(col), rank
+                    break
+        if best is None and kind == "email":
+            # No helpful header, but a column whose VALUES are plainly emails.
+            # (Not done for phones: an unlabelled 10-digit column could as
+            # easily be an order number.)
+            for col in df.columns:
+                if not pd.api.types.is_numeric_dtype(df[col]) and _looks_like(df[col], kind):
+                    best = str(col)
+                    break
+        out[role] = best
+    return out
+
+
+def contact_frame(raw: pd.DataFrame, mapping: dict) -> dict[str, pd.Series]:
+    """The cleaned contact columns for a confirmed mapping."""
+    out = {}
+    for role in CONTACT_ROLES:
+        src = mapping.get(role)
+        if src and src in raw.columns:
+            s = raw[src].astype("string").str.strip()
+            if role == "customer_email":
+                s = s.str.lower().where(s.str.contains("@", na=False))
+            else:
+                s = s.where(s.str.replace(r"\D", "", regex=True).str.len() >= 7)
+            out[role] = s
+    return out
 
 
 def classify_file(df: pd.DataFrame) -> str:
@@ -269,10 +347,17 @@ def build_transactions(df: pd.DataFrame, mapping: dict) -> tuple[pd.DataFrame, d
     if missing:
         raise ValueError(f"Missing required mappings: {', '.join(missing)}")
 
-    rename = {src: role for role, src in mapping.items() if src and src in df.columns}
+    # Contact roles may point at a column another role already uses (a shop
+    # that keys customers by phone), so they are copied, not renamed.
+    contacts = contact_frame(df, mapping)
+    rename = {src: role for role, src in mapping.items()
+              if src and src in df.columns and role in ROLE_KEYWORDS
+              and role not in CONTACT_ROLES}
     out = df.rename(columns=rename)
-    keep = [c for c in ROLE_KEYWORDS if c in out.columns]
+    keep = [c for c in ROLE_KEYWORDS if c in out.columns and c not in CONTACT_ROLES]
     out = out[keep].copy()
+    for role, series in contacts.items():
+        out[role] = series.values
 
     rows_before = len(out)
 
