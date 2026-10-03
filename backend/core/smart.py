@@ -140,18 +140,60 @@ def save_sales(email: str, txns: pd.DataFrame, meta: dict, mode: str = "replace"
         user_store.remember_df(email, SALES_KEY, txns)
 
 
+REVIEW_SOURCE_LABELS = {"upload": "Uploaded files", "site": "Your website",
+                        "woocommerce": "WooCommerce", "wix": "Wix"}
+
+
+def canonical_reviews(df: pd.DataFrame) -> pd.DataFrame:
+    """Name the text / rating / date columns Review / Rating / Date, so reviews
+    from an upload, the website and a platform land in the SAME columns. An
+    upload that kept its own header ("review_text") next to website rows in
+    "Review" would otherwise split the text across two half-empty columns,
+    and the analysis reads only one of them."""
+    from backend.core import positioning
+    df = df.copy()
+    if "Review" not in df.columns:
+        c = positioning.detect_review_column(df)
+        if c is not None:
+            df = df.rename(columns={c: "Review"})
+    if "Rating" not in df.columns:
+        c = positioning.detect_rating_column(df)
+        if c is not None and c != "Review":
+            df = df.rename(columns={c: "Rating"})
+    if "Date" not in df.columns:
+        c = next((col for col in df.columns
+                  if any(k in str(col).lower() for k in ("date", "time", "created"))), None)
+        if c is not None:
+            df = df.rename(columns={c: "Date"})
+    return df
+
+
 def save_review(email: str, df: pd.DataFrame, meta: dict, mode: str = "replace",
-                keep_in_memory: bool = False) -> None:
+                keep_in_memory: bool = False, source: str | None = "upload") -> None:
     """Persist the account's Review data.
 
-    mode="replace" (default) overwrites; mode="append" stacks the new rows onto
-    the saved reviews (the "Add records" flow). Columns are canonicalised to
-    Review/Rating/Date before saving, so the concat aligns.
+    Like sales, each SOURCE owns its slice: the website's own reviews
+    ("site"), a platform's ("woocommerce", "wix") and uploaded files
+    ("upload"). Saving one source replaces (or, mode="append", adds to) only
+    that source's rows. Reviews saved before sources existed count as uploads.
+    source=None writes the frame as given.
     """
-    if mode == "append":
+    if source is not None:
+        df = canonical_reviews(df)
+        df["Source"] = source
         existing = load_review(email)
         if existing is not None and len(existing):
-            df = pd.concat([existing, df], ignore_index=True)
+            keep = existing.copy()
+            src = keep["Source"].fillna("upload") if "Source" in keep.columns else \
+                pd.Series("upload", index=keep.index)
+            keep["Source"] = src
+            if mode != "append":
+                keep = keep[src != source]
+            if len(keep):
+                df = pd.concat([canonical_reviews(keep), df], ignore_index=True)
+    if df is None or not len(df):
+        clear(email, "review")
+        return
     user_store.save_df(email, REVIEW_KEY, df)
     st = user_store.get_key(email, "smart_data", {}) or {}
     st["review"] = {**meta, "rows": int(len(df)),

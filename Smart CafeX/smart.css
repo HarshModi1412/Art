@@ -3950,3 +3950,12 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
   border-radius: 10px; padding: 7px 12px; font: inherit; font-size: 0.8125rem; cursor: pointer; }
 .ch-bar button.on { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
 .ch-bar button.on .muted { color: inherit; opacity: .8; }
+
+/* Website reviews in Review Analytics */
+.srev-list { display: flex; flex-direction: column; }
+.srev { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start;
+  padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.8125rem; }
+.srev:last-child { border-bottom: none; }
+.srev p { margin: 4px 0 0; line-height: 1.5; }
+.srev b:first-child { color: #d4a017; letter-spacing: 1px; }
+.srev.off { opacity: .55; }

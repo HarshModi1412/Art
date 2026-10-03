@@ -1575,6 +1575,7 @@ def connector_pull(body: PullBody, x_session_id: str | None = Header(default=Non
         smart.save_sales(email, sess.txns_df, {"files": sess.file_names[fid]},
                          channel=body.connector)
         replenish.after_sales(email, "sales upload")
+        sess.txns_df = None      # the account now holds every channel; reload that
     return {"file": _file_info(fid, sess), "rows": int(len(df)),
             "from": start.isoformat(), "to": end.isoformat(), "mapped": True}
 
@@ -3930,10 +3931,24 @@ def commerce_pull(body: CommercePullBody, x_session_id: str | None = Header(defa
     smart.save_sales(email, txns, {"files": f"🔌 {body.connector} ({body.days}d)"},
                      channel=body.connector)
     replenish.after_sales(email, f"orders pulled from {body.connector}")
+    # Reviews come along where the platform has a reviews API, as their own
+    # source in Review Analytics. Never fails the orders pull.
+    reviews = {"supported": body.connector in commerce.REVIEWS_SUPPORTED, "rows": 0, "error": ""}
+    if reviews["supported"]:
+        try:
+            rdf = commerce.pull_reviews(body.connector, creds)
+            if len(rdf):
+                smart.save_review(email, rdf, {"files": f"🔌 {body.connector} reviews"},
+                                  source=body.connector)
+            reviews["rows"] = int(len(rdf))
+        except commerce.CommerceError as e:
+            reviews["error"] = str(e)
+        except Exception as e:  # noqa: BLE001
+            reviews["error"] = f"Reviews could not be pulled: {e}"
     sess = get_session(x_session_id)
-    sess.txns_df = txns
+    sess.txns_df = None
     sess.mapped_file_id = "smart_sales"
-    return {"ok": True, "connector": body.connector, "rows": diag["rows_after"],
+    return {"ok": True, "connector": body.connector, "rows": diag["rows_after"], "reviews": reviews,
             "data": smart.data_status(email), "insights": smart.build_insights(email)}
 
 
@@ -3992,7 +4007,12 @@ def smart_positioning(lang: str = "en", authorization: str | None = Header(defau
     df = smart.load_review(email)
     if df is None:
         return _NEEDS_REVIEWS
-    return positioning.analyze_reviews(df, lang, product_type=smart.get_product_type(email))
+    out = positioning.analyze_reviews(df, lang, product_type=smart.get_product_type(email))
+    # where the reviews came from (website, uploads, WooCommerce, Wix)
+    src = df["Source"].fillna("upload") if "Source" in df.columns else pd.Series("upload", index=df.index)
+    out["sources"] = [{"id": k, "label": smart.REVIEW_SOURCE_LABELS.get(k, str(k).title()), "count": int(v)}
+                      for k, v in src.value_counts().items()]
+    return out
 
 
 @app.get("/api/smart/complaints")
@@ -5869,6 +5889,58 @@ def shop_me(handle: str, x_store_token: str | None = Header(default=None)):
 def shop_cart(handle: str, body: ShopCartBody):
     seller = _seller_for(handle)
     return storefront.price_cart(seller, body.lines or [], body.coupon or "")
+
+
+class ShopReviewBody(BaseModel):
+    product_id: str
+    rating: int
+    text: str
+
+
+@app.get("/api/shop/{handle}/reviews")
+def shop_reviews(handle: str, product_id: str, x_store_token: str | None = Header(default=None)):
+    """A product's reviews, and whether this shopper may write one (only
+    customers who bought it)."""
+    from backend.core import store_reviews
+    seller = _seller_for(handle)
+    cust = storefront.customer_from_token(seller, (x_store_token or "").strip())
+    return store_reviews.for_product(seller, product_id, cust)
+
+
+@app.post("/api/shop/{handle}/reviews")
+def shop_review_add(handle: str, body: ShopReviewBody, x_store_token: str | None = Header(default=None)):
+    from backend.core import store_reviews
+    seller, cust = _shopper(handle, x_store_token)
+    try:
+        store_reviews.add(seller, cust, body.product_id, body.rating, body.text)
+    except store_reviews.ReviewError as e:
+        raise HTTPException(400, str(e))
+    cache.clear(seller)
+    return store_reviews.for_product(seller, body.product_id, cust)
+
+
+class StoreReviewHideBody(BaseModel):
+    id: str
+    hidden: bool = True
+
+
+@app.get("/api/store/reviews")
+def store_reviews_list(authorization: str | None = Header(default=None)):
+    """The seller's website reviews, hidden ones included."""
+    from backend.core import store_reviews
+    return {"reviews": store_reviews.list_all(require_user(authorization))}
+
+
+@app.post("/api/store/reviews/hide")
+def store_reviews_hide(body: StoreReviewHideBody, authorization: str | None = Header(default=None)):
+    from backend.core import store_reviews
+    email = require_user(authorization)
+    try:
+        res = store_reviews.set_hidden(email, body.id, body.hidden)
+    except store_reviews.ReviewError as e:
+        raise HTTPException(400, str(e))
+    cache.clear(email)
+    return res
 
 
 class ShopVisitBody(BaseModel):

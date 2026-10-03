@@ -907,8 +907,68 @@ function viewProduct(id) {
           </div>
         </div>
       </div>
+      <section class="wrap pd-rev" id="pdReviews" data-pid="${esc(p.id)}" aria-label="Customer reviews"></section>
       ${related.length ? railSection("rel", "", "More like this", "You may also like", related.map(productCard).join(""), related.length) : ""}
     </div>` + footer();
+}
+
+/* ---------------------------------------------------------------- reviews */
+/* Real reviews, from people who bought this product here. Anyone can read
+   them; only a verified buyer gets the form. They also flow into the seller's
+   Review Analytics. */
+const stars = (n) => `<span class="stars" aria-label="${n} out of 5">${[1, 2, 3, 4, 5].map((i) =>
+  `<i class="${i <= Math.round(n) ? "on" : ""}">★</i>`).join("")}</span>`;
+
+function reviewsHtml(d) {
+  const mine = d.mine;
+  const form = d.can_review ? `
+    <form class="rev-form" id="revForm">
+      <b>${mine ? "Update your review" : "Write a review"}</b>
+      <div class="rev-pick" role="radiogroup" aria-label="Your rating">
+        ${[5, 4, 3, 2, 1].map((i) => `<label title="${i} star${i === 1 ? "" : "s"}"><input type="radio" name="revStars" value="${i}"${mine && mine.rating === i ? " checked" : ""}><span>★</span></label>`).join("")}
+      </div>
+      <textarea id="revText" rows="3" maxlength="1000" placeholder="What did you like? How is the quality, the fit, the finish?">${esc((mine && mine.text) || "")}</textarea>
+      <button class="b p s" type="submit">${mine ? "Update review" : "Post review"}</button>
+      <div class="err" id="revErr" hidden></div>
+    </form>` : (S.customer ? "" : `<p class="tiny muted">Bought this? <a href="#" class="ul" id="revLogin">Log in</a> to review it.</p>`);
+  return `
+    <div class="rev-h">
+      <h2>Reviews</h2>
+      ${d.count ? `<div class="rev-avg">${stars(d.average)} <b>${d.average}</b> <span class="muted">from ${d.count} review${d.count === 1 ? "" : "s"}</span></div>`
+                : `<p class="muted">No reviews yet.</p>`}
+    </div>
+    ${form}
+    <div class="rev-list">
+      ${(d.reviews || []).map((r) => `<div class="rev">
+        <div class="rev-top">${stars(r.rating)} <b>${esc(r.name)}</b>${r.verified ? `<span class="rev-v">${ic("check")}Verified buyer</span>` : ""}
+          <span class="muted tiny">${esc(r.date)}</span></div>
+        <p>${esc(r.text)}</p></div>`).join("")}
+    </div>`;
+}
+
+async function loadReviews() {
+  const box = el("pdReviews");
+  if (!box || EDIT) return;
+  const pid = box.dataset.pid;
+  try {
+    const d = await api(`/reviews?product_id=${encodeURIComponent(pid)}`);
+    if (!el("pdReviews") || el("pdReviews").dataset.pid !== pid) return;   // moved on
+    box.innerHTML = reviewsHtml(d);
+    const lg = el("revLogin");
+    if (lg) lg.onclick = (e) => { e.preventDefault(); openAuth(() => loadReviews()); };
+    const f = el("revForm");
+    if (f) f.onsubmit = async (e) => {
+      e.preventDefault();
+      const err = el("revErr"); err.hidden = true;
+      const r = (f.querySelector('input[name="revStars"]:checked') || {}).value;
+      if (!r) { err.textContent = "Pick 1 to 5 stars."; err.hidden = false; return; }
+      try {
+        await api("/reviews", { method: "POST", json: { product_id: pid, rating: Number(r), text: el("revText").value } });
+        toast("Thank you for your review", "check");
+        loadReviews();
+      } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+    };
+  } catch (e) { box.innerHTML = ""; }
 }
 
 /* Repaint only the product's info column after a variant choice. Falls back to
@@ -1673,6 +1733,7 @@ function askCancel(orderId) {
 
 function bindView() {
   document.querySelectorAll("[data-go]").forEach((n) => n.onclick = (e) => { e.preventDefault(); go(n.dataset.go); });
+  if (el("pdReviews")) loadReviews();
   const upiCopy = document.getElementById("upiCopy");
   if (upiCopy) upiCopy.onclick = async () => {
     const id = (document.getElementById("upiId") || {}).textContent || "";

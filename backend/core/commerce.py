@@ -440,6 +440,85 @@ def test_connection(connector: str, creds: dict) -> dict:
     raise CommerceError(f"Unknown connector: {connector}")
 
 
+# ---------------------------------------------------------
+# Product reviews (feed Review Analytics)
+# ---------------------------------------------------------
+# Only platforms with an official reviews API. Shopify retired its own Product
+# Reviews app and has no reviews API (reviews live in third-party apps such as
+# Judge.me); Amazon's Selling Partner API does not expose customer reviews.
+REVIEWS_SUPPORTED = {"woocommerce", "wix"}
+REVIEW_COLUMNS = ["Review", "Rating", "Date", "Product", "Reviewer"]
+
+
+def _strip_html(s) -> str:
+    import html
+    import re
+    return html.unescape(re.sub(r"<[^>]+>", " ", str(s or ""))).strip()
+
+
+def woocommerce_reviews(creds: dict, max_pages: int = 20) -> pd.DataFrame:
+    """Approved product reviews from the WooCommerce REST API (wc/v3)."""
+    _blank_needed(creds, ["store_url", "consumer_key", "consumer_secret"])
+    base = _woo_base(creds["store_url"])
+    auth = (creds["consumer_key"], creds["consumer_secret"])
+    rows = []
+    for page in range(1, max_pages + 1):
+        r = requests.get(f"{base}/wp-json/wc/v3/products/reviews", auth=auth, timeout=30,
+                         params={"per_page": 100, "page": page, "status": "approved"})
+        if r.status_code in (401, 403):
+            raise CommerceError("WooCommerce did not allow reading reviews with these keys.")
+        if not r.ok:
+            raise CommerceError(f"WooCommerce reviews error {r.status_code}: {r.text[:200]}")
+        batch = r.json() or []
+        for x in batch:
+            text = _strip_html(x.get("review"))
+            if not text:
+                continue
+            rows.append({"Review": text, "Rating": x.get("rating"),
+                         "Date": x.get("date_created"), "Product": x.get("product_name") or "",
+                         "Reviewer": x.get("reviewer") or ""})
+        if len(batch) < 100:
+            break
+    return pd.DataFrame(rows, columns=REVIEW_COLUMNS)
+
+
+def wix_reviews(creds: dict, max_pages: int = 20) -> pd.DataFrame:
+    """Published reviews from the Wix Reviews API (needs the "Read reviews"
+    permission on the API key)."""
+    _blank_needed(creds, ["api_key", "site_id"])
+    headers = _wix_headers(creds)
+    rows, offset = [], 0
+    for _ in range(max_pages):
+        r = requests.post("https://www.wixapis.com/reviews/v1/reviews/query", headers=headers,
+                          timeout=30, json={"query": {"paging": {"limit": 100, "offset": offset}}})
+        if r.status_code in (401, 403):
+            raise CommerceError("Wix did not allow reading reviews: give the API key the "
+                                "'Read reviews' permission.")
+        if not r.ok:
+            raise CommerceError(f"Wix reviews error {r.status_code}: {r.text[:200]}")
+        batch = (r.json() or {}).get("reviews") or []
+        for x in batch:
+            content = x.get("content") or {}
+            text = " ".join(t for t in (content.get("title"), content.get("body")) if t).strip()
+            if not text:
+                continue
+            rows.append({"Review": text, "Rating": content.get("rating"),
+                         "Date": x.get("createdDate"), "Product": "",
+                         "Reviewer": (x.get("author") or {}).get("authorName") or ""})
+        if len(batch) < 100:
+            break
+        offset += 100
+    return pd.DataFrame(rows, columns=REVIEW_COLUMNS)
+
+
+def pull_reviews(connector: str, creds: dict) -> pd.DataFrame:
+    if connector == "woocommerce":
+        return woocommerce_reviews(creds)
+    if connector == "wix":
+        return wix_reviews(creds)
+    raise CommerceError("not_supported")
+
+
 def pull_orders(connector: str, creds: dict, days: int = 90) -> pd.DataFrame:
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=max(1, int(days)))

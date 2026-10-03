@@ -7579,7 +7579,9 @@ function renderSales(payload) {
     wireChannelBar("salesCh", salesForChannel);
     drawChannelSplit(d.channel_split, d.channel || "");
     const primary = cssVar("--primary", "#6d28d9");
-    plot($("cMonthly"), [{ x: d.monthly_trend.x, y: d.monthly_trend.y, type: "scatter", mode: "lines+markers", line: { color: primary, width: 2.5, shape: "spline" }, fill: "tozeroy", fillcolor: softFill() }], { yaxis: { tickprefix: "₹" } }, "Monthly revenue");
+    plot($("cMonthly"), [{ x: d.monthly_trend.x, y: d.monthly_trend.y, type: "scatter", mode: "lines+markers", line: { color: primary, width: 2.5, shape: "spline" }, fill: "tozeroy", fillcolor: softFill() }], { yaxis: { tickprefix: "₹" },
+      // one or two months read as dates make plotly invent hours on the axis
+      ...(d.monthly_trend.x.length < 3 ? { xaxis: { type: "category" } } : {}) }, "Monthly revenue");
     if (d.forecast) {
       const f = d.forecast;
       plot($("cFcst"), [
@@ -7909,13 +7911,45 @@ function renderReview(d) {
         ${kpiCard({ label: "Sentiment", value: `${d.overall_sentiment > 0 ? "+" : ""}${d.overall_sentiment}`, icon: "smile",
                     tone: d.overall_sentiment < 0 ? "red" : "green" })}
       </div>
+      ${(d.sources || []).length > 1 ? `<p class="muted tiny" style="margin:-4px 0 12px;">From ${d.sources.map((x) =>
+          `${esc(x.label)} (${fmt(x.count)})`).join(", ")}</p>` : ""}
       <div class="chart-card"><h4>What your customers talk about (% of reviews)</h4><div class="plot" id="cShare"></div></div>
-      <div class="chart-card"><h4>How positively they talk about it (sentiment)</h4><div class="plot" id="cSent"></div></div>`;
+      <div class="chart-card"><h4>How positively they talk about it (sentiment)</h4><div class="plot" id="cSent"></div></div>
+      <div id="siteRevSlot"></div>`;
     moduleShell("Review Analytics", html);
+    loadSiteReviews();
     const primary = cssVar("--primary", "#6d28d9");
     plot($("cShare"), [{ x: d.share_chart.themes, y: d.share_chart.yours, type: "bar", marker: { color: primary } }], { margin: { l: 46, r: 16, t: 8, b: 120 }, xaxis: { tickangle: -35 } }, "What customers talk about");
     plot($("cSent"), [{ x: d.sentiment_chart.themes, y: d.sentiment_chart.yours, type: "bar", marker: { color: series(1) } }], { margin: { l: 46, r: 16, t: 8, b: 120 }, xaxis: { tickangle: -35 } }, "Sentiment by theme");
   }
+}
+
+/* Reviews customers wrote on the seller's website: shown on the product page,
+   counted here, and hideable (a hidden review leaves both). */
+async function loadSiteReviews() {
+  const slot = $("siteRevSlot");
+  if (!slot) return;
+  let d;
+  try { d = await api("/api/store/reviews"); } catch (e) { return; }
+  const rows = d.reviews || [];
+  slot.innerHTML = `<div class="card">
+    <h4 style="margin-top:0;">Reviews on your website (${fmt(rows.length)})</h4>
+    <p class="muted tiny" style="margin-top:0;">Written by customers who bought the product from your site. They show on
+      the product page and are part of the analysis above. Hide one to take it out of both.
+      Reviews from WooCommerce and Wix come in when you pull orders; Shopify and Amazon do not offer reviews to other apps.</p>
+    ${rows.length ? `<div class="srev-list">${rows.slice(0, 50).map((r) => `<div class="srev${r.hidden ? " off" : ""}">
+        <div><b>${"★".repeat(r.rating)}${"☆".repeat(5 - r.rating)}</b> <b>${esc(r.name)}</b>
+          <span class="muted tiny">${esc(r.product_name)} · ${esc(r.date)}${r.hidden ? " · hidden" : ""}</span>
+          <p>${esc(r.text)}</p></div>
+        <button class="btn ghost sm" data-rh="${esc(r.id)}" data-hide="${r.hidden ? "0" : "1"}">${r.hidden ? "Show" : "Hide"}</button>
+      </div>`).join("")}</div>` : `<p class="muted tiny">None yet. Customers can review a product from its page once they have bought it.</p>`}
+  </div>`;
+  slot.querySelectorAll("[data-rh]").forEach((b) => b.onclick = async () => {
+    try {
+      await api("/api/store/reviews/hide", { method: "POST", json: { id: b.dataset.rh, hidden: b.dataset.hide === "1" } });
+      warmModClearAll(); openReview();
+    } catch (e) { toast(e.message, 6000); }
+  });
 }
 
 // ---------- MODULE: Complaint Analysis ----------
@@ -9616,7 +9650,11 @@ async function commercePull(id) {
   toast("Pulling orders… this can take a few seconds", 8000);
   try {
     const r = await api("/api/commerce/pull", { method: "POST", json: { connector: id, days: 90 } });
-    toast(`Pulled ${fmt(r.rows)} orders from ${id} → saved as Sales.`);
+    const rv = r.reviews || {};
+    const revLine = rv.supported
+      ? (rv.error ? ` Reviews: ${rv.error}` : ` ${fmt(rv.rows)} reviews added to Review Analytics.`)
+      : "";
+    toast(`Pulled ${fmt(r.rows)} orders from ${id}. Your other sales channels are kept.${revLine}`, 7000);
     goHome();
   } catch (e) { toast(e.message, 7000); }
 }
