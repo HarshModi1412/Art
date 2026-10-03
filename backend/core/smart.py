@@ -718,6 +718,24 @@ def add_task(email: str, text: str, ob: str = "") -> list[dict]:
         return tasks
 
 
+def upsert_wa_task(email: str, campaign_id: str, text: str, sent: int, total: int,
+                   done: bool = False) -> list[dict]:
+    """The WhatsApp tap-to-send list of one campaign, as a task with its
+    progress. Kept up to date by the campaign engine (each tap, each skip) and
+    ticked off by itself when nobody is left to send to."""
+    tid = f"wa_{campaign_id}"
+    with TASK_LOCK:
+        tasks = get_tasks(email)
+        row = next((x for x in tasks if x.get("id") == tid), None)
+        if row is None:
+            row = {"id": tid}
+            tasks.append(row)
+        row.update({"text": text[:280], "kind": "wa_send", "campaign_id": campaign_id,
+                    "sent": int(sent), "total": int(total), "done": bool(done)})
+        user_store.set_key(email, "smart_tasks", tasks)
+        return tasks
+
+
 def toggle_task(email: str, task_id: str, done: bool) -> list[dict]:
     with TASK_LOCK:
         tasks = get_tasks(email)

@@ -360,7 +360,14 @@ check("the tap-to-send message carries the code",
       all(x["code"] in x["message"] for x in res["results"]))
 check("with no mail server nothing is claimed as emailed", res["email_sent"] == 0)
 check("nothing counts as sent until it is tapped", res["sent_now"] == 0
-      and res["to_send"] == res["wa_links"] and "tap each one" in res["summary"], res["summary"])
+      and res["to_send"] == res["wa_links"] and "task list" in res["summary"], res["summary"])
+check("tapping takes time, so WhatsApp goes to the 25 most valuable customers only",
+      res["to_send"] == 25 and res["wa_later"] > 0, str((res["to_send"], res["wa_later"])))
+wa_ids = [x["customer_id"] for x in res["results"] if x["wa_link"]]
+by_val = {x["customer_id"]: x["monetary"] for x in d["rows"]}
+others = [by_val[x["customer_id"]] for x in res["results"] if x["phone"] and not x["wa_link"]]
+check("chosen by value: nobody left out spent more than anyone included",
+      min(by_val[i] for i in wa_ids) >= max(others), "")
 check("and the history shows it", n == 1)
 
 # --- the tracker
@@ -390,14 +397,14 @@ r = c.post(f"/api/campaign/{d['id']}/tapped", headers=H, json={"customer_id": "n
 check("a customer outside the campaign is refused", r.status_code == 400)
 an = c.get(f"/api/campaign/{d['id']}/analysis", headers=H).json()
 k = an["kpis"]
-check("the results show exactly how many were sent", k["reached"] == 3 and k["messaged"] == len(res["results"]),
+check("the results show exactly how many were sent", k["reached"] == 3 and k["messaged"] == res["to_send"],
       str(k))
 check("and who is still waiting, with their link",
       len(an["to_send"]) == k["messaged"] - 3 and all(x["wa_link"] for x in an["to_send"]))
 check("the diagnosis says how many are still to send",
       any("still waiting" in x for x in an["diagnosis"]), str(an["diagnosis"]))
 hist = c.get("/api/campaign/state", headers=H).json()["history"][0]
-check("the history shows the real count", hist["sent_count"] == 3 and hist["total"] == len(res["results"]),
+check("the history shows the real count", hist["sent_count"] == 3 and hist["total"] == res["to_send"],
       str(hist)[:200])
 check("the funnel narrows step by step",
       [f["n"] for f in an["funnel"]] == sorted([f["n"] for f in an["funnel"]], reverse=True), str(an["funnel"]))
@@ -412,6 +419,27 @@ check("seven campaign types, each sized from the data",
       [t["id"] for t in st2["types"]] == ["winback", "festival", "second_order", "cross_sell",
                                           "restock", "vip", "thank_you"]
       and all(isinstance(t["audience"], int) for t in st2["types"]), str(st2["types"])[:200])
+
+# --- send mode: one customer at a time, and a task that keeps count
+q = c.get(f"/api/campaign/{d['id']}/queue", headers=H).json()
+check("send mode lists who is left, most valuable first",
+      q["sent"] == 3 and len(q["remaining"]) == 22
+      and [by_val[x["customer_id"]] for x in q["remaining"]] == sorted((by_val[x["customer_id"]] for x in q["remaining"]), reverse=True),
+      str((q["sent"], len(q["remaining"]))))
+check("each with their message ready to read", all(x["code"] in x["message"] for x in q["remaining"]))
+tasks = c.get("/api/smart/state", headers=H).json().get("tasks") or smart.get_tasks(SELLER)
+wt = next((t for t in smart.get_tasks(SELLER) if t.get("id") == f"wa_{d['id']}"), None)
+check("the WhatsApp list is a task, with its progress", wt and wt["kind"] == "wa_send"
+      and wt["sent"] == 3 and wt["total"] == 25 and not wt["done"], str(wt))
+q = c.post(f"/api/campaign/{d['id']}/skip", headers=H, json={"customer_id": q["remaining"][0]["customer_id"]}).json()
+wt = next(t for t in smart.get_tasks(SELLER) if t.get("id") == f"wa_{d['id']}")
+check("skipping one leaves it out without counting it as sent", q["skipped"] == 1 and len(q["remaining"]) == 21
+      and wt["sent"] == 3 and wt["total"] == 24, str(wt))
+for x in q["remaining"]:
+    c.post(f"/api/campaign/{d['id']}/tapped", headers=H, json={"customer_id": x["customer_id"]})
+wt = next(t for t in smart.get_tasks(SELLER) if t.get("id") == f"wa_{d['id']}")
+check("when nobody is left, the task ticks itself off", wt["done"] and wt["sent"] == 24, str(wt))
+
 r = c.get("/api/campaign/nope/analysis", headers=H)
 check("an unknown campaign is a 404", r.status_code == 404)
 r = c.post(f"/api/campaign/{d['id']}/send", headers=H, json={"channels": ["whatsapp"]})
@@ -420,7 +448,7 @@ check("a campaign cannot be sent twice", r.status_code == 400, r.text[:200])
 r = c.post("/api/campaign/build", headers=H, json={
     "reason": "winback", "offer": {"kind": "flat", "value": 100}})
 check("only the customers actually sent to are held back by the cooldown",
-      r.status_code == 200 and r.json()["held_back"] == 3, r.text[:200])
+      r.status_code == 200 and r.json()["held_back"] == wt["sent"], r.text[:200])
 c.post(f"/api/campaign/{r.json()['id']}/discard", headers=H)
 
 r = c.post("/api/campaign/build", headers=H, json={

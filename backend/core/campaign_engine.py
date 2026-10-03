@@ -374,8 +374,9 @@ def public_draft(email: str, draft: dict) -> dict:
     from backend.core import campaign_image, whatsapp
     return {**draft, "counts": counts(draft.get("rows") or []),
             "whatsapp": whatsapp.status(email),
-            "email_ready": messaging.smtp_configured(),
-            "image_allowance": campaign_image.allowance(email)}
+            "email_ready": email_ready(email),
+            "image_allowance": campaign_image.allowance(email),
+            "wa_limit_default": WA_LIMIT_DEFAULT}
 
 
 def update_draft(email: str, draft_id: str, patch: dict) -> dict:
@@ -470,10 +471,43 @@ def campaign_html(brand: str, row: dict, ctx: dict, image_url: str) -> str:
             f'{esc(brand)}</p>{img}{paras}{code}{btn}</div>')
 
 
-def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "email")) -> dict:
-    """Send an approved draft. Email goes out now; WhatsApp sends itself when
-    the seller's template is approved, and comes back as tap-to-send links
-    otherwise. Every outcome is reported per customer."""
+def email_ready(email: str) -> bool:
+    """Can campaign emails go out right now: the seller's own mailbox
+    (Account -> Email), or the server's."""
+    try:
+        from backend.core import seller_mail
+        if seller_mail.status(email).get("connected"):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    return messaging.smtp_configured()
+
+
+def _send_email(email: str, to: str, subject: str, text: str, html: str) -> bool:
+    """From the seller's own mailbox when they connected one (it is their shop
+    writing, and replies land in their inbox), else from the server's."""
+    try:
+        from backend.core import seller_mail
+        if seller_mail.status(email).get("connected"):
+            return bool(seller_mail.send(email, to, subject, text).get("sent"))
+    except Exception as e:  # noqa: BLE001
+        log.warning("seller mailbox send failed, trying the server's: %s", e)
+    return bool(messaging.send(to_email=to, subject=subject, text=text, html=html).get("email"))
+
+
+WA_LIMIT_DEFAULT = 25
+
+
+def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "email"),
+         wa_limit: int | None = WA_LIMIT_DEFAULT) -> dict:
+    """Send an approved draft. Emails go out at once, automatically. WhatsApp
+    sends itself when the seller's template is approved; otherwise it becomes
+    a tap-to-send list (and a task) the seller works through in send mode.
+
+    `wa_limit`: tapping is the seller's time, so the WhatsApp list is the
+    `wa_limit` most valuable customers with a phone (0 / None = everyone).
+    Everyone with an email still gets the email. Customers left out are not
+    marked contacted, so the next campaign can reach them."""
     from backend.core import brandname, whatsapp
     from backend.core import campaign_writer as cw
 
@@ -495,7 +529,10 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
             and (draft.get("offer") or {}).get("kind") != "none":
         raise CampaignError("Add a picture first: your WhatsApp template sends one with every message.")
 
-    results, n_mail, n_wa, n_links, skipped, sample = [], 0, 0, 0, 0, 0
+    with_phone = sorted((r for r in draft["rows"] if (r.get("phone") or "").strip()),
+                        key=lambda r: float(r.get("monetary") or 0), reverse=True)
+    wa_pick = {r["customer_id"] for r in (with_phone[:int(wa_limit)] if wa_limit else with_phone)}
+    results, n_mail, n_wa, n_links, skipped, sample, wa_later = [], 0, 0, 0, 0, 0, 0
     for r in draft["rows"]:
         r.update(cw.message_for(r, ctx))
         to = (r.get("email") or "").strip()
@@ -512,16 +549,16 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
             else:
                 reachable = True
                 try:
-                    res = messaging.send(
-                        to_email=to,
-                        subject=r.get("email_subject") or f"A little something from {brand}",
-                        text=r["message"].replace("*", ""),
-                        html=campaign_html(brand, r, ctx, image_url))
-                    entry["email_sent"] = bool(res.get("email"))
+                    entry["email_sent"] = _send_email(
+                        email, to, r.get("email_subject") or f"A little something from {brand}",
+                        r["message"].replace("*", ""), campaign_html(brand, r, ctx, image_url))
                     n_mail += int(entry["email_sent"])
                 except Exception as e:  # noqa: BLE001 — one bad address, not the batch
                     log.warning("campaign email to %s failed: %s", to, e)
-        if "whatsapp" in channels and phone:
+        if "whatsapp" in channels and phone and r["customer_id"] not in wa_pick:
+            wa_later += 1                  # beyond the WhatsApp limit: next time
+            entry["error"] = entry["error"] or "not in this WhatsApp list"
+        elif "whatsapp" in channels and phone:
             reachable = True
             if wa_auto:
                 try:
@@ -548,7 +585,7 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
             else:
                 entry["wa_link"] = campaigns.wa_link(phone, r["message"])
                 n_links += int(bool(entry["wa_link"]))
-        if not reachable:
+        if not reachable and not (phone and "whatsapp" in channels):
             skipped += 1
             entry["error"] = entry["error"] or "no phone or email on file"
         results.append(entry)
@@ -586,6 +623,8 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
         draft["proof_id"] = proof_id
         _save_draft(email, draft)
         _save_record(email, draft, results, ctx, channels, wa_auto)
+        if prepared:
+            _sync_wa_task(email, draft_id)
 
     bits = []
     if n_wa:
@@ -593,8 +632,10 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
     if n_mail:
         bits.append(f"{n_mail} email{'s' if n_mail != 1 else ''} sent")
     if n_links:
-        bits.append(f"{n_links} WhatsApp message{'s' if n_links != 1 else ''} ready: tap each "
-                    f"one to send it")
+        bits.append(f"{n_links} WhatsApp message{'s' if n_links != 1 else ''} ready to send "
+                    f"(in your task list)")
+    if wa_later:
+        bits.append(f"{wa_later} more with a phone kept for next time")
     if skipped:
         bits.append(f"{skipped} with no phone or email")
     if sample:
@@ -609,7 +650,8 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
             "skipped": skipped, "sample": sample, "delivered": len(delivered),
             "prepared": len(prepared), "whatsapp_auto": wa_auto,
             "email_ready": messaging.smtp_configured(),
-            "sent_now": len(delivered), "to_send": len(prepared), "summary": summary}
+            "sent_now": len(delivered), "to_send": len(prepared), "wa_later": wa_later,
+            "email_ready": email_ready(email), "summary": summary}
 
 
 def history(email: str, limit: int = 30) -> list[dict]:
@@ -963,4 +1005,80 @@ def mark_tapped(email: str, campaign_id: str, customer_id: str) -> dict:
     rec["targets"] = targets
     recs[campaign_id] = rec
     user_store.set_key(email, RECORDS_KEY, recs)
+    _sync_wa_task(email, campaign_id)
     return {"sent": sum(1 for x in targets if _is_sent(x)), "total": len(targets)}
+
+
+# ----------------------------------------------------------------- send mode
+def queue(email: str, campaign_id: str) -> dict:
+    """The WhatsApp messages still to send, most valuable customer first,
+    for send mode (one tap per customer, the next one ready on return)."""
+    rec = _records(email).get(campaign_id)
+    if not rec:
+        raise CampaignError("That campaign could not be found.")
+    targets = rec.get("targets") or []
+    wa = [t for t in targets if t.get("whatsapp") in ("tap", "tapped", "skipped")]
+    left = [t for t in wa if t.get("whatsapp") == "tap" and t.get("wa_link")]
+    left.sort(key=lambda t: float(t.get("monetary") or 0), reverse=True)
+    return {"campaign_id": campaign_id, "label": label(rec.get("reason") or "winback"),
+            "reason": rec.get("reason") or "winback",
+            "occasion": rec.get("occasion") or "",
+            "total": len(wa), "sent": sum(1 for t in wa if t.get("whatsapp") == "tapped"),
+            "skipped": sum(1 for t in wa if t.get("whatsapp") == "skipped"),
+            "remaining": [{"customer_id": t["customer_id"], "customer_name": t.get("customer_name") or "",
+                           "code": t.get("code") or "", "wa_link": t["wa_link"],
+                           "message": _message_of(t)} for t in left]}
+
+
+def _message_of(t: dict) -> str:
+    """The text inside a wa.me link, to show on the send-mode card."""
+    from urllib.parse import parse_qs, urlparse
+    try:
+        return parse_qs(urlparse(t.get("wa_link") or "").query).get("text", [""])[0]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def mark_skipped(email: str, campaign_id: str, customer_id: str) -> dict:
+    """Leave one customer out of this campaign's WhatsApp list (not sent, not
+    counted, eligible next time)."""
+    recs = dict(_records(email))
+    rec = recs.get(campaign_id)
+    if not rec:
+        raise CampaignError("That campaign could not be found.")
+    rec = dict(rec)
+    targets = [dict(t) for t in rec.get("targets") or []]
+    for t in targets:
+        if t["customer_id"] == str(customer_id) and t.get("whatsapp") == "tap":
+            t["whatsapp"] = "skipped"
+    rec["targets"] = targets
+    recs[campaign_id] = rec
+    user_store.set_key(email, RECORDS_KEY, recs)
+    _sync_wa_task(email, campaign_id)
+    return queue(email, campaign_id)
+
+
+_TASK_NAMES = {"winback": "win-back campaign", "second_order": "second-order nudge",
+               "cross_sell": "'goes well with' campaign", "restock": "restock reminder",
+               "vip": "VIP early access", "thank_you": "thank-you messages",
+               "festival": "festival offer"}
+
+
+def _task_name(q: dict) -> str:
+    """'Send the Diwali offer on WhatsApp', not 'Send the Win back quiet
+    customers on WhatsApp': the label is a menu choice, not a noun."""
+    if q.get("occasion"):
+        return f"{q['occasion']} offer"
+    return _TASK_NAMES.get(q.get("reason") or "", "campaign")
+
+
+def _sync_wa_task(email: str, campaign_id: str) -> None:
+    """One task per campaign in the seller's task list: 'Send the Win-back
+    campaign on WhatsApp: 8 of 25 sent'. Done by itself when none are left."""
+    from backend.core import smart
+    try:
+        q = queue(email, campaign_id)
+    except CampaignError:
+        return
+    smart.upsert_wa_task(email, campaign_id, f"Send the {_task_name(q)} on WhatsApp",
+                         q["sent"], q["total"] - q["skipped"], done=not q["remaining"])

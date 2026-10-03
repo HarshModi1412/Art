@@ -2571,6 +2571,19 @@ function taskRowsHtml(tasks) {
        ? `<button type="button" class="task-more" id="taskMore">${sic("chevron-down")}
             <span>Show fewer</span></button>` : "");
   return rows.map((t) => {
+    if (t.kind === "wa_send" && !t.done) {
+      const pct = t.total ? Math.round(100 * (t.sent || 0) / t.total) : 0;
+      return `
+      <div class="task-item task-post" data-task="${esc(t.id)}">
+        <span class="task-ico wa">${sic("whatsapp")}</span>
+        <div class="t">
+          <b>${esc(t.text)}</b>
+          <span class="task-sub">${fmt(t.sent || 0)} of ${fmt(t.total || 0)} sent · one tap each</span>
+          <span class="sm-bar task-bar"><i style="width:${pct}%"></i></span>
+        </div>
+        <button class="btn primary sm" data-wacamp="${esc(t.campaign_id)}">${t.sent ? "Continue" : "Start"}</button>
+      </div>`;
+    }
     if (t.post_id && !t.done) {
       const steps = t.steps || [];
       const doneSteps = new Set(t.steps_done || []);
@@ -2618,6 +2631,7 @@ function wireTasks() {
     paintTasks(((state.lastState || {}).tasks) || []);
   };
   document.querySelectorAll("#taskList [data-vtask]").forEach((b) => b.onclick = () => openVideoTask(b.dataset.vtask));
+  document.querySelectorAll("#taskList [data-wacamp]").forEach((b) => b.onclick = () => openSendMode(b.dataset.wacamp));
   // A setup task opens the journey at its own step or part.
   document.querySelectorAll("#taskList [data-obopen]").forEach((b) => b.onclick = () => {
     const [kind, val] = b.dataset.obopen.split(":");
@@ -8429,10 +8443,18 @@ function mcDraftHtml(d, openId) {
       </div>
 
       <div class="mc-send">
-        <label class="mc-chk"><input type="checkbox" id="mcChWa" checked>${sic("whatsapp")}<span><b>WhatsApp</b><br><span class="muted tiny">${waLine}</span></span></label>
-        <label class="mc-chk"><input type="checkbox" id="mcChMail" ${d.email_ready ? "checked" : ""}>${sic("mail")}<span><b>Email</b><br><span class="muted tiny">${d.email_ready
-          ? "Sent with the picture, the code and a Shop now button."
-          : "Email sending is not set up on this server yet."}</span></span></label>
+        <div class="mc-chk">
+          <input type="checkbox" id="mcChWa" checked>${sic("whatsapp")}
+          <span><b>WhatsApp</b><br><span class="muted tiny">${wa.mode === "auto" ? waLine
+            : "You send these yourself, one tap each, from a list in your tasks. It costs nothing."}</span>
+            <label class="mc-wal">To your
+              <select id="mcWaLimit">
+                ${[10, 25, 50, 0].map((v) => `<option value="${v}"${v === (d.wa_limit_default || 25) ? " selected" : ""}>${v ? v : "all"}</option>`).join("")}
+              </select> most valuable customers with a phone (${fmt(c.phone || 0)} have one)</label></span>
+        </div>
+        <label class="mc-chk"><input type="checkbox" id="mcChMail" ${d.email_ready ? "checked" : ""}${d.email_ready ? "" : " disabled"}>${sic("mail")}<span><b>Email</b><br><span class="muted tiny">${d.email_ready
+          ? `Goes out automatically to all ${fmt(c.email || 0)} with an email when you press Send, with the picture, their code and a Shop now button.`
+          : `Connect your email in <a href="#" id="mcMailSetup">Account → Email</a> and every email in a campaign goes out by itself.`}</span></span></label>
       </div>
       ${reach > 0 ? "" : `<div class="mc-warn">${sic("bell")}<span><b>None of these customers have a phone
         number or email yet,</b> so there is nobody to send to. Open a customer above to add one, upload
@@ -8493,16 +8515,18 @@ function wireMcDraft() {
   };
   const ws = $("mcWaSetup");
   if (ws) ws.onclick = (e) => { e.preventDefault(); openWhatsAppSetup(); };
+  const ms = $("mcMailSetup");
+  if (ms) ms.onclick = (e) => { e.preventDefault(); openAccount(); };
   $("mcSend").onclick = async () => {
     const channels = [];
     if ($("mcChWa").checked) channels.push("whatsapp");
     if ($("mcChMail").checked) channels.push("email");
     if (!channels.length) return err("Pick WhatsApp, email or both.");
-    const n = ((d.counts || {}).audience || 0) - ((d.counts || {}).unreachable || 0);
-    if (!confirm(`Send this campaign to ${n} customers now?`)) return;
+    const waLimit = Number(($("mcWaLimit") || {}).value || 25);
+    if (!confirm("Send this campaign now? Emails go out straight away; the WhatsApp list goes to your tasks.")) return;
     const b = $("mcSend"); b.disabled = true; b.innerHTML = `<span class="spin" aria-hidden="true"></span> Sending…`;
     try {
-      const r = await api(`/api/campaign/${d.id}/send`, { method: "POST", json: { channels } });
+      const r = await api(`/api/campaign/${d.id}/send`, { method: "POST", json: { channels, wa_limit: waLimit } });
       _mc.result = r;
       warmModClearAll(); refreshApprovals(true);
       $("mcMain").innerHTML = mcResultHtml(r);
@@ -8512,67 +8536,102 @@ function wireMcDraft() {
 }
 
 /* ------------------------------------------------------------- result ---- */
-/* The tap-to-send list. Tapping a customer opens WhatsApp with their message
-   and records them as sent, so every count in this screen is what actually
-   went out, never "everyone" just because the links were made. */
-function mcTapsHtml(campaignId, list, sentNow, total) {
-  if (!list.length) return "";
-  return `
-    <div class="mc-tapwrap" data-cid="${esc(campaignId)}">
-      <div class="mc-tapcount"><b id="mcSentN">${fmt(sentNow)}</b> of <b>${fmt(total)}</b> sent</div>
-      <p class="muted tiny" style="margin:0 0 10px;">Tap each customer: WhatsApp opens with their message
-        already written, press send there, come back for the next. Only the ones you tap are counted.
-        ${(_mc.draft && _mc.draft.image && _mc.draft.image.url)
-          ? `<a href="${esc(_mc.draft.image.url)}" download target="_blank" rel="noopener">Save the picture</a> to attach it.` : ""}</p>
-      <div class="mc-taps">
-        ${list.map((x) => `<a class="mc-tap" href="${esc(x.wa_link)}" target="_blank" rel="noopener" data-tapcid="${esc(x.customer_id)}">
-          ${sic("whatsapp")}<span><b>${esc(x.customer_name || x.phone || x.customer_id)}</b><span class="muted tiny">${esc(x.code || "")}</span></span>
-          <span class="mc-tap-s">Send</span></a>`).join("")}
-      </div>
-    </div>`;
-}
-
-function wireMcTaps() {
-  const wrap = document.querySelector(".mc-tapwrap");
-  if (!wrap) return;
-  const id = wrap.dataset.cid;
-  wrap.querySelectorAll("[data-tapcid]").forEach((a) => a.addEventListener("click", async () => {
-    if (a.classList.contains("done")) return;
-    a.classList.add("done");
-    a.querySelector(".mc-tap-s").textContent = "Sent";
-    try {
-      const r = await api(`/api/campaign/${encodeURIComponent(id)}/tapped`, { method: "POST",
-        json: { customer_id: a.dataset.tapcid } });
-      const n = $("mcSentN"); if (n) n.textContent = fmt(r.sent);
-    } catch (e) {
-      a.classList.remove("done"); a.querySelector(".mc-tap-s").textContent = "Send";
-      toast(e.message, 6000);
-    }
-  }));
-}
-
 function mcResultHtml(r) {
-  const links = (r.results || []).filter((x) => x.wa_link);
-  const sentNow = r.sent_now != null ? r.sent_now : (r.delivered || 0);
-  // who CAN be sent something: sent already, plus the tap-to-send ones left
-  const total = sentNow + (r.to_send != null ? r.to_send : links.length);
-  const head = sentNow
-    ? `${sic("check")}${fmt(sentNow)} of ${fmt(total)} sent`
-    : `${sic("whatsapp")}Ready to send`;
+  const waLeft = r.to_send || 0;
   return `
     <div class="card mc-card">
-      <h4 class="mc-h">${head}</h4>
+      <h4 class="mc-h">${sic("check")}${r.email_sent ? `${fmt(r.email_sent)} email${r.email_sent === 1 ? "" : "s"} sent` : "Campaign ready"}</h4>
       <p style="margin:4px 0 12px;">${esc(r.summary || "")}</p>
-      ${mcTapsHtml(r.campaign_id, links, sentNow, total)}
-      <div class="mc-go"><button class="btn primary" id="mcSeeRes">${sic("chart")}Track the results</button>
+      ${waLeft ? `<div class="mc-wa-next">
+          ${sic("whatsapp")}
+          <div><b>${fmt(waLeft)} WhatsApp message${waLeft === 1 ? "" : "s"} to send</b>
+            <span class="muted tiny">One tap each: WhatsApp opens with the message written, you press send, and the
+              next customer is ready when you come back. It is in your task list too, so you can stop and carry on later.</span></div>
+          <button class="btn primary" id="mcSendMode">Start sending</button>
+        </div>` : ""}
+      <div class="mc-go"><button class="btn ghost" id="mcSeeRes">${sic("chart")}Track the results</button>
         <button class="btn ghost" id="mcNew">${sic("plus")}Start another campaign</button></div>
     </div>`;
 }
 
 function wireMcResult(r) {
-  wireMcTaps();
+  const sm = $("mcSendMode");
+  if (sm) sm.onclick = () => openSendMode(r.campaign_id);
   $("mcNew").onclick = () => { warmModClearAll(); openMarketing(); };
   $("mcSeeRes").onclick = () => openCampaignAnalysis(r.campaign_id);
+}
+
+/* ------------------------------------------------------------ send mode ---- */
+/* WhatsApp, one customer at a time. The card shows who is next and exactly
+   what they get; one tap opens WhatsApp with it written (the seller presses
+   send there), records them as sent, and puts the next customer on the card,
+   so coming back to this tab is one more tap, not a hunt through a list.
+   Nothing here can open WhatsApp by itself: a browser only allows that from a
+   tap, which is also what keeps it honest about what was really sent. */
+let _sm = null;
+
+async function openSendMode(campaignId) {
+  let q;
+  try { q = await api(`/api/campaign/${encodeURIComponent(campaignId)}/queue`); }
+  catch (e) { return toast(e.message, 6000); }
+  _sm = { id: campaignId, q, i: 0, sent: q.sent, total: q.total - q.skipped };
+  openModal(`WhatsApp: ${q.occasion ? q.occasion + " offer" : q.label}`, `<div id="smBody"></div>`);
+  smPaint();
+}
+
+function smPaint() {
+  const box = $("smBody");
+  if (!box || !_sm) return;
+  const left = _sm.q.remaining;
+  const pct = _sm.total ? Math.round(100 * _sm.sent / _sm.total) : 100;
+  const head = `<div class="sm-prog"><div class="sm-bar"><i style="width:${pct}%"></i></div>
+    <span><b>${fmt(_sm.sent)}</b> of ${fmt(_sm.total)} sent</span></div>`;
+  const x = left[_sm.i];
+  if (!x) {
+    box.innerHTML = head + `<div class="sm-done">${sic("check")}<b>All done.</b>
+      <span class="muted tiny">Every message in this list has been sent. The task is ticked off.</span>
+      <button class="btn primary" id="smClose">Close</button></div>`;
+    $("smClose").onclick = () => { closeModal(); smAfter(); };
+    return;
+  }
+  box.innerHTML = head + `
+    <div class="sm-card">
+      <div class="sm-who"><b>${esc(x.customer_name || "Customer")}</b>
+        <span class="muted tiny">${fmt(left.length - _sm.i)} still to send${x.code ? ` · code ${esc(x.code)}` : ""}</span></div>
+      <div class="mc-bubble sm-msg">${mcWa(x.message)}</div>
+      <a class="btn primary sm-go" id="smGo" href="${esc(x.wa_link)}" target="_blank" rel="noopener">
+        ${sic("whatsapp")}Send to ${esc((x.customer_name || "them").split(" ")[0])}</a>
+      <div class="sm-row">
+        <button class="btn ghost sm" id="smSkip">Skip</button>
+        <button class="btn ghost sm" id="smStop">Stop for now</button>
+      </div>
+      <p class="muted tiny" style="margin:4px 0 0;">After you press send in WhatsApp, come back here: the next customer is ready.</p>
+    </div>`;
+  // The link opens WhatsApp itself (a real tap, so the browser allows it);
+  // recording and moving on happen alongside, never before.
+  $("smGo").addEventListener("click", () => {
+    api(`/api/campaign/${encodeURIComponent(_sm.id)}/tapped`, { method: "POST", json: { customer_id: x.customer_id } })
+      .catch(() => toast("Could not save that one as sent. It will show again next time.", 5000));
+    _sm.sent += 1; _sm.i += 1;
+    setTimeout(smPaint, 300);
+  });
+  $("smSkip").onclick = async () => {
+    try { await api(`/api/campaign/${encodeURIComponent(_sm.id)}/skip`, { method: "POST", json: { customer_id: x.customer_id } }); }
+    catch (e) { return toast(e.message, 5000); }
+    _sm.total -= 1; _sm.i += 1; smPaint();
+  };
+  $("smStop").onclick = () => {
+    closeModal();
+    toast(`${fmt(_sm.sent)} of ${fmt(_sm.total)} sent. Carry on any time from your task list.`, 5000);
+    smAfter();
+  };
+}
+
+/* Whatever screen is behind gets the new numbers. */
+async function smAfter() {
+  warmModClearAll();
+  try { const st = await api("/api/smart/state"); if (st && st.tasks) refreshTaskList(st.tasks); } catch (e) { /* next load */ }
+  if (_currentModule === "marketing") openMarketing();
 }
 
 /* ------------------------------------------------------------ history ---- */
@@ -8613,7 +8672,8 @@ async function openCampaignAnalysis(id) {
   $("mcMain").innerHTML = mcAnalysisHtml(a);
   $("mcMain").scrollIntoView({ behavior: "smooth", block: "start" });
   $("mcAnBack").onclick = () => { warmModClearAll(); openMarketing(); };
-  wireMcTaps();
+  const cont = $("mcAnContinue");
+  if (cont) cont.onclick = () => openSendMode(id);
   const cl = $("mcCopyLink");
   if (cl) cl.onclick = async () => {
     try { await navigator.clipboard.writeText(cl.dataset.link); toast("Link copied"); }
@@ -8649,8 +8709,10 @@ function mcAnalysisHtml(a) {
         </div>
       </div>
 
-      ${(a.to_send || []).length ? `<h5 class="mc-sub">Still to send</h5>
-        ${mcTapsHtml(c.id, a.to_send, k.reached, k.messaged)}` : ""}
+      ${(a.to_send || []).length ? `<div class="mc-wa-next">${sic("whatsapp")}
+          <div><b>${fmt(a.to_send.length)} WhatsApp message${a.to_send.length === 1 ? "" : "s"} still to send</b>
+            <span class="muted tiny">Only the ones you send are counted below.</span></div>
+          <button class="btn primary" id="mcAnContinue">Continue sending</button></div>` : ""}
       <div class="mc-kpis">
         ${tile("Sent", fmt(k.reached), `of ${fmt(k.messaged)} in the campaign`)}
         ${tile("Opened the link", `${fmt(k.clicked)}`, `${k.click_rate}% of sent`)}

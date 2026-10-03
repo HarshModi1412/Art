@@ -3424,7 +3424,8 @@ def _home_fingerprint(email: str) -> str:
         posts = [(p.get("id"), p.get("state"), bool(p.get("image_url")),
                   bool(p.get("video_url")), p.get("scheduled_at"))
                  for p in social._posts(email)]
-        tasks = [(t.get("id"), t.get("done"), tuple(t.get("steps_done") or []))
+        tasks = [(t.get("id"), t.get("done"), tuple(t.get("steps_done") or []),
+                  t.get("sent"), t.get("total"), t.get("text"))
                  for t in smart.get_tasks(email)]
         dec = user_store.get_key(email, "smart_decisions", {}) or {}
         ap = user_store.get_key(email, autoplan.STATE_KEY, {}) or {}
@@ -4244,6 +4245,7 @@ class CampaignUpdateBody(BaseModel):
 
 class CampaignSendBody(BaseModel):
     channels: list[str] = ["whatsapp", "email"]
+    wa_limit: int | None = 25        # most valuable N on WhatsApp; 0 = everyone
 
 
 def _campaign_err(e: Exception) -> HTTPException:
@@ -4338,7 +4340,7 @@ def campaign_send(draft_id: str, body: CampaignSendBody,
     email = require_user(authorization)
     from backend.core import campaign_engine
     try:
-        res = campaign_engine.send(email, draft_id, tuple(body.channels or ()))
+        res = campaign_engine.send(email, draft_id, tuple(body.channels or ()), body.wa_limit)
     except campaign_engine.CampaignError as e:
         raise _campaign_err(e)
     # the automatic campaign's card goes once its draft has been sent by hand
@@ -4363,6 +4365,28 @@ def campaign_tapped(campaign_id: str, body: CampaignTapBody,
     from backend.core import campaign_engine
     try:
         return campaign_engine.mark_tapped(email, campaign_id, body.customer_id)
+    except campaign_engine.CampaignError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/campaign/{campaign_id}/queue")
+def campaign_queue(campaign_id: str, authorization: str | None = Header(default=None)):
+    """WhatsApp send mode: who is still to send, most valuable first."""
+    email = require_user(authorization)
+    from backend.core import campaign_engine
+    try:
+        return campaign_engine.queue(email, campaign_id)
+    except campaign_engine.CampaignError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.post("/api/campaign/{campaign_id}/skip")
+def campaign_skip(campaign_id: str, body: CampaignTapBody,
+                  authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    from backend.core import campaign_engine
+    try:
+        return campaign_engine.mark_skipped(email, campaign_id, body.customer_id)
     except campaign_engine.CampaignError as e:
         raise HTTPException(400, str(e))
 
