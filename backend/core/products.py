@@ -566,10 +566,21 @@ def canonicalize_df(email: str, df):
         if df is None or "product" not in getattr(df, "columns", []):
             return df
         m = alias_map(email)
+        # Product CODES too: a POS export often carries the SKU ("5773")
+        # rather than the name, and every chart then shows numbers. A code
+        # that matches a product's SKU (or a variant's) becomes its name.
+        for p in get_products(email) or []:
+            if not p.get("name"):
+                continue
+            for code in [p.get("sku")] + [v.get("sku") for v in p.get("variants") or []]:
+                if code and _norm(code) not in m:
+                    m[_norm(code)] = p["name"]
         if not m:
             return df
         out = df.copy()
-        out["product"] = out["product"].map(lambda v: m.get(_norm(v), v))
+        # a code column read as numbers arrives as 5773.0
+        out["product"] = out["product"].map(
+            lambda v: m.get(_norm(v), m.get(_norm(v).removesuffix(".0"), v)))
         return out
     except Exception:
         return df

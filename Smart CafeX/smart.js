@@ -1422,6 +1422,17 @@ function _drawPlot(el, traces, layout, title) {
   if (hbar) el.style.minHeight = `${Math.max(272, (hbar.y || []).length * 30 + 48)}px`;
   Plotly.newPlot(el, _polish(traces, layout), _composeLayout(traces, layout),
     { displayModeBar: false, responsive: true, staticPlot: true });
+  // responsive:true only listens to the WINDOW. A chart drawn while its card
+  // had no width yet (a page restored in a background tab, a card revealed
+  // later) stayed squashed until the window itself changed size. Watch the
+  // chart's own box instead.
+  if (window.ResizeObserver && !el._cxRo) {
+    el._cxRo = new ResizeObserver(() => {
+      const w = el.clientWidth, fl = el._fullLayout;
+      if (w && fl && Math.abs(w - fl.width) > 4) { try { Plotly.Plots.resize(el); } catch (e) { /* replaced */ } }
+    });
+    el._cxRo.observe(el);
+  }
   // The first paint draws in once (a left-to-right reveal, see .plot-in in
   // ios.css). A theme toggle re-plots the same node and does not replay it.
   if (first) el.classList.add("plot-in");
@@ -4116,16 +4127,23 @@ function openMapModal(d) {
   // guess Date or Amount from the numbers rather than the headers, say THAT —
   // a wrong guess presented confidently is how a seller ends up trusting a
   // dashboard built on the wrong two columns.
-  const confirm = (d.suggested_mapping || {})._needs_confirmation || [];
+  const confirm = ((d.suggested_mapping || {})._needs_confirmation || []).slice();
+  const productCodes = !!(d.suggested_mapping || {})._product_codes;
+  if (productCodes && d.kind !== "review") confirm.push("product");
+  const codesNote = productCodes
+    ? "The column we picked as Product holds codes (like 5773), not names, so your charts would show "
+      + "numbers. If your file has a product name column, choose it for Product. "
+    : "";
+  const dateAmount = confirm.filter((r) => r !== "product");
   $("mapHint").textContent = d.kind === "review"
     ? "Which column holds the review text? (required). Rating and Date are optional but sharpen the analysis."
     : d.preset
-      ? `This looks like a ${d.preset}. We have filled it in, have a quick look and press Continue.`
-      : confirm.length
+      ? `This looks like a ${d.preset}. We have filled it in, have a quick look and press Continue. ` + codesNote
+      : dateAmount.length
         ? "We could not tell which columns these are from their names, so please check the "
-          + "highlighted ones against the preview below. Getting these two right is what "
-          + "makes every number afterwards correct."
-        : "Tell us which column is which. Date and Amount are required. "
+          + "highlighted ones against the preview below. Getting Date and Amount right is what "
+          + "makes every number afterwards correct. " + codesNote
+        : codesNote + "Tell us which column is which. Date and Amount are required. "
           + "If your file has customer phone numbers or emails, map them too, "
           + "that is what lets a Marketing Campaign reach your customers.";
   const labelFor = { date: "Date", amount: "Amount", customer_id: "Customer ID", customer_name: "Customer Name",
@@ -7620,17 +7638,33 @@ function salesInsightCharts(d) {
     out.push(chartCard("cWk", "Revenue by weekday", ""));
   }
   if (hm) {
+    // The colour key: what light and dark MEAN, in money. Without it the
+    // squares are a pattern nobody can put a number on.
+    const zs = hm.z.flat().filter((v) => v > 0);
+    const lo = zs.length ? Math.min(...zs) : 0, hi = zs.length ? Math.max(...zs) : 0;
+    const primary = cssVar("--primary", "#6d28d9");
+    const key = zs.length ? `<span class="heat-key" aria-label="Colour key">
+        <span>₹${fmt(Math.round(lo))}</span>
+        <i style="background:linear-gradient(90deg, ${withAlpha(primary, 0.12)}, ${primary})"></i>
+        <span>₹${fmt(Math.round(hi))}</span>
+        <span class="muted">average sales per day</span></span>` : "";
     out.push(chartCard("cHeat", hm.mode === "hour" ? "When your sales happen" : "Your week, month by month",
-      hm.mode === "hour"
-        ? `Busiest: <b>${esc(hm.peak)}</b>. Post and reply to messages just before it.`
-        : `Strongest: <b>${esc(hm.peak)}</b>. Darker squares took more money; a column that is pale all through is a slow month.`));
+      (hm.mode === "hour"
+        ? `Busiest: <b>${esc(hm.peak)}</b>. Each square is the average sales for that day at that hour.
+           Post and reply to messages just before the busiest time.`
+        : `Strongest: <b>${esc(hm.peak)}</b>. Each square is the average sales on that weekday in that month:
+           the stronger the colour, the more money came in (see the key). A column that stays faint all the way down is a slow month.`)
+      + key));
   }
   const pair = [];
   if (mv) {
     const g = mv.top_gainer ? `<b>${esc(mv.top_gainer)}</b> is up ₹${fmt(mv.top_gainer_change)}` : "";
     const l = mv.top_loser ? `<b>${esc(mv.top_loser)}</b> is down ₹${fmt(Math.abs(mv.top_loser_change))}` : "";
     pair.push(chartCard("cMove", "Products rising and falling",
-      `Last 30 days (${esc(mv.window)}) against the 30 before. ${[g, l].filter(Boolean).join(", ")}.`));
+      `Last 30 days (${esc(mv.window)}) against the 30 before. ${[g, l].filter(Boolean).join(", ")}.`
+      + (mv.codes ? `<span class="chart-hint">${sic("tag")}<span>These are product <b>codes</b> from your sales file, not names.
+          Give each product its code in <a href="#" data-goprod>Product Management</a> (the SKU field) and the names
+          show here, or re-upload and map your product <b>name</b> column as Product.</span></span>` : "")));
   }
   if (nr) {
     pair.push(chartCard("cNewRet", "New and returning customers",
@@ -7644,6 +7678,7 @@ function salesInsightCharts(d) {
 }
 
 function drawSalesInsightCharts(d) {
+  document.querySelectorAll("[data-goprod]").forEach((a) => a.onclick = (e) => { e.preventDefault(); openModule("products"); });
   const primary = cssVar("--primary", "#6d28d9");
   const muted = withAlpha(cssVar("--muted", "#8a8a8e"), 0.45);
   const bd = d.best_days, hm = d.heatmap, mv = d.product_movers, nr = d.new_vs_returning;
@@ -7663,7 +7698,8 @@ function drawSalesInsightCharts(d) {
     const days = hm.y.map((y) => y.slice(0, 3));
     plot($("cHeat"), [{ type: "heatmap", x: hm.x, y: days, z: hm.z,
       zmin: zs.length ? Math.min(...zs) : 0, zmax: zs.length ? Math.max(...zs) : 1,
-      colorscale: [[0, withAlpha(primary, 0.08)], [1, primary]], showscale: false, xgap: 2, ygap: 2,
+      // matches the key drawn under the heading (salesInsightCharts)
+      colorscale: [[0, withAlpha(primary, 0.12)], [1, primary]], showscale: false, xgap: 2, ygap: 2,
       hovertemplate: "%{y} %{x}: ₹%{z:,.0f}<extra></extra>" }],
       { xaxis: { type: "category", showgrid: false },
         // every day labelled: the axis thinning that suits a value scale hid three of seven

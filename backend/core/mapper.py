@@ -267,6 +267,7 @@ def suggest_mapping(df: pd.DataFrame) -> dict:
             seen[col] = role
 
     suggestion.update(_suggest_contacts(df))
+    suggestion["_product_codes"] = product_is_codes(df, suggestion.get("product"))
 
     # What the mapping screen needs in order to ASK instead of pre-filling: which
     # fields were guessed from data rather than recognised from a header, and
@@ -316,6 +317,17 @@ def _suggest_contacts(df: pd.DataFrame) -> dict:
                     break
         out[role] = best
     return out
+
+
+def product_is_codes(df: pd.DataFrame, col) -> bool:
+    """Does the column chosen as Product hold codes ("5773", "SKU-1029")
+    rather than names? Then every chart shows numbers, and the mapping screen
+    asks the seller to pick the name column instead, if the file has one."""
+    if not col or col not in df.columns:
+        return False
+    from backend.core.analytics import looks_like_code
+    vals = df[col].dropna().astype(str).head(300)
+    return bool(len(vals)) and float(vals.map(looks_like_code).mean()) >= 0.8
 
 
 def contact_frame(raw: pd.DataFrame, mapping: dict) -> dict[str, pd.Series]:

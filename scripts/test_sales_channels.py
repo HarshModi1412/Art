@@ -113,5 +113,30 @@ check("Sub-Category Analytics filters too", r.status_code == 200 and r.json()["c
 r = c.get("/api/analytics?channel=wix", headers=H)
 check("a channel with no sales says so", r.status_code == 400 and "No sales" in r.text)
 
+print("\n== 4. product codes become names ==")
+from backend.core import mapper, products  # noqa: E402
+codes = df.copy()
+names = sorted(codes["product"].unique())
+code_of = {n: str(5000 + i) for i, n in enumerate(names)}
+codes["product"] = codes["product"].map(code_of).astype(int)
+check("a Product column of codes is flagged at mapping",
+      mapper.suggest_mapping(codes.rename(columns={"product": "Item"}))["_product_codes"] is True)
+check("a column of names is not", not mapper.product_is_codes(df, "product"))
+mv = analytics.sales_analytics(codes).get("product_movers")
+check("the movers chart says it is showing codes", mv and mv["codes"], str(mv)[:120])
+P = "codes@shop.local"
+first = names[0]
+products.upsert_product(P, {"name": first.split(",")[0], "sku": code_of[first], "price": 100})
+smart.save_sales(P, codes, {}, channel="upload")
+named = smart.session_sales(P)
+check("a code that matches a product's SKU shows the product's name",
+      first.split(",")[0] in set(named["product"]) and int(code_of[first]) not in set(named["product"]),
+      str(sorted(set(map(str, named["product"])))[:5]))
+fl = codes.copy()
+fl["product"] = fl["product"].astype(float)
+smart.save_sales(P, fl, {}, channel="upload")
+check("even when the codes were read as decimals (5000.0)",
+      first.split(",")[0] in set(smart.session_sales(P)["product"]))
+
 print(f"\n{PASSED} passed, {FAILED} failed")
 sys.exit(1 if FAILED else 0)

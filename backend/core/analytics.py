@@ -190,6 +190,15 @@ def _sales_heatmap(df: pd.DataFrame) -> dict | None:
             "peak": f"{_DAYS[int(peak[0])]}s in {peak[1].strftime('%B %Y')}"}
 
 
+_CODE = __import__("re").compile(r"^[A-Za-z]{0,4}[-_#./]?\d[\w\-./#]{0,20}$")
+
+
+def looks_like_code(v) -> bool:
+    """"5773", "SKU-1029", "85123A": a product code, not a name a person reads."""
+    t = str(v).strip().removesuffix(".0")
+    return bool(t) and " " not in t and bool(_CODE.match(t))
+
+
 def _product_movers(df: pd.DataFrame, n: int = 5) -> dict | None:
     """The products gaining and losing the most: the last 30 days against the
     30 before. A ranking of all-time totals tells a seller what they already
@@ -222,7 +231,9 @@ def _product_movers(df: pd.DataFrame, n: int = 5) -> dict | None:
             "top_gainer_change": round(float(up.iloc[0]), 2) if len(up) else None,
             "top_loser": str(down.index[0]) if len(down) else None,
             "top_loser_change": round(float(down.iloc[0]), 2) if len(down) else None,
-            "window": f"{(end - pd.Timedelta(days=29)).strftime('%d %b')} to {end.strftime('%d %b')}"}
+            "window": f"{(end - pd.Timedelta(days=29)).strftime('%d %b')} to {end.strftime('%d %b')}",
+            # the screen says how to turn codes into names when that is all it has
+            "codes": sum(looks_like_code(p) for p in rows.index) > len(rows) / 2}
 
 
 def _new_vs_returning(df: pd.DataFrame) -> dict | None:
