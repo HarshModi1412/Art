@@ -4246,6 +4246,8 @@ class CampaignUpdateBody(BaseModel):
 class CampaignSendBody(BaseModel):
     channels: list[str] = ["whatsapp", "email"]
     wa_limit: int | None = 25        # most valuable N on WhatsApp; 0 = everyone
+    wa_paid: bool | None = None      # True paid (Twilio), False free tap-to-send, None = saved default
+    limit: int | None = None         # the cost slider: only the N most valuable reachable customers
 
 
 def _campaign_err(e: Exception) -> HTTPException:
@@ -4340,7 +4342,8 @@ def campaign_send(draft_id: str, body: CampaignSendBody,
     email = require_user(authorization)
     from backend.core import campaign_engine
     try:
-        res = campaign_engine.send(email, draft_id, tuple(body.channels or ()), body.wa_limit)
+        res = campaign_engine.send(email, draft_id, tuple(body.channels or ()), body.wa_limit,
+                                   body.wa_paid, body.limit)
     except campaign_engine.CampaignError as e:
         raise _campaign_err(e)
     # the automatic campaign's card goes once its draft has been sent by hand
@@ -4389,6 +4392,34 @@ def campaign_skip(campaign_id: str, body: CampaignTapBody,
         return campaign_engine.mark_skipped(email, campaign_id, body.customer_id)
     except campaign_engine.CampaignError as e:
         raise HTTPException(400, str(e))
+
+
+@app.post("/api/campaign/{campaign_id}/finish")
+def campaign_finish(campaign_id: str, authorization: str | None = Header(default=None)):
+    """Done with the WhatsApp list: drop the batches not sent yet."""
+    email = require_user(authorization)
+    from backend.core import campaign_engine
+    try:
+        return campaign_engine.finish_here(email, campaign_id)
+    except campaign_engine.CampaignError as e:
+        raise HTTPException(400, str(e))
+
+
+class CampaignDeleteBody(BaseModel):
+    campaign_id: str | None = ""
+    at: str | None = ""
+
+
+@app.post("/api/campaign/delete")
+def campaign_delete(body: CampaignDeleteBody, authorization: str | None = Header(default=None)):
+    email = require_user(authorization)
+    from backend.core import campaign_engine
+    try:
+        if (winback_auto._state(email).get("pending") or {}).get("draft_id") == body.campaign_id:
+            winback_auto.clear_pending(email)
+        return campaign_engine.delete_campaign(email, body.campaign_id or "", body.at or "")
+    except campaign_engine.CampaignError as e:
+        raise HTTPException(404, str(e))
 
 
 @app.get("/api/campaign/{campaign_id}/analysis")
@@ -4479,6 +4510,56 @@ def whatsapp_refresh(authorization: str | None = Header(default=None)):
 def whatsapp_disconnect(authorization: str | None = Header(default=None)):
     from backend.core import whatsapp
     return whatsapp.disconnect(require_user(authorization))
+
+
+class WhatsAppPrefBody(BaseModel):
+    pref: str
+
+
+@app.post("/api/whatsapp/pref")
+def whatsapp_pref(body: WhatsAppPrefBody, authorization: str | None = Header(default=None)):
+    """Free (tap to send) or paid (sends by itself) as the campaign default."""
+    from backend.core import whatsapp
+    try:
+        return whatsapp.save_pref(require_user(authorization), body.pref)
+    except whatsapp.WhatsAppError as e:
+        raise HTTPException(400, str(e))
+
+
+class TwilioConnectBody(BaseModel):
+    account_sid: str
+    auth_token: str
+    from_number: str
+
+
+@app.post("/api/whatsapp/twilio")
+def whatsapp_twilio_connect(body: TwilioConnectBody, authorization: str | None = Header(default=None)):
+    """Paid WhatsApp through the seller's own Twilio account."""
+    from backend.core import wa_twilio, whatsapp
+    email = require_user(authorization)
+    try:
+        wa_twilio.connect(email, body.account_sid, body.auth_token, body.from_number)
+        return whatsapp.save_pref(email, "paid")
+    except wa_twilio.TwilioError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/whatsapp/twilio/refresh")
+def whatsapp_twilio_refresh(authorization: str | None = Header(default=None)):
+    from backend.core import wa_twilio, whatsapp
+    email = require_user(authorization)
+    wa_twilio.refresh(email)
+    return whatsapp.status(email)
+
+
+@app.post("/api/whatsapp/twilio/disconnect")
+def whatsapp_twilio_disconnect(authorization: str | None = Header(default=None)):
+    from backend.core import wa_twilio, whatsapp
+    email = require_user(authorization)
+    wa_twilio.disconnect(email)
+    if not whatsapp.status(email)["paid_ready"]:
+        whatsapp.save_pref(email, "free")
+    return whatsapp.status(email)
 
 
 @app.get("/api/smart/insight/{insight_id}/download")

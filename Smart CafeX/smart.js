@@ -2578,10 +2578,10 @@ function taskRowsHtml(tasks) {
         <span class="task-ico wa">${sic("whatsapp")}</span>
         <div class="t">
           <b>${esc(t.text)}</b>
-          <span class="task-sub">${fmt(t.sent || 0)} of ${fmt(t.total || 0)} sent · one tap each</span>
+          <span class="task-sub">${t.batches > 1 && t.batch ? `Batch ${fmt(t.batch)} of ${fmt(t.batches)} · ` : ""}${fmt(t.sent || 0)} of ${fmt(t.total || 0)} sent · one tap each</span>
           <span class="sm-bar task-bar"><i style="width:${pct}%"></i></span>
         </div>
-        <button class="btn primary sm" data-wacamp="${esc(t.campaign_id)}">${t.sent ? "Continue" : "Start"}</button>
+        <button class="btn primary sm" data-wacamp="${esc(t.campaign_id)}">${t.batch_sent ? "Continue" : t.batch > 1 ? `Send batch ${fmt(t.batch)}` : "Start"}</button>
       </div>`;
     }
     if (t.post_id && !t.done) {
@@ -8385,12 +8385,8 @@ function mcDraftHtml(d, openId) {
   const imgBlock = img.url
     ? `<img src="${esc(img.url)}" alt="Campaign picture" class="mc-img">`
     : `<div class="mc-img empty">${sic("image")}<span>${esc(img.reason || "Add a picture for this campaign.")}</span></div>`;
-  const waLine = wa.mode === "auto"
-    ? `${sic("check")} Sends automatically from ${esc(wa.display_number || "+" + wa.number)}`
-    : wa.mode === "waiting"
-      ? `Waiting for Meta to approve your message. Until then each one opens in WhatsApp for you to tap send.`
-      : `Each message opens in WhatsApp already written, you tap send.
-         <a href="#" id="mcWaSetup">Send automatically</a>`;
+  const paidOn = !!wa.paid_ready && wa.send_pref === "paid";
+  const pe = (wa.twilio || {}).price_each || null;
   const brandWarn = ctx.brand_ready ? "" :
     `<div class="mc-warn">${sic("bell")}<span><b>Add your shop name before sending.</b> These messages
       are signed with it. Set it in Product Studio → Brand.</span></div>`;
@@ -8407,7 +8403,7 @@ function mcDraftHtml(d, openId) {
             ? `${esc(ctx.offer_label)} · codes valid till ${esc(ctx.expiry_label || "")}`
             : "No discount · every order from it is still tracked"}${ctx.link ? "" : " · your website is not published yet, so nothing can be tracked online"}</p>
         </div>
-        <button class="btn ghost sm" id="mcDiscard">${sic("close")}Discard</button>
+        <button class="btn ghost sm" id="mcDiscard">${sic("trash")}Delete</button>
       </div>
       <div class="mc-counts">
         <span><b>${fmt(c.audience || 0)}</b> customers</span>
@@ -8445,17 +8441,27 @@ function mcDraftHtml(d, openId) {
       <div class="mc-send">
         <div class="mc-chk">
           <input type="checkbox" id="mcChWa" checked>${sic("whatsapp")}
-          <span><b>WhatsApp</b><br><span class="muted tiny">${wa.mode === "auto" ? waLine
-            : "You send these yourself, one tap each, from a list in your tasks. It costs nothing."}</span>
-            <label class="mc-wal">To your
-              <select id="mcWaLimit">
-                ${[10, 25, 50, 0].map((v) => `<option value="${v}"${v === (d.wa_limit_default || 25) ? " selected" : ""}>${v ? v : "all"}</option>`).join("")}
-              </select> most valuable customers with a phone (${fmt(c.phone || 0)} have one)</label></span>
+          <span><b>WhatsApp</b>
+            <span class="mc-how" role="radiogroup">
+              <label class="mc-how-o${paidOn ? "" : " on"}"><input type="radio" name="mcWaHow" value="free"${paidOn ? "" : " checked"}>
+                <span><b>Free</b><span class="muted tiny">You tap send, in batches of 10 (up to 50)</span></span></label>
+              <label class="mc-how-o${paidOn ? " on" : ""}${wa.paid_ready ? "" : " off"}"><input type="radio" name="mcWaHow" value="paid"${paidOn ? " checked" : ""}${wa.paid_ready ? "" : " disabled"}>
+                <span><b>Paid</b><span class="muted tiny" id="mcWaCost">${wa.paid_ready
+                  ? (pe ? `Sends by itself · about ${esc(pe.symbol)}${pe.amount} each` : "Sends by itself")
+                  : `<a href="#" id="mcWaSetup">Set up with Twilio</a> to send by itself`}</span></span></label>
+            </span>
+</span>
         </div>
         <label class="mc-chk"><input type="checkbox" id="mcChMail" ${d.email_ready ? "checked" : ""}${d.email_ready ? "" : " disabled"}>${sic("mail")}<span><b>Email</b><br><span class="muted tiny">${d.email_ready
-          ? `Goes out automatically to all ${fmt(c.email || 0)} with an email when you press Send, with the picture, their code and a Shop now button.`
+          ? `Goes out by itself when you press Send, with the picture, their code and a Shop now button. Costs nothing.`
           : `Connect your email in <a href="#" id="mcMailSetup">Account → Email</a> and every email in a campaign goes out by itself.`}</span></span></label>
       </div>
+      ${reach > 0 ? `<div class="mc-reach">
+        <div class="mc-reach-h"><b>How many customers</b>
+          <span><b id="mcReachN">${fmt(reach)}</b> of <span id="mcReachMax">${fmt(reach)}</span>, most valuable first</span></div>
+        <input type="range" id="mcReach" min="1" max="${reach}" value="${reach}" step="1" aria-label="How many customers">
+        <div class="mc-cost" id="mcCost"></div>
+      </div>` : ""}
       ${reach > 0 ? "" : `<div class="mc-warn">${sic("bell")}<span><b>None of these customers have a phone
         number or email yet,</b> so there is nobody to send to. Open a customer above to add one, upload
         your sales again with the phone column mapped, or take orders on your website.</span></div>`}
@@ -8483,7 +8489,7 @@ function wireMcDraft() {
     .catch((e) => err(e.message));
 
   $("mcDiscard").onclick = async () => {
-    if (!confirm("Discard this campaign? Nothing has been sent, and its codes will never work.")) return;
+    if (!confirm("Delete this campaign? Nothing has been sent, and its codes will never work.")) return;
     try {
       await api(`/api/campaign/${d.id}/discard`, { method: "POST" });
       warmModClearAll(); refreshApprovals(true); openMarketing();
@@ -8514,7 +8520,54 @@ function wireMcDraft() {
     catch (e) { err(e.message); }
   };
   const ws = $("mcWaSetup");
-  if (ws) ws.onclick = (e) => { e.preventDefault(); openWhatsAppSetup(); };
+  if (ws) ws.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openWhatsAppSetup(); };
+  const waHow = () => (document.querySelector('input[name="mcWaHow"]:checked') || {}).value || "free";
+  /* The cost slider: the N most valuable customers who can be reached, and
+     what sending to them costs. Paid WhatsApp is the only thing with a price;
+     free WhatsApp is capped at 5 batches of 10 taps. */
+  const isSample = (m) => /@example\.(com|org|net)$/i.test(String(m || "").trim());
+  const money = (sym, v) => `${sym}${sym === "₹" ? fmt(Math.round(v)) : (Math.round(v * 100) / 100).toFixed(2)}`;
+  const plan = () => {
+    const sl = $("mcReach");
+    if (!sl) return null;
+    const useWa = $("mcChWa").checked, useMail = $("mcChMail").checked;
+    const paid = useWa && waHow() === "paid";
+    const pe = ((d.whatsapp || {}).twilio || {}).price_each || { symbol: "$", amount: 0.06 };
+    const reachable = (d.rows || []).filter((r) => (useWa && String(r.phone || "").trim())
+      || (useMail && String(r.email || "").trim() && !isSample(r.email)))
+      .sort((a, b) => (Number(b.monetary) || 0) - (Number(a.monetary) || 0));
+    const max = Math.max(1, reachable.length);
+    sl.max = max;
+    if (!sl.dataset.moved || Number(sl.value) > max) sl.value = max;
+    const n = Math.min(Number(sl.value), reachable.length);
+    const top = reachable.slice(0, n);
+    const phones = useWa ? top.filter((r) => String(r.phone || "").trim()).length : 0;
+    const mails = useMail ? top.filter((r) => String(r.email || "").trim() && !isSample(r.email)).length : 0;
+    const waN = paid ? phones : Math.min(phones, 50);
+    const batches = Math.ceil(waN / 10);
+    const extra = phones - waN;
+    $("mcReachN").textContent = fmt(n);
+    $("mcReachMax").textContent = fmt(reachable.length);
+    const bits = [];
+    if (waN) bits.push(paid ? `${fmt(waN)} WhatsApp × about ${pe.symbol}${pe.amount}, billed by Twilio`
+      : `${fmt(waN)} WhatsApp you send yourself, in ${fmt(batches)} batch${batches === 1 ? "" : "es"} of 10`);
+    if (extra > 0) bits.push(`${fmt(extra)} more with a phone ${useMail ? "get the email if they have one" : "wait for next time"}`);
+    if (mails) bits.push(`${fmt(mails)} email${mails === 1 ? "" : "s"}, free`);
+    const alt = !paid && useWa && (d.whatsapp || {}).paid_ready && phones
+      ? ` <span class="muted tiny">(Paid would be about ${money(pe.symbol, phones * pe.amount)} and send by itself.)</span>` : "";
+    $("mcCost").innerHTML = `<b>${paid ? `Approx cost: ${money(pe.symbol, waN * pe.amount)}` : "Cost: nothing"}</b>${alt}
+      <span class="muted tiny">${esc(bits.join(" · ") || "Pick WhatsApp or email above.")}</span>`;
+    $("mcSend").innerHTML = `${sic("arrow-right")}Send to ${fmt(n)} customer${n === 1 ? "" : "s"}`;
+    $("mcSend").disabled = !n;
+    return { n, paid };
+  };
+  document.querySelectorAll('input[name="mcWaHow"]').forEach((r) => r.onchange = () => {
+    document.querySelectorAll(".mc-how-o").forEach((o) => o.classList.toggle("on", o.contains(r) && r.checked));
+    plan();
+  });
+  if ($("mcReach")) $("mcReach").oninput = () => { $("mcReach").dataset.moved = "1"; plan(); };
+  ["mcChWa", "mcChMail"].forEach((id) => { if ($(id)) $(id).addEventListener("change", plan); });
+  plan();
   const ms = $("mcMailSetup");
   if (ms) ms.onclick = (e) => { e.preventDefault(); openAccount(); };
   $("mcSend").onclick = async () => {
@@ -8522,11 +8575,14 @@ function wireMcDraft() {
     if ($("mcChWa").checked) channels.push("whatsapp");
     if ($("mcChMail").checked) channels.push("email");
     if (!channels.length) return err("Pick WhatsApp, email or both.");
-    const waLimit = Number(($("mcWaLimit") || {}).value || 25);
-    if (!confirm("Send this campaign now? Emails go out straight away; the WhatsApp list goes to your tasks.")) return;
+    const pl = plan() || {};
+    const paidWa = channels.includes("whatsapp") && waHow() === "paid";
+    if (!confirm(paidWa
+      ? `Send this campaign to ${fmt(pl.n || 0)} customers now? Emails and WhatsApp messages go out straight away. WhatsApp messages are billed to your Twilio account.`
+      : `Send this campaign to ${fmt(pl.n || 0)} customers now? Emails go out straight away; the WhatsApp messages go to your tasks in batches of 10.`)) return;
     const b = $("mcSend"); b.disabled = true; b.innerHTML = `<span class="spin" aria-hidden="true"></span> Sending…`;
     try {
-      const r = await api(`/api/campaign/${d.id}/send`, { method: "POST", json: { channels, wa_limit: waLimit } });
+      const r = await api(`/api/campaign/${d.id}/send`, { method: "POST", json: { channels, wa_limit: paidWa ? 0 : 50, wa_paid: paidWa, limit: pl.n || null } });
       _mc.result = r;
       warmModClearAll(); refreshApprovals(true);
       $("mcMain").innerHTML = mcResultHtml(r);
@@ -8540,14 +8596,15 @@ function mcResultHtml(r) {
   const waLeft = r.to_send || 0;
   return `
     <div class="card mc-card">
-      <h4 class="mc-h">${sic("check")}${r.email_sent ? `${fmt(r.email_sent)} email${r.email_sent === 1 ? "" : "s"} sent` : "Campaign ready"}</h4>
+      <h4 class="mc-h">${sic("check")}${(r.email_sent || r.whatsapp_sent) ? `${fmt((r.email_sent || 0) + (r.whatsapp_sent || 0))} message${(r.email_sent || 0) + (r.whatsapp_sent || 0) === 1 ? "" : "s"} sent` : "Campaign ready"}</h4>
       <p style="margin:4px 0 12px;">${esc(r.summary || "")}</p>
       ${waLeft ? `<div class="mc-wa-next">
           ${sic("whatsapp")}
           <div><b>${fmt(waLeft)} WhatsApp message${waLeft === 1 ? "" : "s"} to send</b>
-            <span class="muted tiny">One tap each: WhatsApp opens with the message written, you press send, and the
-              next customer is ready when you come back. It is in your task list too, so you can stop and carry on later.</span></div>
-          <button class="btn primary" id="mcSendMode">Start sending</button>
+            <span class="muted tiny">In batches of 10, one tap each: WhatsApp opens with the message written, you press
+              send, and the next customer is ready when you come back. After the first batch your campaign is live;
+              do the other batches now or later from your task list.</span></div>
+          <button class="btn primary" id="mcSendMode">Start batch 1</button>
         </div>` : ""}
       <div class="mc-go"><button class="btn ghost" id="mcSeeRes">${sic("chart")}Track the results</button>
         <button class="btn ghost" id="mcNew">${sic("plus")}Start another campaign</button></div>
@@ -8574,30 +8631,31 @@ async function openSendMode(campaignId) {
   let q;
   try { q = await api(`/api/campaign/${encodeURIComponent(campaignId)}/queue`); }
   catch (e) { return toast(e.message, 6000); }
-  _sm = { id: campaignId, q, i: 0, sent: q.sent, total: q.total - q.skipped };
+  _sm = { id: campaignId, q, i: 0, sent: q.sent, total: q.total - q.skipped, pending: [] };
   openModal(`WhatsApp: ${q.occasion ? q.occasion + " offer" : q.label}`, `<div id="smBody"></div>`);
   smPaint();
+}
+
+/* The customers of the batch being sent (batches of 10, by value). */
+function smItems() { return _sm.q.remaining.filter((x) => x.batch === _sm.q.batch); }
+
+function smHead() {
+  const q = _sm.q;
+  const pct = _sm.total ? Math.round(100 * _sm.sent / _sm.total) : 100;
+  return `<div class="sm-prog"><div class="sm-bar"><i style="width:${pct}%"></i></div>
+    <span>${q.batches > 1 && q.batch ? `Batch <b>${fmt(q.batch)}</b> of ${fmt(q.batches)} · ` : ""}<b>${fmt(_sm.sent)}</b> of ${fmt(_sm.total)} sent</span></div>`;
 }
 
 function smPaint() {
   const box = $("smBody");
   if (!box || !_sm) return;
-  const left = _sm.q.remaining;
-  const pct = _sm.total ? Math.round(100 * _sm.sent / _sm.total) : 100;
-  const head = `<div class="sm-prog"><div class="sm-bar"><i style="width:${pct}%"></i></div>
-    <span><b>${fmt(_sm.sent)}</b> of ${fmt(_sm.total)} sent</span></div>`;
-  const x = left[_sm.i];
-  if (!x) {
-    box.innerHTML = head + `<div class="sm-done">${sic("check")}<b>All done.</b>
-      <span class="muted tiny">Every message in this list has been sent. The task is ticked off.</span>
-      <button class="btn primary" id="smClose">Close</button></div>`;
-    $("smClose").onclick = () => { closeModal(); smAfter(); };
-    return;
-  }
-  box.innerHTML = head + `
+  const items = smItems();
+  const x = items[_sm.i];
+  if (!x) { smBatchDone(box); return; }
+  box.innerHTML = smHead() + `
     <div class="sm-card">
       <div class="sm-who"><b>${esc(x.customer_name || "Customer")}</b>
-        <span class="muted tiny">${fmt(left.length - _sm.i)} still to send${x.code ? ` · code ${esc(x.code)}` : ""}</span></div>
+        <span class="muted tiny">${fmt(items.length - _sm.i)} left in this batch${x.code ? ` · code ${esc(x.code)}` : ""}</span></div>
       <div class="mc-bubble sm-msg">${mcWa(x.message)}</div>
       <a class="btn primary sm-go" id="smGo" href="${esc(x.wa_link)}" target="_blank" rel="noopener">
         ${sic("whatsapp")}Send to ${esc((x.customer_name || "them").split(" ")[0])}</a>
@@ -8610,8 +8668,8 @@ function smPaint() {
   // The link opens WhatsApp itself (a real tap, so the browser allows it);
   // recording and moving on happen alongside, never before.
   $("smGo").addEventListener("click", () => {
-    api(`/api/campaign/${encodeURIComponent(_sm.id)}/tapped`, { method: "POST", json: { customer_id: x.customer_id } })
-      .catch(() => toast("Could not save that one as sent. It will show again next time.", 5000));
+    _sm.pending.push(api(`/api/campaign/${encodeURIComponent(_sm.id)}/tapped`, { method: "POST", json: { customer_id: x.customer_id } })
+      .catch(() => toast("Could not save that one as sent. It will show again next time.", 5000)));
     _sm.sent += 1; _sm.i += 1;
     setTimeout(smPaint, 300);
   });
@@ -8624,6 +8682,39 @@ function smPaint() {
     closeModal();
     toast(`${fmt(_sm.sent)} of ${fmt(_sm.total)} sent. Carry on any time from your task list.`, 5000);
     smAfter();
+  };
+}
+
+/* End of a batch: the campaign is live. Next batch now, later, or stop here. */
+async function smBatchDone(box) {
+  const finished = _sm.q.batch;
+  box.innerHTML = smHead() + `<div class="sm-done"><span class="spin" aria-hidden="true"></span></div>`;
+  await Promise.all(_sm.pending); _sm.pending = [];
+  try { _sm.q = await api(`/api/campaign/${encodeURIComponent(_sm.id)}/queue`); } catch (e) { /* keep what we had */ }
+  const q = _sm.q;
+  _sm.i = 0; _sm.sent = q.sent; _sm.total = q.total - q.skipped;
+  if (!q.remaining.length) {
+    box.innerHTML = smHead() + `<div class="sm-done">${sic("check")}<b>All done.</b>
+      <span class="muted tiny">Every message in this campaign has been sent. The task is ticked off.</span>
+      <button class="btn primary" id="smClose">Close</button></div>`;
+    $("smClose").onclick = () => { closeModal(); smAfter(); };
+    return;
+  }
+  const nextN = smItems().length;
+  box.innerHTML = smHead() + `<div class="sm-done">${sic("check")}
+    <b>${finished ? `Batch ${fmt(finished)} sent.` : "Sent."} Your campaign is live.</b>
+    <span class="muted tiny">${fmt(q.remaining.length)} more in ${fmt(q.batches_left)} batch${q.batches_left === 1 ? "" : "es"}.
+      Send the next one now, keep the rest for later (they wait in your task list), or finish here.</span>
+    <button class="btn primary sm-go" id="smNext">${sic("whatsapp")}Send batch ${fmt(q.batch)} now (${fmt(nextN)})</button>
+    <div class="sm-row"><button class="btn ghost sm" id="smLater">Later</button>
+      <button class="btn ghost sm" id="smFinish">Finish here</button></div></div>`;
+  $("smNext").onclick = () => smPaint();
+  $("smLater").onclick = () => { closeModal(); toast("Saved. The next batch is waiting in your task list.", 5000); smAfter(); };
+  $("smFinish").onclick = async () => {
+    if (!confirm(`Finish here? The ${q.remaining.length} not sent yet are left out of this campaign and stay free for the next one.`)) return;
+    try { await api(`/api/campaign/${encodeURIComponent(_sm.id)}/finish`, { method: "POST" }); }
+    catch (e) { return toast(e.message, 5000); }
+    closeModal(); toast(`Campaign finished: ${fmt(q.sent)} sent on WhatsApp.`, 5000); smAfter();
   };
 }
 
@@ -8650,6 +8741,8 @@ function mcHistoryHtml(rows, sym) {
               · ${s.total != null ? `<b>${fmt(s.sent_count || 0)} of ${fmt(s.total)} sent</b>` : `${fmt(s.delivered || 0)} sent`}
               ${codes && codes.issued ? ` · <b>${fmt(codes.redeemed)} of ${fmt(codes.issued)} codes used</b>${codes.revenue ? `, ${mcMoney(sym, codes.revenue)} in orders` : ""}` : ""}</span></div>
             ${s.tracked ? `<button class="btn ghost sm" data-an="${esc(s.campaign_id)}">${sic("chart")}Results</button>` : ""}
+            <button class="btn ghost sm mc-del" data-delcamp="${esc(s.campaign_id || "")}" data-delat="${esc(s.at || "")}"
+              title="Delete this campaign" aria-label="Delete this campaign">${sic("trash")}</button>
           </div>`;
         }).join("")}
       </div>
@@ -8658,6 +8751,16 @@ function mcHistoryHtml(rows, sym) {
 
 function wireMcHistory() {
   document.querySelectorAll("[data-an]").forEach((b) => b.onclick = () => openCampaignAnalysis(b.dataset.an));
+  document.querySelectorAll("[data-delcamp]").forEach((b) => b.onclick = async () => {
+    if (!confirm("Delete this campaign? It leaves your list and its results, and WhatsApp messages not sent yet are "
+      + "dropped. Codes customers already got keep working.")) return;
+    b.disabled = true;
+    try {
+      await api("/api/campaign/delete", { method: "POST", json: { campaign_id: b.dataset.delcamp, at: b.dataset.delat } });
+      toast("Campaign deleted");
+      smAfter();
+    } catch (e) { b.disabled = false; toast(e.message, 5000); }
+  });
 }
 
 /* ----------------------------------------------------------- analyzer ---- */
@@ -8908,13 +9011,55 @@ function whatsappSetupHtml(w) {
         type the code Meta sends to it. Meta charges a small fee per marketing message, billed to your own WhatsApp
         account: add a payment method in WhatsApp Manager when it asks.</p>
       <details class="wa-adv"><summary>Advanced: paste the IDs yourself</summary>${manual}</details>`;
+  const tw = w.twilio || {};
+  const paid = w.send_pref === "paid";
+  const price = tw.price_each ? `${tw.price_each.symbol}${tw.price_each.amount}` : "a few cents";
+  const twStat = (v) => ({ approved: "approved", pending: "waiting for WhatsApp", received: "waiting for WhatsApp",
+    rejected: "rejected" }[v] || (v ? v : "not submitted"));
+  const twConnected = `
+      <div class="wa-ok">
+        <b>${sic("check")}Twilio connected${tw.from ? ` · +${esc(tw.from)}` : ""}${tw.account_name ? ` (${esc(tw.account_name)})` : ""}</b>
+        <span class="muted tiny">${esc(tw.headline || "")}</span>
+        ${tw.sandbox ? "" : `<span class="muted tiny">Offer message: <b>${esc(twStat(tw.offer_status))}</b> ·
+          No-discount message: <b>${esc(twStat(tw.update_status))}</b></span>`}
+        ${tw.trial ? `<span class="muted tiny">Twilio trial account: it only sends to numbers you verified in Twilio.
+          Upgrade it in Twilio to reach every customer.</span>` : ""}
+        ${tw.error ? `<span class="wa-err">${esc(tw.error)}</span>` : ""}
+      </div>
+      <div class="wa-row">
+        <button class="btn ghost sm" id="twRefresh">${sic("refresh")}Check approval</button>
+        <button class="btn ghost sm" id="twOff">Disconnect Twilio</button>
+      </div>`;
+  const twForm = `
+      <ol class="wa-steps">
+        <li>Make a Twilio account at <a href="https://www.twilio.com/try-twilio" target="_blank" rel="noopener">twilio.com</a>
+          (it starts with free trial credit).</li>
+        <li><b>To try it first:</b> in Twilio go to Messaging → Try it out → Send a WhatsApp message, and send the join
+          code it shows from your phone. Then connect below with the Sandbox number <b>+1 415 523 8886</b>.
+          Only phones that sent the join code get messages.</li>
+        <li><b>For your customers:</b> in Twilio go to Messaging → Senders → WhatsApp senders → Create new sender, sign in
+          with Facebook and add your shop's number (WhatsApp texts it a code). Connect below with that number. We
+          send our two message templates to WhatsApp for approval for you.</li>
+        <li>Copy the <b>Account SID</b> and <b>Auth Token</b> from the Twilio Console home page.</li>
+      </ol>
+      <div class="wa-fields">
+        <label>Account SID <input id="twSid" placeholder="AC…" autocomplete="off" spellcheck="false"></label>
+        <label>Auth Token <input id="twTok" type="password" autocomplete="off"></label>
+        <label>WhatsApp number on Twilio <input id="twFrom" inputmode="tel" placeholder="+1 415 523 8886"></label>
+      </div>
+      <button class="btn primary sm" id="twConnect">${sic("whatsapp")}Connect Twilio</button>`;
   return `
-    <div class="wa-status ${tone}"><span class="wa-dot"></span><b>${esc(badge)}</b><span class="muted tiny">${esc(w.headline || "")}</span></div>
+    <div class="wa-wrap" id="waWrap">
+    <div class="wa-status ${paid ? (w.paid_ready ? "ok" : "wait") : (w.number ? "info" : "off")}"><span class="wa-dot"></span>
+      <b>${paid ? (w.paid_ready ? "Paid: sends by itself" : "Paid: not ready yet") : w.number ? "Free: tap to send" : "Not set up"}</b>
+      <span class="muted tiny">${esc(paid ? (w.paid_ready ? `Campaigns go out on WhatsApp by themselves${w.paid_via === "twilio" ? " through Twilio" : ""}. You can still pick Free on any campaign.`
+        : "Finish connecting Twilio below. Until then, campaigns use free tap-to-send.")
+        : w.number ? "Each message opens in WhatsApp already written, and you tap send. Nothing to pay."
+        : "Add the WhatsApp number you use for your shop.")}</span></div>
 
     <div class="wa-sec">
       <h4><span class="mc-n">1</span>The number you send from</h4>
-      <p class="muted tiny">The WhatsApp number your customers know your shop by. With just this, every campaign
-        message opens in WhatsApp already written, and you tap send.</p>
+      <p class="muted tiny">The WhatsApp number your customers know your shop by.</p>
       <div class="wa-row">
         <input id="waNum" placeholder="+91 98765 43210" inputmode="tel" value="${esc(w.number ? "+" + w.number : "")}">
         <button class="btn primary sm" id="waNumSave">Save</button>
@@ -8922,13 +9067,27 @@ function whatsappSetupHtml(w) {
     </div>
 
     <div class="wa-sec">
-      <h4><span class="mc-n">2</span>Send automatically <span class="muted tiny">(optional)</span></h4>
-      ${w.connected ? connected : emb.available ? oneButton : `
-        <p class="muted tiny">One-button WhatsApp sign-in is being switched on for your account. Until then, messages open
-          in WhatsApp for you to tap send, or connect by hand below.</p>
-        <details class="wa-adv"><summary>Advanced: paste the IDs yourself</summary>${manual}</details>`}
+      <h4><span class="mc-n">2</span>How campaign messages go out</h4>
+      <p class="muted tiny">This is what comes pre-picked. You can switch on every campaign.</p>
+      <div class="wa-how" role="radiogroup">
+        <label class="wa-how-o${paid ? "" : " on"}"><input type="radio" name="waPref" value="free"${paid ? "" : " checked"}>
+          <span><b>Free · tap to send</b><span class="muted tiny">Each message opens in WhatsApp already written, from a
+            list in your tasks. One tap per customer, nothing to pay. Best for a few dozen customers.</span></span></label>
+        <label class="wa-how-o${paid ? " on" : ""}"><input type="radio" name="waPref" value="paid"${paid ? " checked" : ""}>
+          <span><b>Paid · sends by itself</b><span class="muted tiny">Through your own Twilio account: every message goes out
+            the moment you press Send. About ${esc(price)} a message (WhatsApp's fee plus Twilio's), billed by Twilio.</span></span></label>
+      </div>
     </div>
-    <div class="err" id="waErr" hidden></div>`;
+
+    ${paid ? `<div class="wa-sec">
+      <h4><span class="mc-n">3</span>Connect Twilio</h4>
+      ${tw.connected ? twConnected : twForm}
+      ${w.connected ? `<details class="wa-adv" open><summary>Direct Meta connection</summary>${connected}</details>` : `
+        <details class="wa-adv"><summary>Advanced: already on Meta's WhatsApp Cloud API? Connect it directly</summary>
+          ${emb.available ? oneButton : manual}</details>`}
+    </div>` : ""}
+    <div class="err" id="waErr" hidden></div>
+    </div>`;
 }
 
 /* Facebook's SDK, loaded AHEAD of the click. FB.login opens a popup, and a
@@ -9000,8 +9159,34 @@ function connectWhatsAppEmbedded(cfg, coexistence, onBusy) {
 function wireWhatsAppSetup(onChange, w) {
   const err = (m) => { const e = $("waErr"); if (e) { e.textContent = m; e.hidden = false; } else toast(m, 6000); };
   const emb = (w && w.embedded) || {};
+  const repaint = (nw) => { const box = $("waWrap"); if (!box) return onChange(); box.outerHTML = whatsappSetupHtml(nw); wireWhatsAppSetup(onChange, nw); };
+  document.querySelectorAll('input[name="waPref"]').forEach((r) => r.onchange = async () => {
+    try { repaint(await api("/api/whatsapp/pref", { method: "POST", json: { pref: r.value } })); }
+    catch (e) { err(e.message); }
+  });
+  const twc = $("twConnect");
+  if (twc) twc.onclick = async () => {
+    twc.disabled = true; twc.innerHTML = `<span class="spin" aria-hidden="true"></span> Checking with Twilio…`;
+    try {
+      const nw = await api("/api/whatsapp/twilio", { method: "POST", json: {
+        account_sid: $("twSid").value, auth_token: $("twTok").value, from_number: $("twFrom").value } });
+      toast(nw.twilio && nw.twilio.sandbox ? "Twilio Sandbox connected." : "Twilio connected. Your messages are with WhatsApp for approval.", 6000);
+      repaint(nw);
+    } catch (e) { err(e.message); twc.disabled = false; twc.innerHTML = `${sic("whatsapp")}Connect Twilio`; }
+  };
+  const twr = $("twRefresh");
+  if (twr) twr.onclick = async () => {
+    twr.disabled = true;
+    try { repaint(await api("/api/whatsapp/twilio/refresh", { method: "POST" })); }
+    catch (e) { err(e.message); twr.disabled = false; }
+  };
+  const two = $("twOff");
+  if (two) two.onclick = async () => {
+    if (!confirm("Disconnect Twilio? Campaigns go back to free tap-to-send.")) return;
+    try { repaint(await api("/api/whatsapp/twilio/disconnect", { method: "POST" })); } catch (e) { err(e.message); }
+  };
   if (emb.available) loadFacebookSdk(emb.app_id, emb.graph_version).catch((e) => err(e.message));
-  $("waNumSave").onclick = async () => {
+  if ($("waNumSave")) $("waNumSave").onclick = async () => {
     try {
       await api("/api/whatsapp/number", { method: "POST", json: { number: $("waNum").value } });
       toast("WhatsApp number saved"); onChange();

@@ -702,5 +702,146 @@ check("and it says so", s10["coexistence"])
 for k_ in ("WHATSAPP_APP_ID", "WHATSAPP_APP_SECRET", "WHATSAPP_CONFIG_ID"):
     os.environ.pop(k_, None)
 
+section("10. Free or paid, the cost slider, batches of ten, delete")
+import json as _json  # noqa: E402
+from backend.core import campaign_engine as ce10, wa_twilio  # noqa: E402
+
+
+def _build(reason, **kw):
+    r_ = c.post("/api/campaign/build", headers=H, json={"reason": reason, **kw})
+    assert r_.status_code == 200, r_.text[:300]
+    return r_.json()
+
+
+# --- free: batches of ten, at most five
+b1 = _build("festival", occasion="Holi", offer={"kind": "percent", "value": 10})
+r = c.post(f"/api/campaign/{b1['id']}/send", headers=H, json={"channels": ["whatsapp"], "wa_paid": True})
+check("paid without Twilio says what to do, and sends nothing", r.status_code == 400 and "Twilio" in r.text
+      and ce10.get_draft(SELLER, b1["id"])["state"] != "sent", r.text[:200])
+r = c.post(f"/api/campaign/{b1['id']}/send", headers=H,
+           json={"channels": ["whatsapp"], "wa_limit": 0, "wa_paid": False, "limit": 23})
+res1 = r.json()
+check("the slider limits who is in the campaign", r.status_code == 200 and len(res1["results"]) == 23,
+      str(len(res1.get("results") or [])))
+check("free WhatsApp never asks for more than 50 taps", res1["to_send"] <= ce10.FREE_MAX)
+q1 = c.get(f"/api/campaign/{b1['id']}/queue", headers=H).json()
+check("the list comes in batches of ten", q1["batch_size"] == 10 and q1["batch"] == 1
+      and q1["batches"] == -(-q1["total"] // 10) and q1["batch_total"] == min(10, q1["total"]), str(q1)[:200])
+first = [x for x in q1["remaining"] if x["batch"] == 1]
+check("batch one is the ten most valuable", len(first) == min(10, q1["total"])
+      and all(x["batch"] == 1 for x in q1["remaining"][:len(first)]))
+for x in first:
+    c.post(f"/api/campaign/{b1['id']}/tapped", headers=H, json={"customer_id": x["customer_id"]})
+q1 = c.get(f"/api/campaign/{b1['id']}/queue", headers=H).json()
+wt1 = next(t for t in smart.get_tasks(SELLER) if t.get("id") == f"wa_{b1['id']}")
+if q1["total"] > 10:
+    check("after batch one, batch two is next, and the task says so",
+          q1["batch"] == 2 and q1["batch_sent"] == 0 and wt1["batch"] == 2 and wt1["batches"] == q1["batches"]
+          and not wt1["done"], str(wt1))
+    hist1 = next(h for h in c.get("/api/campaign/state", headers=H).json()["history"] if h.get("campaign_id") == b1["id"])
+    check("the campaign is live after one batch", hist1["sent_count"] == 10)
+    q1 = c.post(f"/api/campaign/{b1['id']}/finish", headers=H).json()
+    wt1 = next(t for t in smart.get_tasks(SELLER) if t.get("id") == f"wa_{b1['id']}")
+    check("finish here drops the rest and ticks the task off",
+          not q1["remaining"] and q1["sent"] == 10 and wt1["done"], str(wt1))
+else:
+    check("(audience too small for a second batch)", True)
+
+# --- delete
+r = c.post("/api/campaign/delete", headers=H, json={"campaign_id": b1["id"]})
+hist = c.get("/api/campaign/state", headers=H).json()["history"]
+check("a campaign can be deleted", r.status_code == 200
+      and not any(h.get("campaign_id") == b1["id"] for h in hist), r.text[:200])
+check("with its results and its task", b1["id"] not in ce10._records(SELLER)
+      and not any(t.get("id") == f"wa_{b1['id']}" for t in smart.get_tasks(SELLER)))
+check("deleting again is a 404", c.post("/api/campaign/delete", headers=H,
+                                        json={"campaign_id": b1["id"]}).status_code == 404)
+
+# --- paid: the seller's own Twilio account
+tw_calls, tw_state = [], {"approval": "unsubmitted"}
+
+
+class _TwResp:
+    def __init__(self, body, code=200):
+        self._b, self.status_code = body, code
+        self.content = b"x"
+
+    def json(self):
+        return self._b
+
+
+def fake_twilio(method, url, auth=None, timeout=None, **kw):
+    tw_calls.append((method, url, kw))
+    if auth and auth[1] == "wrong-token-wrong-token":
+        return _TwResp({"code": 20003, "message": "Authenticate"}, 401)
+    if url.endswith(".json") and "/Accounts/" in url and method == "GET":
+        return _TwResp({"friendly_name": "Rang Studio", "type": "Full"})
+    if url.endswith("/Content") and method == "GET":
+        return _TwResp({"contents": []})
+    if url.endswith("/Content") and method == "POST":
+        return _TwResp({"sid": "HXoffer" if "offer" in kw["json"]["friendly_name"] else "HXupdate"})
+    if url.endswith("/ApprovalRequests") and method == "GET":
+        return _TwResp({"whatsapp": {"status": tw_state["approval"]}})
+    if url.endswith("/ApprovalRequests/whatsapp"):
+        tw_state["approval"] = "pending"
+        return _TwResp({})
+    if url.endswith("/Messages.json"):
+        return _TwResp({"sid": "SM" + secrets.token_hex(8)}, 201)
+    return _TwResp({"message": "unexpected " + url}, 404)
+
+
+wa_twilio.requests.request = fake_twilio
+SID = "AC" + "a" * 32
+r = c.post("/api/whatsapp/twilio", headers=H, json={"account_sid": "nope", "auth_token": "x" * 32,
+                                                    "from_number": "+1 555 010 0000"})
+check("a wrong Account SID is caught before calling Twilio", r.status_code == 400 and "AC" in r.text)
+r = c.post("/api/whatsapp/twilio", headers=H, json={"account_sid": SID, "auth_token": "wrong-token-wrong-token",
+                                                    "from_number": "+1 555 010 0000"})
+check("Twilio refusing the token is said plainly", r.status_code == 400 and "Auth Token" in r.text, r.text[:200])
+r = c.post("/api/whatsapp/twilio", headers=H, json={"account_sid": SID, "auth_token": "t" * 32,
+                                                    "from_number": "+1 555 010 0000"})
+w10 = r.json()
+check("Twilio connects and both templates go to WhatsApp for approval",
+      r.status_code == 200 and w10["twilio"]["connected"] and w10["twilio"]["offer_status"] == "pending"
+      and w10["twilio"]["update_status"] == "pending", r.text[:300])
+check("connecting makes paid the default, but not ready until approved",
+      w10["send_pref"] == "paid" and not w10["paid_ready"])
+check("the token is kept encrypted, never in the plain config",
+      "t" * 32 not in _json.dumps(whatsapp._cfg(SELLER)))
+b2 = _build("festival", occasion="Navratri", offer={"kind": "percent", "value": 10})
+r = c.post(f"/api/campaign/{b2['id']}/send", headers=H, json={"channels": ["whatsapp"], "wa_paid": True})
+check("while WhatsApp reviews the templates, paid is refused", r.status_code == 400)
+tw_state["approval"] = "approved"
+w10 = c.post("/api/whatsapp/twilio/refresh", headers=H).json()
+check("once approved, paid is ready through Twilio", w10["paid_ready"] and w10["paid_via"] == "twilio", str(w10)[:200])
+check("with a price per message for the cost estimate", w10["twilio"]["price_each"]["amount"] > 0)
+tw_calls.clear()
+r = c.post(f"/api/campaign/{b2['id']}/send", headers=H,
+           json={"channels": ["whatsapp"], "wa_paid": True, "wa_limit": 0, "limit": 6})
+res2 = r.json()
+msgs = [kw["data"] for m_, u_, kw in tw_calls if u_.endswith("/Messages.json")]
+with_phone = sum(1 for x in res2["results"] if x["phone"])
+check("paid sends every message by itself, nothing to tap",
+      r.status_code == 200 and res2["whatsapp_sent"] == with_phone == len(msgs) and res2["to_send"] == 0
+      and res2["whatsapp_via"] == "twilio", str(res2)[:300])
+check("through the approved template, with each customer's own code",
+      all(m_["ContentSid"] == "HXoffer" and m_["From"] == "whatsapp:+15550100000" for m_ in msgs)
+      and {_json.loads(m_["ContentVariables"])["4"] for m_ in msgs}
+      == {x["code"] for x in res2["results"] if x["whatsapp_sent"]}, str(msgs[:1])[:300])
+check("the slider limit holds for paid too", len(res2["results"]) == 6)
+check("no WhatsApp task for a paid campaign", not any(t.get("id") == f"wa_{b2['id']}" for t in smart.get_tasks(SELLER)))
+r = c.post("/api/whatsapp/pref", headers=H, json={"pref": "free"})
+check("the seller can switch the default back to free", r.json()["send_pref"] == "free")
+r = c.post("/api/whatsapp/twilio", headers=H, json={"account_sid": SID, "auth_token": "t" * 32,
+                                                    "from_number": "+1 415 523 8886"})
+check("the Twilio Sandbox is ready at once (no templates)",
+      r.json()["twilio"]["sandbox"] and r.json()["paid_ready"], r.text[:200])
+tw_calls.clear()
+wa_twilio.send(SELLER, "+91 98765 43210", ["a"], text="Hi Asha, your code is X1")
+check("and sends the full personal message as text",
+      tw_calls[-1][2]["data"].get("Body") == "Hi Asha, your code is X1" and "ContentSid" not in tw_calls[-1][2]["data"])
+r = c.post("/api/whatsapp/twilio/disconnect", headers=H).json()
+check("disconnecting Twilio goes back to free", not r["twilio"]["connected"] and r["send_pref"] == "free")
+
 print(f"\n{PASSED} passed, {FAILED} failed")
 sys.exit(1 if FAILED else 0)

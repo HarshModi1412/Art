@@ -719,7 +719,7 @@ def add_task(email: str, text: str, ob: str = "") -> list[dict]:
 
 
 def upsert_wa_task(email: str, campaign_id: str, text: str, sent: int, total: int,
-                   done: bool = False) -> list[dict]:
+                   done: bool = False, **batch) -> list[dict]:
     """The WhatsApp tap-to-send list of one campaign, as a task with its
     progress. Kept up to date by the campaign engine (each tap, each skip) and
     ticked off by itself when nobody is left to send to."""
@@ -731,7 +731,8 @@ def upsert_wa_task(email: str, campaign_id: str, text: str, sent: int, total: in
             row = {"id": tid}
             tasks.append(row)
         row.update({"text": text[:280], "kind": "wa_send", "campaign_id": campaign_id,
-                    "sent": int(sent), "total": int(total), "done": bool(done)})
+                    "sent": int(sent), "total": int(total), "done": bool(done),
+                    **{k: int(v or 0) for k, v in batch.items()}})
         user_store.set_key(email, "smart_tasks", tasks)
         return tasks
 

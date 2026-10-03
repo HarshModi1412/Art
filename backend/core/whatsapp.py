@@ -401,8 +401,14 @@ def status(email: str) -> dict:
     mode = ("auto" if connected and tstat == "APPROVED"
             else "waiting" if connected
             else "tap" if c.get("number") else "off")
+    from backend.core import wa_twilio
+    tw = wa_twilio.status(email)
     return {
         "mode": mode,
+        "send_pref": c.get("send_pref") or "free",
+        "twilio": tw,
+        "paid_ready": tw["ready"] or mode == "auto",
+        "paid_via": "twilio" if tw["ready"] else "meta" if mode == "auto" else "",
         "number": c.get("number") or "",
         "display_number": c.get("display_number") or "",
         "verified_name": c.get("verified_name") or "",
@@ -430,6 +436,24 @@ def status(email: str) -> dict:
 
 def live(email: str) -> bool:
     return status(email)["mode"] == "auto"
+
+
+def save_pref(email: str, pref: str) -> dict:
+    """The seller's default for campaigns: "free" (tap to send from their own
+    phone) or "paid" (Twilio, or a direct Meta connection, sends by itself).
+    Asked again on every campaign; this is only what comes pre-selected."""
+    if pref not in ("free", "paid"):
+        raise WhatsAppError("Pick free or paid.")
+    _save_cfg(email, {"send_pref": pref})
+    return status(email)
+
+
+def paid_route(email: str, st: dict | None = None) -> str:
+    """Which paid sender is ready right now: "twilio", "meta" or ""."""
+    st = st or status(email)
+    if (st.get("twilio") or {}).get("ready"):
+        return "twilio"
+    return "meta" if st["mode"] == "auto" else ""
 
 
 # --------------------------------------------------------------------- send

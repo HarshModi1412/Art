@@ -4023,3 +4023,26 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .sm-row { display: flex; gap: 8px; justify-content: space-between; }
 .sm-done { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 6px 0; }
 .sm-done svg { width: 28px; height: 28px; color: var(--green); }
+
+/* Free / paid WhatsApp choice (Account -> WhatsApp and each campaign's Send). */
+.wa-how, .mc-how { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mc-how { margin: 8px 0 6px; }
+.wa-how-o, .mc-how-o { display: flex !important; flex-direction: row !important; align-items: flex-start; gap: 8px;
+  padding: 10px 11px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; background: var(--surface); }
+.wa-how-o.on, .mc-how-o.on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+.mc-how-o.off { cursor: default; opacity: .85; }
+.wa-how-o > input[type="radio"], .mc-how-o > input[type="radio"] { width: 16px !important; height: 16px; min-width: 16px;
+  flex: 0 0 16px; margin: 2px 0 0; padding: 0; accent-color: var(--primary); }
+.wa-how-o > span, .mc-how-o > span { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 0.8125rem; line-height: 1.4; }
+@media (max-width: 520px) { .wa-how { grid-template-columns: 1fr; } }
+
+/* Cost slider on a campaign's Send, and the delete button on past campaigns. */
+.mc-reach { margin: 12px 0 4px; padding: 12px 13px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.mc-reach-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 0.875rem; }
+.mc-reach-h span { font-size: 0.8125rem; color: var(--muted); }
+.mc-reach-h span b { color: var(--text); }
+.mc-reach input[type="range"] { width: 100%; margin: 10px 0 6px; accent-color: var(--primary); padding: 0; border: 0; background: none; height: auto; }
+.mc-cost { display: flex; flex-direction: column; gap: 2px; font-size: 0.875rem; line-height: 1.45; }
+.mc-del { padding: 6px 8px; color: var(--muted); }
+.mc-del:hover { color: var(--red); }
+.mc-del svg { width: 15px; height: 15px; }
