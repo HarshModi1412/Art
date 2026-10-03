@@ -1615,7 +1615,7 @@ def po_excel(email: str, po: dict) -> tuple[str, io.BytesIO]:
         ws["A2"] = f"PO Number: {po.get('po_number', '')}"
         ws["A3"] = f"Created: {po.get('created_at', '')}"
         for i, col in enumerate(df.columns):
-            longest = int(df[col].astype(str).str.len().max()) if len(df) else 12
+            longest = int(pd.Series(df[col].astype(object).where(df[col].notna(), "").astype(str).str.len()).max() or 0) if len(df) else 12
             ws.column_dimensions[chr(65 + i)].width = min(44, max(12, longest + 2, len(str(col)) + 2))
     buf.seek(0)
     return f"{po.get('po_number', 'purchase_order')}.xlsx", buf

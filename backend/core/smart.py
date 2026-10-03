@@ -679,7 +679,7 @@ def _to_xlsx(df: pd.DataFrame, sheet: str) -> io.BytesIO:
         df.to_excel(writer, index=False, sheet_name=sheet[:31])
         ws = writer.sheets[sheet[:31]]
         for i, col in enumerate(df.columns):
-            width = min(70, max(12, int(df[col].astype(str).str.len().max() if len(df) else 12) + 2, len(str(col)) + 2))
+            width = min(70, max(12, (int(pd.Series(df[col].astype(object).where(df[col].notna(), "").astype(str).str.len()).max() or 0) if len(df) else 12) + 2, len(str(col)) + 2))
             ws.column_dimensions[chr(65 + i) if i < 26 else "A"].width = width
     buf.seek(0)
     return buf

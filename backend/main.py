@@ -3116,7 +3116,7 @@ def export_winback_edited(body: WinbackExportBody,
         ws = writer.sheets["Win-back"]
         for i, col in enumerate(df.columns):
             try:
-                width = min(70, max(12, int(df[col].astype(str).str.len().max()) + 2, len(str(col)) + 2))
+                width = min(70, max(12, int(pd.Series(df[col].astype(object).where(df[col].notna(), "").astype(str).str.len()).max() or 0) + 2, len(str(col)) + 2))
             except Exception:
                 width = 18
             ws.column_dimensions[chr(65 + i) if i < 26 else "A"].width = width
