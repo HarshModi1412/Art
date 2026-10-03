@@ -1572,7 +1572,8 @@ def connector_pull(body: PullBody, x_session_id: str | None = Header(default=Non
     # SHARED DATA: persist to the account so Smart mode sees it too.
     email = optional_user(authorization)
     if email:
-        smart.save_sales(email, sess.txns_df, {"files": sess.file_names[fid]})
+        smart.save_sales(email, sess.txns_df, {"files": sess.file_names[fid]},
+                         channel=body.connector)
         replenish.after_sales(email, "sales upload")
     return {"file": _file_info(fid, sess), "rows": int(len(df)),
             "from": start.isoformat(), "to": end.isoformat(), "mapped": True}
@@ -2782,7 +2783,7 @@ def load_demo(x_session_id: str | None = Header(default=None),
         try:
             smart.save_sales(email, sess.txns_df,
                              {"source": "sample", "name": "Sample data (90 days)"},
-                             mode="replace")
+                             mode="replace", channel="sample")
             saved_to_account = True
         except Exception:  # noqa: BLE001 — the session copy is still usable
             pass
@@ -2828,20 +2829,36 @@ def get_languages():
 
 @app.get("/api/analytics")
 @memory.one_at_a_time
-def get_analytics(lang: str = "en", x_session_id: str | None = Header(default=None),
+def get_analytics(lang: str = "en", channel: str = "", x_session_id: str | None = Header(default=None),
                   authorization: str | None = Header(default=None)):
-    result = analytics.sales_analytics(_require_txns(get_session(x_session_id), authorization))
+    """Sales Analytics for every channel together, or one (`channel`), with
+    the split by channel always computed on everything."""
+    txns = _require_txns(get_session(x_session_id), authorization)
+    split = analytics.channel_split(txns)
+    part = analytics.filter_channel(txns, channel)
+    if not len(part):
+        raise HTTPException(400, "No sales from that channel yet.")
+    result = analytics.sales_analytics(part)
     result["insights"] = i18n.render_all(result["insights"], lang)
+    result["channel_split"] = split
+    result["channel"] = channel if channel and channel != "all" else ""
     return result
 
 
 @app.get("/api/subcategory")
 @memory.one_at_a_time
-def get_subcategory(lang: str = "en", x_session_id: str | None = Header(default=None),
+def get_subcategory(lang: str = "en", channel: str = "", x_session_id: str | None = Header(default=None),
                     authorization: str | None = Header(default=None)):
-    result = analytics.subcategory_trends(_require_txns(get_session(x_session_id), authorization))
+    txns = _require_txns(get_session(x_session_id), authorization)
+    split = analytics.channel_split(txns)
+    part = analytics.filter_channel(txns, channel)
+    if not len(part):
+        raise HTTPException(400, "No sales from that channel yet.")
+    result = analytics.subcategory_trends(part)
     if result.get("insights"):
         result["insights"] = i18n.render_all(result["insights"], lang)
+    result["channel_split"] = split
+    result["channel"] = channel if channel and channel != "all" else ""
     return result
 
 
@@ -2879,9 +2896,11 @@ async def analyze_positioning(lang: str = "en", product_type: str | None = None,
 
 @app.get("/api/subcategory/detail")
 @memory.one_at_a_time
-def get_subcategory_detail(value: str, lang: str = "en", x_session_id: str | None = Header(default=None),
+def get_subcategory_detail(value: str, lang: str = "en", channel: str = "",
+                           x_session_id: str | None = Header(default=None),
                            authorization: str | None = Header(default=None)):
-    result = analytics.subcategory_detail(_require_txns(get_session(x_session_id), authorization), value)
+    txns = analytics.filter_channel(_require_txns(get_session(x_session_id), authorization), channel)
+    result = analytics.subcategory_detail(txns, value)
     if result.get("insights"):
         result["insights"] = i18n.render_all(result["insights"], lang)
     return result
@@ -3906,7 +3925,10 @@ def commerce_pull(body: CommercePullBody, x_session_id: str | None = Header(defa
         raise HTTPException(400, str(e))
     if diag["rows_after"] == 0:
         raise HTTPException(400, "Orders pulled but none had a usable date + amount.")
-    smart.save_sales(email, txns, {"files": f"🔌 {body.connector} ({body.days}d)"})
+    # Only this platform's slice is replaced: the website, other platforms
+    # and uploaded files stay (smart.save_sales channels).
+    smart.save_sales(email, txns, {"files": f"🔌 {body.connector} ({body.days}d)"},
+                     channel=body.connector)
     replenish.after_sales(email, f"orders pulled from {body.connector}")
     sess = get_session(x_session_id)
     sess.txns_df = txns

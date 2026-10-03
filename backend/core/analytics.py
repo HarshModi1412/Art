@@ -11,6 +11,51 @@ import pandas as pd
 # =========================================================
 # SALES ANALYTICS  (port of render_sales_analytics)
 # =========================================================
+def channel_of(txns: pd.DataFrame) -> pd.Series:
+    """Which channel each row came from ("upload" for rows saved before
+    channels existed)."""
+    if "channel" in txns.columns:
+        return txns["channel"].fillna("upload").astype(str)
+    return pd.Series("upload", index=txns.index)
+
+
+def filter_channel(txns: pd.DataFrame, channel: str) -> pd.DataFrame:
+    """Only the rows from one channel; the whole frame for "" / "all"."""
+    if not channel or channel == "all":
+        return txns
+    return txns[channel_of(txns) == channel]
+
+
+def channel_split(txns: pd.DataFrame) -> dict:
+    """Revenue and orders per sales channel, plus revenue by month per
+    channel, for the split on Sales / Sub-Category Analytics. `multi` is False
+    when there is only one channel, and the screen hides the split."""
+    from backend.core.smart import channel_label
+    if txns is None or not len(txns):
+        return {"multi": False, "channels": [], "monthly": None}
+    ch = channel_of(txns)
+    amt = pd.to_numeric(txns["amount"], errors="coerce").fillna(0)
+    oc = "order_id" if "order_id" in txns.columns else None
+    total = float(amt.sum()) or 1.0
+    rows = []
+    for c, idx in ch.groupby(ch).groups.items():
+        rev = float(amt.loc[idx].sum())
+        orders = int(txns.loc[idx, oc].nunique()) if oc else int(len(idx))
+        rows.append({"id": c, "label": channel_label(c), "revenue": round(rev, 2),
+                     "orders": orders, "share": round(100.0 * rev / total, 1)})
+    rows.sort(key=lambda r: r["revenue"], reverse=True)
+    monthly = None
+    if len(rows) > 1 and "date" in txns.columns:
+        m = pd.to_datetime(txns["date"], errors="coerce").dt.to_period("M").astype(str)
+        g = pd.DataFrame({"m": m, "c": ch, "a": amt}).dropna().groupby(["m", "c"])["a"].sum().unstack(fill_value=0)
+        g = g.sort_index().tail(12)
+        monthly = {"months": g.index.tolist(),
+                   "series": [{"id": r["id"], "label": r["label"],
+                               "values": [round(float(v), 2) for v in g.get(r["id"], pd.Series(0, index=g.index))]}
+                              for r in rows]}
+    return {"multi": len(rows) > 1, "channels": rows, "monthly": monthly}
+
+
 def sales_analytics(txns: pd.DataFrame) -> dict:
     df = txns.copy()
     df["month"] = df["date"].dt.to_period("M").dt.to_timestamp()

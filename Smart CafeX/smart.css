@@ -622,15 +622,16 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px s
   position: fixed; left: 16px; bottom: 16px; z-index: 60;
   display: flex; align-items: center; gap: 9px;
   background: var(--text); color: var(--surface);
-  border-radius: 99px; padding: 9px 15px 9px 12px;
+  border-radius: 12px; padding: 11px 16px 11px 13px;
   font-size: 0.8rem; font-weight: 550; box-shadow: var(--shadow-lg);
+  line-height: 1.4; overflow-wrap: anywhere; box-sizing: border-box;
   max-width: min(340px, calc(100vw - 32px));
   opacity: 0; transform: translateY(8px) scale(.96);
   transition: opacity .22s ease, transform .22s cubic-bezier(.4, 0, .2, 1);
   pointer-events: none;
 }
 .work-strip.on { opacity: 1; transform: none; }
-.ws-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-txt { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
 .ws-spin {
   width: 13px; height: 13px; flex: none; border-radius: 50%;
   border: 2px solid currentColor; border-right-color: transparent;
@@ -924,8 +925,9 @@ td { color: var(--text-2); }
 }
 
 /* ---------- toast ---------- */
-.toast { position: fixed; bottom: 20px; right: 20px; background: var(--text); color: var(--surface); padding: 12px 18px;
-  border-radius: 10px; z-index: 70; max-width: 340px; font-size: 0.84375rem; box-shadow: var(--shadow-lg); }
+.toast { position: fixed; bottom: 20px; right: 20px; background: var(--text); color: var(--surface); padding: 13px 18px;
+  border-radius: 12px; z-index: 70; max-width: 340px; font-size: 0.84375rem; box-shadow: var(--shadow-lg);
+  line-height: 1.45; overflow-wrap: anywhere; box-sizing: border-box; }
 .toast[hidden] { display: none; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .page-head h2 { font-size: 1.25rem; }
@@ -3941,3 +3943,10 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .mc-tapcount { font-size: 0.9375rem; margin-bottom: 6px; }
 .mc-tapcount b:first-child { color: var(--green); }
 .mc-idea .btn { align-self: flex-start; margin-top: 4px; }
+
+/* Sales channel filter (Sales / Sub-Category Analytics) */
+.ch-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.ch-bar button { border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+  border-radius: 10px; padding: 7px 12px; font: inherit; font-size: 0.8125rem; cursor: pointer; }
+.ch-bar button.on { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
+.ch-bar button.on .muted { color: inherit; opacity: .8; }

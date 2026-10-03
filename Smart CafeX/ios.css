@@ -403,11 +403,13 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-fill);
 }
 .chart-modal-inner { border-radius: 24px; }
 
-/* toast: a dark pill, centered, above the tab bar on a phone */
+/* toast: a dark rounded card, centered, above the tab bar on a phone. Was a
+   999px pill: a two-line message spilled past the curved ends. */
 .toast {
   left: 50%; right: auto; bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   translate: -50% 0; margin: 0;
-  max-width: min(92vw, 460px); border-radius: 999px; padding: 12px 22px; font-weight: 500; font-size: .9063rem;
+  max-width: min(92vw, 460px); border-radius: 14px; padding: 13px 18px; font-weight: 500; font-size: .9063rem;
+  line-height: 1.45; overflow-wrap: anywhere; box-sizing: border-box;
   background: rgba(28, 28, 30, .92); color: #f5f5f7;
   -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
   box-shadow: var(--shadow-lg); animation: toast-in .4s var(--spring) both;

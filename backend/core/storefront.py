@@ -797,5 +797,5 @@ def sync_sales(seller: str) -> int:
         return 0
 
     meta = {"source": "site+uploads", "filename": "site orders + uploads"}
-    smart.save_sales(seller, merged.reset_index(drop=True), meta, mode="replace")
+    smart.save_sales(seller, merged.reset_index(drop=True), meta, mode="replace", channel=None)
     return int(len(site_df))

@@ -4145,7 +4145,12 @@ function openMapModal(d) {
   const mm = $("mapMode");
   if (mm) {
     if (existing > 0) {
-      $("mapModeHint").textContent = `You already have ${fmt(existing)} rows saved. Add these ${fmt(d.rows || 0)} new rows to them, or replace everything?`;
+      const what = d.kind === "review" ? "reviews" : "sales";
+      $("mapModeHint").textContent = `You already have ${fmt(existing)} rows saved. Add these ${fmt(d.rows || 0)} new rows, `
+        + `or replace the ${what} you uploaded before? ${what === "sales" ? "Sales" : "Reviews"} from your website and `
+        + `connected platforms are kept either way.`;
+      const rl = $("mapReplaceLbl");
+      if (rl) rl.textContent = `Replace my uploaded ${what}`;
       const want = _pendingMode === "append" ? "append" : "replace";
       mm.querySelectorAll('input[name="mapMode"]').forEach((r) => { r.checked = (r.value === want); });
       mm.hidden = false;
@@ -7453,7 +7458,50 @@ function showSupplierOrders(orders) {
 }
 
 // ---------- MODULE: Sales Analytics ----------
+/* ------------------------------------------------ sales channels --------
+   A seller sells on their website, Amazon, Shopify and uploads the rest.
+   Sales and Sub-Category Analytics show everything together, the split by
+   channel, and a filter. With one channel there is nothing to split, so none
+   of this is drawn. */
+let _salesChannel = "";
+let _subChannel = "";
+
+function channelBarHtml(split, active, id) {
+  if (!split || !split.multi) return "";
+  const chips = [`<button type="button" data-ch=""${active ? "" : ' class="on"'}>All channels</button>`]
+    .concat(split.channels.map((c) => `<button type="button" data-ch="${esc(c.id)}"${active === c.id ? ' class="on"' : ""}>
+      ${esc(c.label)} <span class="muted">${c.share}%</span></button>`)).join("");
+  return `<div class="ch-bar" id="${id}" role="group" aria-label="Filter by sales channel">${chips}</div>`;
+}
+
+function channelSplitCard(split, active) {
+  if (!split || !split.multi || active) return "";
+  return `<div class="chart-card"><h4>Sales by channel</h4>
+    <div class="grid-2"><div class="plot" id="cChPie"></div><div class="plot" id="cChMonth"></div></div></div>`;
+}
+
+function drawChannelSplit(split, active) {
+  if (!split || !split.multi || active || !$("cChPie")) return;
+  const palette = ["--primary", "--green", "--amber", "--blue", "--red", "--chart-5"].map((v, i) =>
+    cssVar(v, ["#6d28d9", "#0a7a4d", "#b7791f", "#2563eb", "#c2410c", "#0891b2"][i]));
+  plot($("cChPie"), [{ type: "pie", hole: 0.55, labels: split.channels.map((c) => c.label),
+    values: split.channels.map((c) => c.revenue), marker: { colors: palette },
+    textinfo: "percent", sort: false }], { showlegend: true }, "Revenue by channel");
+  if (split.monthly) {
+    plot($("cChMonth"), split.monthly.series.map((s, i) => ({ x: split.monthly.months, y: s.values,
+      name: s.label, type: "bar", marker: { color: palette[i % palette.length] } })),
+      { barmode: "stack", yaxis: { tickprefix: "₹" } }, "Monthly revenue by channel");
+  }
+}
+
+function wireChannelBar(id, onPick) {
+  const bar = $(id);
+  if (!bar) return;
+  bar.querySelectorAll("[data-ch]").forEach((b) => b.onclick = () => onPick(b.dataset.ch));
+}
+
 async function openSales() {
+  _salesChannel = "";
   await openCached("sales", "Sales Analytics",
     async () => {
       await api("/api/smart/state");
@@ -7466,6 +7514,19 @@ async function openSales() {
       ]);
       return { d, cx };
     }, renderSales);
+}
+
+/* A channel filter is a fresh fetch, never the warm cache: the cache holds the
+   all-channels view the screen opens with. */
+async function salesForChannel(ch) {
+  _salesChannel = ch || "";
+  try {
+    const [d, cx] = await Promise.all([
+      api(`/api/analytics?lang=en&channel=${encodeURIComponent(_salesChannel)}`),
+      api("/api/cancellations").catch(() => null),
+    ]);
+    renderSales({ d, cx });
+  } catch (e) { toast(e.message, 6000); }
 }
 
 function renderSales(payload) {
@@ -7485,7 +7546,8 @@ function renderSales(payload) {
     // Only the revenue card gets a sparkline: monthly revenue is the one
     // history the payload carries, and a made-up shape would be worse than none.
     const revSpark = !thin && d.monthly_trend ? d.monthly_trend.y : null;
-    const cards = `
+    const chBar = channelBarHtml(d.channel_split, d.channel || "", "salesCh");
+    const cards = chBar + `
       <div class="kpis">
         ${kpiCard({ label: "Revenue", value: `₹${fmt(k.revenue)}`, icon: "rupee", tone: 1, spark: revSpark })}
         ${kpiCard({ label: "Orders", value: fmt(k.orders), icon: "bag", tone: 3 })}
@@ -7500,11 +7562,13 @@ function renderSales(payload) {
                    "your revenue trend, your best days of the week and next month's forecast",
                    false));
       bindCancelPanel(cx);
+      wireChannelBar("salesCh", salesForChannel);
       return;
     }
 
     let html = cards + `
       ${cancelPanel(cx)}
+      ${channelSplitCard(d.channel_split, d.channel || "")}
       ${renderActions(d.insights)}
       <div class="chart-card"><h4>Monthly revenue</h4><div class="plot" id="cMonthly"></div></div>
       ${d.forecast ? `<div class="chart-card"><h4>Next 30 days: ≈ ₹${fmt(d.forecast.next_30_total)} (${d.forecast.vs_last_30_pct >= 0 ? "+" : ""}${d.forecast.vs_last_30_pct}% vs last 30)</h4><div class="plot" id="cFcst"></div></div>` : ""}
@@ -7512,6 +7576,8 @@ function renderSales(payload) {
       ${d.by_category ? `<div class="chart-card"><h4>Revenue by category</h4><div class="plot" id="cCat"></div></div>` : ""}`;
     moduleShell("Sales Analytics", html);
     bindCancelPanel(cx);
+    wireChannelBar("salesCh", salesForChannel);
+    drawChannelSplit(d.channel_split, d.channel || "");
     const primary = cssVar("--primary", "#6d28d9");
     plot($("cMonthly"), [{ x: d.monthly_trend.x, y: d.monthly_trend.y, type: "scatter", mode: "lines+markers", line: { color: primary, width: 2.5, shape: "spline" }, fill: "tozeroy", fillcolor: softFill() }], { yaxis: { tickprefix: "₹" } }, "Monthly revenue");
     if (d.forecast) {
@@ -7733,6 +7799,7 @@ function bindCancelPanel(cx) {
 
 // ---------- MODULE: Sub-Category Analysis ----------
 async function openSubcategory() {
+  _subChannel = "";
   await openCached("subcategory", "Sub-Category Analysis",
     async () => {
       await api("/api/smart/state");
@@ -7740,20 +7807,28 @@ async function openSubcategory() {
     }, renderSubcategory);
 }
 
+async function subForChannel(ch) {
+  _subChannel = ch || "";
+  try { renderSubcategory(await api(`/api/subcategory?lang=en&channel=${encodeURIComponent(_subChannel)}`)); }
+  catch (e) { toast(e.message, 6000); }
+}
+
 function renderSubcategory(d) {
   {
+    const chBar = channelBarHtml(d.channel_split, d.channel || "", "subCh");
     const rowCount = (state.data && state.data.sales && state.data.sales.rows) || 0;
     // Same rule as Sales Analytics: the cards are sums of the seller's own rows
     // and are always shown; only the trend charts wait for enough history.
-    const cards = (d.cards || []).length ? `
+    const cards = chBar + ((d.cards || []).length ? `
       <div class="kpis">${d.cards.map((c, i) => kpiCard({ label: c.label, value: String(c.value),
         icon: ["layers", "rupee", "pie", "trend"][i % 4], tone: [1, 3, 6, 2][i % 4],
         sub: c.note ? esc(c.note) : "" })).join("")}
-      </div>` : "";
+      </div>` : "");
     if (!d.available) {
       moduleShell("Sub-Category Analysis", cards + `<div class="card">${esc(d.reason || "")}</div>`
         + thinData(rowCount, THIN_DATA_ROWS,
                    "which kinds of product bring the money in", !cards));
+      wireChannelBar("subCh", subForChannel);
       return;
     }
     const label = d.field === "subcategory" ? "sub-categories" : "categories";
@@ -7761,6 +7836,7 @@ function renderSubcategory(d) {
       moduleShell("Sub-Category Analysis", cards + renderActions(d.insights)
         + thinData(rowCount, THIN_DATA_ROWS,
                    `how each of your ${label} is trending month to month`, false));
+      wireChannelBar("subCh", subForChannel);
       return;
     }
     let html = cards + `
@@ -7768,11 +7844,14 @@ function renderSubcategory(d) {
         <span class="muted">Drill into a ${d.field === "subcategory" ? "sub-category" : "category"}:</span>
         <select id="subSel" class="sub-select"><option value="">All (overview)</option>${d.all_values.map((v) => `<option>${esc(v)}</option>`).join("")}</select>
       </div>
+      ${channelSplitCard(d.channel_split, d.channel || "")}
       ${renderActions(d.insights)}
       <div class="chart-card"><h4>Monthly trend: top ${label}</h4><div class="plot" id="cSubTrend"></div></div>
       <div class="chart-card"><h4>Total revenue by ${label}</h4><div class="plot" id="cSubTot"></div></div>`;
     moduleShell("Sub-Category Analysis", html);
-    $("subSel").onchange = () => $("subSel").value ? renderSubDetail($("subSel").value) : openSubcategory();
+    $("subSel").onchange = () => $("subSel").value ? renderSubDetail($("subSel").value) : subForChannel(_subChannel);
+    wireChannelBar("subCh", subForChannel);
+    drawChannelSplit(d.channel_split, d.channel || "");
     plot($("cSubTrend"), d.series.map((s) => ({ x: s.x, y: s.y, name: s.name, type: "scatter", mode: "lines+markers" })), { yaxis: { tickprefix: "₹" } }, "Monthly trend");
     plot($("cSubTot"), [{ x: d.totals.x, y: d.totals.y, type: "bar", marker: { color: cssVar("--primary", "#6d28d9") } }], { yaxis: { tickprefix: "₹" } }, "Total revenue");
   }
@@ -7781,7 +7860,7 @@ function renderSubcategory(d) {
 async function renderSubDetail(value) {
   const wrap = $("view");
   try {
-    const d = await api(`/api/subcategory/detail?value=${encodeURIComponent(value)}&lang=en`);
+    const d = await api(`/api/subcategory/detail?value=${encodeURIComponent(value)}&lang=en&channel=${encodeURIComponent(_subChannel)}`);
     if (!d.available) { toast(d.reason || "No detail"); return; }
     const k = d.kpis;
     let html = `
@@ -7802,7 +7881,7 @@ async function renderSubDetail(value) {
         ${d.top_products ? `<div class="chart-card"><h4>Top items</h4><div class="plot" id="cDP"></div></div>` : ""}
       </div>`;
     setView(`<div class="page-head"><h2>Sub-Category Analysis</h2><button class="btn ghost sm" id="backHome">← All apps</button></div>${html}`);
-    $("backHome").onclick = goHome; $("subBack").onclick = openSubcategory;
+    $("backHome").onclick = goHome; $("subBack").onclick = () => subForChannel(_subChannel);
     plot($("cDT"), [{ x: d.monthly_trend.x, y: d.monthly_trend.y, type: "scatter", mode: "lines+markers", fill: "tozeroy", fillcolor: softFill(), line: { color: cssVar("--primary", "#6d28d9") } }], { yaxis: { tickprefix: "₹" } }, value + " monthly");
     plot($("cDW"), [{ x: d.weekday_pattern.x, y: d.weekday_pattern.y, type: "bar", marker: { color: series(1) } }], { yaxis: { tickprefix: "₹" } }, "Weekday");
     // type "category": item names that are numbers (SKU codes) are labels, not a scale

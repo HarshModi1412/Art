@@ -83,19 +83,50 @@ def set_product_type(email: str, product_type: str, label: str | None = None) ->
 # ---------------------------------------------------------
 # Data persistence + session hydration
 # ---------------------------------------------------------
+# Where a sale came from. A seller sells on their website, Amazon, Shopify and
+# a shop counter at the same time; every source is one CHANNEL of one dataset,
+# so analytics can show the whole business and the split, and filter by it.
+CHANNEL_LABELS = {
+    "upload": "Uploaded files", "site": "Your website", "shopify": "Shopify",
+    "amazon": "Amazon", "woocommerce": "WooCommerce", "wix": "Wix",
+    "petpooja": "PetPooja", "toast": "Toast POS", "mock": "Demo POS",
+    "sample": "Sample data",
+}
+
+
+def channel_label(ch: str) -> str:
+    return CHANNEL_LABELS.get(str(ch or "upload"), str(ch or "upload").title())
+
+
 def save_sales(email: str, txns: pd.DataFrame, meta: dict, mode: str = "replace",
-               keep_in_memory: bool = False) -> None:
+               keep_in_memory: bool = False, channel: str | None = "upload") -> None:
     """Persist the account's Sales data.
 
-    mode="replace" (default) overwrites; mode="append" adds the new rows on top
-    of whatever is already saved (used by the "Add records" flow). Both frames
-    are canonical Transactions frames from mapper.build_transactions, so their
-    columns line up for a straight concat.
+    Each source owns its CHANNEL of the dataset: saving with channel="shopify"
+    replaces (mode="replace") or adds to (mode="append") only the Shopify rows,
+    and leaves the website, Amazon and uploaded rows alone. Rows saved before
+    channels existed count as "upload". Sample data is dropped the moment any
+    real data arrives. channel=None writes the frame exactly as given (the
+    website sync builds the whole merged frame itself).
+
+    BUG THIS FIXES: pulling Shopify orders used to REPLACE the whole dataset,
+    so connecting a second platform wiped the first and every upload.
     """
-    if mode == "append":
+    if channel is not None:
+        txns = txns.copy()
+        txns["channel"] = channel
         existing = load_sales(email)
         if existing is not None and len(existing):
-            txns = pd.concat([existing, txns], ignore_index=True)
+            keep = existing.copy()
+            ch = keep["channel"].fillna("upload") if "channel" in keep.columns else \
+                pd.Series("upload", index=keep.index)
+            keep["channel"] = ch
+            drop = ch == "sample"
+            if mode != "append":
+                drop |= ch == channel
+            keep = keep[~drop]
+            if len(keep):
+                txns = pd.concat([keep, txns], ignore_index=True)
     user_store.save_df(email, SALES_KEY, txns)
     st = user_store.get_key(email, "smart_data", {}) or {}
     st["sales"] = {**meta, "rows": int(len(txns)),

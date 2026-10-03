@@ -22,8 +22,8 @@
     document.documentElement.setAttribute("data-theme", saved || (prefersDark ? "dark" : "light"));
   })();
 </script>
-<link rel="stylesheet" href="/smart-static/smart.css?v=81" />
-<link rel="stylesheet" href="/smart-static/ios.css?v=9" />
+<link rel="stylesheet" href="/smart-static/smart.css?v=82" />
+<link rel="stylesheet" href="/smart-static/ios.css?v=10" />
 <link rel="stylesheet" href="/smart-static/journey.css?v=3" />
 <!-- Plotly is NOT loaded here.
      It is ~3.5 MB of JavaScript, and it used to sit in this <head> with no
@@ -147,7 +147,7 @@
       <p class="muted tiny" id="mapModeHint"></p>
       <div class="map-mode-opts">
         <label><input type="radio" name="mapMode" value="append" checked> <svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Add to existing</label>
-        <label><input type="radio" name="mapMode" value="replace"> <svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4.5h-4.5"/></svg> Replace everything</label>
+        <label><input type="radio" name="mapMode" value="replace"> <svg class="uic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4.5h-4.5"/></svg> <span id="mapReplaceLbl">Replace my uploaded data</span></label>
       </div>
     </div>
     <div class="modal-actions">
@@ -254,6 +254,6 @@
 <!-- journey.js first: it only defines functions, and the home screen's first
      paint (inside smart.js) draws its card. -->
 <script src="/smart-static/journey.js?v=8"></script>
-<script src="/smart-static/smart.js?v=99"></script>
+<script src="/smart-static/smart.js?v=100"></script>
 </body>
 </html>

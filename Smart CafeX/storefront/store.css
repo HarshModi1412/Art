@@ -671,8 +671,9 @@ html:not(.m-hscroll) .rail-nav { display: none; }
 .empty p { color: var(--muted); margin: 0 0 24px; }
 .toast {
   position: fixed; left: 50%; bottom: 30px; transform: translate(-50%, 24px); z-index: 200;
-  background: var(--ink); color: var(--bg); padding: 14px 24px; border-radius: 99px;
+  background: var(--ink); color: var(--bg); padding: 13px 18px; border-radius: 12px;
   font-size: 13.5px; opacity: 0; pointer-events: none; display: flex; align-items: center; gap: 10px;
+  max-width: min(92vw, 460px); line-height: 1.45; overflow-wrap: anywhere; box-sizing: border-box;
   transition: opacity .35s var(--ease), transform .45s var(--ease-out);
 }
 .toast svg { width: 15px; height: 15px; }

@@ -265,7 +265,7 @@ check("a file with no category column explains itself instead of going blank",
       "map one column to" in analytics.subcategory_trends(
           _df.drop(columns=["category"])).get("reason", ""))
 check("Sales Analytics builds the cards before deciding about thin data",
-      JS.index("const cards = `") < JS.index("if (thin) {"))
+      JS.index("const cards = chBar + `") < JS.index("if (thin) {"))
 check("and only the INFERENCES are held back",
       "your best days of the week" in JS and "thinData(rowCount, THIN_DATA_ROWS" in JS)
 check("the thin-data notice can drop its ghost cards when real ones sit above it",
