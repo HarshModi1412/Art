@@ -8807,66 +8807,77 @@ async function openWinbackAutoSetup() {
    is in Meta's review, only sellers added as testers can finish it, exactly
    like Instagram. Pasting IDs by hand is kept under Advanced. */
 function whatsappSetupHtml(w) {
-  const badge = { auto: "Automatic", waiting: "Waiting for Meta", tap: "Tap-to-send", off: "Not set up" }[w.mode] || "";
   const emb = w.embedded || {};
+  const badge = { auto: "Sending automatically", waiting: "Waiting for Meta", tap: "Tap-to-send", off: "Not set up" }[w.mode] || "";
+  const tone = { auto: "ok", waiting: "wait", tap: "info", off: "off" }[w.mode] || "off";
   const manual = `
-      <label class="tiny" style="display:block;">Phone Number ID <input id="waPnid" inputmode="numeric" style="width:100%;"></label>
-      <label class="tiny" style="display:block;margin-top:6px;">WhatsApp Business Account ID <input id="waWaba" inputmode="numeric" style="width:100%;"></label>
-      <label class="tiny" style="display:block;margin-top:6px;">Permanent access token <input id="waTok" type="password" autocomplete="off" style="width:100%;"></label>
-      <button class="btn ghost sm" id="waConnect" style="margin-top:10px;">Connect with these</button>
-      <p class="muted tiny">From developers.facebook.com → your app → WhatsApp → API Setup, and a System User
+      <div class="wa-fields">
+        <label>Phone Number ID <input id="waPnid" inputmode="numeric"></label>
+        <label>WhatsApp Business Account ID <input id="waWaba" inputmode="numeric"></label>
+        <label>Permanent access token <input id="waTok" type="password" autocomplete="off"></label>
+      </div>
+      <button class="btn ghost sm" id="waConnect">Connect with these</button>
+      <p class="muted tiny" style="margin:8px 0 0;">From developers.facebook.com → your app → WhatsApp → API Setup, and a System User
         token with whatsapp_business_messaging and whatsapp_business_management.</p>`;
-  return `
-    <p class="muted tiny" style="margin-top:0;"><span class="mc-tag">${esc(badge)}</span> ${esc(w.headline || "")}</p>
-    <h4 style="margin:12px 0 6px;">1. The number you send from</h4>
-    <p class="muted tiny" style="margin:0 0 8px;">The WhatsApp number your customers know your shop by.
-      With just this, every campaign message opens in WhatsApp already written, you tap send.</p>
-    <div style="display:flex;gap:8px;">
-      <input id="waNum" placeholder="+91 98765 43210" value="${esc(w.number ? "+" + w.number : "")}" style="flex:1;min-width:0;">
-      <button class="btn primary sm" id="waNumSave">Save</button>
-    </div>
-
-    <h4 style="margin:18px 0 6px;">2. Send automatically <span class="muted tiny">(optional)</span></h4>
-    ${w.connected ? `
-      <div class="ok-note">Connected${w.display_number ? ` as ${esc(w.display_number)}` : ""}${w.coexistence ? ", and still on your WhatsApp Business app" : ""}.
-        Message template: <b>${esc(w.template_status || "not submitted")}</b>.
-        ${w.template_error ? `<br>${esc(w.template_error)}` : ""}</div>
-      <div style="display:flex;gap:8px;margin-top:10px;">
+  const connected = `
+      <div class="wa-ok">
+        <b>${sic("check")}Connected${w.display_number ? ` as ${esc(w.display_number)}` : ""}</b>
+        <span class="muted tiny">${w.coexistence ? "Still on your WhatsApp Business app. " : ""}Campaign message: <b>${esc(w.template_status || "not submitted")}</b>${
+          (w.template_status || "") !== "APPROVED" ? " (Meta usually approves within minutes, at most a day)" : ""}</span>
+        ${w.template_error ? `<span class="wa-err">${esc(w.template_error)}</span>` : ""}
+      </div>
+      <div class="wa-row">
         <button class="btn ghost sm" id="waRefresh">${sic("refresh")}Check approval</button>
         <button class="btn ghost sm" id="waOff">Disconnect</button>
-      </div>` : emb.available ? `
-      <div class="ig-pre">
-        <b>Before you start</b>
-        <ol style="line-height:1.7;padding-left:18px;margin:6px 0 0;">
-          <li><b>While we are in Meta's review, accept the tester invite first.</b> We add you as a
-            tester (just ask us); open <a href="https://developers.facebook.com/requests/" target="_blank" rel="noopener">developers.facebook.com/requests</a>
-            with your Facebook login and press Accept.</li>
-          <li>Keep the phone with your shop's WhatsApp number nearby: Meta sends it a code.</li>
-        </ol>
-      </div>
-      <label class="mc-chk" style="margin-top:10px;"><input type="checkbox" id="waCoex" checked>
-        <span><b>I use the WhatsApp Business app on this number</b><br>
-        <span class="muted tiny">Keep using the app as you do today; campaigns send from the same number.
-          Untick if this is a new number that is not on WhatsApp yet.</span></span></label>
-      <button class="btn primary" id="waEmbedded" style="margin-top:10px;">${sic("whatsapp")}Connect WhatsApp</button>
-      <ol class="muted tiny" style="line-height:1.7;padding-left:18px;margin-top:10px;">
-        <li>A Facebook window opens (facebook.com, not us). Log in.</li>
-        <li>Pick your business, or create one with your shop's name.</li>
-        <li>Choose your WhatsApp number and type the code Meta sends to it.</li>
-        <li>You land back here, connected. Meta then approves your campaign message, usually within minutes.</li>
+      </div>`;
+  const oneButton = `
+      <ol class="wa-steps">
+        <li><b>Testers only, for now.</b> Until Meta approves One Tap Manager, your Facebook account must be added
+          to our app as a tester. You get a Facebook notification; accept it in
+          <a href="https://www.facebook.com/settings/?tab=applications" target="_blank" rel="noopener">Facebook → Settings → Apps and websites → Requests</a>.</li>
+        <li>Keep the phone with your shop's WhatsApp number nearby: Meta sends it a code.</li>
       </ol>
-      <p class="muted tiny">Meta charges a small fee per marketing message, billed to your own WhatsApp
+      <label class="wa-check"><input type="checkbox" id="waCoex">
+        <span><b>Keep using the WhatsApp Business app on this number</b>
+        <span class="muted tiny">Tick only if this number is already on the WhatsApp Business app (version 2.24.17 or newer).
+          Leave it unticked for a new number.</span></span></label>
+      <button class="btn primary" id="waEmbedded">${sic("whatsapp")}Connect WhatsApp</button>
+      <p class="muted tiny" style="margin:10px 0 0;">A Facebook window opens: log in, pick your business, choose your number and
+        type the code Meta sends to it. Meta charges a small fee per marketing message, billed to your own WhatsApp
         account: add a payment method in WhatsApp Manager when it asks.</p>
-      <details class="sm-fold"><summary class="tiny">Advanced: paste the IDs yourself</summary>${manual}</details>` : `
-      <p class="muted tiny" style="margin:0 0 8px;">One-button WhatsApp sign-in is being switched on for your
-        account. Until then, messages open in WhatsApp for you to tap send, or connect by hand below.</p>
-      <details class="sm-fold"><summary class="tiny">Advanced: paste the IDs yourself</summary>${manual}</details>`}
+      <details class="wa-adv"><summary>Advanced: paste the IDs yourself</summary>${manual}</details>`;
+  return `
+    <div class="wa-status ${tone}"><span class="wa-dot"></span><b>${esc(badge)}</b><span class="muted tiny">${esc(w.headline || "")}</span></div>
+
+    <div class="wa-sec">
+      <h4><span class="mc-n">1</span>The number you send from</h4>
+      <p class="muted tiny">The WhatsApp number your customers know your shop by. With just this, every campaign
+        message opens in WhatsApp already written, and you tap send.</p>
+      <div class="wa-row">
+        <input id="waNum" placeholder="+91 98765 43210" inputmode="tel" value="${esc(w.number ? "+" + w.number : "")}">
+        <button class="btn primary sm" id="waNumSave">Save</button>
+      </div>
+    </div>
+
+    <div class="wa-sec">
+      <h4><span class="mc-n">2</span>Send automatically <span class="muted tiny">(optional)</span></h4>
+      ${w.connected ? connected : emb.available ? oneButton : `
+        <p class="muted tiny">One-button WhatsApp sign-in is being switched on for your account. Until then, messages open
+          in WhatsApp for you to tap send, or connect by hand below.</p>
+        <details class="wa-adv"><summary>Advanced: paste the IDs yourself</summary>${manual}</details>`}
+    </div>
     <div class="err" id="waErr" hidden></div>`;
 }
 
+/* Facebook's SDK, loaded AHEAD of the click. FB.login opens a popup, and a
+   browser only allows a popup straight from a click: if the click first
+   waited for the SDK (or anything else) to download, the Facebook window was
+   silently blocked. */
+let _fbReady = null;
 function loadFacebookSdk(appId, version) {
-  if (window.FB) return Promise.resolve(window.FB);
-  return new Promise((resolve, reject) => {
+  if (_fbReady) return _fbReady;
+  _fbReady = new Promise((resolve, reject) => {
+    if (window.FB) { resolve(window.FB); return; }
     window.fbAsyncInit = () => {
       window.FB.init({ appId, autoLogAppEvents: true, xfbml: false, version: version || "v21.0" });
       resolve(window.FB);
@@ -8874,72 +8885,75 @@ function loadFacebookSdk(appId, version) {
     const s = document.createElement("script");
     s.src = "https://connect.facebook.net/en_US/sdk.js";
     s.async = true; s.defer = true; s.crossOrigin = "anonymous";
-    s.onerror = () => reject(new Error("Could not load the Facebook sign-in. Turn off any ad blocker for this step and try again."));
+    s.onerror = () => { _fbReady = null; reject(new Error("Could not load the Facebook sign-in. Turn off any ad blocker for this step and try again.")); };
     document.body.appendChild(s);
   });
+  return _fbReady;
 }
 
-/* Meta's Embedded Signup. The popup posts the chosen account and number ids
-   to this window; FB.login hands back a code that is good for 30 seconds,
-   which the server swaps for the seller's token straight away. */
-async function connectWhatsAppEmbedded(coexistence, btn) {
-  const w = await api("/api/whatsapp");
-  const cfg = w.embedded || {};
-  if (!cfg.available) throw new Error("WhatsApp sign-in is not switched on yet.");
-  const FB = await loadFacebookSdk(cfg.app_id, cfg.graph_version);
-  let session = null;
-  const onMsg = (ev) => {
-    let host = "";
-    try { host = new URL(ev.origin).hostname; } catch (e) { return; }
-    if (!/(^|\.)facebook\.com$/.test(host)) return;
-    try {
-      const data = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
-      if (data && data.type === "WA_EMBEDDED_SIGNUP") session = data;
-    } catch (e) { /* other facebook.com messages are not JSON */ }
-  };
-  window.addEventListener("message", onMsg);
-  const extras = { setup: {}, sessionInfoVersion: "3" };
-  if (coexistence) extras.featureType = "whatsapp_business_app_onboarding";
+/* Meta's Embedded Signup. Called straight from the click (no awaits before
+   FB.login). The popup posts the chosen account and number ids to this
+   window; FB.login hands back a code that is good for 30 seconds, which the
+   server swaps for the seller's token at once. */
+function connectWhatsAppEmbedded(cfg, coexistence, onBusy) {
   return new Promise((resolve, reject) => {
-    FB.login((resp) => {
+    if (!window.FB) return reject(new Error("Facebook sign-in is still loading. Wait a second and press Connect again."));
+    let session = null;
+    const onMsg = (ev) => {
+      let host = "";
+      try { host = new URL(ev.origin).hostname; } catch (e) { return; }
+      if (!/(^|\.)facebook\.com$/.test(host)) return;
+      try {
+        const data = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
+        if (data && data.type === "WA_EMBEDDED_SIGNUP") session = data;
+      } catch (e) { /* other facebook.com messages are not JSON */ }
+    };
+    window.addEventListener("message", onMsg);
+    const extras = { setup: {}, sessionInfoVersion: "3" };
+    if (coexistence) extras.featureType = "whatsapp_business_app_onboarding";
+    window.FB.login((resp) => {
       const code = resp && resp.authResponse && resp.authResponse.code;
       // the session message can land a moment after the login callback
       setTimeout(() => {
         window.removeEventListener("message", onMsg);
         if (!code) {
+          const step = session && session.data && session.data.current_step;
           return reject(new Error(session && session.event === "CANCEL"
-            ? "Cancelled. Nothing was connected." : "The WhatsApp sign-in did not finish."));
+            ? `Cancelled${step ? ` at "${step}"` : ""}. Nothing was connected.`
+            : session && session.event === "ERROR"
+              ? `Meta reported an error: ${(session.data && session.data.error_message) || "please try again"}.`
+              : "The WhatsApp sign-in did not finish. If the Facebook window did not open, allow pop-ups for this site."));
         }
-        if (btn) btn.innerHTML = `<span class="spin" aria-hidden="true"></span> Finishing…`;
+        if (onBusy) onBusy();
         const d = (session && session.data) || {};
         api("/api/whatsapp/embedded", { method: "POST", json: {
           code, waba_id: d.waba_id || "", phone_number_id: d.phone_number_id || "",
           coexistence: !!coexistence || (session && session.event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING"),
         } }).then(resolve, reject);
-      }, 400);
+      }, 500);
     }, { config_id: cfg.config_id, response_type: "code", override_default_response_type: true, extras });
   });
 }
 
-function wireWhatsAppSetup(onChange) {
+function wireWhatsAppSetup(onChange, w) {
   const err = (m) => { const e = $("waErr"); if (e) { e.textContent = m; e.hidden = false; } else toast(m, 6000); };
+  const emb = (w && w.embedded) || {};
+  if (emb.available) loadFacebookSdk(emb.app_id, emb.graph_version).catch((e) => err(e.message));
   $("waNumSave").onclick = async () => {
     try {
       await api("/api/whatsapp/number", { method: "POST", json: { number: $("waNum").value } });
       toast("WhatsApp number saved"); onChange();
     } catch (e) { err(e.message); }
   };
-  const emb = $("waEmbedded");
-  if (emb) emb.onclick = async () => {
-    emb.disabled = true;
-    emb.innerHTML = `<span class="spin" aria-hidden="true"></span> Waiting for Facebook…`;
-    try {
-      await connectWhatsAppEmbedded($("waCoex") && $("waCoex").checked, emb);
-      toast("WhatsApp connected. Your campaign message is with Meta for approval.", 6000);
-      onChange();
-    } catch (e) {
-      err(e.message); emb.disabled = false; emb.innerHTML = `${sic("whatsapp")}Connect WhatsApp`;
-    }
+  const btn = $("waEmbedded");
+  if (btn) btn.onclick = () => {
+    $("waErr").hidden = true;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spin" aria-hidden="true"></span> Waiting for Facebook…`;
+    connectWhatsAppEmbedded(emb, $("waCoex") && $("waCoex").checked,
+      () => { btn.innerHTML = `<span class="spin" aria-hidden="true"></span> Finishing…`; })
+      .then(() => { toast("WhatsApp connected. Your campaign message is with Meta for approval.", 6000); onChange(); })
+      .catch((e) => { err(e.message); btn.disabled = false; btn.innerHTML = `${sic("whatsapp")}Connect WhatsApp`; });
   };
   const c = $("waConnect");
   if (c) c.onclick = async () => {
@@ -8954,7 +8968,7 @@ function wireWhatsAppSetup(onChange) {
   if (rf) rf.onclick = async () => {
     try {
       const s = await api("/api/whatsapp/refresh", { method: "POST" });
-      toast(`Template: ${s.template_status || "unknown"}`); onChange();
+      toast(`Campaign message: ${s.template_status || "unknown"}`); onChange();
     } catch (e) { err(e.message); }
   };
   const off = $("waOff");
@@ -8971,7 +8985,7 @@ async function openWhatsAppSetup() {
   wireWhatsAppSetup(() => {
     closeModal(); warmModClearAll();
     if (_currentModule === "marketing") openMarketing();
-  });
+  }, w);
 }
 
 /* Account → WhatsApp pane, drawn when the pane opens. */
@@ -8981,7 +8995,7 @@ async function fillWhatsAppPane() {
   try {
     const w = await api("/api/whatsapp");
     slot.innerHTML = whatsappSetupHtml(w);
-    wireWhatsAppSetup(fillWhatsAppPane);
+    wireWhatsAppSetup(fillWhatsAppPane, w);
   } catch (e) { slot.innerHTML = `<div class="ap-empty">${esc(e.message)}</div>`; }
 }
 
