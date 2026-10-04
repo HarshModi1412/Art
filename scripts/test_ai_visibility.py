@@ -110,7 +110,7 @@ check("?region=in switches to rupees and remembers it",
 c.cookies.clear()
 check("the Hindi page is always rupees", "₹700" in c.get("/hi").text)
 pr = c.get("/pricing").text
-check("pricing names the 7-day trial", "7-day free trial" in pr)
+check("pricing names the trial length", f"{pricing.TRIAL_DAYS}-day free trial" in pr)
 check("pricing schema is in USD for a US visitor", '"priceCurrency": "USD"' in pr and '"price": "12.99"' in pr)
 cmp = c.get("/compare/shopify-apps").text
 total = pricing.stack_comparison()["typical_total_inr"]

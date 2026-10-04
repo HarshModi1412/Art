@@ -6748,7 +6748,7 @@ async function openAccount() {
       </div></div>`;
   };
 
-  // ---- Plan: the 7-day trial, or the paid plan, and both offers ----
+  // ---- Plan: the 14-day trial, or the paid plan, and both offers ----
   const planHtml = planSectionHtml(pl);
 
   // ---- Credits: a monthly allowance + purchased packs, spent by real usage ----

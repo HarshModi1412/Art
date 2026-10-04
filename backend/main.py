@@ -322,7 +322,7 @@ _OPEN_WHEN_LOCKED = ("/api/login", "/api/register", "/api/auth/", "/api/logout",
 
 @app.middleware("http")
 async def _trial_gate(request, call_next):
-    """Nothing is free after the 7-day trial. Every other seller API answers a
+    """Nothing is free after the 14-day trial. Every other seller API answers a
     lapsed, unpaid account with one 402 ("trial_ended"), which the app turns
     into the plan picker. One gate here rather than a check in 300 routes, so a
     new route cannot forget it. Public pages, the storefront and shoppers are

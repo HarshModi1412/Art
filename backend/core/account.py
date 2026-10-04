@@ -114,7 +114,7 @@ def summary(email: str) -> dict:
 
 
 def _plan_status(email: str) -> dict:
-    """Current tier, where the 7-day trial stands, and both paid plans priced
+    """Current tier, where the 14-day trial stands, and both paid plans priced
     in the seller's billing currency, so the Account tab renders in one call."""
     try:
         from backend.core import billing, pricing

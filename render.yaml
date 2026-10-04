@@ -66,7 +66,9 @@ services:
       - key: CAFEX_DATA_DIR
         value: /var/data
       - key: LAUNCH_MODE
-        value: "true"             # everything free. Flip to "false" to turn pricing on (target: 30-50 active cafes)
+        value: "false"            # pricing on: 14-day free trial, then Pro or Pro Max. "true" makes everything free.
+                                  # The live service (Smart_Helper) was created by hand, so its value is set in the
+                                  # Render dashboard, not here; on 4 October 2026 /api/pricing showed launch_mode false.
       - key: RAZORPAY_KEY_ID
         sync: false               # only needed once LAUNCH_MODE=false — use rzp_test_... keys first
       - key: RAZORPAY_KEY_SECRET

@@ -30,11 +30,11 @@ Source: `backend/core/pricing.py`, `billing.py`, `region.py`, `credits.py`.
 
 | Plan | US price | India price | What it includes |
 |---|---|---|---|
-| Free trial | $0 for 7 days | ₹0 for 7 days | Every Pro Max feature, no card. When it ends nothing is free: the app shows the plan picker until a plan is bought. Data is kept |
+| Free trial | $0 for 14 days | ₹0 for 14 days | Every Pro Max feature, no card. When it ends nothing is free: the app shows the plan picker until a plan is bought. Data is kept |
 | Pro | $10 a month | ₹700 a month | Everything except AI image and video generation: analytics, customer groups, win-back, stock, suppliers and purchase orders, the Instagram planner, review and complaint analysis, the website and custom domain, unlimited AI writing |
 | Pro Max | $12.99 a month | ₹1,299 a month | Everything in Pro, plus AI product photos and short product clips |
 
-- **The trial start date** is saved on the account at signup (`billing.start_trial`, stored under `billing_account` in the user store), along with the billing currency. The trial cannot be restarted. Accounts made before this pricing get their 7 days from the first time the app checks them.
+- **The trial start date** is saved on the account at signup (`billing.start_trial`, stored under `billing_account` in the user store), along with the billing currency. The trial cannot be restarted. Accounts made before this pricing get their 14 days from the first time the app checks them. The trial went from 7 to 14 days on 4 October 2026 (`pricing.TRIAL_DAYS`).
 - **Currency** is chosen by region (`region.py`): `?region=in|us`, then a cookie, then the edge country header (`CF-IPCountry` and similar), then Accept-Language, then USD. A seller is billed in the currency saved at signup. Prices are set by hand in each currency, never converted.
 - **After the trial**, a middleware in `main.py` answers every seller API with a 402 `trial_ended`, except sign-in, account, pricing and payment routes. The app turns that into the plan picker. Scheduled jobs (autoplan, win-back, digest) skip locked accounts. Public pages and the storefront keep working.
 - **Image and video generation** is gated in `aicaps.require_generation`, so every generate route (including a seller's own OpenAI key) needs Pro Max or the trial.
@@ -183,7 +183,7 @@ One screen for everything set up once (`account.py`). Secrets never come back to
 
 | Variable | What it does |
 |---|---|
-| `LAUNCH_MODE` | Off by default (7-day trial, then paid). `true` makes everything free |
+| `LAUNCH_MODE` | Off by default (14-day trial, then paid). `true` makes everything free |
 | `AI_LABEL` | `on`, `images` or `off`, as above |
 | `META_APP_SECRET` | Needed to verify Instagram webhooks |
 | `BRAND_PROFILES` | Official profile URLs (Reddit, Instagram, LinkedIn and so on), comma separated. Listed as `sameAs` in the structured data and in `/llms.txt` |
@@ -195,7 +195,7 @@ One screen for everything set up once (`account.py`). Secrets never come back to
 | `WHATSAPP_ENABLED` | Off until WhatsApp is set up |
 | Supabase keys | Main storage. Without them the app falls back to local files |
 
-Auto-deploy is off on Render, so every push needs a Manual Deploy.
+The live service is **Smart_Helper** on Render (created by hand, not from `render.yaml`). It auto-deploys on every commit to `main`, so a push goes live. Its environment variables, `LAUNCH_MODE` included, are set in the Render dashboard; on 4 October 2026 `/api/pricing` showed `launch_mode: false`.
 
 ---
 

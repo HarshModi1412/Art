@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
-<title>One Tap Manager: Shop Management App for Small Indian Sellers</title>
-<meta name="description" content="Shop management app for Indian clothing, jewellery and perfume sellers: sales analytics, stock alerts, GST invoices, WhatsApp win-back. 7-day free trial." />
+<title>One Tap Manager: The Team That Runs Your Online Shop, for Indian Sellers</title>
+<meta name="description" content="One app that runs your online shop end to end: brings old customers back, keeps stock, builds your website, plans Instagram, makes product photos and writes GST bills. 14 days free, then ₹1,299 a month." />
 <meta name="robots" content="index, follow" />
 <link rel="canonical" href="__BASE_URL__/in" />
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -27,7 +27,7 @@
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="One Tap Manager" />
 <meta property="og:title" content="One Tap Manager: run your shop the way a big brand runs theirs" />
-<meta property="og:description" content="It reads your sales, tells you the three things worth doing this morning, and then does most of them for you. 7-day free trial, no card." />
+<meta property="og:description" content="A 7-person team that brings your shop more money: old customers back, stock reordered, your own website, Instagram planned, product photos and GST bills. 14 days free, no card." />
 <meta property="og:url" content="__BASE_URL__/in" />
 <meta property="og:image" content="__BASE_URL__/og-image.png" />
 <meta property="og:image:width" content="1200" />
@@ -79,7 +79,7 @@
       "publisher": { "@id": "__BASE_URL__/#org" },
       "offers": [
         { "@type": "Offer", "name": "Free trial", "price": "0", "priceCurrency": "INR",
-          "description": "Every Pro Max feature for 7 days. No card needed." },
+          "description": "Every Pro Max feature for 14 days. No card needed." },
         { "@type": "Offer", "name": "Pro", "price": "700", "priceCurrency": "INR",
           "description": "Everything except AI image generation: analytics, win-back, stock and suppliers, GST invoices, Instagram planning, your own website." },
         { "@type": "Offer", "name": "Pro Max", "price": "1299", "priceCurrency": "INR",
@@ -451,14 +451,136 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 
 <a class="skip-link" href="#main">Skip to the main content</a>
 
+<style>
+/* ==========================================================================
+   The story layer (October 2026). Written for a visitor who has never heard
+   of One Tap Manager: hook, their day as it is, what it costs, the team that
+   takes over, before and after, three steps, proof, price, no risk, decide.
+   Same tokens as the rest of the page. Mobile first: Instagram ad traffic.
+   ========================================================================== */
+.chapter { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.mini-cta { margin-top: 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
+.mini-cta span { font-size: 14px; color: var(--ink-soft); }
+/* chapter 1: the day */
+.day { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; max-width: 760px; }
+.day li { display: grid; grid-template-columns: 92px 1fr; gap: 16px; align-items: baseline; background: #fff; border-radius: 16px; padding: 16px 18px; box-shadow: var(--shadow-card); }
+.day time { font-weight: 800; font-size: 15px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.day b { display: block; font-size: 17px; margin-bottom: 2px; }
+.day span { font-size: 15px; color: var(--ink-soft); }
+.day li.late { background: var(--card-dark); }
+.day li.late time, .day li.late span { color: var(--card-muted); }
+.day li.late b { color: #fff; }
+.truths { margin-top: 44px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.truth { border-left: 4px solid #D92D20; background: #fff; border-radius: 4px 16px 16px 4px; padding: 16px 18px; box-shadow: var(--shadow-card); }
+.truth b { display: block; font-size: 17px; margin-bottom: 4px; }
+.truth span { font-size: 15px; color: var(--ink-soft); line-height: 1.55; }
+.truths-end { margin-top: 22px; font-size: 18px; max-width: 760px; }
+/* chapter 2: the money */
+.miss.four { grid-template-columns: repeat(2, 1fr); gap: 26px 34px; }
+.addup { margin-top: 26px; background: var(--card-dark); color: var(--card-text); border-radius: 18px; padding: 20px 22px; font-size: 17px; line-height: 1.55; }
+.addup b { color: #fff; }
+.stat-line { margin-top: 18px; font-size: 15.5px; background: #fff; border-radius: 16px; padding: 16px 20px; box-shadow: var(--shadow-card); }
+/* chapter 3: the team */
+.team { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.member { background: #fff; border-radius: 20px; padding: 20px; box-shadow: var(--shadow-card); display: grid; grid-template-columns: 48px 1fr; gap: 14px; align-items: start; }
+.member .av { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; color: #fff; background: var(--accent); }
+.member .av svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.member h3 { font-size: 18px; margin: 0 0 4px; }
+.member p { margin: 0 0 8px; font-size: 15px; color: var(--ink-soft); line-height: 1.55; }
+.member .f-more { display: inline-flex; align-items: center; min-height: 44px; margin-left: 12px; font-size: 14px; font-weight: 600; color: var(--accent); }
+.member.you-card .f-more { color: #fff; }
+.member .you { display: inline-block; font-size: 13px; font-weight: 700; color: #067647; background: #ECFDF3; border-radius: 8px; padding: 3px 10px; }
+.member.max .av { background: var(--marigold); color: var(--ink); }
+.member.you-card { background: var(--accent); color: #fff; }
+.member.you-card .av { background: #fff; color: var(--accent); }
+.member.you-card p { color: #DCE6FA; }
+.team-note { margin-top: 16px; font-size: 15px; color: var(--ink-soft); }
+/* chapter 4: before and after */
+.ba { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border-radius: 20px; box-shadow: var(--shadow-card); overflow: hidden; font-size: 15px; }
+.ba th { text-align: left; padding: 14px 16px; font-size: 13px; letter-spacing: .05em; text-transform: uppercase; }
+.ba th.no { background: #FEF3F2; color: #B42318; }
+.ba th.yes { background: #ECFDF3; color: #067647; }
+.ba th.what { background: var(--paper); color: var(--ink-soft); }
+.ba td { padding: 13px 16px; border-top: 1px solid var(--line); vertical-align: top; line-height: 1.45; }
+.ba td:first-child { font-weight: 700; width: 22%; }
+.ba td.no { color: var(--ink-soft); }
+.ba td.yes { font-weight: 600; }
+.steps3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 40px; counter-reset: s3; }
+.s3 { background: #fff; border-radius: 20px; padding: 22px; box-shadow: var(--shadow-card); }
+.s3::before { counter-increment: s3; content: counter(s3); display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 800; margin-bottom: 10px; }
+.s3 b { display: block; font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+.s3 h3 { font-size: 18px; margin: 0 0 6px; }
+.s3 p { margin: 0; font-size: 15px; color: var(--ink-soft); line-height: 1.55; }
+/* proof */
+.why { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.why-card { background: #fff; border-radius: 20px; padding: 22px; box-shadow: var(--shadow-card); }
+.why-card h3 { font-size: 17.5px; margin: 0 0 6px; }
+.why-card p { font-size: 15px; color: var(--ink-soft); margin: 0; line-height: 1.55; }
+/* price */
+.bonus { max-width: 720px; margin: 0 auto 40px; background: #fff; border-radius: 20px; padding: 24px 28px; box-shadow: var(--shadow-card); }
+.bonus h3 { font-size: 20px; margin: 0 0 12px; }
+.bonus ol { margin: 0; padding-left: 22px; }
+.bonus li { padding: 8px 0; font-size: 15px; border-bottom: 1px solid var(--line); }
+.bonus li:last-child { border-bottom: 0; }
+.bonus li span { color: var(--ink-soft); }
+.stack-year { font-size: 14px; color: var(--ink-soft); margin: 14px 0 0; text-align: right; }
+.people { max-width: 720px; margin: -22px auto 40px; font-size: 15px; color: var(--ink-soft); text-align: center; }
+.plans-2 { grid-template-columns: repeat(2, minmax(0, 420px)); }
+.trial-strip { max-width: 860px; margin: 0 auto 28px; text-align: center; font-size: 17px; background: #fff; border-radius: 16px; padding: 16px 20px; box-shadow: var(--shadow-card); }
+/* risk */
+.risk { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.risk-card { background: #fff; border-radius: 20px; padding: 22px; box-shadow: var(--shadow-card); border-left: 4px solid var(--green); }
+.risk-card h3 { font-size: 17.5px; margin: 0 0 6px; }
+.risk-card p { font-size: 15px; color: var(--ink-soft); margin: 0; line-height: 1.55; }
+.risk-card a { color: var(--accent); font-weight: 600; display: inline-block; padding: 8px 0 0; }
+.risk-sum { margin-top: 22px; text-align: center; font-size: 18px; }
+/* the decision */
+.paths { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: 920px; margin: 0 auto; }
+.path { border-radius: 20px; padding: 24px; }
+.path h3 { font-size: 20px; margin: 0 0 10px; }
+.path ul { margin: 0; padding-left: 20px; }
+.path li { padding: 4px 0; font-size: 15.5px; line-height: 1.5; }
+.path.stay { background: #fff; box-shadow: var(--shadow-card); color: var(--ink-soft); }
+.path.stay h3 { color: var(--ink); }
+.path.go { background: var(--accent); color: #fff; }
+.path.go li { color: #EEF2FF; }
+.path.go .btn { margin-top: 16px; background: #fff; color: var(--accent); border-color: #fff; width: 100%; text-align: center; }
+/* sticky call to action on phones, so the button is always one thumb away */
+.sticky-cta { display: none; }
+@media (max-width: 1024px) { .why, .risk { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 900px) {
+  .truths, .miss.four, .team, .why, .risk, .steps3, .paths, .plans-2 { grid-template-columns: 1fr; }
+  .day li { grid-template-columns: 76px 1fr; gap: 12px; padding: 14px 16px; }
+  .ba { font-size: 14px; }
+  .ba th, .ba td { padding: 11px 10px; }
+  .ba td:first-child { width: 26%; }
+  .sticky-cta { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; gap: 12px; align-items: center;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); border-top: 1px solid var(--line);
+    -webkit-backdrop-filter: saturate(180%) blur(16px); backdrop-filter: saturate(180%) blur(16px); }
+  .sticky-cta .btn { flex: 1; text-align: center; min-height: 48px; }
+  .sticky-cta span { font-size: 12.5px; color: var(--ink-soft); line-height: 1.3; max-width: 120px; }
+  body { padding-bottom: 84px; }
+}
+@media (prefers-color-scheme: dark) {
+  .day li, .truth, .stat-line, .member, .ba, .s3, .why-card, .bonus, .risk-card, .path.stay, .trial-strip { background: #1c1c1e !important; }
+  .day li.late, .addup { background: #0c0c0f !important; }
+  .ba th.what { background: #141416; }
+  .ba th.no { background: #3a1512; color: #FDA29B; }
+  .ba th.yes { background: #0b2e1f; color: #75E0A7; }
+  .member .you { background: #0b2e1f; color: #75E0A7; }
+  .member.you-card, .path.go { background: #0a4fae !important; }
+  .sticky-cta { background: rgba(22,22,24,.94); }
+}
+</style>
+
 <nav class="nav">
   <div class="nav-inner">
     <a class="brand" href="/in"><span class="brand-mark">1T</span> One Tap Manager</a>
     <div class="nav-links">
-      <a href="#features">Features</a>
+      <a href="#offer">Your team</a>
       <a href="#how">How it works</a>
-      <a href="#stories">What it finds</a>
-      <a href="#pricing">Pricing</a>
+      <a href="#pricing">Price</a>
+      <a href="#risk">No risk</a>
       <a href="#faq">Questions</a>
       <a href="/guides">Guides</a>
       <a href="/hi" lang="hi" hreflang="hi">हिंदी</a>
@@ -468,81 +590,98 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
   </div>
 </nav>
 
-<!-- HERO -->
+<!-- HOOK. The dream outcome (a team that makes the shop more money), the
+     mechanism (it does the work, you tap), and the offer in one line. Written
+     for someone who has never heard of us. -->
 <header class="wrap hero" id="main">
   <div>
-    <span class="eyebrow">For Indian sellers · कपड़े, गहने, परफ़्यूम</span>
-    <h1><span class="h1-brand">One Tap Manager</span> Run your shop the way a big brand runs theirs. <em>On your own, before lunch.</em></h1>
-    <!-- The H1 is the brand and the promise. This line carries the words a seller
-         searches for, so the page says plainly what it is, in text. -->
-    <h2 class="hero-kw">Shop management app for Indian sellers: sales analytics, stock reordering, GST invoices and WhatsApp win-back, in one place.</h2>
-    <p class="lead">Big brands do not sell better products than you. They sell with a team:
-      someone reading the numbers, someone chasing the customers who stopped coming,
-      someone deciding what to reorder, someone shooting and posting every day.
-      <b>One Tap Manager is that team.</b> It reads your sales, tells you the three
-      things worth doing this morning, and then does most of them for you.</p>
+    <span class="eyebrow">For anyone who sells online in India · with a website or without one</span>
+    <h1><span class="h1-brand">One Tap Manager</span> Get a 7-person team that brings your shop more money. <em>They do all the work. You just tap.</em></h1>
+    <!-- The words a seller searches for, in plain text. -->
+    <h2 class="hero-kw">One app that runs your online shop for you, end to end: it brings old customers back, keeps your bestsellers in stock, gives you your own website, plans your Instagram, makes your product photos and writes your GST bills.</h2>
+    <p class="lead">Big brands do not sell better products than you. They sell with a team.
+      <b>One Tap Manager is that team.</b> Every morning it shows you the three jobs that
+      will make you money today, already done. You check, and you tap.</p>
     <div class="hero-ctas">
-      <button class="btn btn-primary" onclick="openSignup('free')">Start the 7-day free trial</button>
-      <a class="btn btn-ghost" href="#opportunity">What you are losing without it</a>
+      <button class="btn btn-primary" onclick="openSignup('free')">Start your 14-day free trial</button>
+      <a class="btn btn-ghost" href="#day">See how it works</a>
     </div>
-    <p class="hero-note">No card for the trial. Upload one sales file and the first answers are on
-      screen in about two minutes. Then ₹700 a month, with your own selling website included,
-      because we are not going to charge you for a shop and then charge you again to understand it.</p>
+    <p class="hero-note"><b>₹0 for 14 days, no card.</b> Then ₹1,299 a month for the whole team.
+      No auto-debit, a full refund within 7 days of any payment, and 0% commission on your sales.</p>
   </div>
   <div class="tickets" aria-label="Examples of what One Tap Manager tells a seller to do">
-    <p class="tickets-label">Examples of the cards you get, made up and using round numbers,
-      because we would rather show you the shape than invent a customer.</p>
-    <div class="ticket">
-      <div class="t-tag">EXAMPLE · STOCK</div>
-      <p class="t-title">Four things are about to run out</p>
-      <p>Your best-selling shirt in M lasts three more days at the rate it is going. The order
-        form for that supplier is already written. Check it and send it.</p>
-      <div class="t-metric">order 40 · supplier already on file</div>
-    </div>
+    <p class="tickets-label">Examples of what your team brings you each morning, made up and using
+      round numbers, because we would rather show you the shape than invent a customer.</p>
     <div class="ticket">
       <div class="t-tag">EXAMPLE · CUSTOMERS</div>
       <p class="t-title">38 buyers have not come back in 45 days</p>
-      <p>They spent ₹1.4 lakh with you. One WhatsApp message to these 38 beats a discount for
-        everybody, and we count how many actually came back, so you know if it worked.</p>
-      <div class="t-metric">the message is written · you press send</div>
+      <p>They spent ₹1.4 lakh with you. A WhatsApp message for each of them is already written.
+        Tap send, and we count how many come back.</p>
+      <div class="t-metric">written for you · one tap</div>
     </div>
     <div class="ticket">
-      <div class="t-tag">EXAMPLE · REVIEWS</div>
-      <p class="t-title">“Sizing runs small” is your loudest complaint</p>
-      <p>Said again and again in your reviews, and getting worse. A size chart on three product
-        pages is the whole fix.</p>
-      <div class="t-metric">fix this first · 3 pages to edit</div>
+      <div class="t-tag">EXAMPLE · STOCK</div>
+      <p class="t-title">Your bestseller runs out in 3 days</p>
+      <p>Your best-selling kurti in M is almost gone. The order to your supplier is already filled
+        in. Tap send.</p>
+      <div class="t-metric">order 40 · one tap</div>
+    </div>
+    <div class="ticket">
+      <div class="t-tag">EXAMPLE · WEBSITE</div>
+      <p class="t-title">3 orders came in while you slept</p>
+      <p>Two by UPI, one cash on delivery. Stock updated, GST bills written. Nobody had to reply “price?”.</p>
+      <div class="t-metric">your own website · 0% commission</div>
     </div>
   </div>
 </header>
 
-<!-- ==================================================================
-     WHAT IT COSTS TO NOT HAVE THIS
-     The old version of this section said "you are short on someone who
-     reads your data", which is true and costs the reader nothing to
-     agree with. Nobody buys software because a sentence was correct.
-     What moves a seller is seeing the specific money that walks out of
-     the shop every month while they are busy — and that every one of
-     those leaks is something the big brand down the road already
-     plugged, with staff. That is the actual opportunity being missed.
-     Numbers here are labelled as illustrative and the arithmetic is
-     shown, because an unlabelled figure on a launch page is a lie.
-     ================================================================== -->
-<section class="alt" id="opportunity">
+<!-- CHAPTER 1. Their day as it is, and the things nobody says out loud. -->
+<section class="alt" id="day">
   <div class="wrap">
     <div class="section-head">
-      <span class="eyebrow">The opportunity</span>
+      <span class="chapter">Chapter 1 · Your day today</span>
+      <h2>You are not running a shop. The shop is running you.</h2>
+      <p>Does this sound like your day?</p>
+    </div>
+    <ol class="day">
+      <li><time>7:10 am</time><div><b>23 unread messages before tea</b><span>“price?”, “size M?”, “available?”. You reply one by one.</span></div></li>
+      <li><time>11:00 am</time><div><b>Your bestseller sold out yesterday</b><span>You find out when a customer asks for it. She buys somewhere else.</span></div></li>
+      <li><time>3:30 pm</time><div><b>Packing orders. No post today. Again.</b><span>Instagram shows your shop to fewer people every week you go quiet.</span></div></li>
+      <li><time>9:00 pm</time><div><b>Writing bills by hand</b><span>Your family eats dinner without you.</span></div></li>
+      <li class="late"><time>12:40 am</time><div><b>Still replying “price?”</b><span>Tomorrow, the same day starts again.</span></div></li>
+    </ol>
+
+    <div class="truths">
+      <div class="truth"><b>If you stop, your shop stops.</b><span>You are the website, the stock room, the
+        photographer and the accountant. One sick week, and sales fall.</span></div>
+      <div class="truth"><b>Your old customers are forgetting you.</b><span>They bought once and nobody followed
+        up. Someone else's message reached them first.</span></div>
+      <div class="truth"><b>A shop with worse products is growing faster.</b><span>Not because they are better.
+        Because they follow up, restock and post on time, every time.</span></div>
+      <div class="truth"><b>Your whole business lives in one phone.</b><span>Every customer, every order, every
+        payment screenshot. Lose the phone, and you start again from zero.</span></div>
+    </div>
+    <p class="truths-end"><b>None of this is your fault.</b> One person is doing the work of seven.
+      Big brands have the seven people. Now you can too.</p>
+    <div class="mini-cta"><button class="btn btn-primary" onclick="openSignup('free')">Hand the work to your team</button><span>14 days free · no card</span></div>
+  </div>
+</section>
+
+<!-- CHAPTER 2. What it costs. Labelled worked examples with the arithmetic
+     shown, plus one sourced figure. -->
+<section id="opportunity">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="chapter">Chapter 2 · What it is costing you</span>
       <h2>The money is already in your shop. It leaves quietly.</h2>
       <p>Not because you are doing anything wrong, but because one person cannot watch
-        everything at once. A brand with eight people watches all of it. Here is what
-        goes out the door while nobody is looking, and what closing it is worth.</p>
+        everything at once. Here is what walks out of a small shop every month.</p>
     </div>
-    <div class="miss">
+    <div class="miss four">
       <div class="miss-card">
         <h3>The customers who just stop coming</h3>
-        <p>They do not complain. They do not cancel. They simply do not come back, and
-          you find out months later. Getting one of them back costs a message; finding
-          a new one costs an ad.</p>
+        <p>They do not complain. They simply do not come back, and you find out months later.
+          Getting one back costs a message. Finding a new one costs an ad.</p>
         <p class="miss-worth">If 40 past buyers who spent ₹3,000 each are sitting
           uncontacted, that is <b>₹1.2 lakh</b> of goodwill you already paid for.</p>
       </div>
@@ -554,268 +693,236 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
           sale and two sales a day: <b>₹10,800 a month</b>, gone without a trace.</p>
       </div>
       <div class="miss-card">
+        <h3>The “price?” that went cold</h3>
+        <p>Every DM that waits hours for a price is a buyer who found it somewhere else.
+          A website link answers “price?”, “size?” and “available?” in one tap, at 2 am too.</p>
+        <p class="miss-worth">If 4 buyers a week give up waiting, at ₹900 an order:
+          4 × 4 weeks × ₹900 = <b>₹14,400 a month</b> you never see.</p>
+      </div>
+      <div class="miss-card">
         <h3>The week you did not post</h3>
         <p>The brands growing on Instagram are not more talented. They are more regular.
-          Four posts a week, every week, is the whole trick, and it is the first thing
-          to go when you are packing orders.</p>
+          Four posts a week is the whole trick, and it is the first thing to go when you are busy.</p>
         <p class="miss-worth">Posting is the cheapest customer you will ever get.
           <b>Skipping it costs nothing today and everything in a year.</b></p>
       </div>
     </div>
-    <div class="cmp-line" style="margin-top:26px;">
-      <b>None of this is a knowledge problem.</b> Every big brand knows these three
-      things. They have people to act on them. That is the only difference, and it is
-      the difference this closes, for one person, in the time it takes to have chai.
-    </div>
-    <p class="stack-note" style="margin-top:14px;">The figures above are worked examples
+    <p class="addup"><b>Add it up:</b> ₹10,800 + ₹14,400 = <b>₹25,200 a month</b> walking out of the
+      door, plus <b>₹1.2 lakh</b> of old customers you already paid to win. Your team costs ₹1,299.</p>
+    <p class="stat-line"><b>Why old customers matter most:</b> repeat buyers are about 21% of a typical
+      online shop's customers, but they bring in about 44% of its revenue (source: Gorgias, repeat
+      customer rate benchmarks).</p>
+    <p class="stack-note" style="margin-top:14px;">The ₹ figures above are worked examples
       with the arithmetic shown, not results from a customer. We are new and would rather
       you check our maths than trust our marketing.</p>
   </div>
 </section>
 
-<!-- FEATURES -->
-<section id="features">
+<!-- CHAPTER 3. The team. Each role does the job end to end; the seller's part
+     is one tap. Pro Max has all seven; Pro has all but the photographer. -->
+<section class="alt" id="offer">
   <div class="wrap">
     <div class="section-head">
-      <span class="eyebrow">What you get</span>
-      <h2>The eight people you cannot afford, in one screen</h2>
-      <p>Each of these is a job somebody does at a bigger company. None of them needs
-        you to learn anything.</p>
+      <span class="chapter">Chapter 3 · Meet your team</span>
+      <h2>Done for you, end to end. Your only job is one tap.</h2>
+      <p>Seven jobs a big brand pays people to do. Each one arrives finished. You look, and you tap.</p>
     </div>
-    <div class="features">
-      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 20V11"/><path d="M11 20V5"/><path d="M16 20v-7"/><path d="M21 20v-4"/></svg></div><h3>The one who reads the numbers</h3><p>What sold, what it earned you, which days quietly lose money, and what next month looks like, from the sales file you already have. Plain sentences, not a wall of charts.</p><a class="f-more" href="/features/sales-analytics">Sales analytics</a></div>
-      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M18 19c0-2.3-1-4-2.6-4.8"/></svg></div><h3>The one who watches your customers</h3><p>Who buys often, who spends most, and who has gone quiet. The message to bring the quiet ones back is written for you, and we count how many actually returned.</p><a class="f-more" href="/features/win-back">Customer win-back</a></div>
-      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3.5 8 12 3.5 20.5 8v8L12 20.5 3.5 16z"/><path d="M3.5 8 12 12.5 20.5 8"/><path d="M12 12.5v8"/></svg></div><h3>The one who orders stock</h3><p>It knows how fast each thing sells and how long your supplier takes, so it tells you to buy again before you run out, and hands you the order form for that supplier, filled in.</p><a class="f-more" href="/features/stock-reorder">Low stock alerts and reordering</a></div>
-      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.4"/></svg></div><h3>The one who shoots your photos</h3><p>Upload five pictures you are proud of. It reads your light, your colours, your framing, and then every picture it makes for you looks like your brand, using your own product photo as the starting point so the item is really yours.</p><a class="f-more" href="/features/ai-product-photos">AI product photos</a></div>
-      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="7" y="2.8" width="10" height="18.4" rx="2.2"/><path d="M10.6 5.4h2.8"/><circle cx="12" cy="18" r="1"/></svg></div><h3>The one who posts every day</h3><p>A whole week of Instagram planned as one story rather than seven unrelated posts: the tease, the reveal, the proof, the close. Captions written, times chosen, pictures made. You approve, it schedules.</p><a class="f-more" href="/features/instagram-planner">Instagram planner</a></div>
-      <div class="feature"><div class="f-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-1.8-3 1.8-3-1.8L6 21z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></div><h3>The one who does the paperwork</h3><p>Proper tax invoices with the right rates, and one file your accountant can file from. Nobody re-types anything.</p><a class="f-more" href="/features/gst-invoices">GST invoices</a></div>
+    <div class="team">
+      <div class="member"><span class="av" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M9 10.5h6M9 13.5h4"/></svg></span><div>
+        <h3>The one who brings customers back</h3>
+        <p>Finds every buyer who stopped coming, ranked by what they spent, and writes each one a
+          WhatsApp message with their favourite item in it.</p>
+        <span class="you">You: tap send</span>
+        <a class="f-more" href="/features/win-back">Customer win-back</a></div></div>
+      <div class="member"><span class="av" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3.5 8 12 3.5 20.5 8v8L12 20.5 3.5 16z"/><path d="M3.5 8 12 12.5 20.5 8"/><path d="M12 12.5v8"/></svg></span><div>
+        <h3>The one who keeps stock</h3>
+        <p>Knows how fast each item sells and how long your supplier takes. Warns you before you run
+          out and fills in the order, sent from your own email.</p>
+        <span class="you">You: tap send</span>
+        <a class="f-more" href="/features/stock-reorder">Low stock alerts</a></div></div>
+      <div class="member"><span class="av" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M7 14h4"/></svg></span><div>
+        <h3>The one who builds your website</h3>
+        <p>Your own shop online from 3 product photos. Buyers order and pay by UPI, cash on delivery
+          or card, without asking “price?”. Your own link or domain, 0% commission.</p>
+        <span class="you">You: add 3 photos</span>
+        <a class="f-more" href="/features/online-store">Online store</a></div></div>
+      <div class="member"><span class="av" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="7" y="2.8" width="10" height="18.4" rx="2.2"/><path d="M10.6 5.4h2.8"/><circle cx="12" cy="18" r="1"/></svg></span><div>
+        <h3>The one who runs your Instagram</h3>
+        <p>Plans 2 to 7 posts a week as one story, writes every caption and picks the times.
+          Diwali, Navratri and festival posts are ready before the festival.</p>
+        <span class="you">You: tap approve</span>
+        <a class="f-more" href="/features/instagram-planner">Instagram planner</a></div></div>
+      <div class="member max"><span class="av" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h3l1.4-2h7.2L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.4"/></svg></span><div>
+        <h3>The photographer</h3>
+        <p>Upload five photos you are proud of. It works out what your brand looks like, then turns
+          your plain product photo into brand-quality pictures and short clips.</p>
+        <span class="you">You: upload once</span>
+        <a class="f-more" href="/features/ai-product-photos">AI product photos</a></div></div>
+      <div class="member"><span class="av" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-1.8-3 1.8-3-1.8L6 21z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></span><div>
+        <h3>The accountant</h3>
+        <p>A proper GST bill for every order, with the right rate, and one file a month that your
+          CA files from. Nobody types anything twice.</p>
+        <span class="you">You: nothing</span>
+        <a class="f-more" href="/features/gst-invoices">GST invoices</a></div></div>
+      <div class="member"><span class="av" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 20V11"/><path d="M11 20V5"/><path d="M16 20v-7"/><path d="M21 20v-4"/></svg></span><div>
+        <h3>The manager</h3>
+        <p>Reads every order, customer and stock count overnight. Every morning, the 3 jobs that make
+          you money today, already done. Ask it anything about your shop.</p>
+        <span class="you">You: read 3 lines</span>
+        <a class="f-more" href="/features/sales-analytics">Sales analytics</a></div></div>
+      <div class="member you-card"><span class="av" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M12 10.5V9a1.5 1.5 0 0 1 3 0v2"/><path d="M15 10.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L4 15.5a1.5 1.5 0 0 1 2.4-1.8L9 16"/></svg></span><div>
+        <h3>And you</h3>
+        <p>Check what your team did, and tap. Then go and do the things that only you can do,
+          or simply go home on time.</p></div></div>
     </div>
-    <p class="f-also">Also included: <a href="/features/review-analysis">review and complaint analysis</a>
-      and <a href="/features/online-store">your own online store with no commission</a>.</p>
-    <div class="cmp-line" style="margin-top:24px;">
-      <b>The new part is the last three.</b> Reading numbers has been possible for years.
-      A tool that looks at your own photographs, works out what your brand looks like, and
-      then shoots and writes a month of posts in that style: that has only been possible
-      for about a year, and almost nobody has put it in front of a one-person business yet.
-    </div>
+    <p class="team-note">All seven are in <b>Pro Max, ₹1,299 a month</b>. Pro, ₹700 a month, has
+      everyone except the photographer. Your 14 free days include the whole team.</p>
   </div>
 </section>
 
-<!-- HOW IT WORKS -->
-<section class="alt" id="how">
+<!-- CHAPTER 4. Before and after, then the three steps. -->
+<section id="how">
   <div class="wrap">
     <div class="section-head">
-      <span class="eyebrow">Four steps</span>
-      <h2>From spreadsheet to strategy in minutes</h2>
+      <span class="chapter">Chapter 4 · Your shop, before and after</span>
+      <h2>Same shop. Same products. A completely different month.</h2>
     </div>
-    <div class="steps">
-      <div class="step"><h3>Upload your data</h3><p>Export sales from your billing app or Excel as CSV and drop it in.</p></div>
-      <div class="step"><h3>Confirm columns</h3><p>One Tap Manager works out which column is the date, the amount, the customer and the product. You confirm, and it flags any it had to guess.</p></div>
-      <div class="step"><h3>See the analysis</h3><p>Charts, trends and customer groups, with a sentence under each saying what it means.</p></div>
-      <div class="step"><h3>Act on what it found</h3><p>The three things worth doing this week, each with the work already started.</p></div>
+    <table class="ba">
+      <thead><tr><th class="what" scope="col">Job</th><th class="no" scope="col">Today</th><th class="yes" scope="col">With your team</th></tr></thead>
+      <tbody>
+        <tr><td>“price?” DMs</td><td class="no">You reply one by one, till midnight</td><td class="yes">Your website answers. Buyers order and pay on their own</td></tr>
+        <tr><td>Old customers</td><td class="no">Forgotten</td><td class="yes">Each one gets a message, written for you</td></tr>
+        <tr><td>Bestsellers</td><td class="no">Sell out, you find out late</td><td class="yes">Reordered before they run out</td></tr>
+        <tr><td>Instagram</td><td class="no">When you remember</td><td class="yes">A week planned, every caption written</td></tr>
+        <tr><td>Photos</td><td class="no">Phone photos on the bed</td><td class="yes">Brand-quality photos from the same photo</td></tr>
+        <tr><td>GST bills</td><td class="no">Typed by hand</td><td class="yes">Written for every order</td></tr>
+        <tr><td>Apps and bills</td><td class="no">Up to 9 tools, ₹12,400 a month</td><td class="yes">One app, ₹1,299 a month</td></tr>
+        <tr><td>Your day</td><td class="no">14 hours</td><td class="yes">A few taps in the morning</td></tr>
+      </tbody>
+    </table>
+
+    <div class="steps3">
+      <div class="s3"><b>30 seconds</b><h3>Start free</h3><p>An email and a password. No card, no bank
+        details. All 14 days, the whole team.</p></div>
+      <div class="s3"><b>About 15 minutes</b><h3>Show it your shop</h3><p>Add 3 products and your website is
+        live. Already selling somewhere? Upload your sales file, and it reads the rest.</p></div>
+      <div class="s3"><b>Every morning</b><h3>Tap</h3><p>Your team brings you the jobs that make money today,
+        already done. One tap each. That is the whole job.</p></div>
     </div>
+    <div class="mini-cta"><button class="btn btn-primary" onclick="openSignup('free')">Start step 1 now</button><span>₹0 for 14 days · cancel any time</span></div>
   </div>
 </section>
 
-<!-- STORY WALL -->
-<section id="stories">
+<!-- PROOF. We have no customers to quote, so: results inside the free trial,
+     a practice shop, the seller's own numbers, and counting returns. -->
+<section class="alt" id="why">
   <div class="wrap">
-    <!-- ==================================================================
-         This section used to be six cards in quote marks with an attribution
-         line under each, labelled SAMPLE STORY. The label was honest, and it
-         still was not good enough: a quotation with a byline IS a testimonial
-         to anyone skimming, and invented testimonials are exactly what the
-         Consumer Protection Act's misleading-advertisement provisions and the
-         2023 Dark Patterns Guidelines are aimed at. The ASCI code treats an
-         unverifiable endorsement the same way whether or not a disclaimer sits
-         near it.
-
-         What survives is the useful part: the specific FINDINGS the tool
-         produces, in the languages sellers read. Same substance, stated as
-         what the software does rather than as something a person said. No
-         quote marks, no byline, no first person. Nothing here needs a
-         disclaimer, because nothing here is pretending to be anybody's words.
-         ================================================================== -->
     <div class="section-head">
-      <span class="eyebrow">What it finds</span>
-      <h2>The kind of thing it tells you in week one</h2>
-      <p>One Tap Manager is new. Rather than invent customers, here are the
-        findings it is built to produce, written the way it writes them, in the
-        languages it writes them in.</p>
-      <div class="stories-note">Worked examples of the software's own output.
-        Not quotes, not customers, and not results we are claiming.</div>
+      <span class="chapter">Why you can believe it</span>
+      <h2>You see it working before you pay a rupee</h2>
+      <p>A promise is easy to make. So here is how you check it yourself, inside the free 14 days.</p>
     </div>
-    <div class="stories">
-      <div class="story">
-        <span class="s-chip">EXAMPLE FINDING</span><span class="s-lang">EN</span>
-        <p class="s-body">Tuesdays run 41% below your weekly average. A combo
-          offer on Tuesdays is the smallest change that moves it.</p>
-        <div class="s-who">What the Sales Analytics screen says, in plain words.</div>
-      </div>
-      <div class="story" lang="hi">
-        <span class="s-chip">उदाहरण</span><span class="s-lang">हिंदी</span>
-        <p class="s-body">38 पुराने ग्राहक 45 दिनों से नहीं आए। उन्हें भेजने वाला
-          WhatsApp संदेश तैयार है, और कितने लौटे यह गिना जाएगा।</p>
-        <div class="s-who">ग्राहक स्क्रीन जो बताती है, उसका उदाहरण।</div>
-      </div>
-      <!-- Only languages the app actually writes in (core/i18n.py LANGUAGES), and
-           the app's own sentences with example numbers filled in. The page once
-           showed Bengali, Telugu and Marathi output the app cannot produce, and a
-           profit figure it cannot compute; both are gone. -->
-      <div class="story" lang="ta">
-        <span class="s-chip">எடுத்துக்காட்டு</span><span class="s-lang">தமிழ்</span>
-        <p class="s-body">வெறும் 3 பொருட்கள் உங்கள் மொத்தப் பணத்தில் 62% கொண்டு
-          வருகின்றன. இது ஆபத்தானது. மெதுவாக நான்காவது பொருளை உருவாக்குங்கள்.</p>
-        <div class="s-who">துணை வகை பகுப்பாய்வு திரையின் எடுத்துக்காட்டு.</div>
-      </div>
-      <div class="story" lang="kn">
-        <span class="s-chip">ಉದಾಹರಣೆ</span><span class="s-lang">ಕನ್ನಡ</span>
-        <p class="s-body">ನಿಮ್ಮ ಅತ್ಯುತ್ತಮ ತಿಂಗಳು ಅಕ್ಟೋಬರ್. ಆ ತಿಂಗಳು ನೀವು ₹2.1 ಲಕ್ಷ
-          ಗಳಿಸಿದ್ದೀರಿ. ಆಗ ಏನು ನಡೆಯುತ್ತಿತ್ತು ಎಂದು ನೆನಪಿಸಿಕೊಳ್ಳಿ, ಅದನ್ನೇ ಮತ್ತೆ ಮಾಡಲು ಪ್ರಯತ್ನಿಸಿ.</p>
-        <div class="s-who">ಮಾರಾಟ ವಿಶ್ಲೇಷಣೆ ಪರದೆಯ ಉದಾಹರಣೆ.</div>
-      </div>
+    <div class="why">
+      <div class="why-card"><h3>Results inside the free trial</h3><p>Your website goes live and your first
+        win-back messages go out during the 14 free days. Judge it on your own orders, not on our word.</p></div>
+      <div class="why-card"><h3>A practice shop, in one tap</h3><p>Not ready to upload anything? Load a practice
+        shop with 90 days of sales, 726 orders from 359 shoppers, and see every screen working.</p></div>
+      <div class="why-card"><h3>It runs on your own sales</h3><p>Not generic tips. Every job it brings you is
+        built from your orders, your buyers and your stock.</p></div>
+      <div class="why-card"><h3>It shows you if it worked</h3><p>Every message is logged, and the app counts
+        the buyers who came back after it. You see the result, not a promise.</p></div>
+      <div class="why-card"><h3>Made for कपड़े, गहने, परफ़्यूम</h3><p>Built for clothing, jewellery and perfume
+        sellers, and it works in English, Hindi, Tamil and Kannada.</p></div>
+      <div class="why-card"><h3>Planned on research</h3><p>The Instagram planner is built on a 2023 Journal of
+        Marketing study of 1,641 measured effects across 95 million observations of what brand posts do.</p></div>
     </div>
   </div>
 </section>
 
-<!-- PRICING -->
-<!-- ==================================================================
-     Where we sit: Shopify's customer, Odoo's depth.
-
-     This section exists because the honest objection to this product is
-     "why not just use Shopify?" and the honest answer is that Shopify
-     sells you a storefront and then sells you the thinking as apps. Odoo
-     has the depth but is built for someone with an implementation partner.
-     Saying that plainly beats claiming to be better than both.
-     ================================================================== -->
-<section id="where-we-sit">
-  <div class="wrap">
-    <h2>Built for Shopify's customer. Built to Odoo's standard.</h2>
-    <p class="lead" style="max-width:60ch">Two kinds of software already serve
-      small sellers, and each gets half of it right.</p>
-
-    <div class="cmp">
-      <div class="cmp-col">
-        <div class="cmp-h">Shopify</div>
-        <p><b>Right customer.</b> A person who sells things, set up in an
-           afternoon, no consultant.</p>
-        <p><b>Thin where it counts.</b> The storefront is the product; the
-           operations are apps. Inventory is an app. Win-back is an app.
-           Reports are an app. Each is ₹800–2,400 a month, none of them talk
-           to each other, and none of them know your GST position.</p>
-      </div>
-      <div class="cmp-col">
-        <div class="cmp-h">Odoo</div>
-        <p><b>Right depth.</b> Everything is joined up. Buying, stock, billing
-           and tax are one system, so a delivery moves your stock and a sale sorts
-           its own tax without you typing it twice.</p>
-        <p><b>Wrong customer.</b> Built for a business with someone employed to
-           set it up. A jewellery seller with 40 designs will not get through the
-           setup, and the screens assume you were trained on them.</p>
-      </div>
-      <div class="cmp-col cmp-us">
-        <div class="cmp-h">One Tap Manager</div>
-        <p><b>Odoo's joined-up insides.</b> Products, stock, suppliers, orders,
-           bills and GST are one thing, not six. An order on your website takes the
-           item out of stock, uses up the materials it needed, writes a proper tax
-           invoice and shows up in your numbers, without you entering anything
-           twice.</p>
-        <p><b>Shopify's front door.</b> Sign up, upload a CSV or connect a
-           channel, and the first screen tells you what to do this morning
-           rather than asking you to set up an accounting system first.</p>
-      </div>
-    </div>
-
-    <div class="cmp-line">
-      <b>The difference in one sentence:</b> Shopify tells you what happened
-      and sells you an app to work out what to do. We tell you what to do, and
-      the doing is already wired to the same data.
-      <span class="cmp-links"><a href="/compare/shopify-apps">The Shopify comparison</a> ·
-      <a href="/compare/odoo">The Odoo comparison</a></span>
-    </div>
-
-    <div class="cmp-honest">
-      <b>What we are not, yet.</b> Odoo handles factories, several warehouses,
-      salaries and full accounting. We handle none of those and are not pretending
-      otherwise. If you run a factory floor and three godowns, buy Odoo. If you sell
-      40 to 400 products and your accountant just wants one clean tax file at the end
-      of the month, that gap costs you nothing.
-    </div>
-  </div>
-</section>
-
-<section class="alt" id="pricing">
+<!-- PRICE: the stack, the people it replaces, the bonuses, then the plans.
+     Five rows are the same figures as backend/core/pricing.py REPLACES
+     (₹7,600); the website, planner, GST and photo rows complete the team. -->
+<section id="pricing">
   <div class="wrap">
     <div class="section-head" style="text-align:center; margin-inline:auto;">
-      <span class="eyebrow">Pricing</span>
-      <h2>Try everything for 7 days. Then one flat price.</h2>
-      <p>The trial is the whole of Pro Max, with no card. After 7 days, pick the plan that fits.
-      No setup fee, and never a cut of your sales.</p>
+      <span class="chapter">The price</span>
+      <h2>₹12,400 of tools. One team. You pay ₹1,299.</h2>
+      <p>This is what the same jobs cost when you put them together from separate apps.</p>
     </div>
 
-    <!-- What it replaces. The honest comparison, with the app categories named. -->
     <div class="stack-compare">
-      <h3>What this replaces</h3>
-      <p class="stack-note">Sellers on Shopify assemble this from separate apps. The figures are
-      typical listed monthly prices in each app category as of September 2026, gathered from the
-      app listings themselves, and before any percentage-of-sales charges, which we do not have.
-      They are a guide to the shape of the bill, not a quote: your own stack may cost more or less.</p>
+      <h3>What your team replaces, every month</h3>
+      <p class="stack-note">Typical listed monthly prices for each kind of tool as of September 2026,
+      gathered from the app listings and plan pages, before any percentage-of-sales charges, which we
+      do not have. A guide to the shape of the bill, not a quote: your own tools may cost more or less.</p>
       <table class="stack-table">
         <tbody>
-          <tr><td>Sales reports and customer value</td><td>₹1,600</td></tr>
-          <tr><td>Stock tracking and reordering</td><td>₹2,500</td></tr>
           <tr><td>Bringing quiet customers back</td><td>₹1,500</td></tr>
-          <tr><td>Reviews &amp; reputation</td><td>₹1,200</td></tr>
+          <tr><td>Stock tracking and reordering</td><td>₹2,500</td></tr>
+          <tr><td>Your own selling website (a store plan)</td><td>₹1,500</td></tr>
+          <tr><td>Instagram planner</td><td>₹1,500</td></tr>
+          <tr><td>AI product photos</td><td>₹1,500</td></tr>
+          <tr><td>GST billing</td><td>₹300</td></tr>
+          <tr><td>Sales reports and customer value</td><td>₹1,600</td></tr>
           <tr><td>Order management</td><td>₹800</td></tr>
-          <tr class="stack-sum"><td>Four to six apps, every month</td><td>₹7,600</td></tr>
-          <tr class="stack-ours"><td>One Tap Manager Pro: all of it, plus your own selling website</td><td>₹700</td></tr>
+          <tr><td>Reviews &amp; reputation</td><td>₹1,200</td></tr>
+          <tr class="stack-sum"><td>Nine tools, every month</td><td>₹12,400</td></tr>
+          <tr class="stack-ours"><td>One Tap Manager Pro Max: the whole team, in one app</td><td>₹1,299</td></tr>
         </tbody>
       </table>
+      <p class="stack-year">Over a year: ₹1,48,800 for the tools, ₹15,588 for One Tap Manager.
+        You keep <b>₹1,33,212</b>.</p>
+    </div>
+    <p class="people">And that is the price of tools. Hiring the people who do these jobs, a social media
+      manager, a photographer, someone to follow up customers and someone for the bills, costs far more
+      than ₹1,299 a week.</p>
+
+    <div class="bonus">
+      <h3>Also in the box, at no extra cost</h3>
+      <ol>
+        <li><b>14 days of the whole team, free.</b> <span>Every job, including the photographer, before you pay anything.</span></li>
+        <li><b>A practice shop with 90 days of sales.</b> <span>Try every screen before you upload anything.</span></li>
+        <li><b>Festival posts for the season.</b> <span>Diwali, Dhanteras, Navratri and more, ready to approve.</span></li>
+        <li><b>Your morning list by email.</b> <span>The 3 jobs to do today, every day.</span></li>
+        <li><b>Unlimited AI writing.</b> <span>Captions, product descriptions and customer messages, as many as you want.</span></li>
+      </ol>
     </div>
 
-    <div class="plans plans-3">
-      <div class="plan">
-        <h3>Free trial</h3>
-        <div class="price">₹0 <span>for 7 days</span></div>
-        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Every Pro Max feature. No card needed.</div>
-        <ul>
-          <li>Everything in Pro Max for 7 days</li>
-          <li>AI product photos and clips included</li>
-          <li>Upload a sales file or connect a channel</li>
-          <li>When it ends, choose Pro or Pro Max. Your data is kept.</li>
-        </ul>
-        <button class="btn btn-ghost" onclick="openSignup('free')">Start the free trial</button>
-      </div>
-      <div class="plan">
-        <h3>Pro</h3>
-        <div class="price">₹700 <span>/ month</span></div>
-        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Runs the whole shop. Everything except AI image generation.</div>
-        <ul>
-          <li>Sales analytics, category and sub-category trends</li>
-          <li>Who your best customers are, and who has gone quiet</li>
-          <li><b>Win-back campaigns.</b> Messages, coupons and Excel</li>
-          <li><b>Stock and suppliers:</b> when to buy again, how much, and the order form ready to send</li>
-          <li>GST invoices and the monthly tax file</li>
-          <li>Instagram week planner, captions and scheduling</li>
-          <li><b>Your own selling website</b> and custom domain</li>
-          <li>Unlimited AI writing, analyst and chatbot</li>
-          <li data-chatgpt-plan hidden>Use your ChatGPT plan for AI writing (ChatGPT Plus or Pro) <a href="https://help.openai.com/articles/20001542" target="_blank" rel="noopener">Learn more</a></li>
-        </ul>
-        <button class="btn btn-ghost" onclick="openSignup('free')">Start with the free trial</button>
-      </div>
+    <p class="trial-strip"><b>Start with 14 days free.</b> No card. You get the whole team. On day 15, pick a plan, or walk away and pay nothing.</p>
+    <div class="plans plans-2">
       <div class="plan pro">
-        <div class="badge">MOST COMPLETE</div>
-        <h3>Pro Max</h3>
+        <div class="badge">OUR RECOMMENDATION</div>
+        <h3>Pro Max · the whole team</h3>
         <div class="price">₹1,299 <span>/ month</span></div>
-        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Everything in Pro, plus AI product photos and clips.</div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">All seven jobs. Less than ₹45 a day.</div>
         <ul>
-          <li>Everything in Pro</li>
-          <li><b>AI product photos</b> made from your own product photo, in your brand's look</li>
-          <li>A picture for every planned Instagram post</li>
-          <li>Short AI product clips</li>
-          <li data-chatgpt-plan hidden>Use your ChatGPT plan for AI writing (ChatGPT Plus or Pro) <a href="https://help.openai.com/articles/20001542" target="_blank" rel="noopener">Learn more</a></li>
+          <li><b>Customers brought back</b>, a WhatsApp message written for each one</li>
+          <li><b>Stock that never runs out</b>, with the order to your supplier ready</li>
+          <li><b>Your own website</b>, UPI, cash on delivery and cards, 0% commission</li>
+          <li><b>Instagram planned</b>, every caption written, festival posts included</li>
+          <li><b>The photographer:</b> AI product photos and short clips from your own photo</li>
+          <li><b>GST bills</b> for every order, and one file a month for your CA</li>
+          <li><b>The manager:</b> your 3 jobs every morning, and answers in plain words</li>
+          <li>Unlimited AI writing</li>
+          <li data-chatgpt-plan hidden>Use your ChatGPT plan for AI writing (ChatGPT Plus or Pro) <a href="https://help.openai.com/articles/20001542" target="_blank" rel="noopener">Learn more about using your ChatGPT plan</a></li>
         </ul>
-        <button class="btn btn-primary" onclick="openSignup('free')">Start the free trial</button>
+        <button class="btn btn-primary" onclick="openSignup('free')">Start 14 days free</button>
+      </div>
+      <div class="plan">
+        <h3>Pro · without the photographer</h3>
+        <div class="price">₹700 <span>/ month</span></div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-top:2px;">Everything in Pro Max except AI photos and clips.</div>
+        <ul>
+          <li>Customers brought back</li>
+          <li>Stock and supplier orders</li>
+          <li>Your own website, 0% commission</li>
+          <li>Instagram planned and captioned</li>
+          <li>GST bills and the monthly file</li>
+          <li>Your morning list and the AI analyst</li>
+          <li class="no">AI product photos and clips</li>
+          <li data-chatgpt-plan hidden>Use your ChatGPT plan for AI writing (ChatGPT Plus or Pro) <a href="https://help.openai.com/articles/20001542" target="_blank" rel="noopener">Learn more about using your ChatGPT plan</a></li>
+        </ul>
+        <button class="btn btn-ghost" onclick="openSignup('free')">Start 14 days free</button>
       </div>
     </div>
     <!-- OpenAI asks a partner's pricing to say which plans let you use your
@@ -827,19 +934,77 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
         document.querySelectorAll("[data-chatgpt-plan]").forEach(function (el) { el.hidden = false; });
       }).catch(function () {});
     </script>
-    <p class="stack-note" style="text-align:center; margin-top:18px;">Prices in rupees, billed monthly.
-      Cancel from the Account tab any time; your plan runs to the end of the month you paid for.</p>
+    <p class="stack-note" style="text-align:center; margin-top:18px;">Prices in rupees, for 30 days at a time.
+      Nothing renews on its own: each month you choose to pay again from the Account tab.</p>
   </div>
 </section>
 
-<!-- FAQ. Real questions a small Indian seller types into Google before they
-     sign up, answered plainly. This section exists for three audiences at once:
-     a person deciding whether to trust us, Google (an FAQ is where long-tail
-     queries land), and the AI answer engines that now sit above the blue links
-     and quote a page's own words back to the asker. Every answer here is
-     repeated verbatim in the FAQPage schema directly below it, because schema
-     that says something the page does not is spam. No em dashes: a person reads
-     this copy, and the house rule is commas and full stops. -->
+<!-- RISK. Every line is already true: pricing.py (trial, no card), billing.py
+     (nothing renews on its own), core/legal.py refund_doc (7 days, no reason),
+     no commission anywhere in the code. -->
+<section class="alt" id="risk">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="chapter">No risk</span>
+      <h2>The only way to lose is to not try it</h2>
+      <p>Six promises, all of them in our policies, not just on this page.</p>
+    </div>
+    <div class="risk">
+      <div class="risk-card"><h3>₹0 for 14 days</h3><p>No card, no bank details, no UPI mandate. Sign up
+        with an email and start.</p></div>
+      <div class="risk-card"><h3>Results before you pay</h3><p>Your website and your first messages happen
+        inside the free 14 days, so you only pay for something you have already seen work.</p></div>
+      <div class="risk-card"><h3>No auto-debit, ever</h3><p>Nothing renews on its own. Each month you choose
+        to pay again. No surprise deductions from your account.</p></div>
+      <div class="risk-card"><h3>Full refund within 7 days</h3><p>Paid and changed your mind? Ask within 7
+        days of the payment and get all of it back. No reason needed.<br /><a href="/legal/refunds">Read the refund policy</a></p></div>
+      <div class="risk-card"><h3>0% commission</h3><p>Never a cut of your sales, at any size. Sell ₹10,000
+        or ₹10 lakh a month, the price stays the same.</p></div>
+      <div class="risk-card"><h3>Your data stays yours</h3><p>Stop any time and nothing is deleted. Ask for
+        your data back, or deleted, whenever you like.</p></div>
+    </div>
+    <p class="risk-sum"><b>21 days with nothing to lose:</b> 14 days free, then 7 more days to ask for your money back.</p>
+  </div>
+</section>
+
+<!-- THE DECISION. Two paths, stated plainly. Fear of staying the same is
+     the story's stake; the decline is never shamed in the interface. -->
+<section id="decide">
+  <div class="wrap">
+    <div class="section-head" style="text-align:center; margin-inline:auto;">
+      <span class="chapter">The end of the story is yours</span>
+      <h2>A month from now, your shop will look like one of these</h2>
+    </div>
+    <div class="paths">
+      <div class="path stay">
+        <h3>You wait</h3>
+        <ul>
+          <li>The same 23 messages before tea</li>
+          <li>Old customers buying from someone else</li>
+          <li>Your bestseller sold out, again</li>
+          <li>Bills at 9 pm, “price?” at midnight</li>
+          <li>Next month, exactly like this month</li>
+        </ul>
+      </div>
+      <div class="path go">
+        <h3>You tap once today</h3>
+        <ul>
+          <li>Your website takes orders while you sleep</li>
+          <li>Old customers hear from you, and come back</li>
+          <li>Stock reordered before it runs out</li>
+          <li>Instagram posted every week, bills already done</li>
+          <li>Evenings with your family</li>
+        </ul>
+        <button class="btn" onclick="openSignup('free')">Start 14 days free</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ. Real questions a small Indian seller asks before signing up. Every
+     answer is repeated verbatim in the FAQPage schema below (both are built
+     from one list), because schema that says something the page does not is
+     spam. No em dashes: the house rule is commas and full stops. -->
 <style>
   .faq { padding: 8px 0 4px; }
   .faq h2 { font-size: 30px; margin: 8px 0 24px; }
@@ -848,6 +1013,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
   .faq-item h3 { font-size: 18px; margin: 0 0 8px; }
   .faq-item p { margin: 0; color: var(--ink-soft); font-size: 15px; line-height: 1.65; }
   .faq-item p a { color: var(--accent); font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .faq-item { background: #1c1c1e; } }
 </style>
 <section class="faq" id="faq" aria-labelledby="faqHeading">
   <div class="wrap">
@@ -856,35 +1022,55 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
     <div class="faq-list">
       <div class="faq-item">
         <h3>What is One Tap Manager?</h3>
-        <p>One Tap Manager is operations software for small Indian sellers. It reads the sales you already record, on Amazon, Shopify, Instagram or your own counter, and every morning it tells you the few things worth doing: what to reorder, which customers to win back, and what to post. Then it does most of that work for you, from the supplier order form to the Instagram captions.</p>
+        <p>One Tap Manager is an app that runs a small Indian online shop for you, end to end, like a team. It brings back customers who stopped buying with a WhatsApp message written for each one, warns you before your bestsellers run out and fills in the order, gives you your own selling website with 0% commission, plans your Instagram, makes product photos and writes a GST bill for every website order. Every morning it shows you the three jobs that make you money today, already done, and you tap to approve.</p>
       </div>
       <div class="faq-item">
         <h3>Is One Tap Manager the same as other One Tap apps?</h3>
         <p>One Tap Manager is not related to the other apps called One Tap or OneTap, or to Google One Tap sign-in. It is the shop manager for small Indian sellers, at onetapmanager.com (one word in the address, three words in the name).</p>
       </div>
       <div class="faq-item">
-        <h3>Is there a free plan?</h3>
-        <p>There is a 7-day free trial with every feature, and no card is needed to start it. There is no free plan after the trial: to keep using the app, you choose Pro or Pro Max. Your data is kept either way.</p>
+        <h3>Do I need a website already?</h3>
+        <p>No, it works either way. Add 3 products, with a photo, a name and a price, choose a look, add your UPI ID, and your website is live at onetapmanager.com/yourshop, or on your own domain. Share the link on WhatsApp and in your Instagram bio, and buyers order there instead of asking the price in your DMs. If you already sell on Shopify, Amazon, WooCommerce or Wix, connect it or upload a sales file instead.</p>
+      </div>
+      <div class="faq-item">
+        <h3>How do my customers pay on my website?</h3>
+        <p>By UPI straight to your own UPI ID, by cash on delivery, with an optional small advance to confirm the order, or by card, netbanking and wallets through your own Razorpay account. The money goes to you, never through us.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Do you take a commission on my sales?</h3>
+        <p>No. One Tap Manager is a flat monthly price. There is no commission, no per-order fee and no percentage of your sales, however much you sell.</p>
       </div>
       <div class="faq-item">
         <h3>How much does One Tap Manager cost?</h3>
-        <p>Every account starts with a 7-day free trial of Pro Max, with no card. After that, Pro is ₹700 a month and includes everything except AI image generation. Pro Max is ₹1,299 a month and adds AI product photos and short product clips. We never take a percentage of your sales.</p>
+        <p>Every account starts with 14 days free, with the whole team and no card. After that, Pro Max is ₹1,299 a month and includes every job, including AI product photos and short product clips. If you do not need photos, Pro is ₹700 a month. We never take a percentage of your sales.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Will I be auto-debited after the trial?</h3>
+        <p>No. Nothing renews on its own. When the trial ends, the app asks you to choose a plan, and each paid month runs for 30 days. After that, you choose to pay again from the Account tab. There is no mandate and no surprise deduction.</p>
+      </div>
+      <div class="faq-item">
+        <h3>What if I pay and it is not for me?</h3>
+        <p>Ask for a refund within 7 days of the payment and you get all of it back. No reason needed. The refund goes back the way you paid, and the full policy is on our <a href="/legal/refunds">refunds page</a>.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Is there a free plan?</h3>
+        <p>There is a 14-day free trial with every feature, and no card is needed to start it. There is no free plan after the trial: to keep using the app, you choose Pro Max or Pro. Your data is kept either way.</p>
       </div>
       <div class="faq-item">
         <h3>Do I need a card or bank details to start?</h3>
-        <p>No. You sign up with just an email and a password and the 7-day trial starts right away. You only add a payment method when you choose a plan.</p>
+        <p>No. You sign up with just an email and a password and the 14-day trial starts right away. You only add a payment method when you choose a plan.</p>
       </div>
       <div class="faq-item">
         <h3>How long does it take to set up?</h3>
-        <p>About two minutes. You export a month of sales as a CSV file from your billing app or Excel and drop it in. One Tap Manager works out which column is the date, the amount, the customer and the product, you confirm any it had to guess, and the first insights are on screen.</p>
+        <p>Your website takes about 15 minutes: 3 products, a look and your UPI ID. If you already have orders, export them as a CSV or Excel file from your billing app and drop it in. One Tap Manager works out which column is the date, the amount, the customer and the product, you confirm any it had to guess, and the first answers are on screen in about two minutes.</p>
       </div>
       <div class="faq-item">
         <h3>Do I need any technical or accounting skill to use it?</h3>
-        <p>No. Everything is written in plain sentences rather than charts you have to decode, and each suggestion comes with the work already started. If you can export a sales file and read a WhatsApp message, you can use it.</p>
+        <p>No. Everything is written in plain sentences rather than charts you have to decode, and each job comes with the work already done. If you can read a WhatsApp message, you can use it.</p>
       </div>
       <div class="faq-item">
         <h3>Who is One Tap Manager for?</h3>
-        <p>Small Indian sellers: a shop, a café, a studio, or an online store selling on Amazon, Shopify, Instagram or over the counter. It is built for one owner running the whole business, not a team of analysts.</p>
+        <p>Anyone in India who sells clothes, jewellery, perfume or similar products online, with a website or without one: on Instagram, WhatsApp, Amazon, Shopify or their own site. It is built for one owner running the whole business, not a team of analysts.</p>
       </div>
       <div class="faq-item">
         <h3>How is it different from my billing or accounting app?</h3>
@@ -892,11 +1078,11 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
       </div>
       <div class="faq-item">
         <h3>Can it run my Instagram for me?</h3>
-        <p>Yes. It plans a whole week as one story rather than seven unrelated posts, writes the captions, picks the times, and creates the images from your own product photos. You approve, and it schedules and publishes them.</p>
+        <p>It plans a whole week as one story rather than seven unrelated posts, writes the captions, picks the times and includes posts for festivals like Diwali and Navratri. On Pro Max it also makes the pictures from your own product photos. You approve, and it schedules them.</p>
       </div>
       <div class="faq-item">
         <h3>Will it tell me when to reorder stock?</h3>
-        <p>Yes, on both Pro and Pro Max. It learns how fast each item sells and how long each supplier takes, warns you before you run out, and hands you the purchase order for that supplier already filled in.</p>
+        <p>Yes, on both Pro Max and Pro. It learns how fast each item sells and how long each supplier takes, warns you before you run out, and hands you the purchase order for that supplier already filled in.</p>
       </div>
       <div class="faq-item">
         <h3>Is my data safe and private?</h3>
@@ -913,81 +1099,166 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
     {
       "@type": "Question",
       "name": "What is One Tap Manager?",
-      "acceptedAnswer": { "@type": "Answer", "text": "One Tap Manager is operations software for small Indian sellers. It reads the sales you already record, on Amazon, Shopify, Instagram or your own counter, and every morning it tells you the few things worth doing: what to reorder, which customers to win back, and what to post. Then it does most of that work for you, from the supplier order form to the Instagram captions." }
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "One Tap Manager is an app that runs a small Indian online shop for you, end to end, like a team. It brings back customers who stopped buying with a WhatsApp message written for each one, warns you before your bestsellers run out and fills in the order, gives you your own selling website with 0% commission, plans your Instagram, makes product photos and writes a GST bill for every website order. Every morning it shows you the three jobs that make you money today, already done, and you tap to approve."
+      }
     },
     {
       "@type": "Question",
       "name": "Is One Tap Manager the same as other One Tap apps?",
-      "acceptedAnswer": { "@type": "Answer", "text": "One Tap Manager is not related to the other apps called One Tap or OneTap, or to Google One Tap sign-in. It is the shop manager for small Indian sellers, at onetapmanager.com (one word in the address, three words in the name)." }
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "One Tap Manager is not related to the other apps called One Tap or OneTap, or to Google One Tap sign-in. It is the shop manager for small Indian sellers, at onetapmanager.com (one word in the address, three words in the name)."
+      }
     },
     {
       "@type": "Question",
-      "name": "Is there a free plan?",
-      "acceptedAnswer": { "@type": "Answer", "text": "There is a 7-day free trial with every feature, and no card is needed to start it. There is no free plan after the trial: to keep using the app, you choose Pro or Pro Max. Your data is kept either way." }
+      "name": "Do I need a website already?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No, it works either way. Add 3 products, with a photo, a name and a price, choose a look, add your UPI ID, and your website is live at onetapmanager.com/yourshop, or on your own domain. Share the link on WhatsApp and in your Instagram bio, and buyers order there instead of asking the price in your DMs. If you already sell on Shopify, Amazon, WooCommerce or Wix, connect it or upload a sales file instead."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do my customers pay on my website?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "By UPI straight to your own UPI ID, by cash on delivery, with an optional small advance to confirm the order, or by card, netbanking and wallets through your own Razorpay account. The money goes to you, never through us."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do you take a commission on my sales?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. One Tap Manager is a flat monthly price. There is no commission, no per-order fee and no percentage of your sales, however much you sell."
+      }
     },
     {
       "@type": "Question",
       "name": "How much does One Tap Manager cost?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Every account starts with a 7-day free trial of Pro Max, with no card. After that, Pro is ₹700 a month and includes everything except AI image generation. Pro Max is ₹1,299 a month and adds AI product photos and short product clips. We never take a percentage of your sales." }
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Every account starts with 14 days free, with the whole team and no card. After that, Pro Max is ₹1,299 a month and includes every job, including AI product photos and short product clips. If you do not need photos, Pro is ₹700 a month. We never take a percentage of your sales."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Will I be auto-debited after the trial?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Nothing renews on its own. When the trial ends, the app asks you to choose a plan, and each paid month runs for 30 days. After that, you choose to pay again from the Account tab. There is no mandate and no surprise deduction."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What if I pay and it is not for me?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ask for a refund within 7 days of the payment and you get all of it back. No reason needed. The refund goes back the way you paid, and the full policy is on our refunds page."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is there a free plan?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "There is a 14-day free trial with every feature, and no card is needed to start it. There is no free plan after the trial: to keep using the app, you choose Pro Max or Pro. Your data is kept either way."
+      }
     },
     {
       "@type": "Question",
       "name": "Do I need a card or bank details to start?",
-      "acceptedAnswer": { "@type": "Answer", "text": "No. You sign up with just an email and a password and the 7-day trial starts right away. You only add a payment method when you choose a plan." }
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. You sign up with just an email and a password and the 14-day trial starts right away. You only add a payment method when you choose a plan."
+      }
     },
     {
       "@type": "Question",
       "name": "How long does it take to set up?",
-      "acceptedAnswer": { "@type": "Answer", "text": "About two minutes. You export a month of sales as a CSV file from your billing app or Excel and drop it in. One Tap Manager works out which column is the date, the amount, the customer and the product, you confirm any it had to guess, and the first insights are on screen." }
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Your website takes about 15 minutes: 3 products, a look and your UPI ID. If you already have orders, export them as a CSV or Excel file from your billing app and drop it in. One Tap Manager works out which column is the date, the amount, the customer and the product, you confirm any it had to guess, and the first answers are on screen in about two minutes."
+      }
     },
     {
       "@type": "Question",
       "name": "Do I need any technical or accounting skill to use it?",
-      "acceptedAnswer": { "@type": "Answer", "text": "No. Everything is written in plain sentences rather than charts you have to decode, and each suggestion comes with the work already started. If you can export a sales file and read a WhatsApp message, you can use it." }
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Everything is written in plain sentences rather than charts you have to decode, and each job comes with the work already done. If you can read a WhatsApp message, you can use it."
+      }
     },
     {
       "@type": "Question",
       "name": "Who is One Tap Manager for?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Small Indian sellers: a shop, a café, a studio, or an online store selling on Amazon, Shopify, Instagram or over the counter. It is built for one owner running the whole business, not a team of analysts." }
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Anyone in India who sells clothes, jewellery, perfume or similar products online, with a website or without one: on Instagram, WhatsApp, Amazon, Shopify or their own site. It is built for one owner running the whole business, not a team of analysts."
+      }
     },
     {
       "@type": "Question",
       "name": "How is it different from my billing or accounting app?",
-      "acceptedAnswer": { "@type": "Answer", "text": "A billing app records what already happened. One Tap Manager reads those records and tells you what to do next, then does most of it for you: the reorder, the win-back message, the week of posts. It works alongside your billing app rather than replacing it." }
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A billing app records what already happened. One Tap Manager reads those records and tells you what to do next, then does most of it for you: the reorder, the win-back message, the week of posts. It works alongside your billing app rather than replacing it."
+      }
     },
     {
       "@type": "Question",
       "name": "Can it run my Instagram for me?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Yes. It plans a whole week as one story rather than seven unrelated posts, writes the captions, picks the times, and creates the images from your own product photos. You approve, and it schedules and publishes them." }
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "It plans a whole week as one story rather than seven unrelated posts, writes the captions, picks the times and includes posts for festivals like Diwali and Navratri. On Pro Max it also makes the pictures from your own product photos. You approve, and it schedules them."
+      }
     },
     {
       "@type": "Question",
       "name": "Will it tell me when to reorder stock?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Yes, on both Pro and Pro Max. It learns how fast each item sells and how long each supplier takes, warns you before you run out, and hands you the purchase order for that supplier already filled in." }
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, on both Pro Max and Pro. It learns how fast each item sells and how long each supplier takes, warns you before you run out, and hands you the purchase order for that supplier already filled in."
+      }
     },
     {
       "@type": "Question",
       "name": "Is my data safe and private?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Your sales data is yours. Third-party credentials and your uploaded data are encrypted, and the exact companies that store data for us, Render, Supabase and Razorpay, are named in the privacy policy rather than hidden behind vague wording. You can ask for your data back or deleted at any time." }
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Your sales data is yours. Third-party credentials and your uploaded data are encrypted, and the exact companies that store data for us, Render, Supabase and Razorpay, are named in the privacy policy rather than hidden behind vague wording. You can ask for your data back or deleted at any time."
+      }
     }
   ]
 }
 </script>
 
 <!-- FINAL CTA -->
-<section>
+<section class="alt">
   <div class="wrap" style="text-align:center;">
-    <h2 style="font-size:30px;">The insight you're missing is already in your files.</h2>
-    <p style="color:var(--ink-soft); max-width:52ch; margin:10px auto 26px;">Upload one month of sales. If One Tap Manager doesn't show you something you didn't know, it cost you nothing.</p>
-    <button class="btn btn-primary" onclick="openSignup('free')">Start your 7-day free trial</button>
+    <h2 style="font-size:30px;">Your team can start today. Your first rupee is due on day 15.</h2>
+    <p style="color:var(--ink-soft); max-width:56ch; margin:10px auto 26px;">Put your website live,
+      bring your first old customers back and plan your first week of posts, all inside the free 14 days.
+      If your team does not earn its keep, you pay nothing.</p>
+    <button class="btn btn-primary" onclick="openSignup('free')">Start your 14-day free trial</button>
+    <p class="hero-note" style="margin-top:14px;">No card · no auto-debit · full refund within 7 days of any payment · 0% commission</p>
   </div>
 </section>
+
+<div class="sticky-cta">
+  <button class="btn btn-primary" onclick="openSignup('free')">Start 14 days free</button>
+  <span>No card. ₹1,299 a month after, only if you want.</span>
+</div>
 
 <footer>
   <div class="wrap foot">
     <div><b>One Tap Manager</b> (onetapmanager.com) · Shop manager and operations software for small Indian sellers · © 2026 One Tap Manager</div>
-    <div>Every figure on this page is a worked example, labelled as one. There are no
-      customer quotes here, because we do not have customers yet.</div>
+    <div>Every ₹ figure on this page that is not a price is a worked example, labelled as one. There
+      are no customer quotes here, because we do not have customers yet. The day in Chapter 1 is a
+      typical day, not a real seller's.</div>
     <!-- The legal pages are linked from the footer of every page, which is where a
          shopper and a regulator both look first. Rule 3(1)(a) of the IT Rules
          requires them to be published; putting them behind a menu is how a site
@@ -998,9 +1269,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
       <a href="/legal/refunds">Refunds</a> ·
       <a href="/legal/cookies">Cookies</a> ·
       <a href="/legal/grievance">Complaints</a> ·
-      <!-- consent.js renders the "Cookie settings" control in here. It used to
-           float over the bottom-left of the page; a footer is where a person
-           actually looks for it, and it covers nothing. -->
+      <!-- consent.js renders the "Cookie settings" control in here. -->
       <span data-cookie-settings></span>
     </nav>
     <nav class="foot-links" aria-label="Features"><b>Features:</b> <a href="/features/sales-analytics">Sales analytics</a> · <a href="/features/win-back">Customer win-back</a> · <a href="/features/stock-reorder">Low stock alerts</a> · <a href="/features/gst-invoices">GST invoices</a> · <a href="/features/ai-product-photos">AI product photos</a> · <a href="/features/instagram-planner">Instagram planner</a> · <a href="/features/review-analysis">Review analysis</a> · <a href="/features/online-store">Online store</a> · <a href="/pricing">Pricing</a></nav>
@@ -1011,11 +1280,12 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid 
 </footer>
 
 
+
 <!-- SIGNUP MODAL -->
 <div class="su-backdrop" id="signupModal" style="display:none;">
   <div class="su-card">
     <button class="su-close" onclick="closeSignup()" aria-label="Close sign up">Close</button>
-    <span class="eyebrow" id="suEyebrow">7-DAY FREE TRIAL · NO CARD NEEDED</span>
+    <span class="eyebrow" id="suEyebrow">14-DAY FREE TRIAL · NO CARD NEEDED</span>
     <h3 id="suTitle">Create your One Tap Manager account</h3>
     <p class="su-sub">Pick an email and create a password. You will use these same
       details to log in to the app.</p>
@@ -1111,8 +1381,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
 function openSignup(plan) {
   suPlan = plan;
-  document.getElementById("suEyebrow").textContent = "7-DAY FREE TRIAL · NO CARD NEEDED";
-  document.getElementById("suTitle").textContent = "Start your 7-day free trial";
+  document.getElementById("suEyebrow").textContent = "14-DAY FREE TRIAL · NO CARD NEEDED";
+  document.getElementById("suTitle").textContent = "Start your 14-day free trial";
   document.getElementById("suError").style.display = "none";
   document.getElementById("signupModal").style.display = "flex";
   document.getElementById("suEmail").focus();

@@ -1,4 +1,4 @@
-"""The September 2026 pricing: a 7-day Pro Max trial saved at signup, then Pro
+"""The September 2026 pricing: a 14-day Pro Max trial saved at signup, then Pro
 ($10 / ₹700) or Pro Max ($12.99 / ₹1,299), priced by region.
 
 Run from the repo root:  python scripts/test_pricing_trial.py
@@ -51,7 +51,7 @@ r = c.get("/api/today", headers=H)
 check("trial app open", r.status_code != 402, r.status_code)
 
 # expire the trial
-rec["trial_started_at"] = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+rec["trial_started_at"] = (datetime.now(timezone.utc) - timedelta(days=pricing.TRIAL_DAYS + 1)).isoformat()
 user_store.set_key(email, billing.BILLING_KEY, rec)
 billing._lock_cache.clear()
 check("locked", billing.is_locked(email))

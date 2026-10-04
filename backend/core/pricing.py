@@ -3,7 +3,7 @@ Pricing catalog — single source of truth for the One Tap Manager offer.
 
 THREE TIERS, flat monthly, priced in the buyer's currency
 ---------------------------------------------------------
-       Free trial  7 days      every Pro Max feature, no card. When it ends
+       Free trial  14 days     every Pro Max feature, no card. When it ends
                                nothing stays free: the app locks until a plan
                                is bought. Data is kept, never deleted.
        Pro         ₹700  $10     everything except AI image and video generation
@@ -19,7 +19,7 @@ THREE TIERS, flat monthly, priced in the buyer's currency
    now read as the new Pro. "max" and "chain" alias forward to Pro Max.
 
    The trial start date is written at signup (billing.start_trial). An account
-   made before this pricing existed has no date, so its 7 days start the first
+   made before this pricing existed has no date, so its 14 days start the first
    time the app checks it, not retroactively.
 
 CREDIT PACKS
@@ -34,7 +34,7 @@ lapsed trial never deletes data, it only stops new actions.
 LAUNCH MODE
 -----------
 LAUNCH_MODE=true still turns every gate off (every account behaves as Pro Max,
-no trial clock). It now defaults to OFF, because the offer is "7-day trial,
+no trial clock). It now defaults to OFF, because the offer is "14-day trial,
 then paid". Set it to true on a deployment only for a demo or a free period.
 """
 import os
@@ -42,7 +42,7 @@ import os
 # ---------------------------------------------------------------------------
 # tiers
 # ---------------------------------------------------------------------------
-TRIAL_DAYS = 7
+TRIAL_DAYS = 14   # 7 until 4 October 2026
 PLAN_ORDER = ["free", "pro", "promax"]
 PAID_PLANS = ("pro", "promax")
 

@@ -56,7 +56,7 @@ def _save_pending(email: str, rows: dict) -> None:
 
 # ---------------- the account's billing record ----------------
 # One small record per account in user_store, so it needs no table migration:
-#   trial_started_at  when the 7-day trial began (written at signup)
+#   trial_started_at  when the 14-day trial began (written at signup)
 #   currency          "USD" or "INR", fixed at signup from where they signed up
 #   paid_until        end of the month they last paid for
 #   payments          the last few payments, with the currency they were in
@@ -118,8 +118,8 @@ def billing_currency(email: str) -> str:
 
 
 def trial_info(email: str) -> dict:
-    """Where the 7-day trial stands. An account from before the trial existed
-    gets its start date now, so it has 7 days from today rather than none."""
+    """Where the 14-day trial stands. An account from before the trial existed
+    gets its start date now, so it has the full trial from today rather than none."""
     rec = _record(email)
     started = _parse(rec.get("trial_started_at"))
     if started is None:
