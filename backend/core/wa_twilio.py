@@ -293,7 +293,8 @@ def send(email: str, phone: str, values: list, kind: str = "offer", text: str = 
     c = _cfg(email)
     if not (sid and token and c.get("from")):
         raise TwilioError("Twilio is not connected.")
-    to = _digits(phone)
+    from backend.core import whatsapp
+    to = whatsapp.digits(phone, whatsapp.default_cc(email))   # bare 10-digit numbers get the shop's country code
     if len(to) < 11:
         raise TwilioError("not a full phone number")
     data = {"From": f"whatsapp:+{c['from']}", "To": f"whatsapp:+{to}"}

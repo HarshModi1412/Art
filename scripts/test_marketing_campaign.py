@@ -823,7 +823,7 @@ msgs = [kw["data"] for m_, u_, kw in tw_calls if u_.endswith("/Messages.json")]
 with_phone = sum(1 for x in res2["results"] if x["phone"])
 check("paid sends every message by itself, nothing to tap",
       r.status_code == 200 and res2["whatsapp_sent"] == with_phone == len(msgs) and res2["to_send"] == 0
-      and res2["whatsapp_via"] == "twilio", str(res2)[:300])
+      and res2["whatsapp_via"] == "twilio", str({k_: res2.get(k_) for k_ in ("whatsapp_sent", "to_send", "whatsapp_via", "wa_later")}) + str(len(msgs)) + str(with_phone) + str([x["error"] for x in res2["results"]]))
 check("through the approved template, with each customer's own code",
       all(m_["ContentSid"] == "HXoffer" and m_["From"] == "whatsapp:+15550100000" for m_ in msgs)
       and {_json.loads(m_["ContentVariables"])["4"] for m_ in msgs}
