@@ -4166,7 +4166,7 @@ function openMapModal(d) {
         : codesNote + "Tell us which column is which. Date and Amount are required. "
           + "If your file has customer phone numbers or emails, map them too, "
           + "that is what lets a Marketing Campaign reach your customers.";
-  const labelFor = { date: "Date", amount: "Amount", customer_id: "Customer ID", customer_name: "Customer Name",
+  const labelFor = { date: "Date", amount: "Amount", customer_id: "Customer ID (blank = use the name)", customer_name: "Customer Name",
     order_id: "Order ID", product: "Product", category: "Category", subcategory: "Sub-category", quantity: "Quantity",
     review: "Review text", rating: "Rating",
     customer_phone: "Customer phone (optional)",
@@ -4176,7 +4176,8 @@ function openMapModal(d) {
     <label class="${confirm.includes(r) ? "map-check" : ""}">${labelFor[r] || r}${d.required.includes(r) ? " *" : ""}
       ${confirm.includes(r) ? `<span class="map-flag">please check</span>` : ""}
       <select data-role="${r}">${opts(d.suggested_mapping[r])}</select>
-    </label>`).join("");
+    </label>`).join("") + (d.suggested_mapping._id_note
+      ? `<p class="muted tiny" style="grid-column:1/-1;margin:2px 0 0;">${esc(d.suggested_mapping._id_note)}</p>` : "");
   $("mapPreview").innerHTML = `<table><thead><tr>${d.columns.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
     <tbody>${d.preview.map((row) => `<tr>${row.map((v) => `<td>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
   const existing = Number(d.existing_rows || 0);

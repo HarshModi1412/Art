@@ -99,6 +99,39 @@ ms = mapper.suggest_mapping(shop)
 check("a Shopify export brings its email and phone too",
       ms.get("customer_email") == "Email" and ms.get("customer_phone") == "Billing Phone", str(ms))
 
+# A plain "Name" column, and a "Contact Details" phone column where one
+# number is shared by several people (a seller's real test file): 20 people
+# must stay 20 customers, not collapse into 5 phone numbers.
+shared = pd.DataFrame({
+    "Date": pd.date_range("2026-05-01", periods=40, freq="3D"),
+    "Name": [f"{fn} {ln}" for fn, ln in zip(["Meera", "Ananya", "Vikram", "Neha", "Priya", "Aarav", "Rohan", "Isha",
+                                             "Karan", "Divya"] * 4, ["Joshi", "Rao", "Singh", "K", "Nair", "Shah",
+                                                                    "Mehta", "Kapoor", "Patel", "Menon"] * 4)],
+    "Product": ["Face Serum", "Cotton Kurta", "Hair Oil", "Silk Scarf"] * 10,
+    "Amount": [899, 899, 349, 1199] * 10,
+    "Contact Details": [9328363656, 9818675867, 9510959997] * 13 + [9328363656],
+})
+ms2 = mapper.suggest_mapping(shared)
+check("a plain 'Name' column is the customer's name", ms2.get("customer_name") == "Name", str(ms2))
+check("the phone column is still the phone", ms2.get("customer_phone") == "Contact Details")
+check("one number shared by several names: customers are told apart by name",
+      not ms2.get("customer_id") and ms2.get("_id_note"), str(ms2))
+txs, _ = mapper.build_transactions(shared, ms2)
+check("so ten people stay ten customers", txs["customer_id"].nunique() == 10, str(txs["customer_id"].nunique()))
+check("with their names and their phones",
+      txs["customer_name"].iloc[0] == "Meera Joshi" and txs["customer_phone"].iloc[0] == "9328363656")
+own = shared.assign(**{"Contact Details": [9000000000 + i % 10 for i in range(40)]})
+mo = mapper.suggest_mapping(own)
+check("one number per person: the phone stays the key (names can repeat)",
+      mo.get("customer_id") == "Contact Details" and mo.get("customer_name") == "Name", str(mo))
+txo, _ = mapper.build_transactions(own, mo)
+check("and a numeric phone key is stored as text, never as a number",
+      txo["customer_id"].map(type).eq(str).all() and txo["customer_id"].iloc[0] == "9000000000",
+      str(txo["customer_id"].head(2).tolist()))
+check("a 'Product name' column is never mistaken for a person",
+      mapper.suggest_mapping(pd.DataFrame({"Date": ["2026-01-01"] * 3, "Product name": ["Kurta", "Saree", "Kurta"],
+                                           "Amount": [1, 2, 3]})).get("customer_name") is None)
+
 # =========================================================================
 section("2. The product reads like a product")
 names = {"sku10023": "Block Print Kurta"}

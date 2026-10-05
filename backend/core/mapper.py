@@ -266,7 +266,31 @@ def suggest_mapping(df: pd.DataFrame) -> dict:
         else:
             seen[col] = role
 
+    if suggestion["customer_name"] is None:
+        for col in cols:
+            n = norm(col)
+            if col in used or not n:
+                continue
+            headerish = n in _NAME_HEADERS or (n.endswith("name") and not any(w in n for w in _NOT_PERSON))
+            if headerish and _looks_like_person(df[col]):
+                suggestion["customer_name"] = col
+                used.add(col)
+                break
+
     suggestion.update(_suggest_contacts(df))
+
+    # Who IS the customer. A phone number is the best key, except when the
+    # file shows one number shared by several different names: then keying by
+    # it merges those people into one (20 customers became 5, and nobody was
+    # "quiet" any more). With no ID column at all, the name is the key.
+    name_col, id_col = suggestion.get("customer_name"), suggestion.get("customer_id")
+    phone_col = suggestion.get("customer_phone")
+    # (Left empty rather than pointed at the name column, so no column holds
+    # two roles; build_transactions keys customers by name when there is no ID.)
+    if name_col and id_col and id_col == phone_col and _phone_is_shared(df, phone_col, name_col):
+        suggestion["customer_id"] = None
+        suggestion["_id_note"] = ("Some phone numbers belong to several different names, so customers "
+                                  "are told apart by name.")
     suggestion["_product_codes"] = product_is_codes(df, suggestion.get("product"))
 
     # What the mapping screen needs in order to ASK instead of pre-filling: which
@@ -276,6 +300,41 @@ def suggest_mapping(df: pd.DataFrame) -> dict:
     suggestion["_needs_confirmation"] = sorted(
         [r for r in ("date", "amount") if r in guessed or not suggestion.get(r)])
     return suggestion
+
+
+# A plain "Name" column is the customer's name far more often than anything
+# else, but "name" is also a product keyword, so it is decided by content.
+_NAME_HEADERS = {"name", "names", "customer", "customers", "fullname", "person", "client",
+                 "buyer", "guest", "patron", "member", "party", "partyname"}
+_NOT_PERSON = ("product", "item", "brand", "shop", "store", "file", "sheet", "category", "company",
+               "business", "dish", "menu", "sku", "variant", "city", "state", "country", "payment",
+               "courier", "channel", "platform", "seller", "vendor", "supplier", "staff", "employee")
+
+
+def _looks_like_person(series: pd.Series) -> bool:
+    """Do the values read like people's names: words with letters, no
+    emails, not numbers, a handful of words at most, and repeat buyers."""
+    vals = series.dropna().astype(str).str.strip()
+    vals = vals[vals != ""].head(500)
+    if len(vals) < 2:
+        return False
+    letters = vals.str.contains(r"[A-Za-z\u0900-\u097F]", regex=True).mean()
+    emails = vals.str.contains("@", regex=False).mean()
+    digits = (vals.str.replace(r"\D", "", regex=True).str.len() >= 5).mean()
+    words = vals.str.split().str.len().mean()
+    return letters >= 0.9 and emails <= 0.05 and digits <= 0.05 and words <= 4.5
+
+
+def _phone_is_shared(df: pd.DataFrame, phone_col: str, name_col: str) -> bool:
+    """Does one number belong to several different people in this file (a
+    family or a shop phone, or made-up test data)? Then it cannot tell
+    customers apart, and the name has to."""
+    sub_ = df[[phone_col, name_col]].dropna()
+    if sub_.empty:
+        return False
+    sub_ = sub_.assign(_n=sub_[name_col].astype(str).str.strip().str.lower())
+    per = sub_.groupby(sub_[phone_col].astype(str))["_n"].nunique()
+    return bool(len(per)) and float((per > 1).mean()) >= 0.5
 
 
 def _looks_like(series: pd.Series, kind: str) -> bool:
@@ -371,14 +430,21 @@ def build_transactions(df: pd.DataFrame, mapping: dict) -> tuple[pd.DataFrame, d
     # Contact roles may point at a column another role already uses (a shop
     # that keys customers by phone), so they are copied, not renamed.
     contacts = contact_frame(df, mapping)
+    # The customer's name may also be their ID (no ID column, or a phone
+    # shared between people): one source column, copied into both roles.
+    id_is_name = bool(mapping.get("customer_id")) and mapping.get("customer_id") == mapping.get("customer_name")
     rename = {src: role for role, src in mapping.items()
               if src and src in df.columns and role in ROLE_KEYWORDS
-              and role not in CONTACT_ROLES}
+              and role not in CONTACT_ROLES and not (id_is_name and role == "customer_id")}
     out = df.rename(columns=rename)
     keep = [c for c in ROLE_KEYWORDS if c in out.columns and c not in CONTACT_ROLES]
     out = out[keep].copy()
     for role, series in contacts.items():
         out[role] = series.values
+    if "customer_id" not in out.columns and "customer_name" in out.columns:
+        out["customer_id"] = out["customer_name"]
+    if "customer_id" in out.columns:
+        out["customer_id"] = _id_text(out["customer_id"])
 
     rows_before = len(out)
 
@@ -407,6 +473,19 @@ def build_transactions(df: pd.DataFrame, mapping: dict) -> tuple[pd.DataFrame, d
         "dropped_bad_amount": int(bad_amount),
     }
     return out, diagnostics
+
+
+def _id_text(series: pd.Series) -> pd.Series:
+    """Customer IDs as text, always. A phone or number column arrives as
+    int64 (or float with ".0" when it has blanks); keys elsewhere (contacts,
+    cooldowns, codes) are strings, so a numeric key silently matched nothing."""
+    if pd.api.types.is_numeric_dtype(series):
+        num = pd.to_numeric(series, errors="coerce")
+        whole = num.dropna()
+        if len(whole) and (whole == whole.round()).all():
+            return num.round().astype("Int64").astype(str).replace("<NA>", pd.NA)
+        return num.astype(str).replace("nan", pd.NA)
+    return series.map(lambda v: v if pd.isna(v) else str(v).strip())
 
 
 def _clean_numeric(series: pd.Series) -> pd.Series:
