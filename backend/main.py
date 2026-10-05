@@ -1712,10 +1712,14 @@ def _ig_redirect_url(request: Request) -> str:
     Env var wins (so a Render app can pin a stable HTTPS URL); otherwise we
     derive it from the incoming request."""
     from os import environ as _env
-    from_env = _env.get("META_REDIRECT_URL")
+    from backend.core import publicurl
+    from_env = (_env.get("META_REDIRECT_URL") or "").strip()
     if from_env:
         return from_env
-    return f"{request.url.scheme}://{request.url.netloc}/api/instagram/oauth/callback"
+    # NOT request.url.scheme: on Render TLS ends at the edge, so the app sees
+    # "http" and Meta was sent http://.../callback, which never matches the
+    # https:// URI registered in the Meta app ("Invalid redirect_uri").
+    return f"{publicurl.from_request(request)}/api/instagram/oauth/callback"
 
 
 @app.get("/api/instagram/status")
