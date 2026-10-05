@@ -8183,7 +8183,9 @@ function mcMoney(sym, v) { return `${sym || "₹"}${fmt(Number(v) || 0)}`; }
 
 /* *bold* in a WhatsApp message, shown the way WhatsApp will show it */
 function mcWa(text) {
-  return esc(text || "").replace(/\*([^*\n]+)\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
+  // WhatsApp's own formatting: *bold*, and _italic_ only at word edges (never inside a link)
+  return esc(text || "").replace(/\*([^*\n]+)\*/g, "<b>$1</b>")
+    .replace(/(^|\s)_([^_\n]+)_(?=\s|$)/g, "$1<i>$2</i>").replace(/\n/g, "<br>");
 }
 
 function renderMarketing(d) {
@@ -8413,10 +8415,17 @@ function mcDraftHtml(d, openId) {
           <h4 class="mc-h">${sic("gift")}${title}${d.trigger === "auto" ? ` <span class="mc-tag">prepared for you</span>` : ""}</h4>
           <p class="muted tiny" style="margin:2px 0 0;">${ctx.offer_label
             ? `${esc(ctx.offer_label)} · codes valid till ${esc(ctx.expiry_label || "")}`
-            : "No discount · every order from it is still tracked"}${ctx.link ? "" : " · your website is not published yet, so nothing can be tracked online"}</p>
+            : "No discount · every order from it is still tracked"}</p>
         </div>
-        <button class="btn ghost sm" id="mcDiscard">${sic("trash")}Delete</button>
+        <div class="mc-head-btns">
+          <button class="btn ghost sm" id="mcDownload" title="Every customer's phone, code and message, as Excel">${sic("download")}Download</button>
+          <button class="btn ghost sm" id="mcDiscard">${sic("trash")}Delete</button>
+        </div>
       </div>
+      ${d.has_site ? "" : `<div class="mc-note">${sic("whatsapp")}<span><b>No website yet, so customers use their code on WhatsApp.</b>
+        Each message asks them to reply with their code, with a link that opens a chat with you
+        ${(wa.number) ? "(every tap on it is counted in the results)" : `. <a href="#" id="mcWaNum">Add your WhatsApp number</a> so the link has somewhere to go`}.
+        Publish your website and the link takes them to your shop with the code already applied.</span></div>`}
       <div class="mc-counts">
         <span><b>${fmt(c.audience || 0)}</b> customers</span>
         <span>${sic("whatsapp")}<b>${fmt(c.phone || 0)}</b> on WhatsApp</span>
@@ -8436,10 +8445,13 @@ function mcDraftHtml(d, openId) {
           </div>
         </div>
         <div class="mc-msg">
-          <div class="mc-msg-h"><b>Every customer gets their own message</b></div>
-          <p class="muted tiny" style="margin:0 0 10px;">Ten different voices, each with the customer's name,
-            what they bought and something they are likely to love next (from what your other customers
-            buy together). Open anyone below to see exactly what they get, add their number, or write it yourself.</p>
+          <div class="mc-msg-h"><b>Every customer gets their own message, from you</b></div>
+          <p class="muted tiny" style="margin:0 0 10px;">Written as a personal note from the founder: their name, what
+            they bought, how often they order, and what people who bought the same thing also bought (or your
+            most-bought piece they don't have yet). Open anyone below to see exactly what they get.</p>
+          <label class="mc-sign">Signed by
+            <input id="mcFounder" maxlength="40" placeholder="Your first name" value="${esc(d.founder || "")}">
+            <span class="muted tiny">, founder of ${esc(ctx.brand || "your shop")}</span></label>
           <div class="mc-bubble">${mcWa((rows.find((r) => r.phone || r.email) || rows[0] || {}).message)}</div>
         </div>
       </div>
@@ -8500,6 +8512,12 @@ function wireMcDraft() {
     .then((nd) => { repaint(nd, openId); if (okMsg) toast(okMsg); })
     .catch((e) => err(e.message));
 
+  $("mcDownload").onclick = () => download(`/api/campaign/${encodeURIComponent(d.id)}/download`, "campaign-messages.xlsx");
+  const wn = $("mcWaNum");
+  if (wn) wn.onclick = (e) => { e.preventDefault(); openWhatsAppSetup(); };
+  const fo = $("mcFounder");
+  if (fo) fo.onchange = () => update({ founder: fo.value.trim() }, null,
+    fo.value.trim() ? `Every message is now signed by ${fo.value.trim()}` : "Signed as the founder");
   $("mcDiscard").onclick = async () => {
     if (!confirm("Delete this campaign? Nothing has been sent, and its codes will never work.")) return;
     try {
@@ -8753,6 +8771,8 @@ function mcHistoryHtml(rows, sym) {
               · ${s.total != null ? `<b>${fmt(s.sent_count || 0)} of ${fmt(s.total)} sent</b>` : `${fmt(s.delivered || 0)} sent`}
               ${codes && codes.issued ? ` · <b>${fmt(codes.redeemed)} of ${fmt(codes.issued)} codes used</b>${codes.revenue ? `, ${mcMoney(sym, codes.revenue)} in orders` : ""}` : ""}</span></div>
             ${s.tracked ? `<button class="btn ghost sm" data-an="${esc(s.campaign_id)}">${sic("chart")}Results</button>` : ""}
+            ${s.campaign_id ? `<button class="btn ghost sm mc-del" data-dl="${esc(s.campaign_id)}" title="Download messages and phone numbers"
+              aria-label="Download messages and phone numbers">${sic("download")}</button>` : ""}
             <button class="btn ghost sm mc-del" data-delcamp="${esc(s.campaign_id || "")}" data-delat="${esc(s.at || "")}"
               title="Delete this campaign" aria-label="Delete this campaign">${sic("trash")}</button>
           </div>`;
@@ -8763,6 +8783,8 @@ function mcHistoryHtml(rows, sym) {
 
 function wireMcHistory() {
   document.querySelectorAll("[data-an]").forEach((b) => b.onclick = () => openCampaignAnalysis(b.dataset.an));
+  document.querySelectorAll("[data-dl]").forEach((b) => b.onclick = () =>
+    download(`/api/campaign/${encodeURIComponent(b.dataset.dl)}/download`, "campaign-messages.xlsx"));
   document.querySelectorAll("[data-delcamp]").forEach((b) => b.onclick = async () => {
     if (!confirm("Delete this campaign? It leaves your list and its results, and WhatsApp messages not sent yet are "
       + "dropped. Codes customers already got keep working.")) return;

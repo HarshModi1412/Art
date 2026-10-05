@@ -225,6 +225,7 @@ ICONS = {
     "user": '<circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6"/>',
     "close": '<path d="M6 6 18 18M18 6 6 18"/>',
     "trash": '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
+    "download": '<path d="M12 4v11M7 10l5 5 5-5M5 19h14"/>',
     "plus": '<path d="M12 5v14M5 12h14"/>',
     "minus": '<path d="M5 12h14"/>',
     "check": '<path d="m4.5 12.5 5 5 10-11"/>',

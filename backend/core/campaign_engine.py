@@ -103,6 +103,27 @@ def discard(email: str, draft_id: str) -> None:
 
 
 # ------------------------------------------------------------------ helpers
+FOUNDER_KEY = "founder_name"
+
+
+def founder_name(email: str) -> str:
+    return str(user_store.get_key(email, FOUNDER_KEY, "") or "").strip()[:40]
+
+
+def contact_ctx(email: str) -> dict:
+    """What a message needs about the seller beyond the brand: who signs it,
+    and, with no website, the tracked chat link (only when there is a
+    WhatsApp number for it to open)."""
+    from backend.core import chatlink, whatsapp
+    out = {"founder": founder_name(email), "has_site": bool(store_link(email)), "chat_prefix": ""}
+    if not out["has_site"] and whatsapp._cfg(email).get("number"):  # noqa: SLF001
+        try:
+            out["chat_prefix"] = f"{_base()}/w/{chatlink.token(email)}/"
+        except Exception as e:  # noqa: BLE001
+            log.warning("chat link unavailable for %s: %s", email, e)
+    return out
+
+
 def _symbol(email: str) -> str:
     try:
         from backend.core import currency, sitebuilder
@@ -267,6 +288,7 @@ def build(email: str, reason: str = "winback", offer: dict | None = None,
     if reason == "cross_sell":
         for c in fresh:
             c["pick_display"] = cw.clean_product_name(c.get("pair_pick"), names)
+            c["pick_kind"], c["pick_from"] = "pair", c["product_display"]
     elif reason in ("restock", "thank_you"):
         for c in fresh:
             c["pick_display"] = ""         # one product, one reason to write
@@ -316,6 +338,7 @@ def build(email: str, reason: str = "winback", offer: dict | None = None,
         "offer_short": f"{val:g}% OFF" if offer["kind"] == "percent" else f"{sym}{val:g} OFF",
         "expiry_label": expiry_label, "valid_until": valid_until,
         "link": store_link(email), "symbol": sym, "campaign_id": campaign_id,
+        **contact_ctx(email),
     }
     voices = cw.deal(campaign_id, len(fresh), reason)
 
@@ -329,6 +352,8 @@ def build(email: str, reason: str = "winback", offer: dict | None = None,
                "favorite_item": c.get("favorite_item") or "",
                "product_display": c["product_display"],
                "pick_display": c.get("pick_display") or "",
+               "pick_kind": c.get("pick_kind") or "", "pick_from": c.get("pick_from") or "",
+               "frequency": int(c.get("frequency") or 0),
                "voice": voice,
                "code": (codes.get(str(c["customer_id"])) or {}).get("code") or ""}
         row.update(cw.message_for(row, ctx))
@@ -376,7 +401,8 @@ def public_draft(email: str, draft: dict) -> dict:
             "whatsapp": whatsapp.status(email),
             "email_ready": email_ready(email),
             "image_allowance": campaign_image.allowance(email),
-            "wa_limit_default": WA_LIMIT_DEFAULT}
+            "wa_limit_default": WA_LIMIT_DEFAULT,
+            "founder": founder_name(email), "has_site": bool(store_link(email))}
 
 
 def update_draft(email: str, draft_id: str, patch: dict) -> dict:
@@ -416,6 +442,9 @@ def update_draft(email: str, draft_id: str, patch: dict) -> dict:
             if why:
                 raise CampaignError(why)
             row["message_override"] = str(edit["message"]).strip()
+    if patch.get("founder") is not None:
+        user_store.set_key(email, FOUNDER_KEY, str(patch["founder"]).strip()[:40])
+    draft["ctx"] = {**draft["ctx"], "link": store_link(email), **contact_ctx(email)}
     if patch.get("image_url"):
         draft["image"] = {"url": str(patch["image_url"]),
                           "source": patch.get("image_source") or "upload",
@@ -536,7 +565,7 @@ def send(email: str, draft_id: str, channels: tuple[str, ...] = ("whatsapp", "em
     except ValueError as e:
         raise CampaignError(str(e))
     channels = tuple(c for c in channels if c in ("whatsapp", "email")) or ("whatsapp", "email")
-    ctx = {**draft["ctx"], "brand": brand}
+    ctx = {**draft["ctx"], "brand": brand, "link": store_link(email), **contact_ctx(email)}
     image_url = absolute((draft.get("image") or {}).get("url") or "")
     wa = whatsapp.status(email)
     if wa_paid is None:
@@ -706,10 +735,20 @@ def history(email: str, limit: int = 30) -> list[dict]:
 
 # ------------------------------------------------------------------ picks
 def _add_picks(txns, profiles: list[dict], names: dict) -> None:
-    """For each customer, one thing to suggest: Apriori rules over the shop's
-    own orders (analytics.association_rules), what people who bought what they
-    bought also buy, that they have not bought themselves. Falls back to the
-    shop's best sellers they do not own. Sets `pick_display` (clean name)."""
+    """For each customer, one thing to suggest, and where the suggestion came
+    from, because the message says so:
+
+      1. pair: what people who bought what THIS customer bought also bought.
+         Apriori rules first (analytics.association_rules, by lift); then,
+         for shops too small for rules, plain co-buyers: of the other
+         customers who bought their favourite product, the other product most
+         of them bought (at least two of them). Sets `pick_from`, the product
+         the suggestion is about.
+      2. best: no such link, so the shop's most-bought product (by number of
+         customers who bought it) that this customer does not already own;
+         the second one if they own the first, and so on.
+
+    Sets `pick_display`, `pick_kind` ("pair" | "best") and `pick_from`."""
     from backend.core import analytics
     from backend.core import campaign_writer as cw
     if "product" not in txns.columns or "customer_id" not in txns.columns:
@@ -719,23 +758,49 @@ def _add_picks(txns, profiles: list[dict], names: dict) -> None:
     except Exception as e:  # noqa: BLE001 — a suggestion is a nice-to-have
         log.warning("association rules failed: %s", e)
         rules = {}
-    sub = txns[["customer_id", "product", "amount"]].dropna(subset=["customer_id", "product"])
-    best = (sub.groupby(sub["product"].astype(str))["amount"].sum()
-            .sort_values(ascending=False).head(15).index.tolist())
-    ids = {str(p.get("customer_id")) for p in profiles}
-    sub = sub[sub["customer_id"].astype(str).isin(ids)]
-    owned = sub.groupby(sub["customer_id"].astype(str))["product"].agg(
-        lambda s: set(map(str, s))).to_dict()
+    sub = txns[["customer_id", "product"]].dropna(subset=["customer_id", "product"]).copy()
+    sub["customer_id"] = sub["customer_id"].astype(str)
+    sub["product"] = sub["product"].astype(str)
+    owned_all = sub.groupby("customer_id")["product"].agg(lambda x: set(x)).to_dict()
+    # most bought = bought by the most customers (not the most money)
+    best = sub.drop_duplicates().groupby("product")["customer_id"].nunique() \
+        .sort_values(ascending=False).index.tolist()
+    buyers_of = sub.drop_duplicates().groupby("product")["customer_id"].agg(lambda x: set(x)).to_dict()
+
+    def clean(x: str) -> str:
+        return cw.clean_product_name(x, names)
+
     for p in profiles:
-        bought = owned.get(str(p.get("customer_id")), set())
-        bought_clean = {cw.clean_product_name(x, names) for x in bought}
-        raw = analytics.recommend_for(bought, rules, best)
-        pick = cw.clean_product_name(raw, names) if raw else ""
-        # "you might also like the Linen Shirt" to someone who bought the blue
-        # Linen Shirt reads as if the shop was not paying attention
-        if pick and (pick in bought_clean or pick == p.get("product_display")):
-            pick = ""
-        p["pick_display"] = pick
+        cid = str(p.get("customer_id"))
+        bought = owned_all.get(cid, set())
+        bought_clean = {clean(x) for x in bought} | {p.get("product_display") or ""}
+        fav_raw = str(p.get("favorite_item") or "")
+        pick, kind, frm = "", "", ""
+        # 1a. Apriori, from the favourite first, then anything else they own
+        for src in ([fav_raw] if fav_raw in bought else []) + sorted(bought - {fav_raw}):
+            cand = analytics.recommend_for({src}, rules, None)
+            if cand and cand not in bought and clean(cand) not in bought_clean:
+                pick, kind, frm = clean(cand), "pair", clean(src)
+                break
+        # 1b. co-buyers of their favourite
+        if not pick and fav_raw in buyers_of:
+            others = buyers_of[fav_raw] - {cid}
+            counts: dict[str, int] = {}
+            for o in others:
+                for item in owned_all.get(o, ()):
+                    if item not in bought:
+                        counts[item] = counts.get(item, 0) + 1
+            for item, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+                if n >= 2 and clean(item) and clean(item) not in bought_clean:
+                    pick, kind, frm = clean(item), "pair", clean(fav_raw)
+                    break
+        # 2. the most-bought product they do not own (second if they own the first)
+        if not pick:
+            for item in best:
+                if item not in bought and clean(item) and clean(item) not in bought_clean:
+                    pick, kind = clean(item), "best"
+                    break
+        p["pick_display"], p["pick_kind"], p["pick_from"] = pick, kind, frm
 
 
 # ---------------------------------------------------------------- records
@@ -1099,6 +1164,36 @@ def mark_skipped(email: str, campaign_id: str, customer_id: str) -> dict:
     user_store.set_key(email, RECORDS_KEY, recs)
     _sync_wa_task(email, campaign_id)
     return queue(email, campaign_id)
+
+
+def export_rows(email: str, campaign_id: str) -> tuple[str, list[dict]]:
+    """Every customer in a campaign with their phone, email, code and the
+    exact message, for the seller to download (and send from anywhere)."""
+    draft = get_draft(email, campaign_id)
+    rec = _records(email).get(campaign_id) or {}
+    if not draft and not rec:
+        raise CampaignError("That campaign could not be found.")
+    status = {t["customer_id"]: t for t in rec.get("targets") or []}
+    rows = (draft or {}).get("rows") or []
+    out = []
+    for r in rows:
+        t = status.get(r["customer_id"]) or {}
+        wa = t.get("whatsapp") or ""
+        out.append({
+            "Customer": r.get("customer_name") or r["customer_id"],
+            "Phone": r.get("phone") or "", "Email": r.get("email") or "",
+            "Code": r.get("code") or "",
+            "Message": r.get("message") or "",
+            "WhatsApp link": campaigns.wa_link(r.get("phone") or "", r.get("message") or "") if r.get("phone") else "",
+            "Status": ({"tapped": "Sent", "sent": "Sent", "tap": "To send", "skipped": "Left out"}.get(wa)
+                       or ("Emailed" if t.get("email") == "sent" else "Draft" if (draft or {}).get("state") == "draft"
+                           else "Not in this send")),
+            "Bought": r.get("product_display") or "", "Suggested": r.get("pick_display") or "",
+            "Spent": r.get("monetary") or 0,
+        })
+    name = label((draft or rec).get("reason") or "winback")
+    occ = (draft or rec).get("occasion") or ""
+    return (f"{occ + ' ' if occ else ''}{name}".strip(), out)
 
 
 def finish_here(email: str, campaign_id: str) -> dict:

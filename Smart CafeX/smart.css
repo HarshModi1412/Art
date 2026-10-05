@@ -4046,3 +4046,12 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .mc-del { padding: 6px 8px; color: var(--muted); }
 .mc-del:hover { color: var(--red); }
 .mc-del svg { width: 15px; height: 15px; }
+
+/* Campaign draft: founder signature, no-website note, header buttons. */
+.mc-head-btns { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-start; }
+.mc-sign { display: flex !important; flex-direction: row !important; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin: 0 0 10px; font-size: 0.8125rem; }
+.mc-sign input { width: 150px !important; flex: 0 0 150px; padding: 6px 9px; }
+.mc-note { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; margin: 10px 0 4px;
+  border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); font-size: 0.8125rem; line-height: 1.5; }
+.mc-note svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--green); }

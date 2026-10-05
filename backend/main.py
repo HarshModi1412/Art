@@ -4241,6 +4241,7 @@ class CampaignUpdateBody(BaseModel):
     # one customer: {customer_id, phone?, email?, message?, reset_message?}
     row: dict | None = None
     remove: list[str] | None = None
+    founder: str | None = None       # the name every message is signed with
 
 
 class CampaignSendBody(BaseModel):
@@ -4392,6 +4393,26 @@ def campaign_skip(campaign_id: str, body: CampaignTapBody,
         return campaign_engine.mark_skipped(email, campaign_id, body.customer_id)
     except campaign_engine.CampaignError as e:
         raise HTTPException(400, str(e))
+
+
+@app.get("/api/campaign/{campaign_id}/download")
+def campaign_download(campaign_id: str, authorization: str | None = Header(default=None)):
+    """Every customer in the campaign: name, phone, email, code, their exact
+    message and a WhatsApp link, as an Excel file."""
+    email = require_user(authorization)
+    from backend.core import campaign_engine
+    try:
+        title, rows = campaign_engine.export_rows(email, campaign_id)
+    except campaign_engine.CampaignError as e:
+        raise HTTPException(404, str(e))
+    if not rows:
+        raise HTTPException(400, "Nobody is in this campaign.")
+    buf = smart._to_xlsx(pd.DataFrame(rows), "Messages")
+    from fastapi.responses import StreamingResponse
+    fname = re.sub(r"[^A-Za-z0-9]+", "-", title).strip("-").lower() or "campaign"
+    return StreamingResponse(
+        buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={fname}-messages.xlsx"})
 
 
 @app.post("/api/campaign/{campaign_id}/finish")
@@ -6299,6 +6320,28 @@ def _render_store(handle: str, request: Request, product_id: str = "") -> Respon
                         f"<script>window.__STORE_HANDLE__={json.dumps(handle)};</script></head>", 1)
     return Response(content=html, media_type="text/html",
                     headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
+
+
+@app.get("/w/{token}/{code}")
+def campaign_chat_link(token: str, code: str):
+    """The tracked "message the shop" link in campaigns from shops with no
+    website: counts the open on the customer's code, then opens a WhatsApp
+    chat with the shop with "I'd like to use my code ..." already typed."""
+    from fastapi.responses import HTMLResponse
+    from backend.core import chatlink, discounts
+    seller = chatlink.seller_for(token)
+    if not seller:
+        raise HTTPException(404, "This link is not valid.")
+    discounts.track(seller, code, "click")
+    target = chatlink.target(seller, code)
+    if target:
+        return RedirectResponse(target, status_code=302)
+    safe = re.sub(r"[^A-Za-z0-9-]", "", code)[:40]
+    return HTMLResponse(
+        "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<body style='font-family:system-ui;padding:32px;text-align:center'>"
+        f"<p>Your code</p><h1 style='letter-spacing:2px'>{safe}</h1>"
+        "<p>Reply to the message you got from the shop with this code, and they will set your order aside.</p>")
 
 
 @app.get("/s/{handle}")

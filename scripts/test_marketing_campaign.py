@@ -251,11 +251,11 @@ check("no picture provider means an upload request, not an error",
 
 # --- not the same message for everyone
 voices = [x["voice"] for x in rows]
-check("ten different voices are used across the campaign", len(set(voices)) == min(10, len(rows)),
+check("every voice is used before any repeats", len(set(voices)) == min(len(cw.VOICES["winback"]), len(rows)),
       str(sorted(set(voices))))
 check("and no two neighbours share one",
       all(voices[i] != voices[i + 1] for i in range(len(voices) - 1)))
-firsts = {x["message"].split("\n")[0][:40] for x in rows}
+firsts = {x["message"].split("\n\n")[1][:40] for x in rows}   # [0] is the founder's header
 check("the messages genuinely read differently", len(firsts) >= min(8, len(rows)), str(len(firsts)))
 check("subjects vary too", len({x["email_subject"] for x in rows}) >= min(5, len(rows)))
 picks = [x for x in rows if x["pick_display"]]
@@ -486,9 +486,9 @@ for kind, extra in kinds.items():
     closes = {cw3.fill(v["close"], {"brand": "Rang Studio"}) for v in cw3.VOICES[kind]}
     wb_closes = {cw3.fill(v["close"], {"brand": "Rang Studio"}) for v in cw3.VOICES["winback"]} - closes
     check(f"{kind}: written in its own voices",
-          all(set(x["message"].split("\n\n")) & closes for x in dd["rows"])
-          and not any(set(x["message"].split("\n\n")) & wb_closes for x in dd["rows"])
-          and len({x["voice"] for x in dd["rows"]}) == min(10, len(dd["rows"])),
+          all(any(cl in x["message"] for cl in closes) for x in dd["rows"])
+          and not any(any(cl in x["message"] for cl in wb_closes) for x in dd["rows"])
+          and len({x["voice"] for x in dd["rows"]}) == min(len(cw3.VOICES[kind]), len(dd["rows"])),
           dd["rows"][0]["message"])
     c.post(f"/api/campaign/{dd['id']}/discard", headers=H)
 
@@ -510,7 +510,7 @@ if "restock" in built:
     check("restock: names the product that is due, with no discount and no code in sight",
           all(x["product_display"] in x["message"] and x["code"] not in x["message"].split("?")[0]
               and "off" not in x["message"].split("?")[0].lower().replace("office", "")
-              for x in rs["rows"]), rs["rows"][0]["message"])
+              for x in rs["rows"]), str([x["message"] for x in rs["rows"] if not (x["product_display"] in x["message"] and x["code"] not in x["message"].split("?")[0] and "off" not in x["message"].split("?")[0].lower().replace("office", ""))][:1]))
     check("restock: the link carries a quiet tracking code (ref=), not code=",
           all(f"ref={x['code']}" in x["message"] and "code=" not in x["message"] for x in rs["rows"]))
     ref = rs["rows"][0]["code"]
@@ -842,6 +842,105 @@ check("and sends the full personal message as text",
       tw_calls[-1][2]["data"].get("Body") == "Hi Asha, your code is X1" and "ContentSid" not in tw_calls[-1][2]["data"])
 r = c.post("/api/whatsapp/twilio/disconnect", headers=H).json()
 check("disconnecting Twilio goes back to free", not r["twilio"]["connected"] and r["send_pref"] == "free")
+
+section("11. Founder's voice, picks from real behaviour, no-website chat link, download")
+import io as _io  # noqa: E402
+import re as _re  # noqa: E402
+from backend.core import analytics as an11, campaign_engine as ce11, chatlink, founder_voices as fv  # noqa: E402
+
+# --- fifty voices, every one complete
+check("fifty founder-voice messages", sum(len(v) for v in fv.VOICES.values()) == 50)
+full = {"name": "Asha", "product": "Linen Shirt", "pick": "Silk Scarf", "offer": "Rs 200 off",
+        "code": "ASHA-1234", "expiry": "16 Oct", "link": "https://x.test/s/a", "brand": "Rang Studio",
+        "occasion": "Diwali", "orders": "4", "chatlink": "https://x.test/w/t/ASHA-1234"}
+leftover = [(k, f) for k, vs in fv.VOICES.items() for v in vs for f, t in v.items()
+            if _re.search(r"\{[a-z]+\}", cw.fill(t, full))]
+check("no voice leaves a {variable} unfilled", not leftover, str(leftover[:3]))
+check("every voice has an offer line and a no-discount line",
+      all(v.get("offer") and v.get("none") and v.get("open") and v.get("close") for vs in fv.VOICES.values() for v in vs))
+check("offer lines always carry the code and the date",
+      all("{code}" in v["offer"] and "{expiry}" in v["offer"] for vs in fv.VOICES.values() for v in vs))
+
+# --- picks: people who bought the same, else the most-bought they don't own
+t11 = pd.DataFrame([
+    ("A", "Linen Shirt"), ("B", "Linen Shirt"), ("B", "Silk Scarf"), ("C", "Linen Shirt"), ("C", "Silk Scarf"),
+    ("F", "Linen Shirt"), ("F", "Silk Scarf"), ("D", "Cotton Kurta"), ("E", "Cotton Kurta"),
+    ("G", "Rare Vase"), ("K", "Brass Lamp"), ("K", "Linen Shirt"),
+], columns=["customer_id", "product"])
+t11["amount"] = 100
+_rules = an11.association_rules
+an11.association_rules = lambda *a, **k: {"rules": {}}     # co-buyers and best sellers only
+prof = [{"customer_id": "A", "favorite_item": "Linen Shirt", "product_display": "Linen Shirt"},
+        {"customer_id": "G", "favorite_item": "Rare Vase", "product_display": "Rare Vase"},
+        {"customer_id": "K", "favorite_item": "Brass Lamp", "product_display": "Brass Lamp"}]
+ce11._add_picks(t11, prof, {})
+an11.association_rules = _rules
+pa, pg, pk = prof
+check("bought the Linen Shirt: suggested what other Linen Shirt buyers also bought",
+      pa["pick_display"] == "Silk Scarf" and pa["pick_kind"] == "pair" and pa["pick_from"] == "Linen Shirt", str(pa))
+check("nobody shares their purchase: the shop's most-bought product",
+      pg["pick_display"] == "Linen Shirt" and pg["pick_kind"] == "best", str(pg))
+check("already owns the most-bought one: the second most-bought",
+      pk["pick_display"] == "Silk Scarf" and pk["pick_kind"] == "best", str(pk))
+
+ctx11 = {"reason": "winback", "brand": "Rang Studio", "offer": {"kind": "flat", "value": 200},
+         "offer_label": "Rs 200 off", "expiry_label": "16 Oct", "link": "https://x.test/s/rang",
+         "campaign_id": "c1", "founder": ""}
+row11 = {"customer_name": "Asha K", "product_display": "Linen Shirt", "pick_display": "Silk Scarf",
+         "pick_kind": "pair", "pick_from": "Linen Shirt", "code": "ASHA-1234", "voice": 0, "frequency": 1}
+m = cw.message_for(row11, ctx11)["message"]
+check("signed by the founder, at the top", m.startswith("_A personal note from the founder of Rang Studio_"), m[:80])
+check("names their product and says the suggestion comes from people who bought it",
+      "Linen Shirt" in m and "Silk Scarf" in m and "bought the Linen Shirt" in m, m)
+m = cw.message_for(row11, {**ctx11, "founder": "Harsh"})["message"]
+check("with the founder's name when given", m.startswith("_A personal note from Harsh, founder of Rang Studio_")
+      and m.rstrip().endswith("Harsh, Rang Studio"), m[-60:])
+m = cw.message_for({**row11, "frequency": 7}, ctx11)["message"]
+check("a regular hears how many times they ordered, and still their product", "7 times" in m and "Linen Shirt" in m, m)
+m = cw.message_for({**row11, "pick_kind": "best", "pick_from": ""}, ctx11)["message"]
+check("a best-seller suggestion is worded as one, never as 'people who bought'",
+      "Silk Scarf" in m and "bought the Linen Shirt" not in m, m)
+lens = [len(cw.message_for({**row11, "voice": i, "frequency": 5}, ctx11)["message"]) for i in range(12)]
+check("short enough for a phone screen", max(lens) < 700, str(max(lens)))
+
+# --- no website: reply with the code, and a tracked chat link
+nos = {**ctx11, "link": "", "chat_prefix": "https://x.test/w/tok/"}
+m = cw.message_for(row11, nos)
+check("no website: asks them to reply with their code on WhatsApp",
+      "*ASHA-1234*" in m["message"] and "reply" in m["message"].lower(), m["message"])
+check("with a chat link that carries the code", "https://x.test/w/tok/ASHA-1234" in m["message"]
+      and m["shop_link"] == "https://x.test/w/tok/ASHA-1234")
+check("and no shop link that would go nowhere", "/s/" not in m["message"])
+whatsapp.save_number(SELLER, "+91 98765 00000")
+tok = chatlink.token(SELLER)
+check("the shop token never shows the seller's email", SELLER.split("@")[0] not in tok and chatlink.seller_for(tok) == SELLER)
+code11 = next(iter(discounts._codes(SELLER)))
+before = int(discounts._codes(SELLER)[code11].get("clicks") or 0)
+r = c.get(f"/w/{tok}/{code11}", follow_redirects=False)
+check("the chat link opens WhatsApp with the shop, code typed",
+      r.status_code == 302 and r.headers["location"].startswith("https://wa.me/919876500000?text=")
+      and code11 in r.headers["location"], r.headers.get("location", "")[:120])
+check("and counts as the customer opening the link",
+      int(discounts._codes(SELLER)[code11].get("clicks") or 0) == before + 1)
+check("a made-up shop token is a 404", c.get("/w/nope/X", follow_redirects=False).status_code == 404)
+check("contact_ctx offers the chat link only without a website",
+      ce11.contact_ctx(SELLER)["chat_prefix"] == "" if ce11.store_link(SELLER) else ce11.contact_ctx(SELLER)["chat_prefix"])
+
+# --- founder name, saved from the draft, and the download
+b11 = c.post("/api/campaign/build", headers=H, json={"reason": "festival", "occasion": "Lohri",
+                                                      "offer": {"kind": "flat", "value": 100}}).json()
+r = c.post(f"/api/campaign/{b11['id']}/update", headers=H, json={"founder": "Harsh"})
+check("the seller signs with their name, and every message updates",
+      r.status_code == 200 and r.json()["founder"] == "Harsh"
+      and all(x["message"].startswith("_A personal note from Harsh") for x in r.json()["rows"]), r.text[:200])
+r = c.get(f"/api/campaign/{b11['id']}/download", headers=H)
+check("the campaign downloads as Excel", r.status_code == 200 and "spreadsheet" in r.headers["content-type"])
+xl = pd.read_excel(_io.BytesIO(r.content))
+check("with every customer's phone, code and exact message",
+      len(xl) == len(b11["rows"]) and {"Customer", "Phone", "Email", "Code", "Message", "WhatsApp link", "Status"} <= set(xl.columns)
+      and (xl["Code"].astype(str) == pd.Series([x["code"] for x in b11["rows"]])).all(), str(list(xl.columns)))
+check("an unknown campaign is a 404", c.get("/api/campaign/nope/download", headers=H).status_code == 404)
+c.post(f"/api/campaign/{b11['id']}/discard", headers=H)
 
 print(f"\n{PASSED} passed, {FAILED} failed")
 sys.exit(1 if FAILED else 0)
