@@ -200,7 +200,18 @@ def blank_settings() -> dict:
             "auto_plan": True, "auto_plan_day": 0, "auto_plan_hour": 21,
             # ...and the planned week approves itself rather than waiting in
             # the Approval panel (autoplan.py, "auto-approve").
-            "auto_plan_approve": True}
+            "auto_plan_approve": True,
+            # Where a planned post's picture (and a reel's clip) comes from
+            # when it is approved. See IMAGE_SOURCES.
+            "image_source": "ai"}
+
+
+# "ai": the AI image engine, against the monthly allowance (reels get a task).
+# "scene": free scene templates from the product's own photo, and a free
+#   scene-motion clip for reels (studio.scene_image / scene_video).
+# "ai_then_scene": AI while the allowance lasts, then scenes, so a post never
+#   waits on an empty frame.
+IMAGE_SOURCES = ("ai", "scene", "ai_then_scene")
 
 
 def get_settings(email: str) -> dict:
@@ -243,6 +254,8 @@ def save_settings(email: str, patch: dict) -> dict:
         s["language"] = "hinglish"
     s["auto_plan"] = bool(s.get("auto_plan", True))
     s["auto_plan_approve"] = bool(s.get("auto_plan_approve", True))
+    if s.get("image_source") not in IMAGE_SOURCES:
+        s["image_source"] = "ai"
     try:
         s["auto_plan_day"] = int(s.get("auto_plan_day", 5)) % 7
     except (TypeError, ValueError):

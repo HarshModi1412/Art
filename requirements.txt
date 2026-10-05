@@ -21,6 +21,9 @@ huggingface_hub>=0.34
 # ships switched OFF (see ailabel.py for why), and by the video frame sampling
 # the label step reuses.
 opencv-python-headless>=4.9
+# Cuts the product out of the seller's photo for free scene templates
+# (backend/core/cutout.py). CPU only; the model file downloads on first use.
+onnxruntime>=1.17
 imageio-ffmpeg>=0.5
 # Optional: only imported when SENTRY_DSN is set. The built-in
 # error log in backend/core/errors.py works without it.

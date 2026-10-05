@@ -11,3 +11,5 @@ data/feedback.csv
 data/generated_images/
 .fernet_key
 *.tmp
+data/models/
+data/cutouts/

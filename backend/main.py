@@ -8054,8 +8054,22 @@ def _approve_post_ready(email: str, post_id: str, generate: bool = True,
         raise HTTPException(404, "Post not found")
 
     is_reel = post.get("format") == "reel"
-    made, media_error, script, task = None, "", None, None
+    made, media_error, script, task, clip = None, "", None, None, None
     img_prompt = ""     # the shot we would have made, for the upload task on a cap
+    # Where the picture comes from: the seller's per-post engine pick wins,
+    # otherwise their schedule setting (social.IMAGE_SOURCES).
+    source = "ai" if engine else (social.get_settings(email).get("image_source") or "ai")
+
+    def _draw(eng: str) -> dict:
+        m = studio.generate_image_only(
+            email, post.get("product_id") or "",
+            post.get("pillar") or "", post.get("format") or "",
+            use_reference=True,
+            occasion_key=post.get("occasion_key") or "",
+            shot_type=post.get("shot_type") or "",
+            engine=eng)
+        social.attach_image(email, post_id, m["url"], True, m.get("prompt", ""))
+        return m
 
     if is_reel:
         script = post.get("script") or None
@@ -8071,17 +8085,19 @@ def _approve_post_ready(email: str, post_id: str, generate: bool = True,
                 theme=post.get("theme_note") or "")
             social.update_post(email, post_id, {"script": script})
             script = (social.get_post(email, post_id) or {}).get("script") or script
+        # With free scenes switched on, a reel does not wait for the seller to
+        # go and film: it gets a scene-motion clip of the real product now.
+        # They can still replace it. If it cannot be made (no photo), the reel
+        # falls through to the usual filming task below.
+        if generate and source in ("scene", "ai_then_scene") and not post.get("video_url"):
+            try:
+                clip = studio.scene_video(email, post.get("product_id") or "")
+                social.attach_video(email, post_id, clip["url"])
+            except (RuntimeError, ValueError) as e:
+                media_error = str(e)
     elif generate and not post.get("image_url"):
         try:
-            made = studio.generate_image_only(
-                email, post.get("product_id") or "",
-                post.get("pillar") or "", post.get("format") or "",
-                use_reference=True,
-                occasion_key=post.get("occasion_key") or "",
-                shot_type=post.get("shot_type") or "",
-                engine=engine or "")
-            social.attach_image(email, post_id, made["url"], True,
-                                made.get("prompt", ""))
+            made = _draw("scene" if source == "scene" else (engine or ""))
         except aicaps.CapReached as e:
             media_error = str(e)
             # The picture could not be made because the allowance is spent, so
@@ -8100,6 +8116,14 @@ def _approve_post_ready(email: str, post_id: str, generate: bool = True,
                 img_prompt = ""
         except (RuntimeError, ValueError) as e:
             media_error = str(e)
+        if not made and source == "ai_then_scene":
+            # The AI could not draw it (allowance spent, no key, vendor down):
+            # the free scene engine stands in, from the product's own photo.
+            try:
+                made = _draw("scene")
+                media_error, img_prompt = "", ""
+            except (RuntimeError, ValueError) as e:
+                media_error = f"{media_error} The free scene could not stand in either: {e}".strip()
 
     fresh = social.get_post(email, post_id) or post
     if social.post_ready(fresh):
@@ -8113,7 +8137,7 @@ def _approve_post_ready(email: str, post_id: str, generate: bool = True,
     cache.clear(email)
     out_post = social.get_post(email, post_id)
     return {"post": out_post,
-            "image": made, "script": script, "is_reel": is_reel,
+            "image": made, "clip": clip, "script": script, "is_reel": is_reel,
             "media_error": media_error, "task": task,
             "tasks": smart.get_tasks(email),
             "watermark": (made or {}).get("watermark"),

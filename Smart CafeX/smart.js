@@ -3237,9 +3237,9 @@ function pickVideoEngine(opts) {
           <div class="muted tiny">${esc(o.note || "")}</div></div>
       </label>`).join("");
     openModal("Which AI should make the clip?", `
-      <p class="muted">Both animate your own photograph, so the product in the clip
-        is the product you sell. You are charged by the AI you pick, so the price
-        is here before you choose.</p>
+      <p class="muted">Every option starts from your own photograph, so the product in
+        the clip is the product you sell. The AI options are charged by the AI you
+        pick, so the price is here before you choose. Scene motion is free.</p>
       <div class="eng-list">${rows}</div>
       <div class="row" style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
         <button class="btn ghost" id="vengCancel">Cancel</button>
@@ -3278,7 +3278,10 @@ async function approvePostReady(postId, opts = {}) {
     run,
     onDone: (r) => {
       if (r.tasks) refreshTaskList(r.tasks);
-      if (r.is_reel) {
+      if (r.is_reel && r.clip) {
+        // Free scenes are on, so the reel already has a clip of the real product.
+        toast("Reel approved, with a free clip of your product. Scheduled.", 6000);
+      } else if (r.is_reel) {
         /* The one case worth interrupting for: a reel needs the seller to go
            and film or generate something, and the steps are the whole point.
            Offered, not forced — they may be halfway through approving six. */
@@ -3291,6 +3294,9 @@ async function approvePostReady(postId, opts = {}) {
            know, because the post cannot go out empty. */
         toast("Approved, but the picture could not be drawn: " + r.media_error
               + " It is on your task list.", 9000);
+      } else if (r.image && r.image.engine === "scene") {
+        toast("Your product placed in the \u201c" + (r.image.scene_label || "scene")
+              + "\u201d scene, free. Scheduled.");
       } else if (r.image) {
         const lab = (r.image && r.image.ai_label) || {};
         toast("Picture made" + (lab.labelled ? ", labelled \u201cAI generated\u201d" : "")
@@ -5568,6 +5574,12 @@ function renderStudioProduct() {
             <textarea id="stDiff" data-ai="product_different" data-ai-ctx="studio-product" data-ai-label="What makes it different" rows="2" placeholder="No alcohol burn: it opens soft.">${esc(m.different)}</textarea></label>
           <label>Who it's for<input id="stWho" data-ai="product_for" data-ai-ctx="studio-product" data-ai-label="Who it's for" value="${esc(m.for_who)}" placeholder="Someone who wears one scent, not ten" /></label>
           <label>Where you'd wear or use it<input id="stOcc" data-ai="product_occasions" data-ai-ctx="studio-product" data-ai-label="Where you'd wear or use it" value="${esc(m.occasions)}" placeholder="Evenings, weddings, gifting" /></label>
+          <label>How your photo was taken <span class="muted tiny">for free scenes: picks a set shot from the same angle</span>
+            <select id="stPose">${[
+              ["auto", "Work it out from the photo"],
+              ["stand", "Standing up, camera at its height"],
+              ["flat", "Laid flat or hanging, camera above"],
+            ].map(([v, l]) => `<option value="${v}"${(m.pose || "auto") === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
         </div>
         <button class="btn primary sm" id="stSave">Save material</button>
       </div>
@@ -5622,7 +5634,7 @@ function renderStudioProduct() {
         method: "POST", json: { product_id: p.id, patch: {
           story: $("stStory").value, materials: $("stMat").value,
           different: $("stDiff").value, for_who: $("stWho").value,
-          occasions: $("stOcc").value, shots, clips,
+          occasions: $("stOcc").value, pose: $("stPose").value, shots, clips,
         }}})) };
       toast("Saved.");
       _studio = await api("/api/studio/state");
@@ -12658,8 +12670,10 @@ function openSocialEditor(post) {
     if (!picked) return;
     try {
       const vid = await withBusy(`Making your clip with ${picked.label}…`,
-        "One to three minutes. It animates your own photograph, so the product "
-        + "stays yours. You can go and do something else, it keeps going.",
+        picked.id === "scene"
+          ? "Under a minute. Your own photo, placed in a scene with a camera move."
+          : "One to three minutes. It animates your own photograph, so the product "
+            + "stays yours. You can go and do something else, it keeps going.",
         () => api("/api/studio/video", { method: "POST", json: {
           product_id: post.product_id, post_id: post.id,
           engine: picked.id || "" } }));
@@ -12679,8 +12693,10 @@ function openSocialEditor(post) {
         syncEditorActions();
       }
       _socialData = await api("/api/social");
-      toast("Clip made and attached. Check it before you schedule, the product "
-            + "holds for the first couple of seconds, then detail can drift.", 9000);
+      toast(vid.engine === "scene"
+        ? "Free clip made and attached: your real product, with a camera move and a light sweep."
+        : "Clip made and attached. Check it before you schedule, the product "
+          + "holds for the first couple of seconds, then detail can drift.", 9000);
     } catch (e) { toast(e.message, 8000); }
   };
 
@@ -12703,7 +12719,9 @@ function openSocialEditor(post) {
     // Spent: skip the call entirely and go straight to uploading their own
     // photo (with the shot we would have drawn). Low: confirm the spend. The
     // count is read from the last /api/social load, refreshed after each draw.
-    const q = _imgQuota();
+    // Free scene templates are not an AI picture and do not touch the allowance.
+    const freeScene = (($("smEngine") || {}).value || "") === "scene";
+    const q = freeScene ? null : _imgQuota();
     if (q && q.enabled) {
       if (q.left <= 0) {
         toast("That is all " + q.cap + " AI pictures for this month. Add your own "
@@ -12741,9 +12759,13 @@ function openSocialEditor(post) {
       post.image_url = img.url;
       const mine = document.querySelector(`.modal[data-post="${post.id}"]`);
       const shotEl = mine && mine.querySelector("#smEdShot");
-      if (shotEl) { shotEl.innerHTML = `<img src="${esc(img.url)}" alt="" /><span class="sm-gen">AI</span>`; offerSchedule(); }
+      if (shotEl) { shotEl.innerHTML = `<img src="${esc(img.url)}" alt="" /><span class="sm-gen">${img.engine === "scene" ? "Scene" : "AI"}</span>`; offerSchedule(); }
       else toast("Your picture is ready, reopen the post to see it.", 6000);
-      if (img.ai_label && img.ai_label.labelled) {
+      if (img.engine === "scene") {
+        // Say which set and why, so a wrong pose is one setting away from fixed.
+        toast(img.prompt + ((img.warnings || []).length ? " Tip: " + img.warnings[0] : "")
+              + " Not right? Set how it was photographed in Product Studio, or press again for another scene.", 10000);
+      } else if (img.ai_label && img.ai_label.labelled) {
         toast("Picture made, and labelled \u201cAI generated\u201d in the corner. "
               + "Indian law has required that on AI pictures since February 2026, "
               + "so it goes on every one of them.", 7000);
@@ -13098,6 +13120,16 @@ async function openSocialSetup() {
         posts, never past it. It approves the week itself: each photo post gets its
         picture and is scheduled, and each reel goes on your task list for the clip.
         Any post it cannot finish comes back to your Approval panel.</p>
+      <label class="fld"><span>Pictures for planned posts</span>
+        <select id="soImg">${[
+          ["ai", "AI pictures (uses your monthly allowance)"],
+          ["scene", "Free scenes with your real product photo"],
+          ["ai_then_scene", "AI first, free scenes when the allowance runs out"],
+        ].map(([v, l]) => `<option value="${v}"${(s.image_source || "ai") === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+      <p class="sm-hint">Free scenes cut your product out of your own photo and place it in a
+        studio, table, flat-lay or festive set, with real shadows. Nothing is redrawn, so the
+        product is exactly the one you ship, and it costs nothing. Reels get a free clip of it
+        too, with a slow camera move. A product needs a photo in Product Studio for this.</p>
       ${loc ? `<label class="fld"><span>Times are local to</span>
         <select id="soCountry">${(loc.options || []).map((o) =>
           `<option value="${esc(o.code)}"${o.code === loc.country ? " selected" : ""}>${esc(o.name)}${o.note ? ` – ${esc(o.note)}` : ""} · ${esc(o.now)} now</option>`).join("")}</select></label>
@@ -13128,7 +13160,7 @@ async function openSocialSetup() {
       await api("/api/social/settings", { method: "POST", json: { patch: {
         category: $("soCat").value, language: $("soLang").value,
         cadence: $("soCad").value, city: $("soCity").value,
-        order_cta: $("soCta").value } } });
+        order_cta: $("soCta").value, image_source: $("soImg").value } } });
       await api("/api/social/autoplan/settings", { method: "POST", json: {
         enabled: $("apOn").checked, day: Number($("apDay").value), hour: Number($("apHour").value) } });
       const cSel = $("soCountry");

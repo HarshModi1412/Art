@@ -682,7 +682,11 @@ def blank_material() -> dict:
             "occasions": "", "shots": [], "clips": [],
             # what the AI actually saw in the product photographs — the bridge
             # between "a photo exists" and "the generator knows what it looks like"
-            "seen": ""}
+            "seen": "",
+            # How the product was photographed, for scene templates: "stand"
+            # (camera at its height), "flat" (from above) or "auto" (read from
+            # the cut-out's silhouette). See backend/core/composite.py.
+            "pose": "auto"}
 
 
 def _all_material(email: str) -> dict:
@@ -700,6 +704,8 @@ def save_material(email: str, product_id: str, patch: dict) -> dict:
     for k in ("story", "materials", "different", "for_who", "occasions", "seen"):
         if k in (patch or {}):
             cur[k] = str(patch[k] or "").strip()[:1500]
+    if "pose" in (patch or {}):
+        cur["pose"] = patch["pose"] if patch["pose"] in ("auto", "stand", "flat") else "auto"
     for k in ("shots", "clips"):
         if k in (patch or {}):
             vals = patch[k] if isinstance(patch[k], list) else []
@@ -788,6 +794,11 @@ def build_brief(brand: dict, product: dict, material: dict, angle: str = "") -> 
         "angle": angle or "",
         "facts": facts,
         "product_name": product.get("name") or "",
+        # For the scene engine, which places the real photo rather than
+        # prompting a model: the look picks the set, the pose the camera.
+        "look": brand.get("look") or "clean",
+        "product_id": product.get("id") or "",
+        "pose": material.get("pose") or "auto",
     }
 
 
@@ -1076,6 +1087,19 @@ IMAGE_ENGINES = [
      "free": False, "reshoot": True, "cost": "about $0.03 an edit",
      "note": "Credit-metered. A free account's monthly allowance covers about "
              "four edits, so this needs PRO or pay-as-you-go."},
+    # Not an AI. Cuts the product out of the seller's own photo and stands it
+    # in a ready-made scene (backend/core/scenes.py, composite.py), on this
+    # server. The product is never redrawn, so it is always exactly theirs,
+    # and it costs nothing, so it sits outside every allowance. Needs a photo:
+    # with nothing to cut out there is nothing to place.
+    {"id": "scene", "label": "Scene templates (free, your real product)",
+     "model_env": "CUTOUT_MODEL", "model_default": "isnet-general-use",
+     "free": True, "reshoot": True, "needs_photo": True,
+     "cost": "free, made on our server",
+     "note": "Cuts your product out of your own photo and places it in a "
+             "ready-made studio, table, flat-lay or festive scene with real "
+             "shadows. The product is your actual photo, never redrawn. Works "
+             "best with a photo of the product alone on a plain background."},
 ]
 
 
@@ -1086,6 +1110,9 @@ def _engine_ready(eid: str) -> bool:
         "gemini": aiprovider.gemini_image_ready,
         "cloudflare": aiprovider.image_ready,
         "huggingface": aiprovider.hf_ready,
+        # Always available: with no model file and no network it still cuts
+        # with OpenCV's GrabCut (see cutout.py).
+        "scene": lambda: True,
     }.get(eid, lambda: False)()
 
 
@@ -1104,7 +1131,8 @@ def image_engines(for_reshoot: bool = False) -> list[dict]:
     for want of a key is worse than not offering it. When `for_reshoot` is set,
     engines that cannot preserve a source photograph are dropped rather than
     silently substituting an invented product."""
-    rows = [_engine_row(s) for s in IMAGE_ENGINES if _engine_ready(s["id"])]
+    rows = [_engine_row(s) for s in IMAGE_ENGINES if _engine_ready(s["id"])
+            and (for_reshoot or not s.get("needs_photo"))]
     return [r for r in rows if r["reshoot"]] if for_reshoot else rows
 
 
@@ -1124,6 +1152,10 @@ def image_engine(preferred: str = "", for_reshoot: bool = False) -> dict:
         # than silently drawing on a different one — the seller chose for a
         # reason, and the picture would come back looking wrong to them.
         spec = next((s for s in IMAGE_ENGINES if s["id"] == preferred), None)
+        if spec and spec.get("needs_photo") and not for_reshoot:
+            raise ValueError(
+                "Scene templates place your own photo of the product, and this "
+                "product has none yet. Add a photo in Product Studio first.")
         if spec and for_reshoot and not spec["reshoot"]:
             raise ValueError(
                 f"{spec['label']} cannot re-shoot from your own photograph, it "
@@ -1221,6 +1253,10 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
     if not eng["engine"]:
         raise RuntimeError("No image engine is connected on this server, so "
                            "images cannot be generated. Your own photos still work.")
+    if eng["engine"] == "scene":
+        # Free and made here, so none of the allowance, spend-guard or Pro Max
+        # rules below apply: they exist to bound what an AI call costs.
+        return scene_image(email, brief, guidance, reference, eng)
 
     # Whose money is this? If the seller pasted their OWN OpenAI key in the
     # Account tab and this generation runs on OpenAI, the bill is theirs, so our
@@ -1338,6 +1374,120 @@ def generate_image(email: str, brief: dict, guidance: dict | None = None,
                         if from_ref else None}
 
 
+def _cutout_cached(reference: tuple[bytes, str]) -> dict:
+    """The product cut out of this photo, cut once and reused.
+
+    Cutting is the slow step (seconds on one CPU) and a week of posts uses the
+    same few product photos over and over, so the result is kept on local disk
+    keyed by the photo's bytes. Losing the cache on a redeploy only costs one
+    re-cut."""
+    import hashlib
+    import io
+    import json
+    from pathlib import Path
+    from PIL import Image
+    from backend.core import cutout
+    key = hashlib.sha1(reference[0]).hexdigest()
+    cache = Path(__file__).resolve().parents[2] / "data" / "cutouts"
+    path = cache / f"{key}.png"
+    if path.exists():
+        try:
+            meta = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
+            img = Image.open(path)
+            img.load()
+            return {"image": img.convert("RGBA"), "engine": meta.get("engine", ""),
+                    "quality": meta.get("quality") or {"ok": True, "problems": []}}
+        except Exception:  # noqa: BLE001 — a damaged cache entry is just re-cut
+            pass
+    cut = cutout.cut(reference[0])
+    try:
+        cache.mkdir(parents=True, exist_ok=True)
+        buf = io.BytesIO()
+        cut["image"].save(buf, format="PNG")
+        path.write_bytes(buf.getvalue())
+        path.with_suffix(".json").write_text(
+            json.dumps({"engine": cut["engine"], "quality": cut["quality"]}), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        log.warning("could not cache cutout: %s", e)
+    return cut
+
+
+def _scene(brief: dict, guidance: dict | None,
+           reference: tuple[bytes, str] | None, size: str) -> dict:
+    from backend.core import composite
+    if not reference:
+        raise ValueError("Scene templates place your own photo of the product, and "
+                         "this product has none yet. Add a photo in Product Studio first.")
+    g = guidance or {}
+    try:
+        return composite.make(reference[0], size=size, look=brief.get("look") or "clean",
+                              palette=brief.get("palette") or "",
+                              festive=bool(g.get("festival")),
+                              pose_override=brief.get("pose") or "",
+                              seed=uuid.uuid4().int % (2 ** 31),
+                              cut=_cutout_cached(reference))
+    except ValueError as e:
+        raise ValueError(f"Your photo could not be placed in a scene. {e}") from e
+
+
+def _scene_note(made: dict) -> str:
+    p = made["pose"]
+    return (f"Your own photo placed in the “{made['scene_label']}” scene, "
+            f"{'standing up' if p['stage'] == 'stand' else 'laid flat'} ({p['why']}).")
+
+
+def scene_image(email: str, brief: dict, guidance: dict | None,
+                reference: tuple[bytes, str] | None, eng: dict) -> dict:
+    """A post picture from the scene engine: cut, place, store. No AI call."""
+    from backend.core import composite, ailabel
+    made = _scene(brief, guidance, reference, "post")
+    content = composite.to_jpeg(made["image"])
+    label_report = None
+    if made["ai_made"]:
+        # A pre-generated photo backdrop was AI-made, so the picture carries
+        # the label like any other. Drawn scenes are not AI and do not.
+        content, label_report = ailabel.label_image(content, engine="scene",
+                                                   model=made["scene"])
+    saved = media.save(f"{uuid.uuid4().hex}.jpg", content, email)
+    return {"url": saved["url"], "durable": saved["durable"], "generated": True,
+            "composite": True, "watermark": None, "ai_label": label_report,
+            "prompt": _scene_note(made), "engine": "scene",
+            "engine_label": eng["label"], "model": made["cutout_engine"],
+            "free": True, "from_reference": True, "strength": None,
+            "scene": made["scene"], "scene_label": made["scene_label"],
+            "pose": made["pose"], "warnings": made["quality"].get("problems") or []}
+
+
+def scene_video(email: str, product_id: str) -> dict:
+    """A free reel: the product placed in a 9:16 scene, then a camera move and
+    a shine pass over it (backend/core/motion.py). No video AI, no cost."""
+    from backend.core import motion, ailabel
+    brand = get_brand(email)
+    product = next((p for p in products.get_products(email) if p["id"] == product_id), None)
+    if not product:
+        raise ValueError("That product no longer exists.")
+    material = get_material(email, product_id)
+    ref = _reference_shot(email, product, material)
+    if not ref:
+        raise RuntimeError(
+            "A clip is made FROM one of your own photographs, and this product "
+            "has none yet. Add a photo in Product Studio first.")
+    brief = build_brief(brand, product, material)
+    made = _scene(brief, None, ref, "reel")
+    data = motion.render_clip(made["layers"])
+    label_report = None
+    if made["ai_made"]:
+        data, label_report = ailabel.label_video_bytes(data, "clip.mp4", engine="scene",
+                                                      model=made["scene"])
+    saved = media.save(f"{uuid.uuid4().hex}.mp4", data, email)
+    return {"url": saved["url"], "durable": saved["durable"], "generated": True,
+            "composite": True, "watermark": None, "ai_label": label_report,
+            "product_id": product_id, "prompt": _scene_note(made),
+            "engine": "scene", "engine_label": "Scene motion",
+            "model": made["cutout_engine"], "cost_usd": 0, "free": True,
+            "scene": made["scene"], "pose": made["pose"]}
+
+
 def _stamp_brand(image_bytes: bytes, brand_name: str) -> bytes:
     """A small, legible brand tag in the corner of a generated photo.
 
@@ -1426,6 +1576,16 @@ VIDEO_ENGINES = [
      "note": "Six times cheaper, and it shows: identity holds for the first "
              "couple of seconds and then detail drifts, so keep it to a slow "
              "push-in. About a minute per clip."},
+    # Not a video AI: a camera move over the seller's real product placed in a
+    # scene (scene_video, motion.py). Never drifts, because nothing is redrawn.
+    {"id": "scene", "label": "Scene motion (free, your real product)",
+     "model_env": "CUTOUT_MODEL", "model_default": "isnet-general-use",
+     "free": True, "reshoot": True, "cost_usd": 0,
+     "cost": "free, made on our server",
+     "note": "Your own photo placed in a scene, with a slow camera push-in, "
+             "depth between product and background, and a light sweep. The "
+             "product stays exactly yours for the whole clip. No AI motion, so "
+             "nothing in it moves except the camera and the light."},
 ]
 
 
@@ -1454,7 +1614,7 @@ def video_engine(preferred: str = "") -> dict:
                 f"clip. Pick another, or add its key."
                 if preferred in known else
                 f"{preferred} is not a clip engine we know about.")
-        return {"engine": hit["id"], "model": hit["model"], "free": False,
+        return {"engine": hit["id"], "model": hit["model"], "free": hit["free"],
                 "ready": True, "label": hit["label"],
                 "cost_usd": hit.get("cost_usd"), "note": hit["note"]}
     if not rows:
@@ -1464,7 +1624,7 @@ def video_engine(preferred: str = "") -> dict:
                     "cannot be generated here. You can still film one on your "
                     "phone and upload it — which usually looks better anyway."}
     first = rows[0]
-    return {"engine": first["id"], "model": first["model"], "free": False,
+    return {"engine": first["id"], "model": first["model"], "free": first["free"],
             "ready": True, "label": first["label"],
             "cost_usd": first.get("cost_usd"), "note": first["note"]}
 
@@ -1479,13 +1639,16 @@ def generate_video(email: str, product_id: str, prompt: str = "",
 
     Takes about a minute, so callers keep it off the request path."""
     from backend.core import aiprovider, media, aicaps
+    eng = video_engine(engine)          # raises on an unusable named pick
+    if not eng["ready"]:
+        raise RuntimeError(eng["note"])
+    if eng["engine"] == "scene":
+        # Free and made here: outside the clip ceiling, which bounds AI spend.
+        return scene_video(email, product_id)
     # Clips are 30x the price of an image, so they get their own much tighter
     # ceiling — and the message when it is reached points at Google Flow, which
     # is free, rather than at an upgrade page.
     aicaps.check(email, "video")
-    eng = video_engine(engine)          # raises on an unusable named pick
-    if not eng["ready"]:
-        raise RuntimeError(eng["note"])
     product = next((p for p in products.get_products(email)
                     if p["id"] == product_id), None)
     if not product:
