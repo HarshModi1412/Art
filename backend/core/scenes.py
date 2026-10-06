@@ -51,6 +51,19 @@ from PIL import Image, ImageDraw, ImageFilter
 
 log = logging.getLogger("scenes")
 
+
+def enabled() -> bool:
+    """Free scene templates are OFF unless FREE_SCENES=on.
+
+    Switched off on 2026-10-06: pasting a cut-out into a backdrop without a
+    relighting model did not reach a quality the seller would show a client,
+    and no free relighting model (IC-Light) is reliably callable. The code is
+    kept dormant, not deleted, for the day one is. While off: the "scene"
+    image and clip engines are not offered, the Photo shoot tab is hidden,
+    and scheduled posts use AI pictures whatever image_source says."""
+    import os
+    return os.environ.get("FREE_SCENES", "off").strip().lower() in ("on", "1", "true", "yes")
+
 PHOTO_DIR = Path(__file__).resolve().parents[1] / "static" / "scenes"
 
 # --------------------------------------------------------------- colour
@@ -518,6 +531,30 @@ DESIGN_LOOK = {"studio": "clean", "marble": "clean", "dark": "luxe", "wood": "wa
 LOOK_DESIGN = {"clean": "studio", "warm": "wood", "luxe": "dark", "bright": "pastel",
                "editorial": "marble"}
 
+# THE TONE RULE. Whenever the app picks a design itself ("Mix it up", a
+# scheduled post with no saved style, a person pose with no exact match), it
+# only picks designs that suit the brand's look, so a serious brand never
+# comes back in pastel pop. Pastel is reachable only by choosing it or by a
+# "bright" brand; festive only on a festival post or by choosing it.
+LOOK_DESIGNS = {
+    "clean":     ["studio", "marble", "wood", "nature"],
+    "warm":      ["wood", "nature", "studio"],
+    "luxe":      ["dark", "marble", "studio"],
+    "editorial": ["marble", "dark", "studio"],
+    "bright":    ["pastel", "studio", "nature"],
+}
+# When the exact design has no backdrop for a pose, the closest in tone.
+DESIGN_NEAR = {
+    "studio": ["marble", "wood", "nature"], "marble": ["studio", "dark"],
+    "dark": ["marble", "studio"], "wood": ["nature", "studio"],
+    "nature": ["wood", "studio"], "pastel": ["studio"], "festive": [],
+}
+
+
+def allowed_designs(look: str = "clean", festive: bool = False) -> list[str]:
+    out = list(LOOK_DESIGNS.get(look) or LOOK_DESIGNS["clean"])
+    return (["festive"] + out) if festive else out
+
 
 # --------------------------------------------------------------- photo backdrops
 
@@ -576,7 +613,8 @@ def _render_photo(scene: dict, w: int, h: int):
     room = h / nh - 2 * margin
     if by > room:
         bx, by = bx * room / by, room
-    top, bottom = {"base": (ay - by, ay), "top": (ay, ay + by)}.get(mode, (ay - by / 2, ay + by / 2))
+    top, bottom = {"base": (ay - by, ay), "top": (ay, ay + by),
+                   "fit": (ay, ay + by)}.get(mode, (ay - by / 2, ay + by / 2))
     oy_f = (top + bottom) / 2 - (h / nh) / 2
     oy_f = min(max(oy_f, bottom + margin - h / nh), top - margin)
     ox = int(min(max(ax * nw - w / 2, 0), nw - w))
@@ -606,35 +644,59 @@ def installed() -> dict:
     return out
 
 
-def candidates(stage: str, design: str = "", person: str = "") -> list[dict]:
+def candidates(stage: str, design: str = "", person: str = "",
+               allowed: list[str] | None = None) -> list[dict]:
     """Scenes this product can go in. Person scenes only when a person was
     asked for, and only of that person. Real photo backdrops come before drawn
-    ones, which are kept only as a fallback for stand and flat shots."""
+    ones, which are kept only as a fallback for stand and flat shots.
+
+    Design, in order: the exact design; the designs closest in tone to it;
+    any design in `allowed` (the brand's tone); and only then anything."""
     pool = [s for s in all_scenes() if s["stage"] == stage
             and (s.get("person") or "") == (person or "")]
     photos = [s for s in pool if s["photo"]]
     if photos:
         pool = photos
     if design and design != "any":
-        pool = [s for s in pool if design in s["designs"]] or pool
+        for d in [design] + DESIGN_NEAR.get(design, []):
+            hit = [s for s in pool if d in s["designs"]]
+            if hit:
+                return hit
+    if allowed:
+        hit = [s for s in pool if set(s["designs"]) & set(allowed)]
+        if hit:
+            return hit
     return pool
 
 
 def choose(stage: str, look: str = "clean", festive: bool = False,
            seed: int | None = None, exclude: tuple = (), design: str = "",
            person: str = "") -> dict:
-    """Pick a scene: right camera height and person first, then the design the
-    seller chose (or their brand look's design), then festival or not."""
+    """Pick a scene: right camera height and person first, then the design.
+
+    A design the seller chose is honoured (then its nearest in tone). With no
+    design ("Mix it up", or a scheduled post with no saved style), one is
+    drawn from the designs that suit the brand look, so a different but
+    on-tone set each post. A festival post prefers the festive sets."""
     rng = random.Random(seed)
-    design = design or ("festive" if festive else LOOK_DESIGN.get(look, "studio"))
-    pool = ([s for s in candidates(stage, design, person) if s["id"] not in exclude]
-            or candidates(stage, design, person) or candidates(stage)
+    allowed = allowed_designs(look, festive)
+    if not design or design == "any":
+        if festive:
+            design = "festive"
+        else:
+            have = [d for d in allowed if any(d in s["designs"] for s in candidates(stage, d, person)
+                                              if s["photo"])]
+            design = rng.choice(have) if have else (allowed[0] if allowed else "studio")
+    pool = ([s for s in candidates(stage, design, person, allowed) if s["id"] not in exclude]
+            or candidates(stage, design, person, allowed) or candidates(stage, "", "", allowed)
             or [s for s in all_scenes() if s["stage"] == "stand" and not s["photo"]])
 
     def score(s):
         return ((3 if design in s["designs"] else 0)
+                + (2 if set(s["designs"]) & set(allowed) else 0)
                 + (4 if festive and s["festive"] else 0)
                 - (5 if s["festive"] and not festive and design != "festive" else 0)
+                - (6 if "pastel" in s["designs"] and "pastel" not in allowed and design != "pastel" else 0)
                 + (10 if s["photo"] else 0)
                 + rng.random())
     return max(pool, key=score)

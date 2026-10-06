@@ -49,6 +49,7 @@ from backend.core import (ad_analytics, ai, analytics, auth, billing, complaints
                           report_pdf, smart, templates, user_store)
 from backend.core import commerce, secrets_store, db, supply, products
 from backend.core import sitebuilder, storefront
+from backend.core import scenes
 from backend.core import messaging, password_reset, today as today_mod
 from backend.core import winback_proof
 from backend.core import loginguard, google_auth, winback_auto, publisher
@@ -1445,6 +1446,8 @@ def studio_state(authorization: str | None = Header(default=None)):
         "products": rows,
         "ai_ready": studio.openai_ready(),
         "media_durable": media.durable(),
+        # Free scene templates / Photo shoot: off unless FREE_SCENES=on.
+        "scenes_enabled": scenes.enabled(),
     }
 
 
@@ -1484,6 +1487,11 @@ class ShootBody(BaseModel):
     size: str | None = "post"
 
 
+def _require_scenes() -> None:
+    if not scenes.enabled():
+        raise HTTPException(404, "Photo shoot is switched off on this server.")
+
+
 @app.get("/api/studio/shoot/options")
 def studio_shoot_options(product_id: str, type: str = "",
                          authorization: str | None = Header(default=None)):
@@ -1491,9 +1499,11 @@ def studio_shoot_options(product_id: str, type: str = "",
     design, person, pose) with what each has installed, this product's photos,
     and the style saved on it. See backend/core/shoot.py."""
     email = require_user(authorization)
+    _require_scenes()
     from backend.core import shoot
     saved = shoot.clean_choice(studio.get_material(email, product_id).get("shoot") or {})
-    return {**shoot.options(type or saved["type"]), "saved": saved,
+    look = studio.get_brand(email).get("look") or "clean"
+    return {**shoot.options(type or saved["type"], look), "saved": saved, "look": look,
             "photos": studio.product_photos(email, product_id)}
 
 
@@ -1502,6 +1512,7 @@ def studio_shoot(body: ShootBody, authorization: str | None = Header(default=Non
     """Generate one free picture of the product, shot as chosen. A preview:
     nothing is attached to a post and no AI allowance is used."""
     email = require_user(authorization)
+    _require_scenes()
     try:
         return studio.shoot_preview(email, body.product_id, body.choice or {},
                                     body.photo_url or "", body.size or "post")
@@ -1513,6 +1524,7 @@ def studio_shoot(body: ShootBody, authorization: str | None = Header(default=Non
 def studio_shoot_save(body: ShootBody, authorization: str | None = Header(default=None)):
     """Use this style for the product's scheduled posts (free scenes)."""
     email = require_user(authorization)
+    _require_scenes()
     cache.clear(email)
     mat = studio.save_material(email, body.product_id, {"shoot": body.choice or {}})
     return {"saved": mat.get("shoot") or {}}
@@ -7682,6 +7694,7 @@ def social_home(authorization: str | None = Header(default=None)):
     email = require_user(authorization)
     return {
         "settings": social.get_settings(email),
+        "scenes_enabled": scenes.enabled(),
         "pillars": social.PILLARS,
         "cadence": social.CADENCE,
         "formats": social.FORMATS,
@@ -8156,6 +8169,8 @@ def _approve_post_ready(email: str, post_id: str, generate: bool = True,
     # Where the picture comes from: the seller's per-post engine pick wins,
     # otherwise their schedule setting (social.IMAGE_SOURCES).
     source = "ai" if engine else (social.get_settings(email).get("image_source") or "ai")
+    if not scenes.enabled():
+        source = "ai"       # free scenes are switched off (scenes.enabled)
 
     def _draw(eng: str) -> dict:
         m = studio.generate_image_only(

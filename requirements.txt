@@ -28,3 +28,6 @@ imageio-ffmpeg>=0.5
 # Optional: only imported when SENTRY_DSN is set. The built-in
 # error log in backend/core/errors.py works without it.
 # sentry-sdk>=2.0
+# Free AI try-on (clothing worn by a model) through the public IDM-VTON
+# Hugging Face Space, backend/core/tryon.py. Pure Python client, no GPU here.
+gradio_client>=1.3

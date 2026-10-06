@@ -17,12 +17,19 @@ The answers are saved on the product (material["shoot"]) when the seller
 says "use this style", and the scheduled posts' free scene engine
 (studio.scene_image) shoots that product the same way from then on.
 
-WHAT A PERSON CAN AND CANNOT DO HERE
-The person is in the backdrop photo, generated once; the product is placed
-onto them. So: a product resting on a palm, a necklace at a neckline, an
-earring at an earlobe, a product on the table in front of someone. NOT a
-garment worn on a body: that needs the cloth to drape, which only a paid GPU
-try-on model can do. Clothing types therefore offer no person poses.
+WHAT A PERSON CAN DO HERE
+For most products the person is in the backdrop photo, generated once, and
+the product is placed onto them: resting on a palm, a necklace at a
+neckline, an earring at an earlobe, on the table in front of someone.
+
+Clothing has three ways to meet a person:
+  * on a dress form ("mannequin"): the garment fitted to the form's
+    shoulders, with the form's shading laid over it (composite.py, "fit");
+  * held up by a model, hanging from their raised hand (mode "top");
+  * WORN by a model: the only one that needs the cloth to drape, so it goes
+    through the free IDM-VTON try-on (tryon.py). Best on tops, shirts and
+    kurtis; rationed daily and cached per garment and model.
+Sarees and dupattas get none of these: no free method drapes them.
 """
 from __future__ import annotations
 
@@ -39,8 +46,10 @@ PRODUCT_TYPES = [
     {"id": "necklace", "label": "Necklace or pendant",       "stage": "flat",  "poses": ["neck", "palm"]},
     {"id": "earrings", "label": "Earrings",                  "stage": "flat",  "poses": ["ear", "palm"]},
     {"id": "ring",     "label": "Ring, bangle or bracelet",  "stage": "flat",  "poses": ["palm"]},
-    {"id": "folded",   "label": "Clothing, folded or laid flat", "stage": "flat", "poses": []},
-    {"id": "hanger",   "label": "Clothing on a hanger",      "stage": "hang",  "poses": []},
+    {"id": "folded",   "label": "Clothing, laid flat", "stage": "flat",
+     "poses": ["wear", "mannequin", "held"]},
+    {"id": "hanger",   "label": "Clothing on a hanger",      "stage": "hang",
+     "poses": ["wear", "mannequin", "held"]},
     {"id": "fabric",   "label": "Saree, dupatta or scarf",   "stage": "flat",  "poses": []},
     {"id": "other",    "label": "Something else",            "stage": "auto",  "poses": ["beside"]},
 ]
@@ -50,6 +59,7 @@ PEOPLE = [
     {"id": "woman", "label": "Woman"},
     {"id": "man",   "label": "Man"},
     {"id": "hands", "label": "Just hands"},
+    {"id": "mannequin", "label": "Mannequin"},
 ]
 
 POSES = {
@@ -61,15 +71,17 @@ POSES = {
                "people": ["woman"]},
     "beside": {"label": "Next to them",       "hint": "On the table, the person softly behind",
                "people": ["woman", "man"]},
+    "wear":   {"label": "Wearing it (AI try-on)", "hint": "About 30 seconds. Best for tops, shirts and kurtis",
+               "people": ["woman", "man"]},
+    "held":   {"label": "Holding it up",      "hint": "Hanging from the model's hand",
+               "people": ["woman", "man"]},
+    "mannequin": {"label": "On a dress form", "hint": "Fitted to the form's shoulders",
+                  "people": ["mannequin"]},
 }
 
 NO_PERSON_NOTE = {
-    "folded": "Clothing is shown on its own: putting it ON a person needs a paid "
-              "try-on AI, which this free shoot does not use.",
-    "hanger": "Clothing is shown on its own: putting it ON a person needs a paid "
-              "try-on AI, which this free shoot does not use.",
-    "fabric": "Fabric is shown on its own: draping it on a person needs a paid "
-              "try-on AI, which this free shoot does not use.",
+    "fabric": "Sarees and dupattas are shown on their own: no free method can "
+              "drape them on a person convincingly.",
 }
 
 
@@ -87,11 +99,12 @@ def _thumb(s: dict) -> str:
     return f"/static/scenes/{s['file'].name}"
 
 
-def options(type_id: str = "") -> dict:
+def options(type_id: str = "", look: str = "") -> dict:
     """Everything the shoot screen shows, with what is actually ready.
 
     For a design: how many real photo backdrops exist for this product's
-    stage, and one to preview. A design with none still works (stand and flat
+    stage, one to preview, and whether it suits the brand look (`fits`, the
+    same tone rule scenes.choose() follows when it picks by itself). A design with none still works (stand and flat
     have drawn fallbacks) but is marked so the seller knows it is basic.
     For people and poses: only those this product type allows AND that have
     at least one backdrop installed."""
@@ -106,7 +119,8 @@ def options(type_id: str = "") -> dict:
         ph = _photos(stage, d["id"])
         drawn = stage in ("stand", "flat")
         out["designs"].append({**d, "photos": len(ph), "ready": bool(ph) or drawn,
-                               "basic": not ph, "thumb": _thumb(ph[0]) if ph else ""})
+                               "basic": not ph, "thumb": _thumb(ph[0]) if ph else "",
+                               "fits": d["id"] in scenes.allowed_designs(look or "clean")})
     people = []
     for pid in [p["id"] for p in PEOPLE]:
         poses = []
@@ -114,9 +128,12 @@ def options(type_id: str = "") -> dict:
             pose = POSES[pose_id]
             if pid not in pose["people"]:
                 continue
-            ph = _photos("stand" if pose_id == "beside" else pose_id, "", pid)
+            from backend.core import composite, tryon
+            ph = _photos(composite.POSE_STAGE.get(pose_id, pose_id), "", pid)
             if pose_id == "beside":
                 ph = [s for s in ph if s.get("pose") == "beside"]
+            if pose_id == "wear" and not tryon.enabled():
+                ph = []
             poses.append({"id": pose_id, "label": pose["label"], "hint": pose["hint"],
                           "photos": len(ph), "thumb": _thumb(ph[0]) if ph else ""})
         if poses:
@@ -149,7 +166,10 @@ def composite_args(choice: dict, festive: bool = False) -> dict:
     c = clean_choice(choice)
     stage = _stage(c["type"]) if c["type"] else ""
     design = c["design"]
-    if festive and _photos(stage or "stand", "festive", c["person"]):
+    from backend.core import composite
+    shot_stage = composite.POSE_STAGE.get(c["pose"], stage) if c["pose"] else (stage or "stand")
+    if festive and _photos(shot_stage if shot_stage not in ("", "auto") else "stand",
+                           "festive", c["person"]):
         design = "festive"           # a festival post in the festival's set
     return {"pose_override": "" if stage in ("", "auto") else stage,
             "design": "" if design == "any" else design,

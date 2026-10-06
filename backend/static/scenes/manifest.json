@@ -1,126 +1,1904 @@
 {
-  "_about": "The photo backdrop library for free scene templates. Each entry is one empty backdrop image, generated ONCE (by hand, in any image tool) from its prompt and saved here as <id>.jpg (or .png/.webp). scenes.py reads this file; an entry whose image is not here yet is simply skipped. anchor is where the product attaches, as fractions of the image (x, y); box is the largest the product may be drawn (w, h, fractions); mode says which point of the product sits on the anchor: base (it stands there), center (flat-lay), top (it hangs from there). light is where the light comes FROM. Regenerate the prompt sheet with: python scripts/scene_prompts.py",
-  "suffix": "Photorealistic high-end commercial product photography backdrop, sharp focus, natural soft shadows, vertical 9:16 frame. The empty spot described above must stay completely empty: no product, no bottle, no jewellery, nothing placed there. No text, no logo, no watermark.",
-  "templates": [
-    {"id": "stand-studio-1", "stage": "stand", "design": "studio", "person": "", "ai_made": true,
-     "prompt": "Empty seamless off-white paper backdrop that curves smoothly into the floor, soft diffused light from the upper left, a gentle pool of light in the centre. Camera at table height, looking straight on. The floor in the lower middle of the frame is empty.",
-     "anchor": [0.5, 0.70], "box": [0.55, 0.40], "mode": "base", "light": [-1, -1], "gloss": false},
-    {"id": "stand-studio-2", "stage": "stand", "design": "studio", "person": "", "ai_made": true,
-     "prompt": "An empty round cylindrical podium in matte warm beige plaster, centred, its flat top surface just below the middle of the frame, on a soft beige seamless background. Soft window light from the left. Camera level with the podium top. The podium top is empty.",
-     "anchor": [0.5, 0.58], "box": [0.42, 0.38], "mode": "base", "light": [-1, -1], "gloss": false},
-    {"id": "stand-marble-1", "stage": "stand", "design": "marble", "person": "", "ai_made": true,
-     "prompt": "An empty white marble plinth with soft grey veins and a thin brushed-gold trim, centred, its top surface just below the middle of the frame, soft cream background, gentle daylight from the left. Camera level with the plinth top. The plinth top is empty.",
-     "anchor": [0.5, 0.58], "box": [0.42, 0.38], "mode": "base", "light": [-1, -1], "gloss": false},
-    {"id": "stand-marble-2", "stage": "stand", "design": "marble", "person": "", "ai_made": true,
-     "prompt": "A polished white marble tabletop filling the lower third of the frame, a softly blurred luxurious cream interior behind it with warm gold highlights. Camera at table height. The centre of the tabletop is empty.",
-     "anchor": [0.5, 0.74], "box": [0.55, 0.42], "mode": "base", "light": [-1, -1], "gloss": true},
-    {"id": "stand-dark-1", "stage": "stand", "design": "dark", "person": "", "ai_made": true,
-     "prompt": "An empty black stone pedestal, centred, its top surface just below the middle of the frame, deep charcoal background, a soft rim light and faint haze behind it, dramatic low-key luxury lighting. Camera level with the pedestal top. The pedestal top is empty.",
-     "anchor": [0.5, 0.58], "box": [0.42, 0.38], "mode": "base", "light": [-0.5, -1], "gloss": true},
-    {"id": "stand-dark-2", "stage": "stand", "design": "dark", "person": "", "ai_made": true,
-     "prompt": "A dark slate tabletop in the foreground, a deep black background, a soft spotlight pool falling on the centre of the table, moody low-key luxury lighting. Camera at table height. The centre of the table is empty.",
-     "anchor": [0.5, 0.74], "box": [0.55, 0.42], "mode": "base", "light": [-0.4, -1], "gloss": true},
-    {"id": "stand-wood-1", "stage": "stand", "design": "wood", "person": "", "ai_made": true,
-     "prompt": "A rustic oak wooden table in the foreground, a warm cream plaster wall behind it, soft afternoon window light from the left casting gentle leaf shadows on the wall, a folded linen cloth at the far left edge only. Camera at table height. The centre of the table is empty.",
-     "anchor": [0.5, 0.74], "box": [0.55, 0.42], "mode": "base", "light": [-1, -1], "gloss": false},
-    {"id": "stand-wood-2", "stage": "stand", "design": "wood", "person": "", "ai_made": true,
-     "prompt": "A light wooden table against a warm neutral wall, a small ceramic vase with dried pampas grass at the far right edge only, soft morning light from the left. Camera at table height. The centre of the table is empty.",
-     "anchor": [0.5, 0.74], "box": [0.55, 0.42], "mode": "base", "light": [-1, -1], "gloss": false},
-    {"id": "stand-nature-1", "stage": "stand", "design": "nature", "person": "", "ai_made": true,
-     "prompt": "A large flat natural grey stone in the foreground with its flat top just below the middle of the frame, surrounded by green moss and small ferns, soft dappled sunlight, a blurred green forest behind. Camera level with the stone top. The top of the stone is empty.",
-     "anchor": [0.5, 0.62], "box": [0.48, 0.40], "mode": "base", "light": [-1, -1], "gloss": false},
-    {"id": "stand-nature-2", "stage": "stand", "design": "nature", "person": "", "ai_made": true,
-     "prompt": "Smooth beige sandstone rocks on fine sand, a large flat rock in the centre with its flat top just below the middle of the frame, palm leaf shadows, bright warm sunlight, a softly blurred blue sky behind. Camera level with the rock top. The flat rock is empty.",
-     "anchor": [0.5, 0.62], "box": [0.48, 0.40], "mode": "base", "light": [-1, -1], "gloss": false},
-    {"id": "stand-festive-1", "stage": "stand", "design": "festive", "person": "", "ai_made": true,
-     "prompt": "Diwali scene: a dark wooden table, lit clay diyas and orange marigold flowers placed only along the far left and far right edges, warm golden bokeh lights in the blurred background. Camera at table height. The centre of the table is completely empty.",
-     "anchor": [0.5, 0.74], "box": [0.50, 0.42], "mode": "base", "light": [-0.4, -1], "gloss": true},
-    {"id": "stand-festive-2", "stage": "stand", "design": "festive", "person": "", "ai_made": true,
-     "prompt": "Festive celebration set: a deep maroon velvet surface, gold and brass decor and rose petals at the left and right edges only, soft warm fairy-light bokeh behind. Camera at table height. The centre of the surface is empty.",
-     "anchor": [0.5, 0.74], "box": [0.50, 0.42], "mode": "base", "light": [-0.4, -1], "gloss": false},
-    {"id": "stand-pastel-1", "stage": "stand", "design": "pastel", "person": "", "ai_made": true,
-     "prompt": "Pastel set: a soft pink arch backdrop, a pastel blue cylindrical podium centred in front of it with its empty top just below the middle of the frame, soft even light, playful and modern. Camera level with the podium top. The podium top is empty.",
-     "anchor": [0.5, 0.58], "box": [0.42, 0.38], "mode": "base", "light": [-1, -1], "gloss": false},
-    {"id": "stand-pastel-2", "stage": "stand", "design": "pastel", "person": "", "ai_made": true,
-     "prompt": "A bright butter-yellow seamless background with a mint green rectangular block centred, the block's flat top just below the middle of the frame, crisp sunlight with hard shadows, playful and summery. Camera level with the block top. The block top is empty.",
-     "anchor": [0.5, 0.58], "box": [0.42, 0.38], "mode": "base", "light": [-1, -1], "gloss": false},
-
-    {"id": "flat-studio-1", "stage": "flat", "design": "studio", "person": "", "ai_made": true,
-     "prompt": "Top-down flat lay, camera directly overhead: smooth off-white textured paper, soft shadows from a window at the top left. The middle 60% of the frame is empty.",
-     "anchor": [0.5, 0.5], "box": [0.70, 0.45], "mode": "center", "light": [-1, -1], "gloss": false},
-    {"id": "flat-studio-2", "stage": "flat", "design": "studio", "person": "", "ai_made": true,
-     "prompt": "Top-down flat lay, camera directly overhead: soft beige suede fabric with gentle folds only at the edges, soft even light. The middle of the frame is flat and empty.",
-     "anchor": [0.5, 0.5], "box": [0.70, 0.45], "mode": "center", "light": [-1, -1], "gloss": false},
-    {"id": "flat-marble-1", "stage": "flat", "design": "marble", "person": "", "ai_made": true,
-     "prompt": "Top-down flat lay, camera directly overhead: white Carrara marble with soft grey veins, a single sprig of eucalyptus in the top right corner, soft daylight. The middle of the frame is empty.",
-     "anchor": [0.5, 0.5], "box": [0.70, 0.45], "mode": "center", "light": [-1, -1], "gloss": false},
-    {"id": "flat-dark-1", "stage": "flat", "design": "dark", "person": "", "ai_made": true,
-     "prompt": "Top-down flat lay, camera directly overhead: deep black velvet, a soft vignette, a few specks of gold dust near the edges only. The middle of the frame is empty.",
-     "anchor": [0.5, 0.5], "box": [0.70, 0.45], "mode": "center", "light": [-1, -1], "gloss": false},
-    {"id": "flat-wood-1", "stage": "flat", "design": "wood", "person": "", "ai_made": true,
-     "prompt": "Top-down flat lay, camera directly overhead: natural linen cloth on a light oak table, a few dried flowers in the bottom left corner only, soft daylight. The middle of the frame is empty.",
-     "anchor": [0.5, 0.5], "box": [0.70, 0.45], "mode": "center", "light": [-1, -1], "gloss": false},
-    {"id": "flat-nature-1", "stage": "flat", "design": "nature", "person": "", "ai_made": true,
-     "prompt": "Top-down flat lay, camera directly overhead: fine beige sand with a few seashells and a palm leaf shadow at the edges only, bright sunlight. The middle of the frame is empty.",
-     "anchor": [0.5, 0.5], "box": [0.70, 0.45], "mode": "center", "light": [-1, -1], "gloss": false},
-    {"id": "flat-festive-1", "stage": "flat", "design": "festive", "person": "", "ai_made": true,
-     "prompt": "Top-down flat lay, camera directly overhead: deep red silk cloth, marigold petals, a small brass diya and colourful rangoli powder at the edges only, warm light. The middle of the frame is empty.",
-     "anchor": [0.5, 0.5], "box": [0.70, 0.45], "mode": "center", "light": [-1, -1], "gloss": false},
-    {"id": "flat-pastel-1", "stage": "flat", "design": "pastel", "person": "", "ai_made": true,
-     "prompt": "Top-down flat lay, camera directly overhead: pastel pink paper, the shadow of a palm leaf falling across one corner only, crisp light. The middle of the frame is empty.",
-     "anchor": [0.5, 0.5], "box": [0.70, 0.45], "mode": "center", "light": [-1, -1], "gloss": false},
-
-    {"id": "hang-studio-1", "stage": "hang", "design": "studio", "person": "", "ai_made": true,
-     "prompt": "A single empty brass wall hook on a clean warm-white plaster wall, the hook near the top centre of the frame, soft window light from the left. Camera straight on. Nothing is hanging on the hook and the wall below it is empty.",
-     "anchor": [0.5, 0.16], "box": [0.62, 0.72], "mode": "top", "light": [-1, -1], "gloss": false},
-    {"id": "hang-wood-1", "stage": "hang", "design": "wood", "person": "", "ai_made": true,
-     "prompt": "A natural wooden clothing rail running across the top of the frame in front of a warm beige wall, a dried plant in a pot in the bottom right corner only, soft daylight. Camera straight on. Nothing is hanging on the rail and the wall below it is empty.",
-     "anchor": [0.5, 0.14], "box": [0.62, 0.72], "mode": "top", "light": [-1, -1], "gloss": false},
-    {"id": "hang-festive-1", "stage": "hang", "design": "festive", "person": "", "ai_made": true,
-     "prompt": "An empty decorative gold hook at the top centre of a warm wall, marigold garlands hanging down the far left and far right edges only, warm festive fairy lights. Camera straight on. Nothing is hanging on the hook and the centre of the wall is empty.",
-     "anchor": [0.5, 0.16], "box": [0.58, 0.70], "mode": "top", "light": [-0.4, -1], "gloss": false},
-
-    {"id": "palm-woman-1", "stage": "palm", "design": "studio", "person": "woman", "ai_made": true,
-     "prompt": "Close-up of a woman's hand held out towards the camera, palm facing up, open and flat, fingers relaxed, warm medium-brown skin, neat natural nails, a plain cream sleeve, soft blurred beige background, soft studio light. The palm is centred in the lower middle of the frame and is empty.",
-     "anchor": [0.5, 0.64], "box": [0.34, 0.30], "mode": "base", "light": [-1, -1], "gloss": false},
-    {"id": "palm-woman-2", "stage": "palm", "design": "festive", "person": "woman", "ai_made": true,
-     "prompt": "Close-up of a woman's hand with a fine bridal mehendi (henna) design, held out towards the camera, palm facing up, open and flat, a few glass bangles on the wrist, warm golden blurred bokeh background. The palm is centred in the lower middle of the frame and is empty.",
-     "anchor": [0.5, 0.64], "box": [0.34, 0.30], "mode": "base", "light": [-0.4, -1], "gloss": false},
-    {"id": "palm-man-1", "stage": "palm", "design": "studio", "person": "man", "ai_made": true,
-     "prompt": "Close-up of a man's hand held out towards the camera, palm facing up, open and flat, a crisp white shirt cuff, a softly blurred grey background, soft studio light. The palm is centred in the lower middle of the frame and is empty.",
-     "anchor": [0.5, 0.64], "box": [0.34, 0.30], "mode": "base", "light": [-1, -1], "gloss": false},
-    {"id": "palm-hands-1", "stage": "palm", "design": "nature", "person": "hands", "ai_made": true,
-     "prompt": "Close-up of two cupped hands held together palm up, offering something to the camera, a softly blurred green garden behind, gentle daylight. The cupped palms are centred in the lower middle of the frame and are empty.",
-     "anchor": [0.5, 0.64], "box": [0.36, 0.30], "mode": "base", "light": [-1, -1], "gloss": false},
-
-    {"id": "neck-woman-1", "stage": "neck", "design": "studio", "person": "woman", "ai_made": true,
-     "prompt": "Front close-up of a South Asian woman's neck, collarbones and shoulders, wearing a plain black off-shoulder top, a bare neckline with no jewellery. Her chin is just visible at the top edge and the rest of her face is out of frame. Soft studio light, plain grey background.",
-     "anchor": [0.5, 0.36], "box": [0.62, 0.42], "mode": "top", "light": [-1, -1], "gloss": false},
-    {"id": "neck-woman-2", "stage": "neck", "design": "festive", "person": "woman", "ai_made": true,
-     "prompt": "Front close-up of a woman's neck and collarbones wearing a deep maroon silk saree blouse with a wide neckline, a bare neckline with no jewellery. Her chin is just visible at the top edge and the rest of her face is out of frame. Warm festive golden bokeh background.",
-     "anchor": [0.5, 0.36], "box": [0.62, 0.42], "mode": "top", "light": [-0.4, -1], "gloss": false},
-    {"id": "neck-woman-3", "stage": "neck", "design": "nature", "person": "woman", "ai_made": true,
-     "prompt": "Front close-up of a woman's neck and collarbones wearing a plain white linen V-neck top, a bare neckline with no jewellery. Her chin is just visible at the top edge and the rest of her face is out of frame. Bright natural daylight, soft beige background.",
-     "anchor": [0.5, 0.36], "box": [0.62, 0.42], "mode": "top", "light": [-1, -1], "gloss": false},
-
-    {"id": "ear-woman-1", "stage": "ear", "design": "studio", "person": "woman", "ai_made": true,
-     "prompt": "Side profile close-up of a woman's ear, jawline and neck, hair tied back in a low bun, the earlobe clearly visible and empty with no earrings, the ear in the upper middle of the frame, her eyes out of frame. Soft studio light, warm neutral background.",
-     "anchor": [0.5, 0.40], "box": [0.30, 0.34], "mode": "top", "light": [-1, -1], "gloss": false},
-    {"id": "ear-woman-2", "stage": "ear", "design": "festive", "person": "woman", "ai_made": true,
-     "prompt": "Close-up of a South Asian woman's ear and cheek, dark hair tucked behind the ear, the earlobe clearly visible and empty with no earrings, the ear in the upper middle of the frame, her eyes out of frame. Soft warm festive light, blurred golden background.",
-     "anchor": [0.5, 0.40], "box": [0.30, 0.34], "mode": "top", "light": [-0.4, -1], "gloss": false},
-
-    {"id": "beside-woman-1", "stage": "stand", "design": "wood", "person": "woman", "pose": "beside", "ai_made": true,
-     "prompt": "A smiling young woman sitting at a cafe table, softly out of focus in the background. A light wooden table in the foreground, sharp, with an empty spot in the lower middle of the frame. Camera at table height, warm natural light.",
-     "anchor": [0.5, 0.78], "box": [0.46, 0.38], "mode": "base", "light": [-1, -1], "gloss": false},
-    {"id": "beside-woman-2", "stage": "stand", "design": "marble", "person": "woman", "pose": "beside", "ai_made": true,
-     "prompt": "An elegant woman in a saree standing in a softly lit living room, out of focus in the background. A marble side table in the sharp foreground, its centre empty. Camera at table height, warm evening light.",
-     "anchor": [0.5, 0.78], "box": [0.46, 0.38], "mode": "base", "light": [-1, -1], "gloss": true},
-    {"id": "beside-man-1", "stage": "stand", "design": "wood", "person": "man", "pose": "beside", "ai_made": true,
-     "prompt": "A man in a casual linen shirt sitting at a desk, softly out of focus in the background. A dark wooden desk in the sharp foreground, its centre empty. Camera at desk height, natural window light.",
-     "anchor": [0.5, 0.78], "box": [0.46, 0.38], "mode": "base", "light": [-1, -1], "gloss": false},
-    {"id": "beside-man-2", "stage": "stand", "design": "dark", "person": "man", "pose": "beside", "ai_made": true,
-     "prompt": "A man in a dark suit adjusting his shirt cuff, out of focus in the background. A dark marble counter in the sharp foreground, its centre empty. Camera at counter height, moody evening light.",
-     "anchor": [0.5, 0.78], "box": [0.46, 0.38], "mode": "base", "light": [-0.4, -1], "gloss": true}
-  ]
+ "_about": "The photo backdrop library for free scene templates. Each entry is one empty backdrop image, generated ONCE (by hand, in any image tool) from its prompt and saved here as <id>.jpg (or .png/.webp). scenes.py reads this file; an entry whose image is not here yet is simply skipped. anchor is where the product attaches, as fractions of the image (x, y); box is the largest the product may be drawn (w, h, fractions); mode says which point of the product sits on the anchor: base (it stands there), center (flat-lay), top (it hangs from there). light is where the light comes FROM. Regenerate the prompt sheet with: python scripts/scene_prompts.py",
+ "suffix": "Photorealistic high-end commercial product photography backdrop, sharp focus, natural soft shadows, vertical 9:16 frame. The empty spot described above must stay completely empty: no product, no bottle, no jewellery, nothing placed there. No text, no logo, no watermark.",
+ "templates": [
+  {
+   "id": "stand-studio-1",
+   "stage": "stand",
+   "design": "studio",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Empty seamless off-white paper backdrop that curves smoothly into the floor, soft diffused light from the upper left, a gentle pool of light in the centre. Camera at table height, looking straight on. The floor in the lower middle of the frame is empty.",
+   "anchor": [
+    0.5,
+    0.86
+   ],
+   "box": [
+    0.5,
+    0.46
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Empty_seamless_paper_backdrop_20261006181442.jpg"
+  },
+  {
+   "id": "stand-studio-2",
+   "stage": "stand",
+   "design": "studio",
+   "person": "",
+   "ai_made": true,
+   "prompt": "An empty round cylindrical podium in matte warm beige plaster, centred, its flat top surface just below the middle of the frame, on a soft beige seamless background. Soft window light from the left. Camera level with the podium top. The podium top is empty.",
+   "anchor": [
+    0.5,
+    0.535
+   ],
+   "box": [
+    0.46,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Cylindrical_podium_on_beige_back…_20261006182840.jpg"
+  },
+  {
+   "id": "stand-marble-1",
+   "stage": "stand",
+   "design": "marble",
+   "person": "",
+   "ai_made": true,
+   "prompt": "An empty white marble plinth with soft grey veins and a thin brushed-gold trim, centred, its top surface just below the middle of the frame, soft cream background, gentle daylight from the left. Camera level with the plinth top. The plinth top is empty.",
+   "anchor": [
+    0.5,
+    0.55
+   ],
+   "box": [
+    0.5,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Empty_marble_plinth_on_display_20261006181429.jpg"
+  },
+  {
+   "id": "stand-marble-2",
+   "stage": "stand",
+   "design": "marble",
+   "person": "",
+   "ai_made": true,
+   "prompt": "A polished white marble tabletop filling the lower third of the frame, a softly blurred luxurious cream interior behind it with warm gold highlights. Camera at table height. The centre of the tabletop is empty.",
+   "anchor": [
+    0.5,
+    0.8
+   ],
+   "box": [
+    0.48,
+    0.44
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": true,
+   "source": "Empty_marble_tabletop_interior_20261006181511.jpg"
+  },
+  {
+   "id": "stand-dark-1",
+   "stage": "stand",
+   "design": "dark",
+   "person": "",
+   "ai_made": true,
+   "prompt": "An empty black stone pedestal, centred, its top surface just below the middle of the frame, deep charcoal background, a soft rim light and faint haze behind it, dramatic low-key luxury lighting. Camera level with the pedestal top. The pedestal top is empty.",
+   "anchor": [
+    0.5,
+    0.505
+   ],
+   "box": [
+    0.48,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -0.5,
+    -1
+   ],
+   "gloss": true,
+   "source": "Empty_black_stone_pedestal_20261006181500.jpg"
+  },
+  {
+   "id": "stand-dark-2",
+   "stage": "stand",
+   "design": "dark",
+   "person": "",
+   "ai_made": true,
+   "prompt": "A dark slate tabletop in the foreground, a deep black background, a soft spotlight pool falling on the centre of the table, moody low-key luxury lighting. Camera at table height. The centre of the table is empty.",
+   "anchor": [
+    0.5,
+    0.58
+   ],
+   "box": [
+    0.42,
+    0.44
+   ],
+   "mode": "base",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": true,
+   "source": "Empty_slate_tabletop_under_spotl…_20261006182846.jpg"
+  },
+  {
+   "id": "stand-wood-1",
+   "stage": "stand",
+   "design": "wood",
+   "person": "",
+   "ai_made": true,
+   "prompt": "A rustic oak wooden table in the foreground, a warm cream plaster wall behind it, soft afternoon window light from the left casting gentle leaf shadows on the wall, a folded linen cloth at the far left edge only. Camera at table height. The centre of the table is empty.",
+   "anchor": [
+    0.56,
+    0.76
+   ],
+   "box": [
+    0.48,
+    0.44
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Empty_wooden_table_with_cloth_20261006181456.jpg"
+  },
+  {
+   "id": "stand-wood-2",
+   "stage": "stand",
+   "design": "wood",
+   "person": "",
+   "ai_made": true,
+   "prompt": "A light wooden table against a warm neutral wall, a small ceramic vase with dried pampas grass at the far right edge only, soft morning light from the left. Camera at table height. The centre of the table is empty.",
+   "anchor": [
+    0.42,
+    0.74
+   ],
+   "box": [
+    0.46,
+    0.44
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Ceramic_vase_on_wooden_table_20261006182902.jpg"
+  },
+  {
+   "id": "stand-nature-1",
+   "stage": "stand",
+   "design": "nature",
+   "person": "",
+   "ai_made": true,
+   "prompt": "A large flat natural grey stone in the foreground with its flat top just below the middle of the frame, surrounded by green moss and small ferns, soft dappled sunlight, a blurred green forest behind. Camera level with the stone top. The top of the stone is empty.",
+   "anchor": [
+    0.47,
+    0.63
+   ],
+   "box": [
+    0.42,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Grey_stone_in_forest_20261006182908.jpg"
+  },
+  {
+   "id": "stand-nature-2",
+   "stage": "stand",
+   "design": "nature",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Smooth beige sandstone rocks on fine sand, a large flat rock in the centre with its flat top just below the middle of the frame, palm leaf shadows, bright warm sunlight, a softly blurred blue sky behind. Camera level with the rock top. The flat rock is empty.",
+   "anchor": [
+    0.52,
+    0.55
+   ],
+   "box": [
+    0.42,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Sandstone_rocks_on_sand_20261006181505.jpg"
+  },
+  {
+   "id": "stand-festive-1",
+   "stage": "stand",
+   "design": "festive",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Diwali scene: a dark wooden table, lit clay diyas and orange marigold flowers placed only along the far left and far right edges, warm golden bokeh lights in the blurred background. Camera at table height. The centre of the table is completely empty.",
+   "anchor": [
+    0.5,
+    0.72
+   ],
+   "box": [
+    0.4,
+    0.42
+   ],
+   "mode": "base",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": true,
+   "source": "Diwali_scene_with_lit_diyas_20261006181514.jpg"
+  },
+  {
+   "id": "stand-festive-2",
+   "stage": "stand",
+   "design": "festive",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Festive celebration set: a deep maroon velvet surface, gold and brass decor and rose petals at the left and right edges only, soft warm fairy-light bokeh behind. Camera at table height. The centre of the surface is empty.",
+   "anchor": [
+    0.42,
+    0.66
+   ],
+   "box": [
+    0.42,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": false,
+   "source": "Festive_celebration_backdrop_setup_20261006181437.jpg"
+  },
+  {
+   "id": "stand-pastel-1",
+   "stage": "stand",
+   "design": "pastel",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Pastel set: a soft pink arch backdrop, a pastel blue cylindrical podium centred in front of it with its empty top just below the middle of the frame, soft even light, playful and modern. Camera level with the podium top. The podium top is empty.",
+   "anchor": [
+    0.5,
+    0.62
+   ],
+   "box": [
+    0.42,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Pastel_arch_backdrop_and_podium_20261006181417.jpg"
+  },
+  {
+   "id": "stand-pastel-2",
+   "stage": "stand",
+   "design": "pastel",
+   "person": "",
+   "ai_made": true,
+   "prompt": "A bright butter-yellow seamless background with a mint green rectangular block centred, the block's flat top just below the middle of the frame, crisp sunlight with hard shadows, playful and summery. Camera level with the block top. The block top is empty.",
+   "anchor": [
+    0.5,
+    0.475
+   ],
+   "box": [
+    0.46,
+    0.38
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Green_block_on_yellow_background_20261006181439.jpg"
+  },
+  {
+   "id": "flat-studio-1",
+   "stage": "flat",
+   "design": "studio",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Top-down flat lay, camera directly overhead: smooth off-white textured paper, soft shadows from a window at the top left. The middle 60% of the frame is empty.",
+   "anchor": [
+    0.5,
+    0.52
+   ],
+   "box": [
+    0.62,
+    0.42
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Empty_paper_flat_lay_backdrop_20261006181431.jpg"
+  },
+  {
+   "id": "flat-studio-2",
+   "stage": "flat",
+   "design": "studio",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Top-down flat lay, camera directly overhead: soft beige suede fabric with gentle folds only at the edges, soft even light. The middle of the frame is flat and empty.",
+   "anchor": [
+    0.5,
+    0.5
+   ],
+   "box": [
+    0.62,
+    0.42
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Beige_suede_fabric_backdrop_20261006182839.jpg"
+  },
+  {
+   "id": "flat-marble-1",
+   "stage": "flat",
+   "design": "marble",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Top-down flat lay, camera directly overhead: white Carrara marble with soft grey veins, a single sprig of eucalyptus in the top right corner, soft daylight. The middle of the frame is empty.",
+   "anchor": [
+    0.46,
+    0.55
+   ],
+   "box": [
+    0.62,
+    0.42
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Marble_surface_with_eucalyptus_s…_20261006181449.jpg"
+  },
+  {
+   "id": "flat-dark-1",
+   "stage": "flat",
+   "design": "dark",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Top-down flat lay, camera directly overhead: deep black velvet, a soft vignette, a few specks of gold dust near the edges only. The middle of the frame is empty.",
+   "anchor": [
+    0.5,
+    0.5
+   ],
+   "box": [
+    0.62,
+    0.42
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Black_velvet_and_gold_dust_20261006181420.jpg"
+  },
+  {
+   "id": "flat-wood-1",
+   "stage": "flat",
+   "design": "wood",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Top-down flat lay, camera directly overhead: natural linen cloth on a light oak table, a few dried flowers in the bottom left corner only, soft daylight. The middle of the frame is empty.",
+   "anchor": [
+    0.55,
+    0.4
+   ],
+   "box": [
+    0.58,
+    0.4
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Empty_linen_cloth_flat_lay_20261006181412.jpg"
+  },
+  {
+   "id": "flat-nature-1",
+   "stage": "flat",
+   "design": "nature",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Top-down flat lay, camera directly overhead: fine beige sand with a few seashells and a palm leaf shadow at the edges only, bright sunlight. The middle of the frame is empty.",
+   "anchor": [
+    0.55,
+    0.5
+   ],
+   "box": [
+    0.6,
+    0.42
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Sand_with_seashells_and_palm_20261006182819.jpg"
+  },
+  {
+   "id": "flat-festive-1",
+   "stage": "flat",
+   "design": "festive",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Top-down flat lay, camera directly overhead: deep red silk cloth, marigold petals, a small brass diya and colourful rangoli powder at the edges only, warm light. The middle of the frame is empty.",
+   "anchor": [
+    0.5,
+    0.4
+   ],
+   "box": [
+    0.58,
+    0.36
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Red_cloth_with_marigold_petals_20261006181424.jpg"
+  },
+  {
+   "id": "flat-pastel-1",
+   "stage": "flat",
+   "design": "pastel",
+   "person": "",
+   "ai_made": true,
+   "prompt": "Top-down flat lay, camera directly overhead: pastel pink paper, the shadow of a palm leaf falling across one corner only, crisp light. The middle of the frame is empty.",
+   "anchor": [
+    0.55,
+    0.58
+   ],
+   "box": [
+    0.6,
+    0.42
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Palm_leaf_shadow_on_paper_20261006181512.jpg"
+  },
+  {
+   "id": "hang-studio-1",
+   "stage": "hang",
+   "design": "studio",
+   "person": "",
+   "ai_made": true,
+   "prompt": "A single empty brass wall hook on a clean warm-white plaster wall, the hook near the top centre of the frame, soft window light from the left. Camera straight on. Nothing is hanging on the hook and the wall below it is empty.",
+   "anchor": [
+    0.48,
+    0.37
+   ],
+   "box": [
+    0.58,
+    0.58
+   ],
+   "mode": "top",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Brass_wall_hook_on_wall_20261006181454.jpg"
+  },
+  {
+   "id": "hang-wood-1",
+   "stage": "hang",
+   "design": "wood",
+   "person": "",
+   "ai_made": true,
+   "prompt": "A natural wooden clothing rail running across the top of the frame in front of a warm beige wall, a dried plant in a pot in the bottom right corner only, soft daylight. Camera straight on. Nothing is hanging on the rail and the wall below it is empty.",
+   "anchor": [
+    0.38,
+    0.245
+   ],
+   "box": [
+    0.5,
+    0.62
+   ],
+   "mode": "top",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Wooden_clothing_rail_against_wall_20261006181451.jpg"
+  },
+  {
+   "id": "hang-festive-1",
+   "stage": "hang",
+   "design": "festive",
+   "person": "",
+   "ai_made": true,
+   "prompt": "An empty decorative gold hook at the top centre of a warm wall, marigold garlands hanging down the far left and far right edges only, warm festive fairy lights. Camera straight on. Nothing is hanging on the hook and the centre of the wall is empty.",
+   "anchor": [
+    0.5,
+    0.29
+   ],
+   "box": [
+    0.52,
+    0.62
+   ],
+   "mode": "top",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": false,
+   "source": "Empty_gold_hook_with_garlands_20261006181546.jpg"
+  },
+  {
+   "id": "palm-woman-1",
+   "stage": "palm",
+   "design": "studio",
+   "person": "woman",
+   "ai_made": true,
+   "prompt": "Close-up of a woman's hand held out in front of her at waist height, palm facing straight UP towards the sky, flat and open like a tray, fingers together and slightly curved, seen from slightly above, warm medium-brown skin, a plain cream sleeve, soft blurred beige background, soft studio light. The flat palm is centred in the lower middle of the frame and is empty. The hand is NOT raised and NOT waving.",
+   "anchor": [
+    0.5,
+    0.64
+   ],
+   "box": [
+    0.34,
+    0.3
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "redo": "Regenerate: the hand came out raised upright like a wave. It must be held out flat, palm facing UP, so a product can rest on it."
+  },
+  {
+   "id": "palm-woman-2",
+   "stage": "palm",
+   "design": "festive",
+   "person": "woman",
+   "ai_made": true,
+   "prompt": "Close-up of a woman's hand with a fine bridal mehendi (henna) design, held out in front of her at waist height, palm facing straight UP towards the sky, flat and open like a tray, a few glass bangles on the wrist, seen from slightly above, warm golden blurred bokeh background. The flat palm is centred in the lower middle of the frame and is empty. The hand is NOT raised and NOT waving.",
+   "anchor": [
+    0.5,
+    0.64
+   ],
+   "box": [
+    0.34,
+    0.3
+   ],
+   "mode": "base",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": false,
+   "redo": "Regenerate: the hand came out raised upright like a wave. It must be held out flat, palm facing UP, so a product can rest on it."
+  },
+  {
+   "id": "palm-man-1",
+   "stage": "palm",
+   "design": "studio",
+   "person": "man",
+   "ai_made": true,
+   "prompt": "Close-up of a man's hand held out towards the camera, palm facing up, open and flat, a crisp white shirt cuff, a softly blurred grey background, soft studio light. The palm is centred in the lower middle of the frame and is empty.",
+   "anchor": [
+    0.6,
+    0.56
+   ],
+   "box": [
+    0.26,
+    0.26
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Man_holding_hand_out_palm_20261006182923.jpg"
+  },
+  {
+   "id": "palm-hands-1",
+   "stage": "palm",
+   "design": "nature",
+   "person": "hands",
+   "ai_made": true,
+   "prompt": "Close-up of two cupped hands held together palm up, offering something to the camera, a softly blurred green garden behind, gentle daylight. The cupped palms are centred in the lower middle of the frame and are empty.",
+   "anchor": [
+    0.5,
+    0.53
+   ],
+   "box": [
+    0.36,
+    0.28
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Cupped_hands_offering_empty_palms_20261006183010.jpg"
+  },
+  {
+   "id": "neck-woman-1",
+   "stage": "neck",
+   "design": "studio",
+   "person": "woman",
+   "ai_made": true,
+   "prompt": "Front close-up of a South Asian woman's neck, collarbones and shoulders, wearing a plain black off-shoulder top, a bare neckline with no jewellery. Her chin is just visible at the top edge and the rest of her face is out of frame. Soft studio light, plain grey background.",
+   "anchor": [
+    0.5,
+    0.3
+   ],
+   "box": [
+    0.54,
+    0.26
+   ],
+   "mode": "top",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman_wearing_black_off-shoulder…_20261006181551.jpg"
+  },
+  {
+   "id": "neck-woman-2",
+   "stage": "neck",
+   "design": "festive",
+   "person": "woman",
+   "ai_made": true,
+   "prompt": "Front close-up of a woman's neck and collarbones wearing a deep maroon silk saree blouse with a wide neckline, a bare neckline with no jewellery. Her chin is just visible at the top edge and the rest of her face is out of frame. Warm festive golden bokeh background.",
+   "anchor": [
+    0.48,
+    0.3
+   ],
+   "box": [
+    0.5,
+    0.2
+   ],
+   "mode": "top",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman_wearing_maroon_saree_blouse_20261006181528.jpg"
+  },
+  {
+   "id": "neck-woman-3",
+   "stage": "neck",
+   "design": "studio",
+   "person": "woman",
+   "ai_made": true,
+   "prompt": "Front close-up of a woman's neck and collarbones wearing a plain white linen V-neck top, a bare neckline with no jewellery. Her chin is just visible at the top edge and the rest of her face is out of frame. Bright natural daylight, soft beige background.",
+   "anchor": [
+    0.52,
+    0.33
+   ],
+   "box": [
+    0.5,
+    0.32
+   ],
+   "mode": "top",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman_wearing_white_linen_top_20261006183012.jpg"
+  },
+  {
+   "id": "ear-woman-1",
+   "stage": "ear",
+   "design": "studio",
+   "person": "woman",
+   "ai_made": true,
+   "prompt": "Side profile close-up of a woman's ear, jawline and neck, hair tied back in a low bun, the earlobe clearly visible and empty with no earrings, the ear in the upper middle of the frame, her eyes out of frame. Soft studio light, warm neutral background.",
+   "anchor": [
+    0.53,
+    0.455
+   ],
+   "box": [
+    0.16,
+    0.24
+   ],
+   "mode": "top",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman_profile_close_up_20261006183006.jpg"
+  },
+  {
+   "id": "ear-woman-2",
+   "stage": "ear",
+   "design": "festive",
+   "person": "woman",
+   "ai_made": true,
+   "prompt": "Close-up of a South Asian woman's ear and cheek, dark hair tucked behind the ear, the earlobe clearly visible and empty with no earrings, the ear in the upper middle of the frame, her eyes out of frame. Soft warm festive light, blurred golden background.",
+   "anchor": [
+    0.47,
+    0.485
+   ],
+   "box": [
+    0.18,
+    0.26
+   ],
+   "mode": "top",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman's_ear_without_earrings_20261006182946.jpg"
+  },
+  {
+   "id": "beside-woman-1",
+   "stage": "stand",
+   "design": "wood",
+   "person": "woman",
+   "pose": "beside",
+   "ai_made": true,
+   "prompt": "A smiling young woman sitting at a cafe table, softly out of focus in the background. A light wooden table in the foreground, sharp, with an empty spot in the lower middle of the frame. Camera at table height, warm natural light.",
+   "anchor": [
+    0.62,
+    0.82
+   ],
+   "box": [
+    0.32,
+    0.3
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman_sitting_at_cafe_table_20261006182959.jpg"
+  },
+  {
+   "id": "beside-woman-2",
+   "stage": "stand",
+   "design": "marble",
+   "person": "woman",
+   "pose": "beside",
+   "ai_made": true,
+   "prompt": "An elegant woman in a saree standing in a softly lit living room, out of focus in the background. A marble side table in the sharp foreground, its centre empty. Camera at table height, warm evening light.",
+   "anchor": [
+    0.33,
+    0.67
+   ],
+   "box": [
+    0.28,
+    0.28
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": true,
+   "source": "Woman_standing_in_living_room_20261006181524.jpg"
+  },
+  {
+   "id": "beside-man-1",
+   "stage": "stand",
+   "design": "wood",
+   "person": "man",
+   "pose": "beside",
+   "ai_made": true,
+   "prompt": "A man in a casual linen shirt sitting at a desk, softly out of focus in the background. A dark wooden desk in the sharp foreground, its centre empty. Camera at desk height, natural window light.",
+   "anchor": [
+    0.45,
+    0.8
+   ],
+   "box": [
+    0.32,
+    0.3
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Man_sitting_at_wooden_desk_20261006181518.jpg"
+  },
+  {
+   "id": "beside-man-2",
+   "stage": "stand",
+   "design": "dark",
+   "person": "man",
+   "pose": "beside",
+   "ai_made": true,
+   "prompt": "A man in a dark suit adjusting his shirt cuff, out of focus in the background. A dark marble counter in the sharp foreground, its centre empty. Camera at counter height, moody evening light.",
+   "anchor": [
+    0.5,
+    0.8
+   ],
+   "box": [
+    0.32,
+    0.3
+   ],
+   "mode": "base",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": true,
+   "source": "Man_adjusting_shirt_cuff_20261006181526.jpg"
+  },
+  {
+   "id": "mannequin-woman-1",
+   "stage": "mannequin",
+   "design": "studio",
+   "person": "mannequin",
+   "ai_made": true,
+   "prompt": "A headless white female dress form mannequin on a slim wooden stand, front view, centred, completely bare with no clothes on it, its shoulders about a third of the way down the frame, in a bright minimal boutique with a soft beige wall. Soft even light.",
+   "anchor": [
+    0.5,
+    0.26
+   ],
+   "box": [
+    0.46,
+    0.42
+   ],
+   "mode": "fit",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Mannequin_on_wooden_stand_20261006182912.jpg"
+  },
+  {
+   "id": "mannequin-woman-2",
+   "stage": "mannequin",
+   "design": "festive",
+   "person": "mannequin",
+   "ai_made": true,
+   "prompt": "A headless beige female dress form mannequin on a brass stand, front view, centred, completely bare with no clothes on it, its shoulders about a third of the way down the frame, in a festive boutique with marigold garlands and warm fairy lights softly blurred behind.",
+   "anchor": [
+    0.49,
+    0.205
+   ],
+   "box": [
+    0.5,
+    0.5
+   ],
+   "mode": "fit",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": false,
+   "source": "Dress_form_mannequin_on_stand_20261006182921.jpg"
+  },
+  {
+   "id": "mannequin-man-1",
+   "stage": "mannequin",
+   "design": "dark",
+   "person": "mannequin",
+   "ai_made": true,
+   "prompt": "A headless matte grey male torso mannequin on a black stand, front view, centred, completely bare with no clothes on it, its shoulders about a third of the way down the frame, in a dark moody menswear studio with a soft spotlight.",
+   "anchor": [
+    0.5,
+    0.28
+   ],
+   "box": [
+    0.72,
+    0.48
+   ],
+   "mode": "fit",
+   "light": [
+    -0.5,
+    -1
+   ],
+   "gloss": false,
+   "source": "Torso_mannequin_on_black_stand_20261006182954.jpg"
+  },
+  {
+   "id": "held-woman-1",
+   "stage": "held",
+   "design": "studio",
+   "person": "woman",
+   "ai_made": true,
+   "prompt": "A smiling woman standing in front of a plain warm beige wall, one arm held out to her side at shoulder height, well away from her face, with her fingers pinched together as if holding a small hook, but holding nothing. The space below her raised hand is empty wall. Soft studio light.",
+   "anchor": [
+    0.5,
+    0.22
+   ],
+   "box": [
+    0.62,
+    0.66
+   ],
+   "mode": "top",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "redo": "Regenerate: the raised hand is right beside the face, so any garment hung from it covers the face. The arm must be held out to the SIDE at shoulder height, hand well away from the face, with the space below the hand empty."
+  },
+  {
+   "id": "held-man-1",
+   "stage": "held",
+   "design": "studio",
+   "person": "man",
+   "ai_made": true,
+   "prompt": "A smiling man standing in front of a plain light grey wall, one arm held out to his side at shoulder height, well away from his face, with his fingers pinched together as if holding a small hook, but holding nothing. The space below his raised hand is empty wall. Soft studio light.",
+   "anchor": [
+    0.5,
+    0.22
+   ],
+   "box": [
+    0.62,
+    0.66
+   ],
+   "mode": "top",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "redo": "Regenerate: the raised hand is right beside the face, so any garment hung from it covers the face. The arm must be held out to the SIDE at shoulder height, hand well away from the face, with the space below the hand empty."
+  },
+  {
+   "id": "model-woman-1",
+   "stage": "model",
+   "design": "studio",
+   "person": "woman",
+   "aspect": "3:4",
+   "ai_made": true,
+   "prompt": "Fashion catalogue photo of a South Asian woman standing straight and facing the camera, shown from head to knees, arms relaxed at her sides, wearing a plain fitted white t-shirt and blue jeans, neutral expression, plain light grey studio background, even soft light, the whole upper body clearly visible.",
+   "anchor": [
+    0.5,
+    0.5
+   ],
+   "box": [
+    1,
+    1
+   ],
+   "mode": "tryon",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman_standing_in_white_tshirt_20261006182928.jpg"
+  },
+  {
+   "id": "model-woman-2",
+   "stage": "model",
+   "design": "wood",
+   "person": "woman",
+   "aspect": "3:4",
+   "ai_made": true,
+   "prompt": "Fashion catalogue photo of a Black woman standing straight and facing the camera, shown from head to knees, arms relaxed at her sides, wearing a plain fitted black top and beige trousers, gentle smile, plain warm beige studio background, even soft light, the whole upper body clearly visible.",
+   "anchor": [
+    0.5,
+    0.5
+   ],
+   "box": [
+    1,
+    1
+   ],
+   "mode": "tryon",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman_standing_in_studio_20261006182937.jpg"
+  },
+  {
+   "id": "model-woman-3",
+   "stage": "model",
+   "design": "nature",
+   "person": "woman",
+   "aspect": "3:4",
+   "ai_made": true,
+   "prompt": "Fashion catalogue photo of a white woman standing straight and facing the camera, shown from head to knees, arms relaxed at her sides, wearing a plain fitted grey t-shirt and white trousers, gentle smile, soft natural daylight outdoors with blurred greenery behind, the whole upper body clearly visible.",
+   "anchor": [
+    0.5,
+    0.5
+   ],
+   "box": [
+    1,
+    1
+   ],
+   "mode": "tryon",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman_standing_outdoors_in_outfit_20261006182917.jpg"
+  },
+  {
+   "id": "model-man-1",
+   "stage": "model",
+   "design": "studio",
+   "person": "man",
+   "aspect": "3:4",
+   "ai_made": true,
+   "prompt": "Fashion catalogue photo of a South Asian man standing straight and facing the camera, shown from head to knees, arms relaxed at his sides, wearing a plain fitted white t-shirt and dark jeans, neutral expression, plain light grey studio background, even soft light, the whole upper body clearly visible.",
+   "anchor": [
+    0.5,
+    0.5
+   ],
+   "box": [
+    1,
+    1
+   ],
+   "mode": "tryon",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Man_posing_in_white_t-shirt_20261006183008.jpg"
+  },
+  {
+   "id": "model-man-2",
+   "stage": "model",
+   "design": "dark",
+   "person": "man",
+   "aspect": "3:4",
+   "ai_made": true,
+   "prompt": "Fashion catalogue photo of a white man standing straight and facing the camera, shown from head to knees, arms relaxed at his sides, wearing a plain fitted black t-shirt and grey trousers, neutral expression, plain dark charcoal studio background, soft directional light, the whole upper body clearly visible.",
+   "anchor": [
+    0.5,
+    0.5
+   ],
+   "box": [
+    1,
+    1
+   ],
+   "mode": "tryon",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Man_wearing_t-shirt_trousers_20261006182932.jpg"
+  },
+  {
+   "id": "flat-studio-2-2",
+   "stage": "flat",
+   "design": "studio",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.5
+   ],
+   "box": [
+    0.62,
+    0.42
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Beige_suede_fabric_flat_lay_20261006181427.jpg",
+   "variant_of": "flat-studio-2"
+  },
+  {
+   "id": "flat-dark-1-2",
+   "stage": "flat",
+   "design": "dark",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.5
+   ],
+   "box": [
+    0.62,
+    0.42
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Black_velvet_with_gold_dust_20261006182906.jpg",
+   "variant_of": "flat-dark-1"
+  },
+  {
+   "id": "hang-studio-1-2",
+   "stage": "hang",
+   "design": "studio",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.25
+   ],
+   "box": [
+    0.58,
+    0.66
+   ],
+   "mode": "top",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Brass_wall_hook_on_wall_20261006182825.jpg",
+   "variant_of": "hang-studio-1"
+  },
+  {
+   "id": "stand-festive-1-2",
+   "stage": "stand",
+   "design": "festive",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.55,
+    0.72
+   ],
+   "box": [
+    0.38,
+    0.42
+   ],
+   "mode": "base",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": true,
+   "source": "Diwali_scene_with_lit_diyas_20261006182859.jpg",
+   "variant_of": "stand-festive-1"
+  },
+  {
+   "id": "stand-dark-1-2",
+   "stage": "stand",
+   "design": "dark",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.53
+   ],
+   "box": [
+    0.46,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -0.5,
+    -1
+   ],
+   "gloss": true,
+   "source": "Empty_black_stone_pedestal_20261006182821.jpg",
+   "variant_of": "stand-dark-1"
+  },
+  {
+   "id": "stand-studio-2-2",
+   "stage": "stand",
+   "design": "studio",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.505
+   ],
+   "box": [
+    0.4,
+    0.38
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Empty_cylindrical_podium_on_back…_20261006181447.jpg",
+   "variant_of": "stand-studio-2"
+  },
+  {
+   "id": "hang-festive-1-2",
+   "stage": "hang",
+   "design": "festive",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.26
+   ],
+   "box": [
+    0.52,
+    0.62
+   ],
+   "mode": "top",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": false,
+   "source": "Empty_gold_hook_with_garlands_20261006182942.jpg",
+   "variant_of": "hang-festive-1"
+  },
+  {
+   "id": "stand-marble-1-2",
+   "stage": "stand",
+   "design": "marble",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.575
+   ],
+   "box": [
+    0.48,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Empty_white_marble_plinth_20261006182910.jpg",
+   "variant_of": "stand-marble-1"
+  },
+  {
+   "id": "stand-studio-1-2",
+   "stage": "stand",
+   "design": "studio",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.82
+   ],
+   "box": [
+    0.5,
+    0.46
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Empty_white_photo_backdrop_20261006182830.jpg",
+   "variant_of": "stand-studio-1"
+  },
+  {
+   "id": "stand-festive-2-2",
+   "stage": "stand",
+   "design": "festive",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.52,
+    0.66
+   ],
+   "box": [
+    0.42,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": false,
+   "source": "Festive_celebration_backdrop_wit…_20261006182827.jpg",
+   "variant_of": "stand-festive-2"
+  },
+  {
+   "id": "palm-hands-1-2",
+   "stage": "palm",
+   "design": "nature",
+   "person": "hands",
+   "ai_made": true,
+   "anchor": [
+    0.62,
+    0.57
+   ],
+   "box": [
+    0.3,
+    0.25
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Hands_cupped_holding_empty_space_20261006181544.jpg",
+   "variant_of": "palm-hands-1"
+  },
+  {
+   "id": "flat-wood-1-2",
+   "stage": "flat",
+   "design": "wood",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.55,
+    0.42
+   ],
+   "box": [
+    0.58,
+    0.4
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Linen_cloth_on_oak_table_20261006182814.jpg",
+   "variant_of": "flat-wood-1"
+  },
+  {
+   "id": "beside-man-2-2",
+   "stage": "stand",
+   "design": "dark",
+   "person": "man",
+   "pose": "beside",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.8
+   ],
+   "box": [
+    0.32,
+    0.3
+   ],
+   "mode": "base",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": true,
+   "source": "Man_adjusting_shirt_cuff_20261006182925.jpg",
+   "variant_of": "beside-man-2"
+  },
+  {
+   "id": "palm-man-1-2",
+   "stage": "palm",
+   "design": "studio",
+   "person": "man",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.55
+   ],
+   "box": [
+    0.28,
+    0.26
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Man_holding_open_palm_20261006181536.jpg",
+   "variant_of": "palm-man-1"
+  },
+  {
+   "id": "beside-man-1-2",
+   "stage": "stand",
+   "design": "wood",
+   "person": "man",
+   "pose": "beside",
+   "ai_made": true,
+   "anchor": [
+    0.55,
+    0.78
+   ],
+   "box": [
+    0.32,
+    0.3
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Man_sitting_at_wooden_desk_20261006182952.jpg",
+   "variant_of": "beside-man-1"
+  },
+  {
+   "id": "flat-marble-1-2",
+   "stage": "flat",
+   "design": "marble",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.46,
+    0.55
+   ],
+   "box": [
+    0.62,
+    0.42
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Marble_surface_with_eucalyptus_s…_20261006182823.jpg",
+   "variant_of": "flat-marble-1"
+  },
+  {
+   "id": "stand-pastel-2-2",
+   "stage": "stand",
+   "design": "pastel",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.485
+   ],
+   "box": [
+    0.46,
+    0.38
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Mint_green_block_on_yellow_20261006182849.jpg",
+   "variant_of": "stand-pastel-2"
+  },
+  {
+   "id": "stand-nature-1-2",
+   "stage": "stand",
+   "design": "nature",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.47,
+    0.6
+   ],
+   "box": [
+    0.42,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Mossy_stone_in_forest_20261006181458.jpg",
+   "variant_of": "stand-nature-1"
+  },
+  {
+   "id": "stand-pastel-1-2",
+   "stage": "stand",
+   "design": "pastel",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.615
+   ],
+   "box": [
+    0.46,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Pastel_arch_backdrop_with_podium_20261006182842.jpg",
+   "variant_of": "stand-pastel-1"
+  },
+  {
+   "id": "flat-pastel-1-2",
+   "stage": "flat",
+   "design": "pastel",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.45,
+    0.58
+   ],
+   "box": [
+    0.6,
+    0.42
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Pink_paper_with_palm_shadow_20261006182848.jpg",
+   "variant_of": "flat-pastel-1"
+  },
+  {
+   "id": "stand-marble-2-2",
+   "stage": "stand",
+   "design": "marble",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.77
+   ],
+   "box": [
+    0.48,
+    0.44
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": true,
+   "source": "Polished_white_marble_tabletop_s…_20261006182836.jpg",
+   "variant_of": "stand-marble-2"
+  },
+  {
+   "id": "flat-nature-1-2",
+   "stage": "flat",
+   "design": "nature",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.48,
+    0.5
+   ],
+   "box": [
+    0.6,
+    0.42
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Sand_with_seashells_and_shadow_20261006181422.jpg",
+   "variant_of": "flat-nature-1"
+  },
+  {
+   "id": "stand-nature-2-2",
+   "stage": "stand",
+   "design": "nature",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.44,
+    0.54
+   ],
+   "box": [
+    0.42,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Sandstone_rocks_on_sand_20261006182844.jpg",
+   "variant_of": "stand-nature-2"
+  },
+  {
+   "id": "flat-festive-1-2",
+   "stage": "flat",
+   "design": "festive",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.55,
+    0.42
+   ],
+   "box": [
+    0.54,
+    0.38
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Silk_cloth_and_marigold_petals_20261006182900.jpg",
+   "variant_of": "flat-festive-1"
+  },
+  {
+   "id": "stand-dark-2-2",
+   "stage": "stand",
+   "design": "dark",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.46,
+    0.62
+   ],
+   "box": [
+    0.42,
+    0.44
+   ],
+   "mode": "base",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": true,
+   "source": "Spotlight_on_empty_dark_table_20261006181508.jpg",
+   "variant_of": "stand-dark-2"
+  },
+  {
+   "id": "stand-wood-2-2",
+   "stage": "stand",
+   "design": "wood",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.42,
+    0.68
+   ],
+   "box": [
+    0.42,
+    0.4
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Table_with_vase_of_grass_20261006181444.jpg",
+   "variant_of": "stand-wood-2"
+  },
+  {
+   "id": "flat-studio-1-2",
+   "stage": "flat",
+   "design": "studio",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.48
+   ],
+   "box": [
+    0.62,
+    0.42
+   ],
+   "mode": "center",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Textured_paper_flat_lay_backdrop_20261006182855.jpg",
+   "variant_of": "flat-studio-1"
+  },
+  {
+   "id": "ear-woman-1-2",
+   "stage": "ear",
+   "design": "studio",
+   "person": "woman",
+   "ai_made": true,
+   "anchor": [
+    0.46,
+    0.42
+   ],
+   "box": [
+    0.16,
+    0.24
+   ],
+   "mode": "top",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman_side_profile_close-up_20261006181521.jpg",
+   "variant_of": "ear-woman-1"
+  },
+  {
+   "id": "beside-woman-2-2",
+   "stage": "stand",
+   "design": "marble",
+   "person": "woman",
+   "pose": "beside",
+   "ai_made": true,
+   "anchor": [
+    0.72,
+    0.65
+   ],
+   "box": [
+    0.3,
+    0.28
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": true,
+   "source": "Woman_standing_in_living_room_20261006182945.jpg",
+   "variant_of": "beside-woman-2"
+  },
+  {
+   "id": "neck-woman-1-2",
+   "stage": "neck",
+   "design": "studio",
+   "person": "woman",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.31
+   ],
+   "box": [
+    0.54,
+    0.26
+   ],
+   "mode": "top",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman_wearing_black_off-shoulder…_20261006182956.jpg",
+   "variant_of": "neck-woman-1"
+  },
+  {
+   "id": "neck-woman-2-2",
+   "stage": "neck",
+   "design": "festive",
+   "person": "woman",
+   "ai_made": true,
+   "anchor": [
+    0.48,
+    0.33
+   ],
+   "box": [
+    0.48,
+    0.18
+   ],
+   "mode": "top",
+   "light": [
+    -0.4,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman_wearing_maroon_silk_blouse_20261006183001.jpg",
+   "variant_of": "neck-woman-2"
+  },
+  {
+   "id": "neck-woman-3-2",
+   "stage": "neck",
+   "design": "wood",
+   "person": "woman",
+   "ai_made": true,
+   "anchor": [
+    0.5,
+    0.36
+   ],
+   "box": [
+    0.5,
+    0.3
+   ],
+   "mode": "top",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Woman_wearing_white_top_20261006181534.jpg",
+   "variant_of": "neck-woman-3"
+  },
+  {
+   "id": "hang-wood-1-2",
+   "stage": "hang",
+   "design": "wood",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.38,
+    0.205
+   ],
+   "box": [
+    0.5,
+    0.62
+   ],
+   "mode": "top",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Wooden_clothing_rail_against_wall_20261006182857.jpg",
+   "variant_of": "hang-wood-1"
+  },
+  {
+   "id": "stand-wood-1-2",
+   "stage": "stand",
+   "design": "wood",
+   "person": "",
+   "ai_made": true,
+   "anchor": [
+    0.6,
+    0.72
+   ],
+   "box": [
+    0.46,
+    0.44
+   ],
+   "mode": "base",
+   "light": [
+    -1,
+    -1
+   ],
+   "gloss": false,
+   "source": "Wooden_table_with_leaf_shadows_20261006182834.jpg",
+   "variant_of": "stand-wood-1"
+  }
+ ]
 }

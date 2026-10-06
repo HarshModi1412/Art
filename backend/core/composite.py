@@ -228,7 +228,7 @@ def _match_exposure(cut: Image.Image, scene: Image.Image, at: tuple, strength=0.
     return Image.fromarray(arr.astype(np.uint8), "RGBA")
 
 
-def _light_wrap(cut: Image.Image, scene: Image.Image, at: tuple, amount=0.30) -> Image.Image:
+def _light_wrap(cut: Image.Image, scene: Image.Image, at: tuple, amount=0.18) -> Image.Image:
     """Let a little of the set's light spill over the product's outline.
 
     Real light bends round an object's edge, so its rim picks up the colour
@@ -244,7 +244,7 @@ def _light_wrap(cut: Image.Image, scene: Image.Image, at: tuple, amount=0.30) ->
     arr = np.asarray(cut, np.float32)
     alpha = arr[:, :, 3] / 255.0
     inner = cv2.erode((alpha * 255).astype(np.uint8), np.ones((5, 5), np.uint8),
-                      iterations=max(1, int(min(w, h) * 0.006))).astype(np.float32) / 255
+                      iterations=max(1, int(min(w, h) * 0.003))).astype(np.float32) / 255
     rim = np.clip(alpha - inner, 0, 1)[:, :, None] * amount
     arr[:, :, :3] = arr[:, :, :3] * (1 - rim) + bg * rim
     return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGBA")
@@ -268,6 +268,51 @@ def one_piece(cut: Image.Image) -> Image.Image:
     keep = np.asarray(cut, np.uint8).copy()
     keep[:, :, 3] = np.where(labels == i, keep[:, :, 3], 0)
     return Image.fromarray(keep, "RGBA").crop((x, y, x + w, y + h))
+
+
+def trim_hook(cut: Image.Image) -> Image.Image:
+    """Take a hanger's hook off the top of a garment photo.
+
+    On a dress form the garment's shoulders must sit on the form's shoulders;
+    a hook sticking up above the collar would end up floating over the neck.
+    The hook is the run of rows at the top much narrower than the garment."""
+    a = np.asarray(cut.getchannel("A")) > 127
+    widths = a.sum(axis=1)
+    if not widths.any():
+        return cut
+    full = widths.max()
+    rows = np.where(widths > 0)[0]
+    top = rows[0]
+    limit = rows[0] + int(len(rows) * 0.35)        # a hook never runs past a third
+    while top < limit and widths[top] < full * 0.18:
+        top += 1
+    if top - rows[0] < 3:
+        return cut
+    return cut.crop((0, top, cut.width, cut.height))
+
+
+def _form_shading(cut: Image.Image, scene: Image.Image, at: tuple, strength=0.55) -> Image.Image:
+    """Lay the dress form's own light and shade over the garment.
+
+    A flat photo pasted on a form reads as a sticker because its brightness is
+    even across a body that is round. Multiplying in the form's shading (its
+    brightness relative to its average, softened) makes the cloth darken where
+    the form turns away from the light, which is most of what "on a body"
+    looks like."""
+    w, h = cut.size
+    x, y = int(at[0]), int(at[1])
+    region = scene.crop((x, y, x + w, y + h)).convert("L")
+    if region.size != cut.size:
+        return cut
+    lum = np.asarray(region.filter(ImageFilter.GaussianBlur(max(3, w * 0.02))), np.float32)
+    arr = np.asarray(cut, np.float32)
+    a = arr[:, :, 3] > 127
+    if a.sum() < 100:
+        return cut
+    ref = float(np.median(lum[a])) or 1.0
+    shade = np.clip(lum / ref, 0.55, 1.2) ** strength
+    arr[:, :, :3] = np.clip(arr[:, :, :3] * shade[:, :, None], 0, 255)
+    return Image.fromarray(arr.astype(np.uint8), "RGBA")
 
 
 def _top_cx(alpha: np.ndarray) -> float:
@@ -304,10 +349,13 @@ def place(scene_img: Image.Image, layout: dict, cut: Image.Image,
         box = cut.getchannel("A").point(lambda v: 255 if v > 24 else 0).getbbox()
         if box:
             cut = cut.crop(box)
+    if mode == "fit":
+        cut = trim_hook(cut)
     pw, ph = cut.size
     # Never blow a small photo up past 1.6x: soft pixels give a composite away
-    # faster than anything else.
-    s = min(bw / pw, bh / ph, 1.6)
+    # faster than anything else. On a dress form the garment is sized to the
+    # form's shoulders (the box width), not merely to fit inside the box.
+    s = min(bw / pw, bh / ph, 1.6) if mode != "fit" else min(bw / pw, bh / ph)
     cut = cut.resize((max(1, int(pw * s)), max(1, int(ph * s))), Image.LANCZOS)
     pw, ph = cut.size
     a_np = np.asarray(cut.getchannel("A"))
@@ -317,8 +365,8 @@ def place(scene_img: Image.Image, layout: dict, cut: Image.Image,
         base = _base_stats(a_np)
         x, y = int(fx - base["cx"]), int(fy - ph)
         centre = (fx, fy - ph / 2)
-    elif mode == "top":
-        x, y = int(fx - _top_cx(a_np)), int(fy)
+    elif mode in ("top", "fit"):
+        x, y = int(fx - (_top_cx(a_np) if mode == "top" else pw / 2)), int(fy)
         centre = (fx, fy + ph / 2)
     else:
         x, y = int(fx - pw / 2), int(fy - ph / 2)
@@ -327,6 +375,8 @@ def place(scene_img: Image.Image, layout: dict, cut: Image.Image,
     cut = _harmonise(cut, scene_img, centre)
     cut = _match_exposure(cut, scene_img, centre)
     cut = _light_wrap(cut, scene_img, (x, y))
+    if mode == "fit":
+        cut = _form_shading(cut, scene_img, (x, y))
     a = cut.getchannel("A")
 
     if mode == "base":
@@ -336,6 +386,9 @@ def place(scene_img: Image.Image, layout: dict, cut: Image.Image,
         shadow.alpha_composite(_contact_shadow((W, H), fx, fy, max(base["width"], pw * 0.3)))
         if layout.get("gloss"):
             shadow.alpha_composite(_reflection((W, H), cut, (x, fy)))
+    elif mode == "fit":
+        # Cloth sitting on a form: a tight, soft shadow just below its edges.
+        shadow.alpha_composite(_shadow_layer((W, H), a, (x + 2, y + ph * 0.01), max(3, pw * 0.012), 0.40))
     elif mode == "top":
         # Hanging against a wall or lying on skin: the shadow falls a little
         # below and away from the light, close for jewellery, further for a
@@ -362,7 +415,8 @@ def place(scene_img: Image.Image, layout: dict, cut: Image.Image,
 
 
 # Which backdrop stage each person pose uses.
-POSE_STAGE = {"palm": "palm", "neck": "neck", "ear": "ear", "beside": "stand"}
+POSE_STAGE = {"palm": "palm", "neck": "neck", "ear": "ear", "beside": "stand",
+              "mannequin": "mannequin", "held": "held", "wear": "model"}
 
 
 def make(photo: bytes, *, size: str = "post", look: str = "clean", palette: str = "",
@@ -392,6 +446,8 @@ def make(photo: bytes, *, size: str = "post", look: str = "clean", palette: str 
         p = pose(cut["image"], pose_override)
     product = _straighten(cut["image"], p["tilt"]) if p["stage"] == "stand" else cut["image"]
     stage = p["stage"]
+    if person_pose == "wear":
+        raise ValueError("Wearing it is made by the try-on (tryon.py), not placed here.")
     if person and person_pose:
         stage = POSE_STAGE.get(person_pose, stage)
         if person_pose == "ear":
@@ -415,6 +471,24 @@ def make(photo: bytes, *, size: str = "post", look: str = "clean", palette: str 
             "ai_made": bool(layout.get("ai_made")), "photo_backdrop": bool(layout.get("photo")),
             "pose": {k: v for k, v in p.items() if k != "base"},
             "quality": q, "cutout_engine": cut["engine"]}
+
+
+def from_photo(img: Image.Image, size: str = "post") -> dict:
+    """A finished photo (a try-on result) in the same shape make() returns:
+    cover-cropped to the post or reel frame, centred a little high so the
+    garment, not the knees, is in the middle, with layers the motion clip can
+    push in on."""
+    W, H = SIZES.get(size, SIZES["post"])
+    sw, sh = img.size
+    s = max(W / sw, H / sh)
+    nw, nh = int(round(sw * s)), int(round(sh * s))
+    ox = (nw - W) // 2
+    oy = int(min(max(nh * 0.42 - H / 2, 0), nh - H))
+    frame = img.resize((nw, nh), Image.LANCZOS).crop((ox, oy, ox + W, oy + H)).convert("RGB")
+    empty = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    layers = {"image": frame, "background": frame, "shadow": empty, "product": empty,
+              "anchor": (W / 2, H * 0.45), "product_box": (0, 0, 1, 1)}
+    return {"image": frame, "layers": layers}
 
 
 def to_jpeg(img: Image.Image, quality: int = 92) -> bytes:

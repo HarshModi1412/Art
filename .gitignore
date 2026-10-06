@@ -13,3 +13,7 @@ data/generated_images/
 *.tmp
 data/models/
 data/cutouts/
+
+# Scene backdrop copies (free scenes are switched off; originals in D:/Claude/Preset,
+# re-import with scripts/import_presets.py if FREE_SCENES is ever turned on).
+backend/static/scenes/*.jpg

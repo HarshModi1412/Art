@@ -5569,9 +5569,10 @@ async function renderShoot(p) {
         <button type="button" class="sh-design${ch.design === d.id ? " on" : ""}" data-sh="design" data-v="${esc(d.id)}"${d.ready ? "" : " disabled"}>
           <span class="sh-thumb"${d.thumb ? ` style="background-image:url('${esc(d.thumb)}')"` : ""}>${d.thumb ? "" : esc(d.label.slice(0, 1))}</span>
           <b>${esc(d.label)}</b><span class="muted tiny">${esc(d.basic ? (d.ready ? "Basic for now" : "Not ready yet") : d.hint)}</span>
+          ${d.fits ? `<span class="pill-on" style="align-self:flex-start;">Suits your brand</span>` : ""}
         </button>`),
       `<button type="button" class="sh-design${ch.design === "any" ? " on" : ""}" data-sh="design" data-v="any">
-          <span class="sh-thumb">∗</span><b>Mix it up</b><span class="muted tiny">A different design each post</span></button>`,
+          <span class="sh-thumb">∗</span><b>Mix it up</b><span class="muted tiny">A different design each post, only ones that suit your brand</span></button>`,
     ].join("")}</div>` : `<p class="muted tiny">Pick what the product is first.</p>`;
 
   let people = "";
@@ -5651,7 +5652,7 @@ function renderStudioProduct() {
       </div>
       <div class="pf-tabs">
         <button type="button" class="pf-tab on" data-st="material">Material</button>
-        <button type="button" class="pf-tab" data-st="shoot">Photo shoot <span class="pill-free">free</span></button>
+        ${_studio.scenes_enabled ? `<button type="button" class="pf-tab" data-st="shoot">Photo shoot <span class="pill-free">free</span></button>` : ""}
         <button type="button" class="pf-tab" data-st="make">Make a post</button>
       </div>
 
@@ -13254,7 +13255,7 @@ async function openSocialSetup() {
         posts, never past it. It approves the week itself: each photo post gets its
         picture and is scheduled, and each reel goes on your task list for the clip.
         Any post it cannot finish comes back to your Approval panel.</p>
-      <label class="fld"><span>Pictures for planned posts</span>
+      ${d.scenes_enabled ? `<label class="fld"><span>Pictures for planned posts</span>
         <select id="soImg">${[
           ["ai", "AI pictures (uses your monthly allowance)"],
           ["scene", "Free scenes with your real product photo"],
@@ -13263,7 +13264,7 @@ async function openSocialSetup() {
       <p class="sm-hint">Free scenes cut your product out of your own photo and place it in a
         studio, table, flat-lay or festive set, with real shadows. Nothing is redrawn, so the
         product is exactly the one you ship, and it costs nothing. Reels get a free clip of it
-        too, with a slow camera move. A product needs a photo in Product Studio for this.</p>
+        too, with a slow camera move. A product needs a photo in Product Studio for this.</p>` : ""}
       ${loc ? `<label class="fld"><span>Times are local to</span>
         <select id="soCountry">${(loc.options || []).map((o) =>
           `<option value="${esc(o.code)}"${o.code === loc.country ? " selected" : ""}>${esc(o.name)}${o.note ? ` – ${esc(o.note)}` : ""} · ${esc(o.now)} now</option>`).join("")}</select></label>
@@ -13294,7 +13295,7 @@ async function openSocialSetup() {
       await api("/api/social/settings", { method: "POST", json: { patch: {
         category: $("soCat").value, language: $("soLang").value,
         cadence: $("soCad").value, city: $("soCity").value,
-        order_cta: $("soCta").value, image_source: $("soImg").value } } });
+        order_cta: $("soCta").value, ...($("soImg") ? { image_source: $("soImg").value } : {}) } } });
       await api("/api/social/autoplan/settings", { method: "POST", json: {
         enabled: $("apOn").checked, day: Number($("apDay").value), hour: Number($("apHour").value) } });
       const cSel = $("soCountry");

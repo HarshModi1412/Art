@@ -1110,6 +1110,11 @@ IMAGE_ENGINES = [
 ]
 
 
+def _scenes_on() -> bool:
+    from backend.core import scenes
+    return scenes.enabled()
+
+
 def _engine_ready(eid: str) -> bool:
     from backend.core import aiprovider
     return {
@@ -1117,9 +1122,9 @@ def _engine_ready(eid: str) -> bool:
         "gemini": aiprovider.gemini_image_ready,
         "cloudflare": aiprovider.image_ready,
         "huggingface": aiprovider.hf_ready,
-        # Always available: with no model file and no network it still cuts
-        # with OpenCV's GrabCut (see cutout.py).
-        "scene": lambda: True,
+        # Only when FREE_SCENES=on (scenes.enabled). When on, it always works:
+        # with no model file and no network it still cuts with GrabCut.
+        "scene": _scenes_on,
     }.get(eid, lambda: False)()
 
 
@@ -1423,12 +1428,60 @@ def _cutout_cached(reference: tuple[bytes, str]) -> dict:
     return cut
 
 
+TRYON_KEY = "tryon_cache"      # "<photo sha1>:<model id>" -> stored result url
+
+
+def _tryon(email: str, brief: dict, reference: tuple[bytes, str], args: dict,
+           size: str) -> dict:
+    """The garment WORN by a model, via the free try-on (tryon.py), in the
+    shape composite.make() returns. A garment photo on a given model is made
+    once and kept: the try-on is rationed daily and takes half a minute."""
+    import hashlib
+    import io
+    import random
+    from PIL import Image
+    from backend.core import composite, scenes, tryon
+    models = [s for s in scenes.candidates("model", args.get("design") or "", args["person"])
+              if s.get("photo") and s["stage"] == "model" and s.get("person") == args["person"]]
+    if not models:
+        raise RuntimeError("No model photo is installed for that yet.")
+    cache = user_store.get_key(email, TRYON_KEY, {}) or {}
+    sha = hashlib.sha1(reference[0]).hexdigest()
+    # Prefer a model this garment has already been tried on, so a week of
+    # posts does not spend a try-on per post.
+    done = [m for m in models if f"{sha}:{m['id']}" in cache]
+    model = random.choice(done or models)
+    key = f"{sha}:{model['id']}"
+    img = None
+    if key in cache:
+        got = media.read(cache[key].rsplit("/", 1)[-1])
+        if got:
+            img = Image.open(io.BytesIO(got[0])).convert("RGB")
+    if img is None:
+        cut = _cutout_cached(reference)
+        from backend.core.composite import trim_hook
+        img = tryon.wear(trim_hook(cut["image"]), str(model["file"]),
+                         brief.get("product_name") or "a top")
+        saved = media.save(f"tryon_{uuid.uuid4().hex}.png", tryon.to_png(img), email)
+        cache[key] = saved["url"]
+        user_store.set_key(email, TRYON_KEY, cache)
+    made = composite.from_photo(img, size)
+    return {**made, "scene": model["id"], "scene_label": model.get("label") or "Model",
+            "ai_made": True, "photo_backdrop": True, "tryon": True,
+            "pose": {"stage": "model", "tilt": 0.0, "why": "AI try-on"},
+            "quality": {"ok": True, "problems": []}, "cutout_engine": "tryon"}
+
+
 def _scene(brief: dict, guidance: dict | None,
            reference: tuple[bytes, str] | None, size: str,
-           choice: dict | None = None) -> dict:
+           choice: dict | None = None, email: str = "", strict: bool = False) -> dict:
     """Place the product. `choice` is a Photo shoot answer set (shoot.py); by
     default the one the seller saved on this product, so scheduled posts are
-    shot the way they chose in Product Studio."""
+    shot the way they chose in Product Studio.
+
+    "Wearing it" goes to the try-on. If that fails (daily ration spent, service
+    down) a scheduled post falls back to the same garment shown without a
+    person, so it still goes out; a preview (`strict`) says why instead."""
     from backend.core import composite, shoot
     if not reference:
         raise ValueError("Scene templates place your own photo of the product, and "
@@ -1441,6 +1494,14 @@ def _scene(brief: dict, guidance: dict | None,
         # No product type picked yet: the older per-product pose setting, or
         # read the pose from the silhouette.
         args["pose_override"] = brief.get("pose") or ""
+    if args.get("person_pose") == "wear":
+        try:
+            return _tryon(email, brief, reference, args, size)
+        except RuntimeError as e:
+            if strict:
+                raise ValueError(str(e)) from e
+            log.warning("try-on fell back to a scene: %s", e)
+            args = {**args, "person": "", "person_pose": ""}
     try:
         return composite.make(reference[0], size=size, look=brief.get("look") or "clean",
                               palette=brief.get("palette") or "", festive=festive,
@@ -1451,6 +1512,10 @@ def _scene(brief: dict, guidance: dict | None,
 
 
 def _scene_note(made: dict) -> str:
+    if made.get("tryon"):
+        return ("Your garment worn by a model, made by the free AI try-on. The try-on "
+                "redraws the cloth onto the body, so check the print, colour and neckline "
+                "match before you post it.")
     p = made["pose"]
     how = {"stand": "standing up", "flat": "laid flat", "hang": "hanging"}.get(p["stage"], "placed")
     return (f"Your own photo placed in the “{made['scene_label']}” scene, "
@@ -1487,7 +1552,8 @@ def shoot_preview(email: str, product_id: str, choice: dict, photo_url: str = ""
     brief = build_brief(get_brand(email), product, get_material(email, product_id))
     choice = shoot.clean_choice(choice)
     made = _scene(brief, {"festival": "festive" if choice["design"] == "festive" else ""},
-                  ref, "reel" if size == "reel" else "post", choice=choice)
+                  ref, "reel" if size == "reel" else "post", choice=choice,
+                  email=email, strict=True)
     content = composite.to_jpeg(made["image"])
     label_report = None
     if made["ai_made"]:
@@ -1507,7 +1573,7 @@ def scene_image(email: str, brief: dict, guidance: dict | None,
                 reference: tuple[bytes, str] | None, eng: dict) -> dict:
     """A post picture from the scene engine: cut, place, store. No AI call."""
     from backend.core import composite, ailabel
-    made = _scene(brief, guidance, reference, "post")
+    made = _scene(brief, guidance, reference, "post", email=email)
     content = composite.to_jpeg(made["image"])
     label_report = None
     if made["ai_made"]:
@@ -1540,7 +1606,7 @@ def scene_video(email: str, product_id: str) -> dict:
             "A clip is made FROM one of your own photographs, and this product "
             "has none yet. Add a photo in Product Studio first.")
     brief = build_brief(brand, product, material)
-    made = _scene(brief, None, ref, "reel")
+    made = _scene(brief, None, ref, "reel", email=email)
     data = motion.render_clip(made["layers"])
     label_report = None
     if made["ai_made"]:
