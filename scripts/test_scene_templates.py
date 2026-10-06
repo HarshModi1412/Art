@@ -172,5 +172,66 @@ s = social.blank_settings()
 check("defaults to AI pictures (no change for existing sellers)", s["image_source"] == "ai")
 check("knows the three sources", set(social.IMAGE_SOURCES) == {"ai", "scene", "ai_then_scene"})
 
+print("\nphoto shoot: tap-only choices")
+from backend.core import shoot  # noqa: E402
+import json  # noqa: E402
+from pathlib import Path  # noqa: E402
+man = json.loads((scenes.PHOTO_DIR / "manifest.json").read_text(encoding="utf-8"))
+ids = [t["id"] for t in man["templates"]]
+check("every manifest entry has a unique id", len(ids) == len(set(ids)))
+check("every entry has a prompt, an anchor, a box and a known mode",
+      all(t.get("prompt") and len(t["anchor"]) == 2 and len(t["box"]) == 2
+          and t["mode"] in ("base", "center", "top") for t in man["templates"]))
+check("every design has stand and flat backdrops listed",
+      all(any(t["stage"] == st and t["design"] == d and not t.get("person") for t in man["templates"])
+          for d in scenes.DESIGN_IDS for st in ("stand", "flat")))
+check("clothing never offers a person (needs a paid try-on)",
+      all(not shoot.TYPES[t]["poses"] for t in ("folded", "hanger", "fabric")))
+check("a pose the product type does not allow is dropped",
+      shoot.clean_choice({"type": "bag", "person": "woman", "pose": "neck"})["pose"] == "")
+check("a person nobody poses as there is dropped",
+      shoot.clean_choice({"type": "necklace", "person": "man", "pose": "neck"})["person"] == "")
+check("a valid choice survives", shoot.clean_choice(
+    {"type": "earrings", "design": "festive", "person": "woman", "pose": "ear"})
+    == {"type": "earrings", "design": "festive", "person": "woman", "pose": "ear"})
+check("product type sets how it rests",
+      shoot.composite_args({"type": "hanger"})["pose_override"] == "hang"
+      and shoot.composite_args({"type": "necklace"})["pose_override"] == "flat")
+
+# Stand-in backdrops (flat colour, anchors from the manifest) to check that
+# each person pose and the hanger attach the product at the right point.
+tmp = Path(tempfile.mkdtemp())
+(tmp / "manifest.json").write_text(json.dumps(man), encoding="utf-8")
+for tid in ("neck-woman-1", "ear-woman-1", "palm-woman-1", "hang-studio-1"):
+    Image.new("RGB", (1080, 1920), (200, 170, 150)).save(tmp / f"{tid}.jpg")
+scenes.PHOTO_DIR, scenes.MANIFEST = tmp, tmp / "manifest.json"
+o = shoot.options("earrings")
+check("options only offer installed people and poses",
+      [p["id"] for p in o["people"] if p["ready"]] == ["woman"], [(p["id"], p["ready"]) for p in o["people"]])
+check("and say how much of the library is installed", o["library"]["installed"] == 4, o["library"])
+by = {t["id"]: t for t in man["templates"]}
+for tid, ch, cut_use in [
+        ("neck-woman-1", {"type": "necklace", "person": "woman", "pose": "neck"}, cut_n),
+        ("ear-woman-1", {"type": "earrings", "person": "woman", "pose": "ear"}, cut_n),
+        ("hang-studio-1", {"type": "hanger"}, cut_b)]:
+    for size in ("post", "reel"):
+        r = composite.make(b"", size=size, seed=2, cut=cut_use, **shoot.composite_args(ch))
+        x0, y0, x1, y1 = r["layers"]["product_box"]
+        ax, ay = r["layout"]["floor"]
+        W_, H_ = r["image"].size
+        check(f"{tid} ({size}): the product's top hangs from the anchor, all in frame",
+              r["scene"] == tid and abs(y0 - ay) <= 2 and x0 <= ax <= x1 and y0 >= 0 and y1 <= H_,
+              (r["scene"], (x0, y0, x1, y1), (round(ax), round(ay)), (W_, H_)))
+r = composite.make(b"", seed=2, cut=cut_b, **shoot.composite_args(
+    {"type": "bottle", "person": "woman", "pose": "palm"}))
+check("a bottle stands on the palm", r["scene"] == "palm-woman-1"
+      and abs(r["layers"]["product_box"][3] - r["layout"]["floor"][1]) <= 2)
+try:
+    composite.make(b"", seed=2, cut=cut_b, **shoot.composite_args(
+        {"type": "bottle", "person": "man", "pose": "beside"}))
+    check("a person pose with no backdrop yet is refused, not faked", False, "no error")
+except ValueError as e:
+    check("a person pose with no backdrop yet is refused, not faked", "no backdrop" in str(e), str(e))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

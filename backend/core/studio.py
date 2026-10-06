@@ -686,7 +686,10 @@ def blank_material() -> dict:
             # How the product was photographed, for scene templates: "stand"
             # (camera at its height), "flat" (from above) or "auto" (read from
             # the cut-out's silhouette). See backend/core/composite.py.
-            "pose": "auto"}
+            "pose": "auto",
+            # The Photo shoot answers the seller chose to use for this product:
+            # {type, design, person, pose}. See backend/core/shoot.py.
+            "shoot": {}}
 
 
 def _all_material(email: str) -> dict:
@@ -706,6 +709,9 @@ def save_material(email: str, product_id: str, patch: dict) -> dict:
             cur[k] = str(patch[k] or "").strip()[:1500]
     if "pose" in (patch or {}):
         cur["pose"] = patch["pose"] if patch["pose"] in ("auto", "stand", "flat") else "auto"
+    if "shoot" in (patch or {}):
+        from backend.core import shoot
+        cur["shoot"] = shoot.clean_choice(patch["shoot"] if isinstance(patch["shoot"], dict) else {})
     for k in ("shots", "clips"):
         if k in (patch or {}):
             vals = patch[k] if isinstance(patch[k], list) else []
@@ -799,6 +805,7 @@ def build_brief(brand: dict, product: dict, material: dict, angle: str = "") -> 
         "look": brand.get("look") or "clean",
         "product_id": product.get("id") or "",
         "pose": material.get("pose") or "auto",
+        "shoot": material.get("shoot") or {},
     }
 
 
@@ -1393,10 +1400,14 @@ def _cutout_cached(reference: tuple[bytes, str]) -> dict:
     if path.exists():
         try:
             meta = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
-            img = Image.open(path)
-            img.load()
-            return {"image": img.convert("RGBA"), "engine": meta.get("engine", ""),
-                    "quality": meta.get("quality") or {"ok": True, "problems": []}}
+            # A rough GrabCut cut is only kept while the model is unavailable.
+            # Without this, one cut made while the model was still downloading
+            # (or failed to load) stayed rough for that photo forever.
+            if meta.get("engine") != "grabcut" or cutout.engine() == "grabcut":
+                img = Image.open(path)
+                img.load()
+                return {"image": img.convert("RGBA"), "engine": meta.get("engine", ""),
+                        "quality": meta.get("quality") or {"ok": True, "problems": []}}
         except Exception:  # noqa: BLE001 — a damaged cache entry is just re-cut
             pass
     cut = cutout.cut(reference[0])
@@ -1413,27 +1424,83 @@ def _cutout_cached(reference: tuple[bytes, str]) -> dict:
 
 
 def _scene(brief: dict, guidance: dict | None,
-           reference: tuple[bytes, str] | None, size: str) -> dict:
-    from backend.core import composite
+           reference: tuple[bytes, str] | None, size: str,
+           choice: dict | None = None) -> dict:
+    """Place the product. `choice` is a Photo shoot answer set (shoot.py); by
+    default the one the seller saved on this product, so scheduled posts are
+    shot the way they chose in Product Studio."""
+    from backend.core import composite, shoot
     if not reference:
         raise ValueError("Scene templates place your own photo of the product, and "
                          "this product has none yet. Add a photo in Product Studio first.")
     g = guidance or {}
+    festive = bool(g.get("festival"))
+    args = shoot.composite_args(choice if choice is not None else (brief.get("shoot") or {}),
+                                festive=festive)
+    if not args["pose_override"]:
+        # No product type picked yet: the older per-product pose setting, or
+        # read the pose from the silhouette.
+        args["pose_override"] = brief.get("pose") or ""
     try:
         return composite.make(reference[0], size=size, look=brief.get("look") or "clean",
-                              palette=brief.get("palette") or "",
-                              festive=bool(g.get("festival")),
-                              pose_override=brief.get("pose") or "",
+                              palette=brief.get("palette") or "", festive=festive,
                               seed=uuid.uuid4().int % (2 ** 31),
-                              cut=_cutout_cached(reference))
+                              cut=_cutout_cached(reference), **args)
     except ValueError as e:
         raise ValueError(f"Your photo could not be placed in a scene. {e}") from e
 
 
 def _scene_note(made: dict) -> str:
     p = made["pose"]
+    how = {"stand": "standing up", "flat": "laid flat", "hang": "hanging"}.get(p["stage"], "placed")
     return (f"Your own photo placed in the “{made['scene_label']}” scene, "
-            f"{'standing up' if p['stage'] == 'stand' else 'laid flat'} ({p['why']}).")
+            f"{how} ({p['why']}).")
+
+
+def product_photos(email: str, product_id: str) -> list[str]:
+    """Every photo of this product the seller has given us, Studio shots first."""
+    product = next((p for p in products.get_products(email) if p["id"] == product_id), None) or {}
+    m = get_material(email, product_id)
+    out = []
+    for u in list(m.get("shots") or []) + [product.get("image_url")] + list(product.get("images") or []):
+        if u and u not in out:
+            out.append(u)
+    return out
+
+
+def shoot_preview(email: str, product_id: str, choice: dict, photo_url: str = "",
+                  size: str = "post") -> dict:
+    """Product Studio's Generate button: one free picture of this product shot
+    the way the seller chose, to look at before using it. Nothing is attached
+    to any post and no allowance is touched."""
+    from backend.core import composite, ailabel, shoot
+    product = next((p for p in products.get_products(email) if p["id"] == product_id), None)
+    if not product:
+        raise ValueError("That product no longer exists.")
+    photos = product_photos(email, product_id)
+    if photo_url and photo_url not in photos:
+        raise ValueError("That photo is not one of this product's photos.")
+    url = photo_url or (photos[0] if photos else "")
+    ref = media.read(url.rsplit("/", 1)[-1]) if url else None
+    if not ref:
+        raise ValueError("This product has no photo yet. Add one above, then shoot it.")
+    brief = build_brief(get_brand(email), product, get_material(email, product_id))
+    choice = shoot.clean_choice(choice)
+    made = _scene(brief, {"festival": "festive" if choice["design"] == "festive" else ""},
+                  ref, "reel" if size == "reel" else "post", choice=choice)
+    content = composite.to_jpeg(made["image"])
+    label_report = None
+    if made["ai_made"]:
+        content, label_report = ailabel.label_image(content, engine="scene", model=made["scene"])
+    saved = media.save(f"shoot_{uuid.uuid4().hex}.jpg", content, email)
+    return {"url": saved["url"], "scene": made["scene"], "scene_label": made["scene_label"],
+            "photo_backdrop": made["photo_backdrop"], "note": _scene_note(made),
+            "warnings": made["quality"].get("problems") or [], "photo_url": url,
+            "choice": choice, "ai_label": label_report,
+            # Which cutter ran. "grabcut" means the cut-out model could not
+            # load on this server (no download, no onnxruntime), and the
+            # edges will be rough: worth seeing, not hiding.
+            "cutout": made["cutout_engine"]}
 
 
 def scene_image(email: str, brief: dict, guidance: dict | None,

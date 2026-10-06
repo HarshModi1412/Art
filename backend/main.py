@@ -23,6 +23,15 @@ import secrets
 import threading
 import time
 
+# onnxruntime (the product cut-out model, backend/core/cutout.py) must load
+# BEFORE pandas. On Windows, pandas loads an older C++ runtime DLL first and
+# onnxruntime then fails to initialise, so every cut-out silently fell back to
+# the rough GrabCut cutter. Harmless where that conflict does not exist.
+try:
+    import onnxruntime  # noqa: F401
+except Exception:  # noqa: BLE001 — not installed: cutout.py falls back on its own
+    pass
+
 import pandas as pd
 import logging
 
@@ -1466,6 +1475,47 @@ def studio_product_save(body: MaterialBody, authorization: str | None = Header(d
     p = next((x for x in products.get_products(email) if x["id"] == body.product_id), {})
     return {"material": mat, "completeness": studio.completeness(p, mat),
             "angles": studio.angles(p, mat)}
+
+
+class ShootBody(BaseModel):
+    product_id: str
+    choice: dict = {}
+    photo_url: str | None = ""
+    size: str | None = "post"
+
+
+@app.get("/api/studio/shoot/options")
+def studio_shoot_options(product_id: str, type: str = "",
+                         authorization: str | None = Header(default=None)):
+    """Product Studio's Photo shoot: the tap-only choices (product type,
+    design, person, pose) with what each has installed, this product's photos,
+    and the style saved on it. See backend/core/shoot.py."""
+    email = require_user(authorization)
+    from backend.core import shoot
+    saved = shoot.clean_choice(studio.get_material(email, product_id).get("shoot") or {})
+    return {**shoot.options(type or saved["type"]), "saved": saved,
+            "photos": studio.product_photos(email, product_id)}
+
+
+@app.post("/api/studio/shoot")
+def studio_shoot(body: ShootBody, authorization: str | None = Header(default=None)):
+    """Generate one free picture of the product, shot as chosen. A preview:
+    nothing is attached to a post and no AI allowance is used."""
+    email = require_user(authorization)
+    try:
+        return studio.shoot_preview(email, body.product_id, body.choice or {},
+                                    body.photo_url or "", body.size or "post")
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/studio/shoot/save")
+def studio_shoot_save(body: ShootBody, authorization: str | None = Header(default=None)):
+    """Use this style for the product's scheduled posts (free scenes)."""
+    email = require_user(authorization)
+    cache.clear(email)
+    mat = studio.save_material(email, body.product_id, {"shoot": body.choice or {}})
+    return {"saved": mat.get("shoot") or {}}
 
 
 @app.post("/api/studio/post")

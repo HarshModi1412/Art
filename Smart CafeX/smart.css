@@ -4055,3 +4055,31 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .mc-note { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; margin: 10px 0 4px;
   border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); font-size: 0.8125rem; line-height: 1.5; }
 .mc-note svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--green); }
+
+/* Product Studio: Photo shoot (renderShoot in smart.js). Tap-only choices. */
+.sh-step { margin: 0 0 16px; }
+.sh-step-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.sh-n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 99px;
+  background: var(--primary-soft); color: var(--primary); font-size: 0.6875rem; font-weight: 700; }
+.sh-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sh-chip { border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 99px; padding: 7px 13px; font-size: 0.8125rem; cursor: pointer; line-height: 1.2; }
+.sh-chip:hover:not(:disabled) { border-color: var(--primary); }
+.sh-chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.sh-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+.sh-designs { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+.sh-design { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 8px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  color: var(--text); cursor: pointer; font-size: 0.8125rem; }
+.sh-design:hover:not(:disabled) { border-color: var(--primary); }
+.sh-design.on { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+.sh-design:disabled { opacity: 0.5; cursor: not-allowed; }
+.sh-thumb { display: grid; place-items: center; aspect-ratio: 4 / 5; border-radius: 7px; margin-bottom: 4px;
+  background: var(--surface-2) center / cover no-repeat; color: var(--muted); font-size: 1.25rem; }
+.sh-photos { display: flex; gap: 8px; flex-wrap: wrap; }
+.sh-photo { width: 64px; height: 64px; border-radius: var(--radius); border: 2px solid transparent;
+  background: var(--surface-2) center / cover no-repeat; cursor: pointer; padding: 0; }
+.sh-photo.on { border-color: var(--primary); }
+.sh-result { margin-top: 14px; max-width: 420px; }
+.sh-result img { width: 100%; border-radius: var(--radius); border: 1px solid var(--border); display: block; }
+.sh-result p { margin: 8px 0 0; }

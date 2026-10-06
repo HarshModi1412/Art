@@ -27,24 +27,17 @@ product in Product Studio.
 
 TWO KINDS OF SCENE
 ------------------
-1. DRAWN scenes (below). Painted with numpy at whatever size is asked for, so a
-   4:5 post and a 9:16 reel get a real layout each, not a crop. Not AI, so a
-   picture made only from these needs no "AI generated" label.
-2. PHOTO scenes: any image dropped into backend/static/scenes/ with a JSON
-   file of the same name beside it. This is where a pre-generated, once-only
-   AI backdrop goes (an empty marble podium, an empty Diwali table). The JSON:
-
-     {"label": "Marble podium", "stage": "stand",
-      "looks": ["clean", "luxe"], "festive": false,
-      "ai_made": true,                 # true -> the picture gets the AI label
-      "floor": [0.5, 0.74],            # where the product's base sits (x, y)
-      "box": [0.42, 0.50],             # biggest the product may be (w, h)
-      "light": [-1, -1],               # where the light comes FROM
-      "gloss": false}                  # shiny surface -> faint reflection
-
-   For a "flat" scene, "floor" is the centre of the product instead. The
-   empty scene must be generated WITHOUT a product in it, with the space
-   for one left clear.
+1. PHOTO backdrops, the ones that look real. Listed in
+   backend/static/scenes/manifest.json with the prompt each was generated
+   from, generated ONCE by hand in any image tool, and saved beside it as
+   <id>.jpg. Each entry says where the product attaches (anchor, box, mode)
+   and, for people, who and in which pose (stages "palm", "neck", "ear",
+   and "stand" with pose "beside"). An entry with no image yet is skipped.
+   scripts/scene_prompts.py writes the prompt sheet and the progress.
+2. DRAWN scenes (below). Painted with numpy at any size. Plain next to a
+   photo, so they are only the fallback for "stand" and "flat" while a
+   design has no photo backdrop. Not AI, so they need no "AI generated"
+   label; photo backdrops are AI-made and do.
 """
 from __future__ import annotations
 
@@ -496,67 +489,153 @@ DRAWN = [
 ]
 
 
-# --------------------------------------------------------------- photo scenes
+# --------------------------------------------------------------- designs
 
-def _photo_scenes() -> list[dict]:
+# What the seller picks in Product Studio ("design"), and how each drawn scene
+# and each brand look maps onto it. Photo backdrops carry their design in
+# manifest.json.
+DESIGNS = [
+    {"id": "studio",  "label": "Clean studio",      "hint": "White and beige, soft light"},
+    {"id": "marble",  "label": "Marble & gold",     "hint": "Bright, polished, premium"},
+    {"id": "dark",    "label": "Dark luxury",       "hint": "Black stone, dramatic light"},
+    {"id": "wood",    "label": "Warm wood & linen", "hint": "Handmade, natural, cosy"},
+    {"id": "nature",  "label": "Nature",            "hint": "Stone, moss, sand, sunlight"},
+    {"id": "festive", "label": "Festive",           "hint": "Diyas, marigold, warm lights"},
+    {"id": "pastel",  "label": "Pastel pop",        "hint": "Bright colour, playful"},
+]
+DESIGN_IDS = [d["id"] for d in DESIGNS]
+
+DRAWN_DESIGNS = {
+    "studio": ["studio"], "podium": ["studio", "marble", "pastel"], "table": ["wood", "nature"],
+    "dark": ["dark"], "arch": ["pastel"], "festive": ["festive"],
+    "flat-linen": ["wood", "studio", "nature"], "flat-marble": ["marble", "studio"],
+    "flat-paper": ["pastel"], "flat-velvet": ["dark"], "flat-festive": ["festive"],
+}
+# The palette a drawn scene paints with, per design.
+DESIGN_LOOK = {"studio": "clean", "marble": "clean", "dark": "luxe", "wood": "warm",
+               "nature": "warm", "festive": "clean", "pastel": "bright"}
+# The brand profile's look, as a default design when the seller picked none.
+LOOK_DESIGN = {"clean": "studio", "warm": "wood", "luxe": "dark", "bright": "pastel",
+               "editorial": "marble"}
+
+
+# --------------------------------------------------------------- photo backdrops
+
+MANIFEST = PHOTO_DIR / "manifest.json"
+_IMG_EXT = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def manifest() -> list[dict]:
+    try:
+        return json.loads(MANIFEST.read_text(encoding="utf-8")).get("templates") or []
+    except Exception as e:  # noqa: BLE001 — a broken manifest leaves the drawn scenes
+        log.warning("scene manifest unreadable: %s", e)
+        return []
+
+
+def _file_for(tid: str) -> Path | None:
+    return next((p for p in (PHOTO_DIR / f"{tid}{ext}" for ext in _IMG_EXT) if p.exists()), None)
+
+
+def _label(t: dict) -> str:
+    d = next((x["label"] for x in DESIGNS if x["id"] == t.get("design")), "")
+    who = {"woman": "with a woman", "man": "with a man", "hands": "in hands"}.get(t.get("person"), "")
+    return " ".join(x for x in (d, who) if x) or t["id"]
+
+
+def photo_scenes() -> list[dict]:
+    """Every backdrop in the manifest whose image has been saved."""
     out = []
-    if not PHOTO_DIR.is_dir():
-        return out
-    for meta in sorted(PHOTO_DIR.glob("*.json")):
-        try:
-            spec = json.loads(meta.read_text(encoding="utf-8"))
-        except Exception as e:  # noqa: BLE001 — one bad file must not hide the rest
-            log.warning("scene %s unreadable: %s", meta.name, e)
+    for t in manifest():
+        f = _file_for(t["id"])
+        if not f:
             continue
-        img = next((p for p in (meta.with_suffix(ext) for ext in (".jpg", ".jpeg", ".png", ".webp"))
-                    if p.exists()), None)
-        if not img or spec.get("stage") not in ("stand", "flat"):
-            continue
-        out.append({"id": "photo-" + meta.stem, "label": spec.get("label") or meta.stem,
-                    "stage": spec["stage"], "looks": spec.get("looks") or list(LOOK_COLOURS),
-                    "festive": bool(spec.get("festive")), "ai_made": bool(spec.get("ai_made", True)),
-                    "file": img, "spec": spec})
+        out.append({**t, "file": f, "label": t.get("label") or _label(t),
+                    "designs": [t.get("design") or "studio"],
+                    "festive": t.get("design") == "festive",
+                    "ai_made": bool(t.get("ai_made", True)), "photo": True})
     return out
 
 
 def _render_photo(scene: dict, w: int, h: int):
-    spec = scene["spec"]
+    """Cover-crop the backdrop to w x h, keeping the product's spot well inside
+    the frame, and translate its anchor and box into pixels."""
     src = Image.open(scene["file"]).convert("RGB")
     sw, sh = src.size
-    # Cover-crop to the asked-for frame, keeping the product's spot in view.
     s = max(w / sw, h / sh)
     nw, nh = int(round(sw * s)), int(round(sh * s))
-    fx, fy = spec.get("floor") or [0.5, 0.7]
-    ox = int(min(max(fx * nw - w / 2, 0), nw - w))
-    oy = int(min(max(fy * nh - h * 0.62, 0), nh - h))
+    ax, ay = scene.get("anchor") or [0.5, 0.7]
+    bx, by = scene.get("box") or [0.45, 0.4]
+    mode = scene.get("mode") or "base"
+    # The product's whole extent, top to bottom: a standing product rises
+    # above its anchor, a hanging one drops below it. A 4:5 post is shorter
+    # than the 9:16 backdrop, so if that extent does not fit the crop with a
+    # margin it is shrunk, and the crop is placed to contain all of it, hook
+    # or base included.
+    margin = 0.03
+    room = h / nh - 2 * margin
+    if by > room:
+        bx, by = bx * room / by, room
+    top, bottom = {"base": (ay - by, ay), "top": (ay, ay + by)}.get(mode, (ay - by / 2, ay + by / 2))
+    oy_f = (top + bottom) / 2 - (h / nh) / 2
+    oy_f = min(max(oy_f, bottom + margin - h / nh), top - margin)
+    ox = int(min(max(ax * nw - w / 2, 0), nw - w))
+    oy = int(min(max(oy_f * nh, 0), nh - h))
     img = src.resize((nw, nh), Image.LANCZOS).crop((ox, oy, ox + w, oy + h))
-    bx, by = spec.get("box") or [0.45, 0.5]
-    return img, {"floor": (fx * nw - ox, fy * nh - oy), "box": (bx * nw, by * nh),
-                 "light": tuple(spec.get("light") or (-1.0, -1.0)),
-                 "gloss": bool(spec.get("gloss"))}
+    return img, {"floor": (ax * nw - ox, ay * nh - oy), "box": (bx * nw, by * nh),
+                 "mode": mode, "light": tuple(scene.get("light") or (-1.0, -1.0)),
+                 "gloss": bool(scene.get("gloss"))}
 
 
 # --------------------------------------------------------------- choosing
 
 def all_scenes() -> list[dict]:
-    return [{**s, "ai_made": False} for s in DRAWN] + _photo_scenes()
+    drawn = [{**s, "ai_made": False, "photo": False, "person": "",
+              "designs": DRAWN_DESIGNS.get(s["id"], ["studio"]),
+              "mode": "base" if s["stage"] == "stand" else "center"} for s in DRAWN]
+    return photo_scenes() + drawn
+
+
+def installed() -> dict:
+    """How many real photo backdrops exist per stage|design|person, so the
+    shoot screen can show what is ready."""
+    out: dict = {}
+    for s in photo_scenes():
+        key = f"{s['stage']}|{s.get('design')}|{s.get('person') or ''}"
+        out[key] = out.get(key, 0) + 1
+    return out
+
+
+def candidates(stage: str, design: str = "", person: str = "") -> list[dict]:
+    """Scenes this product can go in. Person scenes only when a person was
+    asked for, and only of that person. Real photo backdrops come before drawn
+    ones, which are kept only as a fallback for stand and flat shots."""
+    pool = [s for s in all_scenes() if s["stage"] == stage
+            and (s.get("person") or "") == (person or "")]
+    photos = [s for s in pool if s["photo"]]
+    if photos:
+        pool = photos
+    if design and design != "any":
+        pool = [s for s in pool if design in s["designs"]] or pool
+    return pool
 
 
 def choose(stage: str, look: str = "clean", festive: bool = False,
-           seed: int | None = None, exclude: tuple = ()) -> dict:
-    """Pick a scene that matches the product's camera angle first, then the
-    brand's look, then whether this is a festival post. Photo scenes win ties
-    because a real backdrop beats a drawn one when one exists."""
+           seed: int | None = None, exclude: tuple = (), design: str = "",
+           person: str = "") -> dict:
+    """Pick a scene: right camera height and person first, then the design the
+    seller chose (or their brand look's design), then festival or not."""
     rng = random.Random(seed)
-    pool = [s for s in all_scenes() if s["stage"] == stage and s["id"] not in exclude]
-    if not pool:
-        pool = [s for s in all_scenes() if s["stage"] == stage]
+    design = design or ("festive" if festive else LOOK_DESIGN.get(look, "studio"))
+    pool = ([s for s in candidates(stage, design, person) if s["id"] not in exclude]
+            or candidates(stage, design, person) or candidates(stage)
+            or [s for s in all_scenes() if s["stage"] == "stand" and not s["photo"]])
 
     def score(s):
-        return ((3 if look in s["looks"] else 0)
+        return ((3 if design in s["designs"] else 0)
                 + (4 if festive and s["festive"] else 0)
-                - (5 if s["festive"] and not festive else 0)
-                + (1 if s["id"].startswith("photo-") else 0)
+                - (5 if s["festive"] and not festive and design != "festive" else 0)
+                + (10 if s["photo"] else 0)
                 + rng.random())
     return max(pool, key=score)
 
@@ -568,6 +647,9 @@ def render(scene: dict, w: int, h: int, look: str = "clean",
         img, lay = _render_photo(scene, w, h)
     else:
         rng = np.random.default_rng(seed)
-        img, lay = scene["draw"](w, h, rng, look, palette_colours(palette))
+        d = (scene.get("designs") or ["studio"])[0]
+        img, lay = scene["draw"](w, h, rng, DESIGN_LOOK.get(d, look), palette_colours(palette))
+        lay = {**lay, "mode": scene.get("mode") or "base"}
     return img, {**lay, "stage": scene["stage"], "scene": scene["id"],
-                 "label": scene["label"], "ai_made": bool(scene.get("ai_made"))}
+                 "label": scene.get("label") or scene["id"], "ai_made": bool(scene.get("ai_made")),
+                 "photo": bool(scene.get("photo"))}

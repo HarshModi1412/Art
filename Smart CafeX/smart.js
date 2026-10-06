@@ -5523,6 +5523,119 @@ async function openStudioProduct(pid) {
   panel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+/* Product Studio → Photo shoot.
+   Four questions answered by tapping, never typing: what the product is, the
+   design, whether a person is in the shot, and their pose. Each option comes
+   from the server with whether its backdrops are installed, so nothing on
+   screen is a shoot that cannot happen. "Generate" makes a free preview from
+   the product's own photo (backend/core/shoot.py); "Use this style" saves the
+   answers on the product so scheduled posts with free scenes are shot the
+   same way. */
+let _shoot = null;
+
+async function renderShoot(p) {
+  const box = $("stShoot");
+  if (!box) return;
+  if (!_shoot || _shoot.pid !== p.id) _shoot = { pid: p.id, choice: null, photo: "", result: null };
+  const S = _shoot;
+  let o;
+  try {
+    o = await api(`/api/studio/shoot/options?product_id=${encodeURIComponent(p.id)}`
+      + `&type=${encodeURIComponent((S.choice || {}).type || "")}`);
+  } catch (e) { box.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+  if (_shoot !== S) return;                      // another product was opened meanwhile
+  if (!S.choice) S.choice = { type: "", design: "", person: "", pose: "", ...(o.saved || {}) };
+  if (!S.photo || !(o.photos || []).includes(S.photo)) S.photo = (o.photos || [])[0] || "";
+  const ch = S.choice;
+  const person = (o.people || []).find((x) => x.id === ch.person);
+  const lib = o.library || {};
+
+  const chip = (group, id, label, on, extra = "", disabled = false) =>
+    `<button type="button" class="sh-chip${on ? " on" : ""}" data-sh="${group}" data-v="${esc(id)}"${disabled ? " disabled" : ""}>${esc(label)}${extra}</button>`;
+  const step = (n, title, body, hint = "") => `
+    <div class="sh-step"><div class="sh-step-h"><span class="sh-n">${n}</span><b>${esc(title)}</b>
+      ${hint ? `<span class="muted tiny">${esc(hint)}</span>` : ""}</div>${body}</div>`;
+
+  const photos = (o.photos || []).length
+    ? `<div class="sh-photos">${o.photos.map((u) => `
+        <button type="button" class="sh-photo${u === S.photo ? " on" : ""}" data-photo="${esc(u)}"
+          style="background-image:url('${esc(u)}')" aria-label="Use this photo"></button>`).join("")}</div>`
+    : `<p class="muted">This product has no photo yet. Add one in the Material tab, then come back.</p>`;
+
+  const types = `<div class="sh-chips">${(o.types || []).map((t) => chip("type", t.id, t.label, ch.type === t.id)).join("")}</div>`;
+
+  const designs = ch.type ? `<div class="sh-designs">${[
+      ...(o.designs || []).map((d) => `
+        <button type="button" class="sh-design${ch.design === d.id ? " on" : ""}" data-sh="design" data-v="${esc(d.id)}"${d.ready ? "" : " disabled"}>
+          <span class="sh-thumb"${d.thumb ? ` style="background-image:url('${esc(d.thumb)}')"` : ""}>${d.thumb ? "" : esc(d.label.slice(0, 1))}</span>
+          <b>${esc(d.label)}</b><span class="muted tiny">${esc(d.basic ? (d.ready ? "Basic for now" : "Not ready yet") : d.hint)}</span>
+        </button>`),
+      `<button type="button" class="sh-design${ch.design === "any" ? " on" : ""}" data-sh="design" data-v="any">
+          <span class="sh-thumb">∗</span><b>Mix it up</b><span class="muted tiny">A different design each post</span></button>`,
+    ].join("")}</div>` : `<p class="muted tiny">Pick what the product is first.</p>`;
+
+  let people = "";
+  if (ch.type) {
+    people = (o.people || []).length
+      ? `<div class="sh-chips">${chip("person", "", "No person", !ch.person)}${(o.people || []).map((x) =>
+          chip("person", x.id, x.label, ch.person === x.id, x.ready ? "" : ` <span class="muted tiny">soon</span>`, !x.ready)).join("")}</div>`
+      : `<p class="muted tiny">${esc(o.no_person_note || "No person poses for this kind of product.")}</p>`;
+  }
+  const poses = person ? `<div class="sh-designs">${person.poses.map((x) => `
+      <button type="button" class="sh-design${ch.pose === x.id ? " on" : ""}" data-sh="pose" data-v="${esc(x.id)}"${x.photos ? "" : " disabled"}>
+        <span class="sh-thumb"${x.thumb ? ` style="background-image:url('${esc(x.thumb)}')"` : ""}>${x.thumb ? "" : "·"}</span>
+        <b>${esc(x.label)}</b><span class="muted tiny">${esc(x.photos ? x.hint : "Not ready yet")}</span>
+      </button>`).join("")}</div>` : "";
+
+  const canShoot = !!(S.photo && ch.type && ch.design && (!ch.person || ch.pose));
+  const r = S.result;
+  box.innerHTML = `
+    <p class="muted" style="margin:0 0 12px;">Your real product, cut out of your own photo and placed in a
+      ready-made set. Nothing is redrawn, so it is exactly the thing you ship. Free, as many times as you like.</p>
+    ${step("1", "Which photo?", photos)}
+    ${step("2", "What is it?", types, "decides how it sits: standing, laid flat or hanging")}
+    ${step("3", "Design", designs)}
+    ${ch.type ? step("4", "With a person?", people + poses, person ? "then pick the pose" : "") : ""}
+    <div class="st-make" style="margin-top:14px;">
+      <button class="btn primary sm" id="shGo"${canShoot ? "" : " disabled"}>${sic("image")}${r ? "Try another" : "Generate"}</button>
+      ${r ? `<button class="btn ghost sm" id="shUse">Use this style for my posts</button>
+             <a class="btn ghost sm" href="${esc(r.url)}" download>Download</a>` : ""}
+    </div>
+    <div id="shOut">${r ? `
+      <div class="sh-result"><img src="${esc(r.url)}" alt="Your product in the ${esc(r.scene_label)} scene" />
+        <p class="muted tiny">${esc(r.note)}${(r.warnings || []).length ? ` <b>Tip:</b> ${esc(r.warnings[0])}` : ""}</p>
+        ${r.cutout === "grabcut" ? `<p class="err tiny">The cut-out model is not running on the server, so a
+          rougher fallback cut this. Edges will look better once it is.</p>` : ""}</div>` : ""}</div>
+    <p class="muted tiny" style="margin-top:14px;">Backdrop library: ${esc(String(lib.installed || 0))} of ${esc(String(lib.total || 0))} real photo sets installed.
+      ${(lib.installed || 0) < (lib.total || 0) ? "Designs marked “Basic for now” use simple drawn sets until theirs is added." : ""}</p>`;
+
+  box.querySelectorAll("[data-photo]").forEach((b) => b.onclick = () => { S.photo = b.dataset.photo; renderShoot(p); });
+  box.querySelectorAll("[data-sh]").forEach((b) => b.onclick = () => {
+    const g = b.dataset.sh, v = b.dataset.v;
+    if (g === "type") { ch.type = v; ch.person = ""; ch.pose = ""; }
+    else if (g === "person") { ch.person = v; ch.pose = ""; }
+    else ch[g] = v;
+    renderShoot(p);
+  });
+  const go = $("shGo");
+  if (go) go.onclick = async () => {
+    go.disabled = true; go.innerHTML = sic("image") + "Shooting…";
+    try {
+      S.result = await api("/api/studio/shoot", { method: "POST", json: {
+        product_id: p.id, choice: ch, photo_url: S.photo } });
+    } catch (e) { toast(e.message, 8000); }
+    renderShoot(p);
+  };
+  const use = $("shUse");
+  if (use) use.onclick = async () => {
+    try {
+      await api("/api/studio/shoot/save", { method: "POST", json: { product_id: p.id, choice: ch } });
+      toast("Saved. Scheduled posts of this product will be shot this way when "
+        + "“Pictures for planned posts” is set to free scenes.", 8000);
+    } catch (e) { toast(e.message); }
+  };
+}
+
 function renderStudioProduct() {
   const { product: p, material: m, completeness: c, angles: ang } = _studioProduct;
   const shots = (m.shots || []);
@@ -5538,8 +5651,11 @@ function renderStudioProduct() {
       </div>
       <div class="pf-tabs">
         <button type="button" class="pf-tab on" data-st="material">Material</button>
+        <button type="button" class="pf-tab" data-st="shoot">Photo shoot <span class="pill-free">free</span></button>
         <button type="button" class="pf-tab" data-st="make">Make a post</button>
       </div>
+
+      <div class="pf-panel" data-st="shoot"><div id="stShoot"></div></div>
 
       <div class="pf-panel on" data-st="material">
         <div class="st-checks">${(c.checks || []).map((k) =>
@@ -5575,12 +5691,6 @@ function renderStudioProduct() {
             <textarea id="stDiff" data-ai="product_different" data-ai-ctx="studio-product" data-ai-label="What makes it different" rows="2" placeholder="No alcohol burn: it opens soft.">${esc(m.different)}</textarea></label>
           <label>Who it's for<input id="stWho" data-ai="product_for" data-ai-ctx="studio-product" data-ai-label="Who it's for" value="${esc(m.for_who)}" placeholder="Someone who wears one scent, not ten" /></label>
           <label>Where you'd wear or use it<input id="stOcc" data-ai="product_occasions" data-ai-ctx="studio-product" data-ai-label="Where you'd wear or use it" value="${esc(m.occasions)}" placeholder="Evenings, weddings, gifting" /></label>
-          <label>How your photo was taken <span class="muted tiny">for free scenes: picks a set shot from the same angle</span>
-            <select id="stPose">${[
-              ["auto", "Work it out from the photo"],
-              ["stand", "Standing up, camera at its height"],
-              ["flat", "Laid flat or hanging, camera above"],
-            ].map(([v, l]) => `<option value="${v}"${(m.pose || "auto") === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
         </div>
         <button class="btn primary sm" id="stSave">Save material</button>
       </div>
@@ -5608,6 +5718,7 @@ function renderStudioProduct() {
     $("stPanel").querySelectorAll(".pf-tab").forEach((x) => x.classList.toggle("on", x === n));
     $("stPanel").querySelectorAll(".pf-panel").forEach((x) =>
       x.classList.toggle("on", x.dataset.st === n.dataset.st));
+    if (n.dataset.st === "shoot") renderShoot(p);
   });
 
   const paintMedia = () => {
@@ -5635,7 +5746,7 @@ function renderStudioProduct() {
         method: "POST", json: { product_id: p.id, patch: {
           story: $("stStory").value, materials: $("stMat").value,
           different: $("stDiff").value, for_who: $("stWho").value,
-          occasions: $("stOcc").value, pose: $("stPose").value, shots, clips,
+          occasions: $("stOcc").value, shots, clips,
         }}})) };
       toast("Saved.");
       _studio = await api("/api/studio/state");

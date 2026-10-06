@@ -96,7 +96,7 @@ def pose(cut: Image.Image, override: str = "") -> dict:
     tilt = _tilt(alpha) if tall >= 1.25 else 0.0
     if override in ("stand", "flat"):
         return {"stage": override, "tilt": tilt if override == "stand" else 0.0,
-                "why": "set in Product Studio", "base": base}
+                "why": "from the product type you picked", "base": base}
     if base["ratio"] >= 0.30 and tall >= 0.55:
         return {"stage": "stand", "tilt": tilt, "base": base,
                 "why": "it has a flat base to stand on"}
@@ -204,17 +204,100 @@ def _reflection(size, cut: Image.Image, at, strength=0.16):
     return layer.filter(ImageFilter.GaussianBlur(1.5))
 
 
+# --------------------------------------------------------------- realism
+
+def _match_exposure(cut: Image.Image, scene: Image.Image, at: tuple, strength=0.25) -> Image.Image:
+    """Pull the product's brightness part of the way toward the set's.
+
+    A product shot in bright daylight dropped into a dark luxury set glows like
+    a sticker; the same product a touch darker reads as lit by that set. Capped
+    to -18%/+10% so a white bottle stays white and a black one stays black."""
+    arr = np.asarray(cut, np.float32)
+    a = arr[:, :, 3] > 200
+    if a.sum() < 100:
+        return cut
+    x, y = at
+    sw, sh = scene.size
+    r = int(min(sw, sh) * 0.3)
+    patch = np.asarray(scene.crop((max(0, int(x - r)), max(0, int(y - r)),
+                                   min(sw, int(x + r)), min(sh, int(y + r)))).convert("L"), np.float32)
+    s_l = float(patch.mean())
+    p_l = float((arr[:, :, :3][a] @ np.array([0.299, 0.587, 0.114], np.float32)).mean())
+    gain = float(np.clip((max(s_l, 1) / max(p_l, 1)) ** strength, 0.82, 1.10))
+    arr[:, :, :3] = np.clip(arr[:, :, :3] * gain, 0, 255)
+    return Image.fromarray(arr.astype(np.uint8), "RGBA")
+
+
+def _light_wrap(cut: Image.Image, scene: Image.Image, at: tuple, amount=0.30) -> Image.Image:
+    """Let a little of the set's light spill over the product's outline.
+
+    Real light bends round an object's edge, so its rim picks up the colour
+    behind it. A cut-out has a perfectly clean rim, which is the single
+    biggest tell of a composite. Only the outermost few pixels change."""
+    import cv2
+    w, h = cut.size
+    x, y = int(at[0]), int(at[1])
+    bg = scene.crop((x, y, x + w, y + h)).convert("RGB")
+    if bg.size != cut.size:
+        return cut
+    bg = np.asarray(bg.filter(ImageFilter.GaussianBlur(max(2, min(w, h) * 0.02))), np.float32)
+    arr = np.asarray(cut, np.float32)
+    alpha = arr[:, :, 3] / 255.0
+    inner = cv2.erode((alpha * 255).astype(np.uint8), np.ones((5, 5), np.uint8),
+                      iterations=max(1, int(min(w, h) * 0.006))).astype(np.float32) / 255
+    rim = np.clip(alpha - inner, 0, 1)[:, :, None] * amount
+    arr[:, :, :3] = arr[:, :, :3] * (1 - rim) + bg * rim
+    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGBA")
+
+
+def one_piece(cut: Image.Image) -> Image.Image:
+    """The biggest single piece of a cut-out: one earring from a photo of the
+    pair, which is what goes on one ear."""
+    import cv2
+    a = (np.asarray(cut.getchannel("A")) > 127).astype(np.uint8)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(a, 8)
+    if n <= 2:
+        return cut
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    order = np.argsort(areas)[::-1]
+    if areas[order[1]] < areas[order[0]] * 0.35:
+        return cut             # one main piece with crumbs: already a single item
+    i = order[0] + 1
+    x, y, w, h = (stats[i, cv2.CC_STAT_LEFT], stats[i, cv2.CC_STAT_TOP],
+                  stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT])
+    keep = np.asarray(cut, np.uint8).copy()
+    keep[:, :, 3] = np.where(labels == i, keep[:, :, 3], 0)
+    return Image.fromarray(keep, "RGBA").crop((x, y, x + w, y + h))
+
+
+def _top_cx(alpha: np.ndarray) -> float:
+    """Horizontal centre of the product's top edge: where a hanger hook or a
+    necklace's clasp ends are."""
+    rows = np.where((alpha > 127).any(axis=1))[0]
+    if not len(rows):
+        return alpha.shape[1] / 2
+    band = alpha[rows[0]:rows[0] + max(2, int(alpha.shape[0] * 0.06))] > 127
+    xs = np.where(band.any(axis=0))[0]
+    return float((xs[0] + xs[-1]) / 2) if len(xs) else alpha.shape[1] / 2
+
+
 # --------------------------------------------------------------- placing
 
 def place(scene_img: Image.Image, layout: dict, cut: Image.Image,
           stage: str, seed: int = 0) -> dict:
     """Composite the product into the set. Returns the layers separately as
-    well as flattened, because the motion clip moves them independently."""
+    well as flattened, because the motion clip moves them independently.
+
+    layout["mode"] says which point of the product sits on the anchor:
+      base   — it stands there (tables, podiums, a palm): cast + contact shadow
+      center — it lies there (flat-lays): soft drop shadow straight down
+      top    — it hangs from there (a hook, a neckline, an earlobe)"""
     W, H = scene_img.size
     bw, bh = layout["box"]
     fx, fy = layout["floor"]
     light = layout.get("light") or (-1.0, -1.0)
-    if stage == "flat":
+    mode = layout.get("mode") or ("base" if stage == "stand" else "center")
+    if mode == "center":
         rng = np.random.default_rng(seed)
         # A flat-lay is arranged by hand, never perfectly square to the frame.
         cut = cut.rotate(float(rng.uniform(-7, 7)), resample=Image.BICUBIC, expand=True)
@@ -227,22 +310,43 @@ def place(scene_img: Image.Image, layout: dict, cut: Image.Image,
     s = min(bw / pw, bh / ph, 1.6)
     cut = cut.resize((max(1, int(pw * s)), max(1, int(ph * s))), Image.LANCZOS)
     pw, ph = cut.size
+    a_np = np.asarray(cut.getchannel("A"))
 
     shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    if stage == "stand":
-        base = _base_stats(np.asarray(cut.getchannel("A")))
-        x = int(fx - base["cx"])
-        y = int(fy - ph)
-        cut = _harmonise(cut, scene_img, (fx, fy - ph / 2))
-        shadow.alpha_composite(_cast_shadow((W, H), cut.getchannel("A"), fx, fy, light))
+    if mode == "base":
+        base = _base_stats(a_np)
+        x, y = int(fx - base["cx"]), int(fy - ph)
+        centre = (fx, fy - ph / 2)
+    elif mode == "top":
+        x, y = int(fx - _top_cx(a_np)), int(fy)
+        centre = (fx, fy + ph / 2)
+    else:
+        x, y = int(fx - pw / 2), int(fy - ph / 2)
+        centre = (fx, fy)
+
+    cut = _harmonise(cut, scene_img, centre)
+    cut = _match_exposure(cut, scene_img, centre)
+    cut = _light_wrap(cut, scene_img, (x, y))
+    a = cut.getchannel("A")
+
+    if mode == "base":
+        small = stage == "palm"
+        shadow.alpha_composite(_cast_shadow((W, H), a, fx, fy, light,
+                                            strength=0.18 if small else 0.30))
         shadow.alpha_composite(_contact_shadow((W, H), fx, fy, max(base["width"], pw * 0.3)))
         if layout.get("gloss"):
             shadow.alpha_composite(_reflection((W, H), cut, (x, fy)))
+    elif mode == "top":
+        # Hanging against a wall or lying on skin: the shadow falls a little
+        # below and away from the light, close for jewellery, further for a
+        # garment that hangs off the wall on its hanger.
+        far = 0.035 if stage == "hang" else 0.012
+        off = (-light[0] * pw * far, -light[1] * ph * far + ph * far)
+        shadow.alpha_composite(_shadow_layer((W, H), a, (x + off[0], y + off[1]),
+                                             max(3, min(pw, ph) * (0.04 if stage == "hang" else 0.015)),
+                                             0.38 if stage == "hang" else 0.45))
     else:
-        x, y = int(fx - pw / 2), int(fy - ph / 2)
-        cut = _harmonise(cut, scene_img, (fx, fy))
         off = (-light[0] * pw * 0.025, -light[1] * ph * 0.025)
-        a = cut.getchannel("A")
         shadow.alpha_composite(_shadow_layer((W, H), a, (x + off[0], y + off[1]),
                                              max(4, min(pw, ph) * 0.03), 0.42))
         shadow.alpha_composite(_shadow_layer((W, H), a, (x + 1, y + 2), 2, 0.35))
@@ -252,19 +356,29 @@ def place(scene_img: Image.Image, layout: dict, cut: Image.Image,
     out = scene_img.convert("RGBA")
     out.alpha_composite(shadow)
     out.alpha_composite(product)
+    anchor = (fx, fy) if mode == "base" else (centre[0], centre[1])
     return {"image": out.convert("RGB"), "background": scene_img, "shadow": shadow,
-            "product": product, "anchor": (fx, fy if stage == "stand" else fy),
-            "product_box": (x, y, x + pw, y + ph)}
+            "product": product, "anchor": anchor, "product_box": (x, y, x + pw, y + ph)}
+
+
+# Which backdrop stage each person pose uses.
+POSE_STAGE = {"palm": "palm", "neck": "neck", "ear": "ear", "beside": "stand"}
 
 
 def make(photo: bytes, *, size: str = "post", look: str = "clean", palette: str = "",
          festive: bool = False, pose_override: str = "", seed: int = 0,
-         scene_id: str = "", cut: dict | None = None) -> dict:
+         scene_id: str = "", cut: dict | None = None, design: str = "",
+         person: str = "", person_pose: str = "") -> dict:
     """The whole job: cut, read the pose, choose a set, place. Returns
     {"image": PIL RGB, "layers": {...}, "scene", "pose", "quality", ...}.
 
+    pose_override is the product's own resting pose ("stand", "flat", "hang"),
+    from the product type the seller picked. person + person_pose ask for a
+    backdrop with a person in it (see POSE_STAGE).
+
     Raises ValueError with a seller-readable reason when the photo cannot make
-    a believable picture (product not found, cut off at the frame edge)."""
+    a believable picture (product not found, cut off at the frame edge), or
+    when no backdrop exists yet for the person and pose asked for."""
     from backend.core import cutout
     cut = cut or cutout.cut(photo)
     q = cut["quality"]
@@ -272,17 +386,33 @@ def make(photo: bytes, *, size: str = "post", look: str = "clean", palette: str 
                 if "could not" in p or "runs off" in p]
     if blocking:
         raise ValueError(" ".join(blocking) + " " + q.get("tip", ""))
-    p = pose(cut["image"], pose_override)
+    if pose_override == "hang":
+        p = {"stage": "hang", "tilt": 0.0, "why": "it hangs on a hanger"}
+    else:
+        p = pose(cut["image"], pose_override)
     product = _straighten(cut["image"], p["tilt"]) if p["stage"] == "stand" else cut["image"]
+    stage = p["stage"]
+    if person and person_pose:
+        stage = POSE_STAGE.get(person_pose, stage)
+        if person_pose == "ear":
+            product = one_piece(product)
     W, H = SIZES.get(size, SIZES["post"])
-    scene = next((s for s in scenes.all_scenes() if s["id"] == scene_id
-                  and s["stage"] == p["stage"]), None) \
-        or scenes.choose(p["stage"], look, festive, seed=seed)
+    scene = next((s for s in scenes.all_scenes() if s["id"] == scene_id), None) \
+        or scenes.choose(stage, look, festive, seed=seed, design=design,
+                         person=person if person_pose else "")
+    if person and person_pose and (scene["stage"] != stage or (scene.get("person") or "") != person):
+        raise ValueError("There is no backdrop with that person and pose yet. "
+                         "Pick another, or a design without a person.")
     bg, layout = scenes.render(scene, W, H, look=look, palette=palette, seed=seed)
-    placed = place(bg, layout, product, p["stage"], seed=seed)
+    if person_pose == "palm" and p["stage"] == "flat":
+        # Jewellery photographed flat lies ON the palm, so it is centred a
+        # little above the palm's base point rather than stood up on it.
+        layout = {**layout, "mode": "center",
+                  "floor": (layout["floor"][0], layout["floor"][1] - layout["box"][1] * 0.25)}
+    placed = place(bg, layout, product, stage, seed=seed)
     return {"image": placed["image"], "layers": placed, "layout": layout,
             "scene": scene["id"], "scene_label": scene["label"],
-            "ai_made": bool(layout.get("ai_made")),
+            "ai_made": bool(layout.get("ai_made")), "photo_backdrop": bool(layout.get("photo")),
             "pose": {k: v for k, v in p.items() if k != "base"},
             "quality": q, "cutout_engine": cut["engine"]}
 
