@@ -1044,7 +1044,7 @@ def save_site(email: str, patch: dict) -> dict:
     }
 
     # ---- checkout trust block ----
-    tr = site.get("trust") or {}
+    tr = _trust_with_contact(site)
     site["trust"] = {
         "business_name": str(tr.get("business_name") or "").strip()[:120],
         "gstin": str(tr.get("gstin") or "").strip().upper()[:20],
@@ -1091,6 +1091,25 @@ def _refund_id(v) -> str:
     return want if any(c["id"] == want for c in legal.REFUND_CHOICES) else "7day"
 
 
+def _trust_with_contact(site: dict) -> dict:
+    """The trust block, with blanks filled from the contact details.
+
+    The builder asks for an address, a phone and an email once. Before they
+    were mirrored here, a seller who filled in "Contact shown on your site" was
+    still refused at Publish for a missing address and phone, because the legal
+    check only read this block and nothing on screen wrote to it.
+    """
+    tr = dict((site or {}).get("trust") or {})
+    ct = (site or {}).get("contact") or {}
+    fill = {"address": ct.get("address"),
+            "support_phone": ct.get("phone") or ct.get("whatsapp"),
+            "support_email": ct.get("email")}
+    for k, v in fill.items():
+        if not str(tr.get(k) or "").strip() and str(v or "").strip():
+            tr[k] = str(v).strip()
+    return tr
+
+
 def legal_details(site: dict) -> dict:
     """The shop's trust block, in the shape legal.seller_docs() expects.
 
@@ -1098,7 +1117,7 @@ def legal_details(site: dict) -> dict:
     the legal module names things the way the rules do; mapping them here means
     neither has to be renamed and they cannot drift.
     """
-    tr = (site or {}).get("trust") or {}
+    tr = _trust_with_contact(site)
     return {
         "legal_name": tr.get("business_name") or "",
         "address": tr.get("address") or "",
@@ -1134,7 +1153,7 @@ def set_published(email: str, published: bool) -> dict:
             raise ValueError(
                 "Before your shop can go live it has to show who runs it and "
                 f"how to reach you. Still needed: {names}. You can set these in "
-                "Site Management under Legal and contact details. This is a "
+                "Website Builder, Setup, under Legal and contact details. This is a "
                 "legal requirement for any shop selling in India, not a "
                 "preference of ours.")
     site["published"] = bool(published)

@@ -2074,6 +2074,9 @@ table.tbl tr:hover .row-acts { opacity: 1; }
 /* Odoo marks a required-but-empty input with the ACCENT colour, not red.
    Red is kept for a value that is actually wrong. */
 input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--primary-line); }
+/* A required field the seller tried to skip past. Red, because by then it is
+   blocking them, not just waiting. */
+.fld-bad { border-color: var(--red) !important; box-shadow: 0 0 0 3px var(--red-soft); }
 
 .btn.xs { padding: 2px 8px; font-size: 0.6875rem; line-height: 18px; }
 .btn.danger { color: var(--red); }

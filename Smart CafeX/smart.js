@@ -10225,9 +10225,16 @@ async function openSite(step) {
     _siteMeta = d;
     _site = JSON.parse(JSON.stringify(d.site));
     if (!_site.handle) _site.handle = d.suggested_handle;
+    // Address, phone and email are typed once and kept in both blocks. A site
+    // saved before that has them only under contact, so carry them across.
+    _site.trust = _site.trust || {}; _site.contact = _site.contact || {};
+    [["address", "address"], ["support_phone", "phone"], ["support_email", "email"]].forEach(([t, c]) => {
+      if (!String(_site.trust[t] || "").trim()) _site.trust[t] = _site.contact[c] || (c === "phone" ? _site.contact.whatsapp : "") || "";
+      if (!String(_site.contact[c] || "").trim()) _site.contact[c] = _site.trust[t] || "";
+    });
     await loadPairings();
-    _siteDirty = false; _frameReady = false;
-    _step = step || (_site.handle && _site.brand ? "editor" : "setup");
+    _siteDirty = false; _frameReady = false; _setupTried = false;
+    _step = setupMissing().length ? "setup" : (step || "editor");
     renderSite();
     if (d.seeded_now) {
       toast("Started your site from your catalogue, change anything you like.", 6000);
@@ -10351,6 +10358,10 @@ function renderSite() {
 }
 
 async function goStep(id) {
+  // Nothing past Setup until its required fields are in. The rail, Next and
+  // the Design shortcut all come through here, so one check covers them.
+  const to = STEPS.findIndex((s) => s.id === id);
+  if (to > STEPS.findIndex((s) => s.id === "setup") && !setupGate()) return;
   // The live canvas loads the real site, and the site only has an address once
   // it has been saved once. Entering Design saves silently so the seller never
   // has to publish (step 5) just to see step 3.
@@ -10384,6 +10395,7 @@ function renderStep() {
   else if (_step === "checkout") { b.innerHTML = stepCheckout() + stepNav(); setTimeout(renderGateway, 0); }
   else b.innerHTML = stepPublish() + stepNav();
   wireStep();
+  showSetupMissing();
   document.querySelectorAll("#siteBody [data-step]").forEach((n) => n.onclick = () => goStep(n.dataset.step));
   const fin = $("wzFinish");
   if (fin) fin.onclick = async () => { if (_siteDirty) await saveSite(); goHome(); };
@@ -10407,7 +10419,13 @@ function wireBinds(scope) {
     n.addEventListener(ev, () => {
       let v = n.type === "checkbox" ? n.checked : n.value;
       if (n.dataset.num) v = v === "" ? 0 : parseFloat(v);
+      if (n.dataset.mirror) {
+        const parts = n.dataset.mirror.split(".");
+        const o = parts.slice(0, -1).reduce((a, k) => (a[k] = a[k] || {}), _site);
+        o[parts[parts.length - 1]] = v;
+      }
       bindPath(path, v);
+      if (_setupTried) showSetupMissing();
       if (n.type === "range") { const out = $(n.id + "Out"); if (out) out.textContent = n.value; }
     });
   });
@@ -10432,9 +10450,14 @@ function siteAiAttr(path, label) {
 }
 
 function field(label, path, opts = {}) {
-  const v = readPath(path);
+  // A mirrored field is one value the site keeps in two places (the contact
+  // block shoppers see, and the legal block the go-live check reads).
+  const v = readPath(path) || (opts.mirror ? readPath(opts.mirror) : "");
+  if (opts.req) label = `<span>${label}<span class="req">Required</span></span>`;
   const hint = opts.hint ? ` <span class="muted tiny">${opts.hint}</span>` : "";
-  const ai = opts.ai === false ? "" : siteAiAttr(path, label);
+  const ai = (opts.ai === false ? "" : siteAiAttr(path, label))
+    + (opts.mirror ? ` data-mirror="${opts.mirror}"` : "")
+    + (opts.req ? ` aria-required="true"` : "");
   if (opts.type === "textarea")
     return `<label>${label}${hint}<textarea rows="${opts.rows || 3}" data-bind="${path}"${ai} placeholder="${esc(opts.ph || "")}">${esc(v || "")}</textarea></label>`;
   if (opts.type === "check")
@@ -10448,7 +10471,8 @@ function field(label, path, opts = {}) {
       <span class="rng-val"><b id="${id}Out">${v == null ? opts.def : v}</b>${opts.hint ? ` <span class="muted tiny">${opts.hint}</span>` : ""}</span>
       <input type="range" id="${id}" data-bind="${path}" data-num="1" min="${opts.min}" max="${opts.max}" step="${opts.step || 1}" value="${v == null ? opts.def : v}" /></label>`;
   }
-  return `<label>${label}${hint}<input type="${opts.type || "text"}" data-bind="${path}"${(opts.type || "text") === "text" && !opts.num ? ai : ""} ${opts.num ? 'data-num="1" min="0" step="any"' : ""} value="${esc(v == null ? "" : v)}" placeholder="${esc(opts.ph || "")}" /></label>`;
+  const extra = (opts.mirror ? ` data-mirror="${opts.mirror}"` : "") + (opts.req ? ` aria-required="true"` : "");
+  return `<label>${label}${hint}<input type="${opts.type || "text"}" data-bind="${path}"${(opts.type || "text") === "text" && !opts.num && !opts.mirror && !opts.req ? ai : extra} ${opts.num ? 'data-num="1" min="0" step="any"' : ""} value="${esc(v == null ? "" : v)}" placeholder="${esc(opts.ph || "")}" /></label>`;
 }
 
 /* ============================== STEP 1: SETUP ============================ */
@@ -10509,15 +10533,68 @@ function stepSetup() {
       </div>
     </div>
 
-    <div class="sup-sub">Contact shown on your site</div>
+    <div class="sup-sub" id="setupLegal">Legal and contact details</div>
+    <p class="muted tiny" style="margin:0 0 10px;">Every shop selling in India has to show who runs it
+      and how to reach them, so these are needed before you can go on. They appear on your site and
+      in its privacy, terms and returns pages.</p>
+    <div id="setupMissing"></div>
     <div class="sup-form-grid">
-      ${field("Email", "contact.email", { type: "email" })}
-      ${field("Phone", "contact.phone", { ph: "+91 …" })}
+      ${field("Your legal name or registered business name", "trust.business_name", { req: true, ph: "Meera Rao, or Kaya Leather Pvt Ltd" })}
+      ${field("Who handles complaints", "trust.grievance_name", { req: true, hint: "(a person's name, yours is fine)", ph: "Meera Rao" })}
+      ${field("Customer care email", "trust.support_email", { type: "email", req: true, mirror: "contact.email" })}
+      ${field("Customer care phone", "trust.support_phone", { type: "tel", req: true, mirror: "contact.phone", ph: "+91 98765 43210" })}
+      ${field("Full business address", "trust.address", { type: "textarea", rows: 2, req: true, mirror: "contact.address", ph: "Shop 4, 12 MG Road, Bengaluru, Karnataka 560001" })}
       ${field("WhatsApp number", "contact.whatsapp", { hint: "(digits only)", ph: "919876543210" })}
       ${field("Instagram handle", "contact.instagram", { ph: "@yourbrand" })}
-      ${field("Address", "contact.address", { type: "textarea", rows: 2 })}
     </div>
   </div>`;
+}
+
+/* What Setup still needs before the seller may move on. The same five legal
+   details the server checks at Publish (legal.SELLER_REQUIRED), plus the brand
+   and address the shop cannot exist without. Kept at least as strict as the
+   server, so passing here can never end in a refusal at Publish. */
+function setupMissing() {
+  const val = (p) => String(readPath(p) || "").trim();
+  const out = [];
+  const need = (ok, sel, label) => { if (!ok) out.push({ sel, label }); };
+  need(val("brand"), '[data-bind="brand"]', "Brand name");
+  need(val("handle").replace(/[^a-z0-9]/g, "").length >= 3, "#siteHandle", "Web address (at least 3 letters or numbers)");
+  need(val("trust.business_name").length >= 2, '[data-bind="trust.business_name"]', "Your legal name or registered business name");
+  need(val("trust.grievance_name").length >= 2, '[data-bind="trust.grievance_name"]', "Who handles complaints");
+  need(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val("trust.support_email")), '[data-bind="trust.support_email"]', "Customer care email");
+  need(val("trust.support_phone").replace(/\D/g, "").length >= 10, '[data-bind="trust.support_phone"]', "Customer care phone (at least 10 digits)");
+  need(val("trust.address").length >= 8, '[data-bind="trust.address"]', "Full business address");
+  return out;
+}
+
+/* Paint what is missing on the Setup step. Only after the seller has tried to
+   move on, so a fresh form is not a wall of red. */
+let _setupTried = false;
+function showSetupMissing() {
+  const box = $("setupMissing");
+  if (!box) return;
+  const miss = _setupTried ? setupMissing() : [];
+  document.querySelectorAll("#siteBody .fld-bad").forEach((n) => n.classList.remove("fld-bad"));
+  miss.forEach((m) => { const n = document.querySelector("#siteBody " + m.sel); if (n) n.classList.add("fld-bad"); });
+  box.innerHTML = miss.length
+    ? `<div class="err" role="alert" style="margin:0 0 12px;">Fill these in to continue:
+        <ul style="margin:6px 0 0;padding-left:18px;">${miss.map((m) => `<li>${esc(m.label)}</li>`).join("")}</ul></div>`
+    : "";
+}
+
+/* True when the seller may leave Setup. Otherwise brings them to it, marks
+   each empty field and puts the cursor in the first one. */
+function setupGate() {
+  const miss = setupMissing();
+  if (!miss.length) return true;
+  _setupTried = true;
+  if (_step !== "setup") { _step = "setup"; _frameReady = false; renderSite(); }
+  else showSetupMissing();
+  const first = document.querySelector("#siteBody " + miss[0].sel);
+  if (first) { first.scrollIntoView({ behavior: "smooth", block: "center" }); first.focus({ preventScroll: true }); }
+  toast(`Fill in ${miss.length === 1 ? "the required field" : `the ${miss.length} required fields`} on Setup first.`, 5000);
+  return false;
 }
 
 /* ============================== STEP 2: THEME ============================ */
@@ -11098,6 +11175,7 @@ function stepPublish() {
   const checks = [
     [!!_site.brand, "Brand name set"],
     [!!_site.handle, "Web address chosen"],
+    [!setupMissing().length, setupMissing().length ? "Legal and contact details are incomplete (Setup)" : "Legal and contact details filled in"],
     [c.listed > 0, `${fmt(c.listed)} product${c.listed === 1 ? "" : "s"} listed on the site`],
     [c.no_price === 0, c.no_price ? `${fmt(c.no_price)} listed product${c.no_price === 1 ? " has" : "s have"} no price` : "Every listed product has a price"],
     [c.no_image === 0, c.no_image ? `${fmt(c.no_image)} listed product${c.no_image === 1 ? " has" : "s have"} no photo` : "Every listed product has a photo"],
@@ -11112,7 +11190,9 @@ function stepPublish() {
         `<li class="${ok ? "ok" : "warn"}">${sic(ok ? "check" : "close")}<span>${esc(t)}</span></li>`).join("")}</ul>
       <p class="muted tiny" style="margin-top:14px;">${ready
         ? "Everything's in place. Publishing makes your site reachable by anyone with the link."
-        : "You can still publish, the warnings above are things shoppers will notice."}</p>
+        : setupMissing().length
+          ? `Your legal and contact details have to be filled in before the site can go live. <button class="btn ghost xs" data-step="setup" type="button">Go to Setup</button>`
+          : "You can still publish, the warnings above are things shoppers will notice."}</p>
       <div class="row" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
         <button class="btn ${_site.published ? "ghost" : "primary"}" id="pubBtn">${_site.published ? "Unpublish site" : "Publish my site"}</button>
         ${_site.published ? `<a class="btn ghost" href="${esc(shopPath())}" target="_blank" rel="noopener">Visit site ↗</a>` : ""}
@@ -11178,6 +11258,7 @@ function wireStep() {
       _site.handle = clean; _siteDirty = true;
       const b = $("siteSave"); if (b) { b.disabled = false; b.textContent = "Save"; }
       const d = $("siteDirty"); if (d) d.hidden = false;
+      if (_setupTried) showSetupMissing();
       clearTimeout(h._t);
       h._t = setTimeout(async () => {
         const st = $("handleState");
@@ -11350,6 +11431,7 @@ async function saveSite(opts) {
 
 async function togglePublish() {
   const want = !_site.published;
+  if (want && !setupGate()) return;
   if (want && _siteDirty) await saveSite({ quiet: true });
   try {
     const d = await api("/api/site/publish", { method: "POST", json: { published: want } });
