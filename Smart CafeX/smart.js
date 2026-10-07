@@ -1648,6 +1648,7 @@ const MODULES = [
   { id: "inventory",  name: "Inventory Management",   sub: "How much you have left. It goes down on its own as orders come in.", ico: "package", cls: "tile-supply", needs: null, tag: "STOCK", group: "run" },
   { id: "supply",     name: "Suppliers & Orders to Send", sub: "Who you buy from, when to buy again, and a ready order form to send them.", ico: "truck", cls: "tile-supply", needs: null, tag: "SUPPLY", group: "run" },
   // --- bring in more customers ----------------------------------------------
+  { id: "brand",      name: "Brand Management",       sub: "Pick the brand your buyers respond to. We set your name in type, choose the colours and write the words.", ico: "palette", cls: "tile-brand", needs: null, tag: "BRAND", group: "grow" },
   { id: "studio",     name: "Product Studio",         sub: "Upload your photos once. We learn your look and use it in everything we make.", ico: "spark", cls: "tile-content", needs: null, tag: "STUDIO", group: "grow" },
   { id: "social",     name: "Social Media Manager",   sub: "A week of Instagram posts planned, written and scheduled for you.", ico: "spark", cls: "tile-content", needs: null, tag: "SOCIAL", group: "grow" },
   { id: "site",       name: "Website Builder",        sub: "Your own selling website. Pick a look, publish, start taking orders.", ico: "globe", cls: "tile-site", needs: null, tag: "SITE", group: "grow" },
@@ -4555,6 +4556,7 @@ async function openModule(id) {
   if (id === "sales") return openSales();
   if (id === "inventory") return openInventory();
   if (id === "studio") return openStudio();
+  if (id === "brand") return openBrand();
   if (id === "subcategory") return openSubcategory();
   if (id === "products") return openProducts();
   if (id === "site") return openSite();

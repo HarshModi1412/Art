@@ -6486,6 +6486,150 @@ def storefront_legal_config(handle: str):
     }
 
 
+# ---------------------------------------------------------
+# Brand Management (brandkit.py, docs/designs/brand-management-module.md)
+# ---------------------------------------------------------
+class BrandKitBody(BaseModel):
+    kit: dict = {}
+    options: dict = {}
+
+
+def _brand_spelling(email: str, request: Request) -> str:
+    """US spelling (jewelry) for accounts billed in dollars; everyone else gets
+    jewellery. The account's currency is set at signup from its region, so it
+    is the stored answer to "which market is this seller in"."""
+    try:
+        ccy = billing.billing_currency(email)
+    except Exception:  # noqa: BLE001
+        ccy = ""
+    if not ccy:
+        ccy = region.detect_currency(request)
+    return "us" if str(ccy).upper() == "USD" else "intl"
+
+
+def _brand_payload(email: str, kit: dict) -> dict:
+    from backend.core import brandkit
+    return {"kit": kit, "describe": brandkit.describe(kit)}
+
+
+def _brand_error(e: Exception):
+    msg = str(e)
+    if msg.startswith("CONFIRM_LIVE:"):
+        raise HTTPException(409, msg.split(":", 1)[1].strip())
+    raise HTTPException(400, msg)
+
+
+@app.get("/api/brand/state")
+def brand_state(request: Request, authorization: str | None = Header(default=None)):
+    from backend.core import brandkit, brandname
+    email = require_user(authorization)
+    spelling = _brand_spelling(email, request)
+    kit = brandkit.get_kit(email)
+    resolved = brandname.resolve(email)
+    return {
+        "library": brandkit.public_library(spelling),
+        "spelling": spelling,
+        **_brand_payload(email, kit),
+        "suggested": {
+            "name": resolved.get("name") or "", "source": resolved.get("source") or "",
+            "category": brandkit.category_for_product_type(smart.get_product_type(email)),
+        },
+        "has_site": brandkit.has_site(email),
+        "assets": brandkit.list_assets(),
+        "undo": bool((kit.get("last_apply") or {}).get("rows")),
+        # What the mockups draw with: the faces (loaded on demand, only once the
+        # seller opens this module), the website themes as they really look,
+        # and up to four of the seller's own product photos.
+        "fonts": [{k: f[k] for k in ("id", "label", "stack", "g", "kind")} for f in sitebuilder.FONTS],
+        "themes": [{"id": t["id"], "label": t["label"], "light": t["light"], "dark": t["dark"],
+                    "case": t["layout"].get("case", "none")} for t in sitebuilder.THEMES],
+        "photos": _brand_photos(email),
+    }
+
+
+def _brand_photos(email: str) -> list[str]:
+    try:
+        out = []
+        for p in products.get_products(email):
+            if p.get("status") == "archived":
+                continue
+            url = p.get("image_url") or ((p.get("images") or [None])[0])
+            if url and url not in out:
+                out.append(url)
+            if len(out) >= 4:
+                break
+        return out
+    except Exception:  # noqa: BLE001 - mockups fall back to drawn shapes
+        return []
+
+
+@app.post("/api/brand/compose")
+def brand_compose(body: BrandKitBody, request: Request, authorization: str | None = Header(default=None)):
+    """The kit after these choices and edits, not saved. The screen calls this
+    as the seller types, so every line they have not edited follows along."""
+    from backend.core import brandkit
+    email = require_user(authorization)
+    try:
+        kit = brandkit.compose(email, body.kit, _brand_spelling(email, request))
+    except brandkit.BrandError as e:
+        _brand_error(e)
+    return _brand_payload(email, kit)
+
+
+@app.post("/api/brand/save")
+def brand_save(body: BrandKitBody, request: Request, authorization: str | None = Header(default=None)):
+    from backend.core import brandkit
+    email = require_user(authorization)
+    try:
+        kit = brandkit.save(email, body.kit, _brand_spelling(email, request))
+    except brandkit.BrandError as e:
+        _brand_error(e)
+    return _brand_payload(email, kit)
+
+
+@app.post("/api/brand/plan")
+def brand_plan(body: BrandKitBody, request: Request, authorization: str | None = Header(default=None)):
+    """Exactly what Apply would change, field by field. Changes nothing."""
+    from backend.core import brandkit
+    email = require_user(authorization)
+    try:
+        kit = brandkit.compose(email, body.kit, _brand_spelling(email, request))
+        kit["last_apply"] = brandkit.get_kit(email).get("last_apply")
+        return brandkit.plan_apply(email, kit, body.options)
+    except brandkit.BrandError as e:
+        _brand_error(e)
+
+
+@app.post("/api/brand/apply")
+def brand_apply(body: BrandKitBody, request: Request, authorization: str | None = Header(default=None)):
+    from backend.core import brandkit
+    email = require_user(authorization)
+    cache.clear(email)
+    try:
+        out = brandkit.apply(email, body.kit, body.options, _brand_spelling(email, request))
+    except (brandkit.BrandError, ValueError) as e:
+        _brand_error(e)
+    return {**_brand_payload(email, out["kit"]), "applied": out["applied"], "undo": True}
+
+
+@app.get("/api/brand/undo")
+def brand_undo_plan(authorization: str | None = Header(default=None)):
+    from backend.core import brandkit
+    return brandkit.plan_undo(require_user(authorization))
+
+
+@app.post("/api/brand/undo")
+def brand_undo(body: BrandKitBody, authorization: str | None = Header(default=None)):
+    from backend.core import brandkit
+    email = require_user(authorization)
+    cache.clear(email)
+    try:
+        out = brandkit.undo(email, body.options)
+    except (brandkit.BrandError, ValueError) as e:
+        _brand_error(e)
+    return {**_brand_payload(email, out["kit"]), "restored": out["restored"], "undo": False}
+
+
 @app.get("/api/site/legal-options")
 def site_legal_options(authorization: str | None = Header(default=None)):
     """The refund policies a seller may choose between, and what is still blank.

@@ -90,6 +90,10 @@ def blank_brand(email: str = "") -> dict:
         "avoid": "",                 # words or looks to stay away from
         "hashtags": "",              # the ones they always use
         "city": "",
+        # Written by Brand Management's Apply: the chosen direction's voice in
+        # one paragraph (traits, do, never, who the buyers are). Read by the
+        # caption writer so posts sound like the brand book, not like a preset.
+        "voice_rules": "",
         # --- design language ------------------------------------------------
         # Reference images that define the brand's AESTHETIC rather than its
         # products: shots the seller admires, their packaging, their shop, a
@@ -763,6 +767,8 @@ def build_brief(brand: dict, product: dict, material: dict, angle: str = "") -> 
     image are made against the same instructions."""
     look = LOOK_PROMPT.get(brand.get("look"), LOOK_PROMPT["clean"])
     voice = VOICE_PROMPT.get(brand.get("voice"), VOICE_PROMPT["warm"])
+    if (brand.get("voice_rules") or "").strip():
+        voice = f"{voice}. {brand['voice_rules'].strip()}"
     facts = [f for f in [
         f"Product: {product.get('name')}",
         f"Category: {product.get('category')}" if product.get("category") else "",

@@ -1,0 +1,368 @@
+{
+  "version": 2,
+  "round": 1,
+  "document": "D:\\Claude\\Art\\docs\\designs\\brand-management-module.md",
+  "quality_score": 5,
+  "dimensions": {
+    "completeness": "ISSUES",
+    "consistency": "ISSUES",
+    "clarity": "ISSUES",
+    "scope": "ISSUES",
+    "feasibility": "ISSUES"
+  },
+  "findings": [
+    {
+      "id": "R1-1",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The Problem Statement says small branded sellers were '4 to 6 times more likely to have a product pass 50 or 100 ratings than unbranded ones, at every price band'. The source (Pain_Point.md, P11 table) shows 4.0x-5.7x only for Fashion and 3.8x-4.7x for Beauty, while Handmade is 1.7x-2.2x. The 'all 15 price-band tests' result is the mean-ratings comparison (1.15x to 3.4x), not the breakout ratio. The data also has no home decor category. The design's main quantitative evidence is overstated and attributed to the wrong measure.",
+      "remedy": "Restate the evidence as the source supports it. Branded small sellers had 1.5x-2.3x more ratings at the same price (true in all 15 price-band tests). They were 4x-6x likelier to pass 50/100 ratings in Fashion and Beauty, and 1.7x-2.2x in Handmade. Name Amazon US as the source and say that home decor has no matching evidence."
+    },
+    {
+      "id": "R1-2",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "'What I noticed' says the link-not-cause answer 'is now written into the plan's guardrails'. The design has no guardrails section; its only mention is one sentence in the Problem Statement. Nothing in the committed behavior stops the module's UI, its tile copy or its generated brand copy from implying that a brand kit grows sales, which is the earnings claim Pain_Point.md's P11 guardrails forbid.",
+      "remedy": "Add a Guardrails section that binds the module. No screen or generated copy may claim a brand grows sales. Any statistic shown must cite Amazon data and be labelled a link, not a cause. Packaging must not be promoted until a packaging deliverable ships. Alternatively, correct the coaching sentence so it does not claim guardrails the plan lacks."
+    },
+    {
+      "id": "R1-3",
+      "dimension": "clarity",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The target market for v1 is never stated, and the sources conflict. The research cites India D2C brands (GIVA, Palmonas, Bonkers Corner), Open Question 2 defers Hindi, and 'big-city buyers' is India framing. Brand.md is India-first (rupees, Hinglish). Pain_Point.md is written for US ads, drops COD as 'India, not US', and the evidence is Amazon US. Every one of the template copy pieces depends on this choice: spelling (jewellery vs jewelry), currency, idiom, and the buyer references behind the age brackets.",
+      "remedy": "State the primary market (and language variant) for the v1 template library and research. If both markets are in scope, say how templates vary by market and which one ships first."
+    },
+    {
+      "id": "R1-4",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The template copy (statement, promise, bio, about, captions, filled with category vocabulary) is written without knowing the seller's products. Directions like Artisan Earth, Calm Natural, Apothecary and Heritage Maison invite claims such as handmade, natural, sustainably sourced, clean ingredients, unisex, heritage or a guaranteed return promise. Apply then publishes that copy to the seller's site and Studio. Brand.md forbids 'invented claims about the product', and false material, sourcing or green claims are a consumer-protection risk for the seller. The design has no rule against this.",
+      "remedy": "Add a rule that templates never assert product facts (materials, origin, process, ingredients, sustainability, certifications, service promises such as returns or delivery) unless they come from seller-supplied fields. The 'promise' field should be about attitude, not service guarantees, unless confirmed. Add a library test that scans templates for a banned-claims word list."
+    },
+    {
+      "id": "R1-5",
+      "dimension": "clarity",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "Constraints apply 'App voice rules from Brand.md: plain, honest, no emoji icons, no hype' without saying whether they bind the generated seller brand copy. Brand.md section 6 says generated seller copy is 'in the seller's brand voice, not ours', with no em dashes, no decorative emoji and no invented product claims. Playful Pop, Street Edge and Bold Maximal voices can't be written if 'plain, no hype' governs them, and template authors can't tell which rules apply.",
+      "remedy": "State which voice rules govern (a) the module's own UI and (b) the generated seller copy. For the seller copy, cite Brand.md section 6: seller's voice, no em dashes, no decorative emoji, no invented claims. Say what latitude each direction's voice has."
+    },
+    {
+      "id": "R1-6",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The composer fills one template set per direction and category with only the shop name and category vocabulary. Every jewellery seller who picks Quiet Luxury therefore gets the same statement, tagline, promise, bio, about and captions apart from the name. This contradicts the Status Quo's criticism of Canva ('same templates as everyone else') and the quality bar ('not like a template'). Two competing sellers on our platform would publish identical brand copy.",
+      "remedy": "Specify how outputs differ between sellers. Options: several variants per field chosen per seller (seeded, with a 'show another' control), slots filled from the seller's own product label (smart.get_product_label / product_meta nouns), city and Studio 'about', and a uniqueness check. Otherwise state the sameness as an accepted v1 limit and add it to the Assignment."
+    },
+    {
+      "id": "R1-7",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "Image assets are stored per direction (Smart CafeX/brand-assets/<direction>/<asset>) and shown to every seller who picks that direction. That includes 'an abstract symbol', which the brand book presents as part of the seller's identity. Every seller in a direction would share the same symbol, pattern and hero, so the mark isn't distinctive. Competing sellers on the platform could end up with the same identity mark.",
+      "remedy": "Decide what shared assets may be used for. Either drop the abstract symbol as an identity element (keep it as decoration only and never offer it as a logo or monogram), or make identity assets per seller. Say in the brand book UI that backgrounds and textures are shared stock."
+    },
+    {
+      "id": "R1-8",
+      "dimension": "feasibility",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The template library is the core of the product and its cost is hidden. 13 directions x 4 categories x about 8 copy fields (statement, tagline, promise, bio, about, three captions) is over 400 hand-written pieces. Add voice rules, imagery rules and three palettes per direction, all 'quality-controlled' to an H&M/Zara/Gucci bar. The design names no author, review process or schedule. The only success test is 'no leftover template slots', which says nothing about quality.",
+      "remedy": "Count the pieces to be written. Name who writes and who approves them, and the review gate each direction must pass (for example, founder sign-off against the quality bar). Either budget the time or cut the v1 library (see R1-9)."
+    },
+    {
+      "id": "R1-9",
+      "dimension": "scope",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The 'Narrowest Wedge' is the whole module, not a wedge: 4 categories x 4 age brackets x 13 directions x 3 palettes, with wordmark, monogram, palette variants, type alternatives, feed, story, packaging and website mockups, logo export, a prompt-generator script and an asset pipeline. Home decor adds a category with no product type in the app (product_config has jewellery, clothes, perfumes, generic) and no supporting evidence. Nothing would be learned before the full library is built.",
+      "remedy": "Define a v1 cut that tests the core bet. For example, the three categories that map to existing product types, 4-6 directions, wordmark + palette + type + copy + Apply, and one mockup set. Move the remaining directions, home decor, the extra mockups and the prompt and asset pipeline to later phases, gated on the Assignment's results."
+    },
+    {
+      "id": "R1-10",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The category prefill covers only clothes->clothing and perfumes->fragrance (jewellery is implied). smart.get_product_type has no home decor value, and many sellers are 'generic' with their own label (product_config: candles, pottery, leather bags, pickles). The design doesn't say what a generic seller sees, whether they can use the module at all, or how a candle seller who picks home_decor gets copy that says candles rather than generic category vocabulary.",
+      "remedy": "Specify the mapping for every product type, including generic. Either refuse with an explanation, ask the seller to pick, or support a generic category. Fill the vocabulary slots from product_meta nouns and label when the seller has given them."
+    },
+    {
+      "id": "R1-11",
+      "dimension": "clarity",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "Directions are ranked by an 'age fit 0 to 3' score and badged 'Best fit for 25-34'. The founder's request is that the seller picks the style their buyers respond to, but the design gives no basis for these scores. The research covers only Gen Z and 35+ in general terms, nothing for 25-34 or 50+ by direction, and the '13 researched directions' are not individually researched. The badge presents an invented score as evidence.",
+      "remedy": "Document the basis for each direction's age-fit score, or label the ranking as a suggestion ('Suggested for 25-34') rather than a measured fit. Add a check of the ranking against real sellers' picks to the Assignment."
+    },
+    {
+      "id": "R1-12",
+      "dimension": "feasibility",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The claim 'Posts follow because Social Media Manager reads Studio' isn't supported by Studio's code. studio.image_prompt uses look_prompt and palette only when the seller has no aesthetic reading: aesthetic_directive or aesthetic outranks both. Sellers who uploaded reference images will see no change in generated images after Apply. Studio stores voice as one of 5 preset ids (save_brand coerces anything else to 'warm'), so the direction's we-say and never-say rules can only partly survive through 'avoid'. Studio has no font field, so posts can't carry the brand's type. This contradicts the Problem Statement's promise that 'fonts, colours, post styling ... follow from it'.",
+      "remedy": "Either extend Studio or the brief to read brand_kit (palette hexes and voice rules alongside or above the aesthetic; fonts for any text overlays), or decide what Apply does to an existing aesthetic reading (keep it, re-weight it, or ask). Otherwise narrow the claim to what actually flows into posts and update the success criteria to test it."
+    },
+    {
+      "id": "R1-13",
+      "dimension": "feasibility",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The Website Builder's style accepts only accent and accent_dark as colour overrides. The background, surface, ink, muted and border colours come from one of 8 genre themes (basic, luxury, fitness, fashion, jewellery, cafe, beauty, tech). The kit's ground, surface, ink and support colours therefore never reach the site. The brand book's 'website header' mockup, drawn in the kit's palette, won't match the site after Apply. Several of the 13 directions (Playful Pop, Artisan Earth, Calm Natural, Street Edge) have no matching theme; 'cafe' is a food theme with menu-board pricing.",
+      "remedy": "Choose one: extend the sitebuilder style to accept the kit's palette roles (with the contrast rules in R1-14), or make the website mockup render the mapped theme's real colours and say only the accent changes. Document the direction->theme mapping, including the directions with no good theme."
+    },
+    {
+      "id": "R1-14",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "Apply writes one 'accent colour'. The site also has accent_dark and a mode of auto, light or dark. The theme supplies accent_ink, which is #ffffff in every light theme. A pale brand accent such as blush or sand will put white button text on a pale button. Visitors in dark or auto mode either keep the theme's own accent, or get a dark brand accent that vanishes on a near-black ground. The only contrast test is ink-on-ground in the library; the accent against accent_ink, the accent against ground, and the reversed wordmark are never checked.",
+      "remedy": "Specify how the kit's accent maps to accent and accent_dark, and what happens when the accent fails contrast against the theme's accent_ink or ground in either mode (adjust, pick the support colour, or warn). Extend the success criteria to every pairing the module renders or applies, in both modes."
+    },
+    {
+      "id": "R1-15",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "Apply's website field list leaves several gaps. A seller-uploaded logo_url stays, so an old home-grown logo keeps showing instead of the new wordmark. 'brief', which the site content writer builds all site copy from, is not updated, so the next regeneration reverts to the old voice. Hero heading and sub, manifesto and SEO title/description are untouched. The wordmark spec (case, track, weight) has no mapping, although heading_track (-8 to 30) and heading_weight exist and case is fixed per theme.",
+      "remedy": "List every site field Apply writes, leaves alone, or offers to change. At minimum decide on logo_url, brief, hero copy, and the mapping of the wordmark spec onto heading_weight and heading_track (with clamping) and the theme case."
+    },
+    {
+      "id": "R1-16",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "Apply is all-or-nothing apart from the theme checkbox. It overwrites the site's brand, tagline, story body, fonts and accent, plus Studio's name, tagline, about, audience, look, voice, palette and avoid, with no snapshot or undo. A published live shop changes the moment Apply is pressed. Copy the seller wrote by hand (story, Studio about/avoid) is lost, and 'shows exactly what changes' is a preview, not a recovery path.",
+      "remedy": "Store a snapshot of the previous site and Studio values on Apply and offer Undo. Add per-section toggles (or per-field keep/replace on the diff), and define extra protection for published sites (for example, a draft first or explicit confirmation of live changes). Add a success criterion for undo."
+    },
+    {
+      "id": "R1-17",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "Premise 3 says 'One source of truth: the kit is stored once', but Apply copies values into sitebuilder and studio_brand, and the seller can keep editing them there. After that the kit and the live values drift. A re-Apply silently overwrites later edits, and brandname.resolve (Studio name first) can return a different name from the kit's. The design has no drift detection and no rule about which side wins.",
+      "remedy": "Either call the model copy-on-apply and define drift handling (for example, show 'your site differs from your brand book' and let the seller choose on re-Apply), or make Website Builder and Studio read from brand_kit. Update premise 3 to match."
+    },
+    {
+      "id": "R1-18",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The behavior for sellers without a One Tap site is undefined. For a seller with no site, sitebuilder.save_site would silently create a site document and claim a global handle from the brand name. Sellers whose store is on Shopify, Etsy or a marketplace (Brand.md 'Where they sell'; Target User 'or a site') get nothing for their real website, because Apply only reaches the One Tap site.",
+      "remedy": "Define Apply's website step for (a) no site: skip with an explanation, or create a draft only on explicit consent, and (b) an external store: provide an export (hex values, font names with Google Fonts links, logo files, copy) and say whether that is in v1."
+    },
+    {
+      "id": "R1-19",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The success criterion 'Editing the name updates every non-edited field ... edited fields survive' guarantees stale names. If a seller edits the statement ('At Kora we ...') and then renames the shop to Kaya, the edited statement keeps 'Kora', and Apply publishes it to the site story and Studio.",
+      "remedy": "Track the name as a token inside edited fields and substitute it on rename, or flag edited fields that still contain the old name and block Apply until the seller resolves them. Add that case to the success criteria."
+    },
+    {
+      "id": "R1-20",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "'edited' records only text fields. The design doesn't say what happens to edited swatches, a chosen palette variant, or a chosen type alternative when the seller changes direction or palette. After a swatch edit, 'palette id' no longer describes the stored colours.",
+      "remedy": "Define how visual edits persist (kept, reset, or asked) across direction and palette changes, record them in 'edited' or an equivalent, and say what 'palette id' means once swatches are edited."
+    },
+    {
+      "id": "R1-21",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "Swatches are editable, but the contrast guarantee (ink-on-ground >= 4.5:1) is tested only on the library palettes. The normaliser checks only that values are hex. A seller can save and Apply an unreadable palette to the site and the mockups.",
+      "remedy": "Validate contrast for edited colours on save and Apply. Either warn with a suggested fix or refuse pairings below threshold, and cover this in the success criteria."
+    },
+    {
+      "id": "R1-22",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The wordmark and monogram rules don't cover real names. Names up to 80 characters (site brand) or 60 (brandname.resolve) can overflow all-caps, wide-tracked wordmarks on direction cards and 4:5 posts. Names in Devanagari (onboarding is bilingual) won't render in the catalogue faces, which are Latin-script families, and fall back to a system font. A forced 'case' transform can destroy deliberate capitalisation. How the monogram is built (which letters, words like 'The', single-word names) is unspecified.",
+      "remedy": "Specify name rules: a maximum wordmark length or fit-to-width scaling, script detection with a fallback or warning for non-Latin names, when the case transform is skipped, and the monogram construction rule."
+    },
+    {
+      "id": "R1-23",
+      "dimension": "feasibility",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "Each direction has three palettes, and swatches are editable. The image prompts carry 'the direction's palette hexes' (unclear which palette), and assets are stored per direction. A seller on palette 2 or 3, or with edited swatches, gets backgrounds and packaging made in another palette's colours, which clash with the mockup's typography and swatches. Image models also follow hex codes only loosely.",
+      "remedy": "Choose one: assets per direction x palette; neutral or desaturated assets tinted in CSS (blend or duotone) so they follow any palette; or use images only when the active palette matches and fall back to CSS otherwise. State the rule and add a browser check for it."
+    },
+    {
+      "id": "R1-24",
+      "dimension": "feasibility",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The mockups overlay the CSS-typeset wordmark and copy on the founder-supplied images (the 'blank packaging set' box, tag and card, and the post and story backgrounds). Placing text on a photographed box needs per-image placement data: label area, safe zone and perspective. The asset contract defines only a folder and filename, so text will float off the packaging or collide with image content.",
+      "remedy": "Add placement to the asset contract. Require front-on compositions with a fixed blank area stated in each prompt, plus a sidecar file or naming convention giving the label box and transform. Define the fallback when the placement data is missing."
+    },
+    {
+      "id": "R1-25",
+      "dimension": "clarity",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The packaging deliverable is undefined. The Problem Statement says packaging follows from the brand, and the brand book shows box, tag and card mockups, but the only download is a logo PNG. Pain_Point.md lists packaging as a Gap ('Do not mention packaging in ads until we ship something for it') and Decision 7 asks whether to build label and box designs. The design doesn't say whether v1 closes that gap.",
+      "remedy": "Decide whether packaging is mockup-only in v1 (say so, and keep the ads guardrail) or whether the module exports printable tag, card and sticker files. If it exports them, specify sizes, bleed, resolution or vector format, and colour handling."
+    },
+    {
+      "id": "R1-26",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The founder's explicit bar ('must read like H&M, Zara or Gucci, not like a template') has no acceptance criterion; every success criterion is mechanical. Premise 1 overstates the case: those wordmarks are custom-drawn or custom-kerned letterforms, not names typeset in a stock face. Typesetting in code reaches the bar only with explicit optical rules, which the design doesn't specify.",
+      "remedy": "Add wordmark typesetting rules per direction (tracking per case and size, optical kerning pairs or font-feature settings, weight). Add an acceptance gate for the bar, such as a founder or outside-designer review of every direction rendered on several real shop names, with a pass/fail record."
+    },
+    {
+      "id": "R1-27",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The Status Quo says brand lives in three disconnected places, Product Studio, Website Builder and Position Strategy, and that 'Nothing ties them together'. The design ties only the first two. Position Strategy's value/premium position is neither read (to rank directions; a value-positioned seller can be steered to Quiet Luxury) nor written by Apply.",
+      "remedy": "Either read Position Strategy when ranking or warning on directions (and say whether Apply updates it), or state explicitly that Position Strategy stays separate in v1 and why."
+    },
+    {
+      "id": "R1-28",
+      "dimension": "clarity",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "The Assignment can't be done as written and would not produce trustworthy evidence. It asks the founder to 'show the brand book' to three sellers before the next build session, but the brand book doesn't exist yet and no artifact for the meetings is named. Its only question, 'Would you put this on your packaging?', is hypothetical and leading, so it measures politeness rather than demand. This is the design's only plan to close the 'no seller has used a brand module yet' gap.",
+      "remedy": "Name the artifact to show: for example, hand-built brand books for 2-3 directions using each seller's real name. Replace the hypothetical question with a commitment signal, such as the seller changing their Instagram bio or ordering a printed label with it, and record which direction they pick and what they edit first."
+    },
+    {
+      "id": "R1-29",
+      "dimension": "consistency",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The constraint says 'the Website Builder's existing 35-font catalogue'. sitebuilder.FONTS has 36 entries (13 grotesk, 8 display, 13 serif, 2 mono), its own comment says thirty-five, and Pain_Point.md says '20 fonts'.",
+      "remedy": "Refer to sitebuilder.FONT_IDS without a count, or state 36."
+    },
+    {
+      "id": "R1-30",
+      "dimension": "consistency",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The header says this design 'Supersedes: Harsh-main-design-20261002-232053.md (different topic ...)'. A design on a different topic doesn't supersede that one.",
+      "remedy": "Replace 'Supersedes' with 'Previous design on this branch' or remove the line."
+    },
+    {
+      "id": "R1-31",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Research figures are untraced: '71% of Gen Z luxury buyers weigh brand values (Deloitte via search summary)' and 'over 60% of 2025 niche launches unisex'. Pain_Point.md's standard records whether each source page was opened.",
+      "remedy": "Mark these figures as untraced secondary figures, or trace them. State that they inform direction design only and never appear in seller-facing copy."
+    },
+    {
+      "id": "R1-32",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The Status Quo says neither Canva nor Looka 'flows into the seller's website and posts'. Canva's Brand Kit applies fonts, colours and logos to its post templates, and Looka's brand kit includes social templates and a website builder. The real differences are starting from the buyer and applying automatically to the seller's existing site and post generator.",
+      "remedy": "Restate the differentiation as buyer-led direction plus automatic application inside the tools the seller already uses here."
+    },
+    {
+      "id": "R1-33",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Each direction stores 'in the spirit of' references to real brands (for example Celine, Chanel, Tiffany), and the image prompts and copy are generated from the same library. The design doesn't say these names stay out of generated copy and image prompts, where they could produce lookalike trade dress.",
+      "remedy": "State that 'in the spirit of' is shown only as UI guidance and is excluded from copy templates and from BRAND_IMAGE_PROMPTS.md. Add a library test."
+    },
+    {
+      "id": "R1-34",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Logo PNG download via canvas is underspecified. Canvas draws in a fallback font unless the Google Font has loaded, and no export size, transparency or print format is given.",
+      "remedy": "Specify that the export waits for document.fonts.load for the exact face and weight, the pixel sizes (for example 1000 and 3000 px wide), a transparent background, and whether an SVG export is offered for print."
+    },
+    {
+      "id": "R1-35",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The normaliser caps only the bio (<= 150). Downstream stores truncate silently: Studio save_brand cuts every field at 400 characters, site tagline at 160, brand at 80, and brandname.resolve at 60. Longer template fields would be cut mid-sentence on Apply.",
+      "remedy": "Set the kit's per-field caps to the smallest downstream cap for each destination and enforce them in the composer and the editor."
+    },
+    {
+      "id": "R1-36",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The API doesn't say whether POST /api/brand/apply applies the saved kit or the current draft, or whether unsaved edits are saved first.",
+      "remedy": "Define it, for example: apply saves the posted kit through the normaliser, then applies it and records applied_at."
+    },
+    {
+      "id": "R1-37",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Saved kits reference library ids and the normaliser accepts 'known ids only'. Renaming or removing a direction or palette id, or rewriting templates in a later deploy, could reset saved kits or silently change non-edited fields that have already been applied.",
+      "remedy": "Keep library ids stable, stamp kits with a library version, and define what happens to a kit whose id no longer exists or whose templates changed."
+    },
+    {
+      "id": "R1-38",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Buyer age is a single choice among four brackets. Many sellers sell across brackets, and the design offers no 'mixed' or 'not sure' path.",
+      "remedy": "Allow multiple brackets or a 'not sure' option, and define how ranking treats it."
+    },
+    {
+      "id": "R1-39",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Once a field is marked edited, there is no described way to return it to the generated suggestion.",
+      "remedy": "Add a per-field 'reset to suggested' control that clears its edited flag."
+    },
+    {
+      "id": "R1-40",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The founder's line 'if they change what is written, that also changes' is interpreted as 'edits flow into the preview and into Apply'. It could also mean that edited copy should change the styling. The interpretation was auto-chosen and never confirmed.",
+      "remedy": "Mark this interpretation as an auto-decision for the founder to confirm."
+    },
+    {
+      "id": "R1-41",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Every success criterion is about build correctness. None measures whether sellers adopt the kit: Apply rate, kits kept unchanged after some weeks, posts generated after Apply. The randomised test proposed in Pain_Point.md Decision 8 is not mentioned.",
+      "remedy": "Add adoption measures that use the stored applied_at and edited data, and note whether the randomised brand test is planned."
+    },
+    {
+      "id": "R1-42",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Step 2 renders the seller's name in each direction's type. Loading up to 13 directions' heading, body and accent families from Google Fonts at once is slow on mobile.",
+      "remedy": "Load only each card's heading face, subset with Google Fonts' text= parameter for the shop name, and lazy-load the rest."
+    },
+    {
+      "id": "R1-43",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Up to about 140 images (13 directions x 7 assets + mood scenes) go into Smart CafeX/brand-assets. The design gives no size or format budget and doesn't say whether the images are committed to git and shipped with every Render deploy.",
+      "remedy": "Set per-asset dimensions, format and a size budget, and say where the files live (repo or object storage)."
+    },
+    {
+      "id": "R1-44",
+      "dimension": "consistency",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The success criterion says 'A seller with a site name sees it prefilled', but the name comes from brandname.resolve, which prefers the Product Studio name, then the site brand, then the business name.",
+      "remedy": "Reword to 'a seller with a resolved shop name (Studio, site or business name)'."
+    }
+  ],
+  "prior": []
+}

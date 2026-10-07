@@ -1,0 +1,301 @@
+{
+  "version": 2,
+  "round": 2,
+  "document": "D:\\Claude\\Art\\docs\\designs\\brand-management-module.md",
+  "quality_score": 7,
+  "dimensions": {
+    "completeness": "ISSUES",
+    "consistency": "ISSUES",
+    "clarity": "ISSUES",
+    "scope": "ISSUES",
+    "feasibility": "ISSUES"
+  },
+  "findings": [
+    {
+      "id": "R2-1",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "Apply's site field list now decides logo_url, brief, hero copy, heading weight and heading tracking, but it still doesn't decide case, which R1-15 asked for. The site style has no case field. Each theme fixes its heading case: layout.case is 'upper' for Maison, Atelier and Charge and 'none' for Studio and Bloom. A lowercase or title-case wordmark, or a name kept with 'Keep my capitalisation', will show on the site in the theme's case, and neither the website preview nor the Apply diff says so.",
+      "remedy": "Decide the case. Either the theme's case wins, and the website preview and Apply diff show the brand and headings in that case, or Apply writes a new heading-case override into the site style. Name the directions whose mark changes case on its mapped theme."
+    },
+    {
+      "id": "R2-2",
+      "dimension": "feasibility",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "Packaging is now solved: it's CSS-drawn, and the packaging images are inspiration only, with no text overlaid. The hero prompt states an empty centre area for text. The post-bg (1080×1350) and story-bg (1080×1920) prompts state no text area, yet the feed-post and story mockups set the wordmark and copy over those images. The text will collide with whatever the image model puts in the frame.",
+      "remedy": "Give the post-bg and story-bg prompts the same kind of stated empty area as the hero: its position and share of the frame. Place mockup text inside it. When an image is too busy, add a scrim or fall back to the palette-built CSS background."
+    },
+    {
+      "id": "R2-3",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": "The brand book's website preview renders the mapped theme's real ground and ink with the kit's accent",
+      "problem": "The brand book's website preview shows the mapped theme's ground and ink with the kit's accent, and says that only fonts and the accent change. Apply can produce a different site. (a) The theme switch defaults to off for published shops, so those sites keep their current theme's ground and ink. (b) The contrast rule may write the support or ink colour instead of the accent, or keep the theme's own accent, separately for each mode. (c) Apply also writes heading weight and tracking. The contrast rule also refers to 'the theme' without saying whether that means the mapped or the current one, and the tests cover only mapped themes. A seller who keeps their theme can therefore get an accent that was never checked against it.",
+      "remedy": "Define the post-Apply theme: the mapped theme when the switch is on, the current one when it's off. Run the accent rule against that theme in both modes. Render the preview from the same result, including heading weight and tracking, and correct its note. Extend the tests to the case where the theme is kept."
+    },
+    {
+      "id": "R2-4",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": "Apply stores the previous values of every field it writes",
+      "problem": "'Undo last apply' restores the snapshot with none of Apply's safeguards. If a seller edits the site story or a Studio field after Apply, Undo silently overwrites that edit with the pre-Apply value; Apply's drift check would have protected it. On a published shop, Undo changes the live site at once, but only Apply asks the seller to confirm 'This updates your live shop now.' The design also doesn't say how long Undo stays available or what it means after a second Apply.",
+      "remedy": "Give Undo the same drift check: list the fields changed since Apply and leave them alone unless ticked. Give it the same live-shop confirmation. State that Undo reverts only the most recent Apply, and for how long it stays available."
+    },
+    {
+      "id": "R2-5",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": "A direction that fails is hidden until rewritten",
+      "problem": "The quality gate hides a direction that fails, using the 'ready' flag, but doesn't say what a direction nobody has reviewed yet does. The Distribution Plan ships main straight to Render, which is production, with no staging step or feature flag. The Assignment, though, starts 'after the module is on staging'. As written, all 13 directions reach every seller on the first push, before the founder has passed any of them.",
+      "remedy": "Make 'ready' default to false, so a direction stays hidden until the founder passes it. Keep the tile hidden until enough directions pass, using a flag or an allowlist of the founder's and the Assignment sellers' accounts. Say where the sign-off and the Assignment sessions run."
+    },
+    {
+      "id": "R2-6",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": "The Assignment checks whether sellers notice.",
+      "problem": "Distinct output per seller accepts, as a v1 limit, that sellers in one direction share a pool of 17 lines, and says the Assignment checks whether sellers notice. The Assignment records the direction picked, the first field edited and three commitment actions. It has no step about shared lines. With one seller per category, and no seller ever seeing another seller's kit, those sessions can't reveal the problem.",
+      "remedy": "Add a concrete check, for example: count identical taglines and bios across applied kits from stored data, or show two sellers in the same direction each other's lines. Otherwise, drop the sentence and record the shared pool as an untested v1 limit."
+    },
+    {
+      "id": "R2-7",
+      "dimension": "clarity",
+      "severity": "blocking",
+      "changed_text": "Seller-facing copy is international English with no currency, prices, local idiom or cultural references",
+      "problem": "Seller-facing copy is 'international English', and only the category nouns follow the account's spelling (jewelry for US accounts). Every other US/UK variant in the 221 template pieces (colour, favourite, personalised, grey, centre) is left to the author. A US seller's bio or site story can then mix 'jewelry' with 'colour', a visible defect for a US-first launch held to the H&M/Zara/Gucci bar.",
+      "remedy": "Set the rule for template text. Either use only words spelled the same in US and UK English, or make every variant word a slot that follows the account's spelling. Add a library test that flags variant spellings outside slots."
+    },
+    {
+      "id": "R2-8",
+      "dimension": "feasibility",
+      "severity": "blocking",
+      "changed_text": "Slots use the seller's name, category noun from their own product label",
+      "problem": "Slots now take the seller's own product label through product_config.meta. That function deliberately invents no plurals, so a mass-noun label such as 'Blue pottery' comes back unchanged as both singular and plural. Labels also keep the seller's casing and run up to 40 characters. Template lines that need agreement ('Our {nouns} are', 'Every {noun} is'), or that have a tight length budget (bio ≤150), will print broken or overlong copy, and Apply publishes it. Neither the 'no leftover slots' test nor the founder's review on three shop names tests different label shapes.",
+      "remedy": "Define slot rules: where the noun may appear (only positions with no verb agreement or article), how it is cased mid-sentence, and a length budget per field, falling back to the category default when the label doesn't fit. Add a composer test over sample labels ('blue pottery', 'Soy wax candles', a 40-character label) and the four default nouns."
+    },
+    {
+      "id": "R2-9",
+      "dimension": "consistency",
+      "severity": "minor",
+      "changed_text": "more ratings than unbranded ones at the same price, true in all 15 price-band tests",
+      "problem": "The evidence line says branded sellers had 1.5× to 2.3× more ratings at the same price, 'true in all 15 price-band tests across Fashion, Beauty and Handmade'. In Pain_Point.md, 1.49× and 2.33× are the overall Fashion and Beauty ratios, and Handmade's is 1.29×. The 15 same-price tests range from 1.15× to 3.4×. No statistic reaches sellers, so no decision rests on these numbers, but the line still mixes two measures.",
+      "remedy": "Write it as: overall, 1.3× to 2.3× more ratings (Fashion 1.49×, Beauty 2.33×, Handmade 1.29×), and ahead in all 15 same-price tests, by 1.15× to 3.4×."
+    },
+    {
+      "id": "R2-10",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "from the account currency: USD means US spelling",
+      "problem": "Spelling follows 'the account currency', but the design doesn't name the stored field. If it is the site's commerce.currency, that defaults to INR (sitebuilder.default_site), so a US seller with no site, or with no currency set, gets 'jewellery'.",
+      "remedy": "Name the source, for example the selling country or currency set at onboarding, and its fallback when it isn't set."
+    },
+    {
+      "id": "R2-11",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "by viewing it rendered on three real shop names (the Assignment)",
+      "problem": "The quality gate has the founder review each direction 'on three real shop names (the Assignment)'. The Assignment describes seller sessions in which each seller picks one direction; it has no review of all 13 directions. It's unclear whether the sign-off is a separate pass that borrows the Assignment sellers' names, or part of those sessions.",
+      "remedy": "Describe the sign-off as its own step: who does it, when (before any seller sees a direction) and on which three names. Keep the Assignment for the seller sessions."
+    },
+    {
+      "id": "R2-12",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": "Author: Claude drafts. Approver: the founder signs off each direction",
+      "problem": "The library is now counted: 221 copy pieces, 39 palettes, and voice and imagery rules for 13 directions. Claude drafts and the founder approves. No time is budgeted for the founder's review of 13 directions on three names, or for the rewrite loop, and that review is the gate on launch.",
+      "remedy": "Estimate the founder's review and rewrite time, and state how many passed directions are enough to open the tile."
+    },
+    {
+      "id": "R2-13",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": "A library test scans every template against a banned-claims list",
+      "problem": "The banned-claims test names templates only. Each direction's 'we say' lines and words to use now feed Studio's new voice_rules field and, through it, the AI caption prompt. Imagery rules feed BRAND_IMAGE_PROMPTS.md. A 'we say' example such as 'hand-finished in small batches' would push AI captions toward the product claim the guardrail forbids.",
+      "remedy": "Extend the banned-claims and brand-reference scans to voice rules, words to use, imagery rules and the generated prompt file."
+    },
+    {
+      "id": "R2-14",
+      "dimension": "consistency",
+      "severity": "minor",
+      "changed_text": "heritage claims about the seller",
+      "problem": "The guardrail bans heritage, handmade, natural, ingredient and origin claims unless the seller typed them. Heritage Maison, Modern Heritage, Artisan Earth, Apothecary and Calm Natural are defined by exactly those ideas. The design doesn't say how their copy conveys the direction without those claims, so these directions are the likeliest to fail the banned-claims test or the founder's review.",
+      "remedy": "For these directions, say what the copy leans on instead (form, ritual, time, care), or offer optional seller-confirmed facts (for example 'made by hand: yes') that unlock the matching words."
+    },
+    {
+      "id": "R2-15",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": "Cap 40 characters (the shortest downstream cap that keeps a wordmark legible)",
+      "problem": "The name is capped at 40 characters, but brandname.resolve returns up to 60 and the site brand holds 80. The design doesn't say what happens when a prefilled name is longer than 40. If it is cut silently, Apply then writes the truncated name to the site and to Studio. The stated rationale is also inaccurate: the downstream caps are 60, 80 and 400. 40 matches the handle and product-label caps instead.",
+      "remedy": "Ask the seller to shorten a name longer than 40 characters instead of truncating it, and correct the rationale."
+    },
+    {
+      "id": "R2-16",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": "the previous name is replaced in every edited field",
+      "problem": "On rename, the previous name is replaced in every edited field. Without word-boundary matching, a short old name is replaced inside other words: renaming 'Lux' to 'Nova' turns 'Luxury' into 'Novaury'.",
+      "remedy": "Specify whole-word, case-insensitive matching. Treat a partial match like an unmatched name: highlight the field and block Apply."
+    },
+    {
+      "id": "R2-17",
+      "dimension": "consistency",
+      "severity": "minor",
+      "changed_text": "Atelier (fashion) otherwise",
+      "problem": "The theme mapping never uses Lustre, the existing jewellery theme, so a jewellery seller already on Lustre would be moved to Maison or Bloom when the theme switch is on. Playful Pop and Everyday Bright (for clothing and home decor) and Bold Maximal map to Atelier, which is monochrome, all caps and square-cornered, the opposite of those directions. Bloom's genre promises ingredient callouts and Charge's a scrolling claims band. Nobody has checked how these render for clothing or jewellery.",
+      "remedy": "Consider Lustre for the luxury directions in the jewellery category, and keep the seller's current theme when it already suits the direction. Name the weak fits in the brand book note, and check Bloom and Charge with clothing and jewellery catalogues."
+    },
+    {
+      "id": "R2-18",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": "1000 and 3000 px wide, transparent, ink and reversed versions",
+      "problem": "The logo export now waits for the font and produces 1000 px and 3000 px transparent PNGs in ink and reversed versions. It still doesn't decide whether a vector (SVG) or print-ready file is offered (R1-34), even though the Assignment counts 'order a printed label using the wordmark' as a signal.",
+      "remedy": "Decide whether v1 offers an SVG wordmark for print, with text converted to outlines or the font subset embedded, or state that the 3000 px PNG is the print file."
+    },
+    {
+      "id": "R2-19",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": "Logo PNG export waits for",
+      "problem": "The PNG is drawn on a canvas, but the wordmark depends on letter-spacing and optical tracking. Canvas letterSpacing isn't available in every browser sellers use; older Safari lacks it. The design doesn't say how the export reproduces tracking there, so the downloaded logo can differ from the wordmark on screen.",
+      "remedy": "Specify per-glyph placement, or rasterising an SVG of the wordmark, so the PNG matches the screen, and add a check that compares the two."
+    },
+    {
+      "id": "R2-20",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": "Each field picks its default variant by a stable hash of the seller's account",
+      "problem": "Each field's default variant comes from a hash of the account, and 'Show another' cycles through the variants. The design doesn't say whether the chosen variant is stored. If it isn't, the next change to name, category, age or direction regenerates the field and returns it to the hash default, losing the seller's pick.",
+      "remedy": "Store the chosen variant index for each field and keep it through regeneration. Only an edit or Reset changes it."
+    },
+    {
+      "id": "R2-21",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "never on an applied kit until the seller presses Apply again",
+      "problem": "The library-version rule can be read to mean that pressing Apply silently picks up new library text the seller hasn't reviewed.",
+      "remedy": "State that new template text first appears in the brand book as a visible change, and in the Apply diff, before it reaches the site or Studio."
+    },
+    {
+      "id": "R2-22",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": "photographic assets appear only when the active palette is the direction's first and unedited",
+      "problem": "The image use rule is now stated, which R1-23 asked for, but the browser check that R1-23 also asked for is missing. The success criteria check only the empty-folder case.",
+      "remedy": "Add a browser check: on palette 2 or 3, or after a swatch edit, mockups use CSS backgrounds and tinted textures, never the photographs."
+    },
+    {
+      "id": "R2-23",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "offers a brand sheet instead",
+      "problem": "Sellers without a One Tap site get a brand sheet (hex codes, font links, copy, logo PNGs), but its form isn't stated: a page on screen, a download, or a PDF. It is the only website deliverable for Shopify and Etsy sellers.",
+      "remedy": "Name the format, and say whether it is in v1 or waits for the later PDF export (Approach C)."
+    },
+    {
+      "id": "R2-24",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": "heading weight (from the wordmark)",
+      "problem": "Apply writes the wordmark's weight and tracking into heading_weight and heading_track, which style every heading on the site, not only the brand. A wide-tracked all-caps mark (up to 0.30 em after clamping) will also space out long section titles and product headings.",
+      "remedy": "Give each direction a separate heading tracking value for running headings, distinct from the mark's, or state that the trade-off is accepted."
+    },
+    {
+      "id": "R2-25",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": "site brief (from the statement, so the site copy writer keeps the voice)",
+      "problem": "Apply replaces seller-written context with fact-free brand copy. Studio's 'about' ('what you make and why', which build_brief reads) and the site 'brief', which the site copy writer builds all site copy from, both receive the statement. The guardrail keeps product facts out of the statement, so both generators lose the concrete detail the seller wrote. The Posts toggle is all or nothing, so a seller who wants to keep 'about' also loses the voice rules and look.",
+      "remedy": "Write the statement only into empty fields, or append it, or let the diff keep or replace 'about' and 'brief' one at a time."
+    },
+    {
+      "id": "R2-26",
+      "dimension": "scope",
+      "severity": "minor",
+      "changed_text": "The founder explicitly asked for jewellery, clothing, fragrance and home decor",
+      "problem": "The scope note keeps four categories, all 13 directions and the prompt MD because 'the founder explicitly asked' for them. The founder's request in the Problem Statement names none of these, so the document doesn't show the basis for overriding the recommended cut.",
+      "remedy": "Add the founder's request for the categories, the researched directions and the prompt MD to the Problem Statement, quoted or summarised."
+    },
+    {
+      "id": "R2-27",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "ranking then uses the category order alone",
+      "problem": "With 'Not sure / all ages', the ranking uses 'the category order alone', but the library only records which categories each direction supports. No order of directions within a category is defined.",
+      "remedy": "Define a default order of directions for each category in the library."
+    },
+    {
+      "id": "R2-28",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "with a one-line reason drawn from the research above",
+      "problem": "Each direction's age score carries 'a one-line reason drawn from the research above'. The research covers only Gen Z and 35+, in general terms, so it can't supply reasons for 25–34 (the bracket in the badge example) or for 50+.",
+      "remedy": "State that reasons for brackets the research doesn't cover are the author's judgement, or extend the research."
+    },
+    {
+      "id": "R2-29",
+      "dimension": "consistency",
+      "severity": "minor",
+      "changed_text": "reversed wordmark (ground on ink)",
+      "problem": "One of the four library contrast pairs is 'reversed wordmark (ground on ink)'. Contrast ratio is symmetric, so this repeats the ink-on-ground test. The pairs the mockups also render, such as the wordmark on the accent or on the surface colour, are not tested.",
+      "remedy": "Replace the duplicate with the pairs the mockups actually use, for example the wordmark on the accent and the wordmark on the surface."
+    },
+    {
+      "id": "R2-30",
+      "dimension": "scope",
+      "severity": "minor",
+      "changed_text": "sit with three sellers (one jewellery, one clothing, one fragrance)",
+      "problem": "Home decor stays in v1 against the review's recommendation and has no supporting evidence. The Assignment uses only jewellery, clothing and fragrance sellers, so no real home decor seller ever tries the home decor copy or directions.",
+      "remedy": "Add a home decor seller to the Assignment, or keep home decor hidden until one has tried it."
+    }
+  ],
+  "prior": [
+    {"id": "R1-1", "status": "resolved", "evidence": "The Problem Statement now limits 4×–6× to Fashion and Beauty, gives Handmade 1.7×–2.2×, names Amazon US, says there is no home decor evidence, and labels the result a link, not a cause. The remaining mix-up between the overall and same-price ranges is recorded as minor R2-9.", "current_id": null},
+    {"id": "R1-2", "status": "resolved", "evidence": "The Guardrails section binds every screen, template and export: nothing implies that a brand grows sales, and no statistic is shown to sellers in v1. Packaging is mockup-only and the ads guardrail stays. The coaching line now points to that real guardrail.", "current_id": null},
+    {"id": "R1-3", "status": "resolved", "evidence": "'Market and language (v1)' sets international English with no currency, idiom or cultural references, serving both the US-first launch and Indian sellers. Noun spelling follows the account, and Hindi is out of v1. The missing spelling rule for template text is new finding R2-7.", "current_id": null},
+    {"id": "R1-4", "status": "resolved", "evidence": "A guardrail bans product-fact claims (materials, origin, process, ingredients, natural, sustainability, certifications, heritage, service promises) unless the seller typed them. Promises are attitude only, and a banned-claims library test is part of the success criteria.", "current_id": null},
+    {"id": "R1-5", "status": "resolved", "evidence": "Module UI copy follows Brand.md. Generated seller copy follows Brand.md section 6. Each direction's voice sets its tone, for example one exclamation mark for Playful Pop and none for Quiet Luxury.", "current_id": null},
+    {"id": "R1-6", "status": "resolved", "evidence": "'Distinct output per seller' adds account-seeded variants, 'Show another', slots for the seller's label and Studio about, and an accepted v1 limit. The claim that the Assignment checks the limit, which the Assignment doesn't do, is new finding R2-6.", "current_id": null},
+    {"id": "R1-7", "status": "resolved", "evidence": "The motif is 'decoration only, never offered as a logo or monogram', and the brand book labels images as shared backgrounds, not the seller's own.", "current_id": null},
+    {"id": "R1-8", "status": "resolved", "evidence": "'Copy volume and quality gate' counts 17 pieces per direction (221 in total) and 39 palettes, names Claude as author and the founder as approver, and hides failing directions with a 'ready' flag. The quality gate is in the success criteria. The missing time budget is minor R2-12.", "current_id": null},
+    {"id": "R1-9", "status": "resolved", "evidence": "The scope note records the founder's explicit request for four categories, researched directions and the prompt MD. The build order ships the library, composer, brand book and Apply first and the prompt MD and assets second. The founder's request not appearing in the Problem Statement is minor R2-26.", "current_id": null},
+    {"id": "R1-10", "status": "resolved", "evidence": "Every product type now maps: jewellery, clothes to clothing, perfumes to fragrance, and generic to no preselection (the seller picks; home decor lives there). Nouns come from product_config.meta with the seller's label.", "current_id": null},
+    {"id": "R1-11", "status": "resolved", "evidence": "The ranking is labelled 'Suggested for 25–34', never 'best fit', and called a judgement, not a measurement. The Assignment records which direction each seller picks without being steered.", "current_id": null},
+    {"id": "R1-12", "status": "resolved", "evidence": "The Posts section adds a voice_rules field that build_brief adds to the caption prompt, keeps the Studio aesthetic leading image generation (and Apply says so), and puts post fonts out of v1. The success criteria test the voice rules.", "current_id": null},
+    {"id": "R1-13", "status": "resolved", "evidence": "The website preview renders the mapped theme's real ground and ink, and the direction-to-theme mapping is documented for all 13 directions. The new mismatches between the preview and Apply are R2-3.", "current_id": null},
+    {"id": "R1-14", "status": "resolved", "evidence": "'Colour and contrast' chooses accent and accent_dark by contrast against accent_ink and ground in each mode, falls back to the theme's accent, and is tested for every direction and palette.", "current_id": null},
+    {"id": "R1-15", "status": "persisting", "evidence": "The Apply Website section now decides logo_url, brief, hero copy, weight and clamped tracking, but it still doesn't decide the theme case that R1-15 named.", "current_id": "R2-1"},
+    {"id": "R1-16", "status": "resolved", "evidence": "Apply now has per-section toggles, a before/after diff, a snapshot with 'Undo last apply', a live-shop confirmation, and a success criterion for Undo. Undo lacking Apply's safeguards is new finding R2-4.", "current_id": null},
+    {"id": "R1-17", "status": "resolved", "evidence": "Premise 3 now describes copy-on-apply. Drift shows fields changed since the last Apply and doesn't overwrite them unless ticked.", "current_id": null},
+    {"id": "R1-18", "status": "resolved", "evidence": "The Website section runs only when a One Tap site exists and never creates one. Sellers with no site or an external store get a brand sheet with hex codes, Google Fonts links, the copy and logo PNGs.", "current_id": null},
+    {"id": "R1-19", "status": "resolved", "evidence": "Renaming replaces the old name inside edited fields, and an unmatched old name blocks Apply. The success criteria cover both.", "current_id": null},
+    {"id": "R1-20", "status": "resolved", "evidence": "Swatch edits make the palette 'custom' (edited.colours), font choices are recorded in edited.fonts, and changing direction or palette asks before replacing either.", "current_id": null},
+    {"id": "R1-21", "status": "resolved", "evidence": "Edited colours are checked on save, and failing pairs show a warning with a suggested fix. Apply is refused while ink on ground is below 4.5:1.", "current_id": null},
+    {"id": "R1-22", "status": "resolved", "evidence": "'Name and wordmark rules' add a 40-character cap, fit-to-container scaling, a non-Latin fallback with a note, 'Keep my capitalisation', and a monogram rule. Prefilled names longer than 40 are minor R2-15.", "current_id": null},
+    {"id": "R1-23", "status": "resolved", "evidence": "The use rule shows photographs only on the direction's first, unedited palette; otherwise CSS backgrounds, with greyscale textures tinted. The missing browser check is minor R2-22.", "current_id": null},
+    {"id": "R1-24", "status": "persisting", "evidence": "Packaging is CSS-drawn with no text on the images, and the hero states an empty centre. The post-bg and story-bg prompts, which the feed and story mockups put text over, still state no text area or fallback.", "current_id": "R2-2"},
+    {"id": "R1-25", "status": "resolved", "evidence": "A guardrail makes packaging mockup-only in v1 and keeps the Pain_Point.md ads guardrail until printable files ship.", "current_id": null},
+    {"id": "R1-26", "status": "resolved", "evidence": "Per-direction typesetting rules cover case, tracking per case, weight, kern and liga, and optical tightening. The founder passes or fails each direction on three real shop names, and the quality gate is in the success criteria.", "current_id": null},
+    {"id": "R1-27", "status": "resolved", "evidence": "Position Strategy 'stays separate in v1 (it needs a reviews file most sellers do not have)', with a mismatch flag planned later.", "current_id": null},
+    {"id": "R1-28", "status": "resolved", "evidence": "The Assignment now runs on the built module with real shop names, lets sellers pick unprompted, and records commitment actions (bio change, Apply, printed label) instead of 'I like it'. The staging environment it assumes is part of R2-5.", "current_id": null},
+    {"id": "R1-29", "status": "resolved", "evidence": "Constraints now say 'Fonts only from sitebuilder.FONT_IDS' without a count.", "current_id": null},
+    {"id": "R1-30", "status": "resolved", "evidence": "The header now reads 'Previous design on this branch'.", "current_id": null},
+    {"id": "R1-31", "status": "resolved", "evidence": "Both figures are marked untraced, and the research section says the figures inform direction design only and none appears in seller-facing copy.", "current_id": null},
+    {"id": "R1-32", "status": "resolved", "evidence": "The Status Quo describes Canva Brand Kit and Looka accurately and narrows our difference to buyer-led directions plus Apply into the tools sellers already use here.", "current_id": null},
+    {"id": "R1-33", "status": "resolved", "evidence": "A guardrail makes 'In the spirit of' references UI-only, never in copy templates or BRAND_IMAGE_PROMPTS.md, checked by a library test.", "current_id": null},
+    {"id": "R1-34", "status": "persisting", "evidence": "The export now waits for document.fonts.load and has sizes, transparency, and ink and reversed versions, but whether an SVG or print file is offered is still undecided.", "current_id": "R2-18"},
+    {"id": "R1-35", "status": "resolved", "evidence": "'Field caps equal the smallest destination cap: tagline 160, Studio fields 400, bio 150, name 40.'", "current_id": null},
+    {"id": "R1-36", "status": "resolved", "evidence": "The Apply heading now says the POST saves the posted kit through the normaliser, then applies it and stamps applied_at.", "current_id": null},
+    {"id": "R1-37", "status": "resolved", "evidence": "The library has LIBRARY_VERSION and stable ids. A kit whose direction is missing falls back to its stored values, and template changes regenerate only non-edited fields.", "current_id": null},
+    {"id": "R1-38", "status": "resolved", "evidence": "'Not sure / all ages' is added, with a ranking rule. Multiple brackets are declined, with the reason given.", "current_id": null},
+    {"id": "R1-39", "status": "resolved", "evidence": "'Reset to suggested' clears a field's edited flag.", "current_id": null},
+    {"id": "R1-40", "status": "resolved", "evidence": "The interpretation is flagged for the founder in the composer section and listed as Open Question 1.", "current_id": null},
+    {"id": "R1-41", "status": "resolved", "evidence": "Adoption measures (Apply share, kits unchanged after 4 weeks, posts after Apply) are added, and the randomised test is Open Question 4.", "current_id": null},
+    {"id": "R1-42", "status": "resolved", "evidence": "Step 2 fonts are lazy-loaded per card using Google Fonts text= subsets.", "current_id": null},
+    {"id": "R1-43", "status": "resolved", "evidence": "The Images section gives each asset's dimensions, webp or jpg format, a 300 KB cap, and says the files are committed to the repo.", "current_id": null},
+    {"id": "R1-44", "status": "resolved", "evidence": "The success criterion now says 'a resolved shop name (Studio, site or business name)'.", "current_id": null}
+  ]
+}

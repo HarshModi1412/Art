@@ -30,6 +30,7 @@ Ordered by how strongly sellers voiced them. Evidence IDs (S1, S4 and so on) poi
 | **P8** | "Returns and exchanges are confusing and eat my margin" | S13 and clothing threads |
 | **P9** | "My stock numbers can't be trusted" | S14 and many more |
 | **P10** | "Customer messages never stop and I'm doing support alone" | S15, S16 |
+| **P11** | "I already sell, but my sales are stuck. I can't get to the next level" | Founder observation, 7 Oct 2026: sellers who have made sales but cannot scale. Their posts look generic or home-grown, and big-city buyers do not buy. **Not yet sourced from seller threads.** Backed by our own data test (section 2) |
 
 **Left out on purpose:** cash-on-delivery and fake orders (India, not US), Etsy sales slumps (not our core), "wearing every hat" (only a vendor survey), "ads cost more" (numbers in sources disagree).
 
@@ -51,6 +52,36 @@ Ordered by how strongly sellers voiced them. Evidence IDs (S1, S4 and so on) poi
 | Repeat purchase rate near 18.8% across 156K DTC customers; apparel brands 15 to 17% | [BS&Co](https://bsandco.us/blog-post/repeat-purchase-rate-benchmarks), Feb 2026 | **Opened the page.** An agency's own client data. Apparel exchanges may be counted as new orders |
 | Online apparel returns run about 24%; size and fit is the top cause | NRF and Appriss Retail data via [3PL Insider](https://3plinsider.com/research/cost-of-ecommerce-returns) and similar | **Not opened.** Secondary |
 | Stockouts cut annual revenue about 2 to 5% | [OpenSend](https://www.opensend.com/post/inventory-stock-out-rate-statistics) | **Not opened.** Secondary |
+| Small sellers with a brand are 4 to 6 times more likely to have a product break out than sellers with no brand (full table under P11 below) | [Amazon Reviews 2023](https://huggingface.co/datasets/McAuley-Lab/Amazon-Reviews-2023), McAuley Lab, UC San Diego. 1.1M products, data to Sept 2023 | **Our own analysis of the raw data, 7 Oct 2026.** Primary. Amazon US. Shows a link, not cause |
+
+### P11 proof: branded products are 4 to 6 times more likely to break out
+
+| | 50+ ratings: brand vs no brand | 100+ ratings: brand vs no brand |
+|---|---|---|
+| Fashion | 5.8% vs 1.4% → **4.0×** | 2.8% vs 0.5% → **5.7×** |
+| Beauty / fragrance | 17.9% vs 4.7% → **3.8×** | 9.6% vs 2.0% → **4.7×** |
+| Handmade | 11.6% vs 6.9% → **1.7×** | 6.1% vs 2.8% → **2.2×** |
+
+**How it was measured:**
+* **Data:** three categories of Amazon Reviews 2023 that match our sellers: Amazon Fashion (826,108 products), All Beauty (112,590) and Handmade (164,817). Every product in it has at least one rating, so these are sellers who already sell, which is exactly the P11 seller.
+* **Brand vs no brand:** "no brand" = the store is blank, "Generic", "Unbranded", "Unknown" or similar. "Brand" = a named store with **20 or fewer products** in the category, so big companies are left out. Small brand vs small no-brand seller.
+* **Sales measure:** the number of customer ratings, the usual public stand-in for units sold. Handmade counts only products still on sale. Products that are no longer listed flip the Handmade result, because many small handmade shops stopped selling.
+* **Hypothesis test:** one-sided Welch t-test on log(1 + ratings). H₀: branded sellers do no better than unbranded. H₁: branded sellers sell more. α = 0.05.
+
+| Category | t | p (one-sided) | Effect size (Cohen's d) | Sales vs no brand | Decision |
+|---|---|---|---|---|---|
+| Fashion | 75.27 | < 10⁻³⁰⁰ | 0.36 | 1.49× | Reject H₀ |
+| Beauty / fragrance | 75.75 | < 10⁻³⁰⁰ | 0.62 | 2.33× | Reject H₀ |
+| Handmade (products still on sale) | 19.92 | 6×10⁻⁸⁸ | — | 1.29× | Reject H₀ |
+
+* **Same price band:** small brands beat no brand in all 15 tests (3 categories × 5 price bands), by 1.15× to 3.4×. Price does not explain the gap.
+* **Other stats from the same data:** half (50%) of unbranded fashion products never pass 2 ratings, against 37% of branded ones. In beauty it is 37% against 17%. Branded beauty products are 4.4× more likely to be in the category's top 10%.
+
+**What we can and cannot say:**
+* **Say:** "Small sellers with a brand sell 1.5 to 2.3 times more than sellers without one, at the same price." Also say where it comes from: "in Amazon data covering 1.1 million products".
+* **Do not say:** "Creating a brand grows your sales." This is a link, not proof of cause. More serious sellers may be the ones who build brands.
+* **It tests "has a brand", not "has a clear brand statement and consistent styling".** The data has no measure of styling. One pointer: small brands use more product photos (beauty 5.0 vs 4.0) and are 3 to 5 times more likely to include a video.
+* **To prove cause:** randomly give half of our selling sellers the brand setup and compare 8 to 12 week sales growth with a t-test. That needs about 96 sellers per group if the effect is as big as in fashion (d = 0.36), or about 310 per group if it is small (d = 0.2).
 
 ### The FOMO lines
 
@@ -66,6 +97,7 @@ Ordered by how strongly sellers voiced them. Evidence IDs (S1, S4 and so on) poi
 | **P8** Returns | **Margin leak** | Clothing returns are common and costly, mostly from size and fit | "About 1 in 4 online clothing orders comes back. Do you know what yours cost you?" | **Medium.** Secondary source, not opened |
 | **P9** Stock trust | **Lost sales and lost buyers** | A stockout loses the sale and sometimes the customer | "Sold out on your best seller. How many buyers went to someone else?" | **Weak to medium.** Not opened |
 | **P10** Support alone | **Lost evenings and lost sales** | Customers write at midnight, and replies are slow | "Your customers message at midnight. Who answers?" | **Qualitative** (S15, S16) |
+| **P11** Sales stuck, no brand | **The next level goes to someone else** | Their products sell, but they look like everyone else's. Branded small sellers are 4 to 6 times more likely to have a product break out, and unbranded products stall far more often | "In 1.1 million products, unbranded sellers were 4× less likely to get a product past 50 sales." / "Same price, same category. The branded seller outsold the unbranded one in every price band." | **Strong.** Our own test on primary data. Amazon US, and a link, not cause |
 
 ---
 
@@ -85,6 +117,7 @@ Status comes from `Product.md` and `GO_TO_MARKET.md`. **Strong** = a direct, shi
 | **P8** | Returns | Nothing for returns | Cancellation analysis exists but is in rupees and is not returns/exchanges | **Gap** |
 | **P9** | Stock trust | **Inventory + reorder levels + purchase orders** | Stock falls on its own as **our** orders come in; buy-again alerts; supplier PDF. **Verify** whether stock decrements from **Shopify or Amazon orders**. The docs only say website (One Tap site) orders trigger the stock check | **Verify** |
 | **P10** | Support alone | Nothing | No customer inbox or support bot. The AI chatbot is for the seller's own analysis | **Gap** |
+| **P11** | Sales stuck, no brand | **A brand, made from what they already sell** | **Position Strategy** sets where the brand sits (value or premium, product-led or look-led) and a plan to stand for something. **Product Studio** keeps their look, voice and reference photos and makes posts in that look. **Social Media Manager** keeps the posts on-brand every week. **Website Builder** gives a designer-level site (8 themes, 20 fonts) and writes all the site copy from their brief. **Nothing for packaging** | **Strong** for statement, posts and site. **Gap** for packaging |
 
 ### What this tells us about which pains to build ads on
 
@@ -95,6 +128,7 @@ Status comes from `Product.md` and `GO_TO_MARKET.md`. **Strong** = a direct, shi
 | **Do not advertise yet** | **P3, P8, P10** | We have no answer. An ad would promise something we don't ship |
 | **Check first** | **P9** | Need to confirm Shopify/Amazon stock sync |
 | **Don't use** | **P2** | No fact, only indirect fit |
+| **Strong candidate, decide** | **P11** (sales stuck, no brand) | The strongest fact we have (our own test on 1.1M products) and a real offer for the brand, posts and site. Two limits: Amazon US data, and we ship nothing for packaging |
 
 ---
 
@@ -107,6 +141,21 @@ Status comes from `Product.md` and `GO_TO_MARKET.md`. **Strong** = a direct, shi
 
 That is the whole chain for the first ad. P4 is the second. Both have a verified fact and a real feature.
 
+### The P11 chain: from stuck sales to the end goal
+
+> **Pain (P11):** I already sell, but my sales are stuck. My posts look generic or home-grown, and big-city buyers scroll past
+> **Solution: a brand.** A clear brand statement, then styling that follows it, then every post, product photo and page in that style. One Tap Manager sets the position (Position Strategy), keeps the look and voice (Product Studio), posts in that look every week (Social Media Manager), and puts it on a designer-level site (Website Builder)
+> **Proof:** in 1.1 million Amazon products, small sellers with a brand were **4 to 6 times more likely** to have a product break out (table under P11 in section 2). Fashion: 5.8% vs 1.4% past 50 ratings. Beauty and fragrance: 17.9% vs 4.7%. The same held in every price band
+> **End goal:** the goals in `Pain_Journey.md` section 1:
+> * **G1 Money:** more of their products reach the level where sales add up. A branded product is 4 to 6 times more likely to get there
+> * **G2 A customer base:** a brand is something buyers remember, follow and come back to. "Generic" gives them nothing to come back to, which also feeds P1
+> * **G5 Pride:** a shop that looks like a real brand, not a side project
+> * **G7 To be taken seriously:** the big-city buyer who scrolled past a home-grown post stops for a brand
+>
+> **Their own proof:** the free 7-day trial. Day 1 they write their brand statement and pick a look. By day 7 they see a week of on-brand posts and a site in the same style. Sales growth takes longer than 7 days, so the trial proves the look, not the sales
+
+**Guardrails for P11:** never "a brand will grow your sales" (that is an earnings claim, and the data shows a link, not cause). Always name the source as Amazon data. Do not mention packaging in ads until we ship something for it.
+
 ---
 
 ## 5. Decisions for our discussion
@@ -117,3 +166,5 @@ That is the whole chain for the first ad. P4 is the second. Both have a verified
 4. **P9 stock:** can you confirm whether stock updates from Shopify and Amazon orders? I could not tell from the docs.
 5. **P7 wording:** are we OK saying "what sells and what earns" and **not** "profit"?
 6. **P2 and P3 facts:** do you want me to hunt for a solid, sourced conversion-rate fact and a review fact for jewelry and clothing, in case we use them later?
+7. **P11 brand:** lead with it, or keep it third after P1 and P4? And do we build anything for packaging (for example, label and box designs in the brand's look from Product Studio), or stay silent on packaging?
+8. **P11 proof on our own sellers:** run the randomised brand test (about 96 sellers per group) so the claim comes from our customers and not only from Amazon data?
