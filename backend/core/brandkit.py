@@ -89,6 +89,23 @@ WORDMARK_FONTS = ["tenorsans", "marcellus", "bodoni", "italiana", "cormorant", "
                   "spacemono"]
 
 FRAMES = ["none", "circle", "square", "circle-solid", "square-solid"]
+
+# How the name is shaped, and the emblem around the monogram. Drawn by the
+# browser in the brand's own face (brand.js bmLogoGeom), never by an image
+# model. "arch" is the umbrella: the name curved over an emblem.
+LOGO_LAYOUTS = [
+    ("straight", "Straight"), ("arch", "Arch (umbrella)"), ("circle", "Circle badge"),
+    ("stacked", "Stacked"), ("framed", "In a shape"),
+]
+LOGO_SHAPES = [
+    ("none", "No shape"), ("circle", "Circle"), ("oval", "Oval"), ("square", "Square"),
+    ("rounded", "Rounded"), ("arch", "Arch"), ("shield", "Shield"), ("diamond", "Diamond"),
+    ("hexagon", "Hexagon"), ("scallop", "Scalloped seal"),
+]
+LOGO_FILLS = [("outline", "Outline"), ("solid", "Solid")]
+_LAYOUT_IDS = {k for k, _ in LOGO_LAYOUTS}
+_SHAPE_IDS = {k for k, _ in LOGO_SHAPES}
+_FILL_IDS = {k for k, _ in LOGO_FILLS}
 COLOUR_ROLES = ["ground", "surface", "ink", "accent", "support"]
 TEXT_FIELDS = ["tagline", "statement", "promise", "bio", "about"]
 CAPTION_COUNT = 4
@@ -116,6 +133,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["jewellery", "clothing", "fragrance", "home_decor"],
         "wordmark": {"font": "tenorsans", "case": "upper", "track": 0.30, "weight": 400},
         "frame": "none",
+        "logo": {"layout": "straight", "shape": "arch", "fill": "outline"},
         "fonts": {"heading": "cormorant", "body": "inter", "accent": "jost"},
         "site": {"heading_weight": 400, "heading_track": 2,
                  "themes": {"jewellery": "jewellery", "*": "luxury"}, "fits": ["luxury", "jewellery", "basic"]},
@@ -167,6 +185,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["jewellery", "clothing", "fragrance", "home_decor"],
         "wordmark": {"font": "marcellus", "case": "upper", "track": 0.18, "weight": 400},
         "frame": "square",
+        "logo": {"layout": "circle", "shape": "shield", "fill": "outline"},
         "fonts": {"heading": "playfair", "body": "lora", "accent": "jost"},
         "site": {"heading_weight": 500, "heading_track": 1,
                  "themes": {"jewellery": "jewellery", "*": "luxury"}, "fits": ["luxury", "jewellery"]},
@@ -218,6 +237,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["jewellery", "clothing", "fragrance", "home_decor"],
         "wordmark": {"font": "bodoni", "case": "upper", "track": 0.06, "weight": 500},
         "frame": "none",
+        "logo": {"layout": "straight", "shape": "square", "fill": "outline"},
         "fonts": {"heading": "bodoni", "body": "inter", "accent": "intertight"},
         "site": {"heading_weight": 500, "heading_track": -1,
                  "themes": {"*": "basic"}, "fits": ["basic", "fashion", "tech"]},
@@ -269,6 +289,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["jewellery", "clothing", "fragrance", "home_decor"],
         "wordmark": {"font": "jost", "case": "none", "track": -0.01, "weight": 600},
         "frame": "square-solid",
+        "logo": {"layout": "framed", "shape": "rounded", "fill": "solid"},
         "fonts": {"heading": "jost", "body": "figtree", "accent": "figtree"},
         "site": {"heading_weight": 600, "heading_track": -1,
                  "themes": {"fragrance": "beauty", "*": "basic"}, "fits": ["basic", "beauty"]},
@@ -320,6 +341,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["jewellery", "clothing", "fragrance", "home_decor"],
         "wordmark": {"font": "bricolage", "case": "lower", "track": -0.03, "weight": 800},
         "frame": "circle-solid",
+        "logo": {"layout": "arch", "shape": "scallop", "fill": "solid"},
         "fonts": {"heading": "bricolage", "body": "dmsans", "accent": "spacegro"},
         "site": {"heading_weight": 800, "heading_track": -2,
                  "themes": {"fragrance": "beauty", "jewellery": "beauty", "*": "basic"}, "fits": ["beauty", "basic"]},
@@ -371,6 +393,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["jewellery", "clothing"],
         "wordmark": {"font": "anton", "case": "upper", "track": 0.02, "weight": 400},
         "frame": "square-solid",
+        "logo": {"layout": "framed", "shape": "square", "fill": "solid"},
         "fonts": {"heading": "anton", "body": "intertight", "accent": "archivo"},
         "site": {"heading_weight": 400, "heading_track": 0,
                  "themes": {"*": "fashion"}, "fits": ["fashion", "fitness"]},
@@ -422,6 +445,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["jewellery", "clothing", "fragrance", "home_decor"],
         "wordmark": {"font": "italiana", "case": "upper", "track": 0.16, "weight": 400},
         "frame": "circle",
+        "logo": {"layout": "arch", "shape": "oval", "fill": "outline"},
         "fonts": {"heading": "cormorant", "body": "dmsans", "accent": "jost"},
         "site": {"heading_weight": 500, "heading_track": 1,
                  "themes": {"jewellery": "jewellery", "*": "beauty"}, "fits": ["beauty", "jewellery"]},
@@ -473,6 +497,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["jewellery", "clothing", "fragrance", "home_decor"],
         "wordmark": {"font": "fraunces", "case": "none", "track": -0.01, "weight": 600},
         "frame": "circle",
+        "logo": {"layout": "circle", "shape": "circle", "fill": "outline"},
         "fonts": {"heading": "fraunces", "body": "worksans", "accent": "jost"},
         "site": {"heading_weight": 600, "heading_track": -1,
                  "themes": {"*": "luxury"}, "fits": ["luxury", "basic"]},
@@ -525,6 +550,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["jewellery", "clothing", "fragrance", "home_decor"],
         "wordmark": {"font": "prata", "case": "upper", "track": 0.12, "weight": 400},
         "frame": "square",
+        "logo": {"layout": "stacked", "shape": "arch", "fill": "outline"},
         "fonts": {"heading": "prata", "body": "newsreader", "accent": "jost"},
         "site": {"heading_weight": 400, "heading_track": 1,
                  "themes": {"jewellery": "jewellery", "*": "luxury"}, "fits": ["luxury", "jewellery"]},
@@ -577,6 +603,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["fragrance", "home_decor"],
         "wordmark": {"font": "spacemono", "case": "upper", "track": 0.14, "weight": 400},
         "frame": "square",
+        "logo": {"layout": "framed", "shape": "square", "fill": "outline"},
         "fonts": {"heading": "newsreader", "body": "inter", "accent": "spacemono"},
         "site": {"heading_weight": 400, "heading_track": 0,
                  "themes": {"*": "basic"}, "fits": ["basic", "beauty"]},
@@ -628,6 +655,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["jewellery", "clothing", "fragrance", "home_decor"],
         "wordmark": {"font": "jost", "case": "lower", "track": 0.18, "weight": 400},
         "frame": "none",
+        "logo": {"layout": "straight", "shape": "circle", "fill": "outline"},
         "fonts": {"heading": "newsreader", "body": "worksans", "accent": "jost"},
         "site": {"heading_weight": 400, "heading_track": 0,
                  "themes": {"*": "basic"}, "fits": ["basic"]},
@@ -679,6 +707,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["jewellery", "clothing", "fragrance", "home_decor"],
         "wordmark": {"font": "gloock", "case": "upper", "track": 0.04, "weight": 400},
         "frame": "circle-solid",
+        "logo": {"layout": "arch", "shape": "diamond", "fill": "solid"},
         "fonts": {"heading": "dmserif", "body": "figtree", "accent": "syne"},
         "site": {"heading_weight": 400, "heading_track": -1,
                  "themes": {"fragrance": "beauty", "clothing": "fashion", "*": "luxury"},
@@ -730,6 +759,7 @@ DIRECTIONS: list[dict] = [
         "categories": ["jewellery", "clothing", "fragrance", "home_decor"],
         "wordmark": {"font": "librecaslon", "case": "upper", "track": 0.10, "weight": 400},
         "frame": "circle",
+        "logo": {"layout": "circle", "shape": "shield", "fill": "outline"},
         "fonts": {"heading": "librecaslon", "body": "lora", "accent": "instrsans"},
         "site": {"heading_weight": 400, "heading_track": 0,
                  "themes": {"jewellery": "jewellery", "*": "luxury"}, "fits": ["luxury", "jewellery", "basic"]},
@@ -892,7 +922,7 @@ def public_library(spelling: str = "intl") -> dict:
         dirs.append({
             "id": d["id"], "name": d["name"], "essence": d["essence"], "spirit": d["spirit"],
             "mood": d["mood"], "ages": d["ages"], "why": d["why"], "categories": d["categories"],
-            "wordmark": d["wordmark"], "frame": d["frame"], "fonts": d["fonts"],
+            "wordmark": d["wordmark"], "frame": d["frame"], "logo": d["logo"], "fonts": d["fonts"],
             "palettes": d["palettes"], "voice": d["voice"],
             "imagery": d["imagery"], "site": {"heading_weight": d["site"]["heading_weight"],
                                               "heading_track": d["site"]["heading_track"]},
@@ -905,6 +935,9 @@ def public_library(spelling: str = "intl") -> dict:
         "order": CATEGORY_ORDER,
         "wordmark_fonts": WORDMARK_FONTS,
         "frames": FRAMES,
+        "logo_layouts": [{"id": k, "label": v} for k, v in LOGO_LAYOUTS],
+        "logo_shapes": [{"id": k, "label": v} for k, v in LOGO_SHAPES],
+        "logo_fills": [{"id": k, "label": v} for k, v in LOGO_FILLS],
         "contrast_rules": [{"pair": f"{f}/{b}", "need": n, "label": l} for f, b, n, l in CONTRAST_RULES],
         "name_max": NAME_MAX,
     }
@@ -989,7 +1022,7 @@ def blank_kit() -> dict:
     return {
         "v": LIBRARY_VERSION, "name": "", "name_source": "", "keep_case": False,
         "category": "", "age": "", "direction": "", "palette": "",
-        "colours": {}, "fonts": {}, "wordmark": {}, "frame": "",
+        "colours": {}, "fonts": {}, "wordmark": {}, "frame": "", "logo": {},
         "text": {f: "" for f in TEXT_FIELDS} | {"captions": []},
         "variants": {}, "edited": {}, "stale": [], "spelling": "intl",
         "applied_at": "", "last_apply": None, "updated_at": "",
@@ -1047,7 +1080,7 @@ def compose(email: str, draft: dict, spelling: str = "intl") -> dict:
     kit["direction"] = d["id"] if d else ""
     edited = dict(prev.get("edited") or {})
     edited.update({k: bool(v) for k, v in (d_in.get("edited") or {}).items()
-                   if k in TEXT_FIELDS + ["captions", "colours", "fonts", "wordmark"]})
+                   if k in TEXT_FIELDS + ["captions", "colours", "fonts", "wordmark", "logo"]})
     variants = dict(prev.get("variants") or {})
     for k, v in (d_in.get("variants") or {}).items():
         if k in TEXT_FIELDS + ["captions"] and isinstance(v, int):
@@ -1082,6 +1115,7 @@ def compose(email: str, draft: dict, spelling: str = "intl") -> dict:
     if reset_visuals:
         edited.pop("fonts", None)
         edited.pop("wordmark", None)
+        edited.pop("logo", None)
     fonts_in = d_in.get("fonts") or {}
     if edited.get("fonts") and fonts_in:
         f = {r: (fonts_in.get(r) if fonts_in.get(r) in sitebuilder.FONT_IDS else d["fonts"][r])
@@ -1107,6 +1141,16 @@ def compose(email: str, draft: dict, spelling: str = "intl") -> dict:
         kit["wordmark"] = dict(d["wordmark"])
     frame = str(d_in.get("frame") or "")
     kit["frame"] = frame if (frame in FRAMES and not reset_visuals and not direction_changed) else d["frame"]
+    lg_in = d_in.get("logo") or {}
+    if edited.get("logo") and lg_in:
+        base = d["logo"]
+        kit["logo"] = {
+            "layout": lg_in.get("layout") if lg_in.get("layout") in _LAYOUT_IDS else base["layout"],
+            "shape": lg_in.get("shape") if lg_in.get("shape") in _SHAPE_IDS else base["shape"],
+            "fill": lg_in.get("fill") if lg_in.get("fill") in _FILL_IDS else base["fill"],
+        }
+    else:
+        kit["logo"] = dict(d["logo"])
 
     # ---- copy ----
     gen = generated_text(email, d["id"], kit["category"] or d["categories"][0], name,

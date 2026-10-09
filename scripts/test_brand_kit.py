@@ -127,6 +127,25 @@ for d in bk.DIRECTIONS:
                     miss.append((d["id"], p["id"], th["id"], mode))
 check("the site accent always reads on the theme it lands on, mapped or kept, light or dark", not miss, miss[:3])
 
+_layouts = {k for k, _ in bk.LOGO_LAYOUTS}
+_shapes = {k for k, _ in bk.LOGO_SHAPES}
+check("every direction has a valid default logo shape",
+      all(d["logo"]["layout"] in _layouts and d["logo"]["shape"] in _shapes
+          and d["logo"]["fill"] in {k for k, _ in bk.LOGO_FILLS} for d in bk.DIRECTIONS))
+check("the arch (umbrella) and circle layouts are offered", {"arch", "circle"} <= _layouts)
+
+# the founder's generated images, mapped into the folders the module reads
+_assets = bk.list_assets()
+_count = sum(len(v) for v in _assets.values())
+check("the generated brand images are all in place (130 of 139)", _count >= 130, _count)
+check("every image sits under a known direction and asset name",
+      all(did in bk._DIR and set(keys) <= set(bk.ASSET_KEYS) for did, keys in _assets.items()))
+_heavy = [os.path.join(r, f) for r, _, fs in os.walk(bk.assets_dir()) for f in fs
+          if f.endswith(".webp") and os.path.getsize(os.path.join(r, f)) > 300 * 1024]
+check("no image is over 300 KB", not _heavy, _heavy[:3])
+check("every direction with a ready card has its hero image",
+      all("hero" in _assets.get(d["id"], {}) for d in bk.DIRECTIONS))
+
 import importlib.util as _ilu  # noqa: E402
 _spec = _ilu.spec_from_file_location("gen_brand_prompts",
                                      os.path.join(os.path.dirname(os.path.abspath(__file__)), "gen_brand_prompts.py"))
@@ -188,6 +207,13 @@ check("edited colours make the palette custom", k6["palette"] == "custom")
 check("unreadable custom colours block Apply", bool(bk._blocked(k6)))
 k7 = bk.compose(EM, {"palette": "noir", "edited": {"colours": False}, "reset_visuals": True})
 check("choosing a palette again replaces custom colours", k7["palette"] == "noir")
+
+k8 = bk.compose(EM, {"logo": {"layout": "arch", "shape": "scallop", "fill": "solid"}, "edited": {"logo": True}})
+check("the seller can arch their name over a scalloped emblem", k8["logo"] == {"layout": "arch", "shape": "scallop", "fill": "solid"})
+k9 = bk.compose(EM, {"logo": {"layout": "spiral", "shape": "star"}, "edited": {"logo": True}})
+check("an unknown shape falls back to the direction's", k9["logo"]["layout"] in _layouts and k9["logo"]["shape"] in _shapes)
+k10 = bk.compose(EM, {"edited": {"logo": False}})
+check("'Use the direction's' puts the default shape back", k10["logo"] == bk._DIR[k10["direction"]]["logo"])
 
 v1 = bk.compose(EM, {"variants": {"tagline": 0}})["text"]["tagline"]
 v2 = bk.compose(EM, {"variants": {"tagline": 1}})["text"]["tagline"]

@@ -4389,3 +4389,72 @@ input:required:invalid, .fld.req input:placeholder-shown { border-color: var(--p
 .bm-sheet-t { white-space: pre-wrap; font-size: 0.75rem; line-height: 1.55; background: var(--surface-2); border-radius: var(--radius); padding: 12px 14px;
   max-height: 320px; overflow: auto; margin: 0; }
 @media (max-width: 640px) { .bm-story { max-width: 300px; width: 100%; justify-self: center; } }
+
+/* ---- Brand Management, round 2: logo shapes and the direction's images ---- */
+.bm-lc { display: block; }
+/* the generated images: a light greyscale surface multiplied over the brand
+   colour, and stencils painted in the brand's own colours */
+.bm-book .bm-tex { background-image: var(--b-tex); background-size: 420px; background-repeat: repeat;
+  background-position: center; background-blend-mode: multiply; }
+.bm-pat-layer { position: absolute; inset: 0; pointer-events: none; background: var(--b-accent); opacity: .5;
+  -webkit-mask-image: var(--b-pat); mask-image: var(--b-pat);
+  -webkit-mask-size: var(--b-pat-size); mask-size: var(--b-pat-size);
+  -webkit-mask-repeat: repeat; mask-repeat: repeat; }
+.bm-pat-layer.soft { background: var(--b-support); opacity: .22; }
+.bm-motif { display: block; background: var(--b-accent);
+  -webkit-mask: var(--b-motif) center / contain no-repeat; mask: var(--b-motif) center / contain no-repeat; }
+.bm-motif-bg { position: absolute; inset: 12%; background: var(--b-on-accent); opacity: .16; }
+.bm-motif-ty { width: 30px; height: 30px; margin-bottom: 2px; }
+
+/* cover: the direction's hero behind the logo, softened so the mark reads */
+.bm-cover.has-img { background-size: cover; background-position: center; }
+.bm-cover.has-img::before { content: ""; position: absolute; inset: 0; z-index: 0;
+  background:
+    radial-gradient(46% 58% at 50% 48%, color-mix(in srgb, var(--b-ground) 84%, transparent), color-mix(in srgb, var(--b-ground) 22%, transparent) 72%),
+    linear-gradient(to top, color-mix(in srgb, var(--b-ground) 88%, transparent), transparent 34%); }
+.bm-cover.has-img::after { display: none; }
+.bm-lc-cover { width: min(100%, 760px); height: clamp(140px, 24vw, 250px); }
+.bm-lc-mini { width: 58px; height: 58px; flex: none; }
+
+/* logo tiles and pickers */
+.bm-ltile .bm-lc-tile { width: 84%; height: 74%; }
+.bm-pick { margin-top: 14px; }
+.bm-pick-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.bm-pick-h b { font-size: 0.8125rem; }
+.bm-pick-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
+.bm-pick-row.shapes { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+.bm-pick-b { display: grid; gap: 6px; padding: 6px 6px 8px; border-radius: var(--radius); border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text-2); cursor: pointer; font-size: 0.6875rem; font-weight: 600; text-align: center;
+  transition: border-color .15s, box-shadow .15s, transform .15s; }
+.bm-pick-b:hover { border-color: var(--primary); transform: translateY(-1px); }
+.bm-pick-b.on { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary); color: var(--text); }
+.bm-pick-b:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.bm-lc-pick { width: 100%; height: 76px; border-radius: 6px; background: var(--b-ground); }
+.bm-pick-b.sm .bm-lc-pick { height: 60px; }
+.bm-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 99px; overflow: hidden; }
+.bm-seg-b { border: 0; background: var(--surface); color: var(--text-2); font-size: 0.6875rem; font-weight: 600; padding: 5px 12px; cursor: pointer; }
+.bm-seg-b + .bm-seg-b { border-left: 1px solid var(--border-strong); }
+.bm-seg-b.on { background: var(--primary-fill); color: var(--on-primary); }
+
+/* photography mood board */
+.bm-mb { display: grid; grid-template-columns: 1.3fr 1fr 1fr; grid-auto-rows: 120px; gap: 8px; }
+.bm-mb > div { position: relative; border-radius: var(--radius); background-color: var(--b-surface);
+  background-size: cover; background-position: center; overflow: hidden; }
+.bm-mb .bm-mb-a { grid-row: span 2; }
+.bm-mb-pat { background-color: var(--b-ground) !important; }
+.bm-mb-tex { background-color: var(--b-ground) !important; }
+.bm-mb-l { position: absolute; left: 8px; bottom: 8px; font-size: 0.5625rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  background: rgba(255, 255, 255, .86); color: #222; padding: 3px 7px; border-radius: 99px; }
+@media (max-width: 640px) { .bm-mb { grid-template-columns: 1fr 1fr; grid-auto-rows: 110px; } }
+
+/* mockups with the logo */
+.bm-ig-av { overflow: hidden; }
+.bm-lc-av { width: 100%; height: 100%; }
+.bm-lc-post { width: 86%; height: 60%; }
+.bm-post-card { position: relative; background: var(--b-ground); padding: 12% 10%; margin: 0 8%; border-radius: 2px; }
+.bm-story-mark { width: 100%; display: grid; place-items: center; }
+.bm-lc-story { width: 78%; height: 58px; }
+.bm-box { position: relative; overflow: hidden; }
+.bm-box-lid { position: relative; background: var(--b-ground); }
+.bm-lc-lid { width: 100%; height: 100%; }
+.bm-lc-tag { width: 58px; height: 58px; }

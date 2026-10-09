@@ -97,7 +97,7 @@ function bmVars(kit, colours) {
 }
 function bmSetVars(el) {
   if (!el) return;
-  el.setAttribute("style", bmVars(_bmKit));
+  el.setAttribute("style", bmVars(_bmKit) + (_bmKit.direction ? ";" + bmAssetVars() : ""));
 }
 
 /* WCAG contrast, the same maths as brandkit.contrast(). Used to pick the
@@ -210,7 +210,7 @@ function bmDraft() {
   return {
     name: k.name, name_source: k.name_source, keep_case: k.keep_case, category: k.category, age: k.age,
     direction: k.direction, palette: k.palette, colours: k.colours, fonts: k.fonts, wordmark: k.wordmark,
-    frame: k.frame, text: k.text, variants: k.variants, edited: k.edited, reset_visuals: !!k.reset_visuals,
+    frame: k.frame, logo: k.logo, text: k.text, variants: k.variants, edited: k.edited, reset_visuals: !!k.reset_visuals,
   };
 }
 
@@ -272,6 +272,7 @@ function bmRefresh() {
   });
   bmLoadBookFonts();
   bmFitSoon(book);
+  bmDrawLogosSoon(book);
 }
 
 function bmText(key) {
@@ -432,7 +433,7 @@ function bmWireDirections() {
   document.querySelectorAll("[data-dir]").forEach((b) => b.onclick = async () => {
     const id = b.dataset.dir;
     const k = _bmKit;
-    if (k.direction && k.direction !== id && (k.edited.colours || k.edited.fonts || k.edited.wordmark)) {
+    if (k.direction && k.direction !== id && (k.edited.colours || k.edited.fonts || k.edited.wordmark || k.edited.logo)) {
       const keep = await bmConfirm("Keep your custom colours and fonts?",
         "You changed the colours or type in your brand book. Keep them with the new direction, or use the new direction's own?",
         "Use the new direction's", "Keep mine");
@@ -479,7 +480,7 @@ function bmBookHtml() {
       ${BM_TOC.map(([id, l]) => `<a href="#bm-${id}" data-toc="${id}">${esc(l)}</a>`).join("")}
       <button class="btn ghost sm" data-bmgo="direction" style="margin-top:10px;">Change direction</button>
     </nav>
-    <div class="bm-book" id="bmBook" style="${bmVars(_bmKit)}">
+    <div class="bm-book" id="bmBook" style="${bmVars(_bmKit)};${bmAssetVars()}">
       ${Object.keys(BM_SECTIONS).map((id) => `<section class="bm-sec" id="bm-${id}" data-sec="${id}">${BM_SECTIONS[id]()}</section>`).join("")}
     </div>
   </div>
@@ -492,9 +493,331 @@ function bmSecHead(title, sub, extra = "") {
   return `<div class="bm-sec-h"><div><h3>${esc(title)}</h3>${sub ? `<p class="muted tiny">${sub}</p>` : ""}</div>${extra}</div>`;
 }
 
-function bmFrameHtml(cls = "") {
-  const frame = _bmKit.frame || "none";
-  return `<span class="bm-mono bm-frame-${frame} ${cls}" data-text="monogram">${esc(bmText("monogram"))}</span>`;
+/* ============================================================ THE LOGO ===
+   One drawing routine for every shape the name can take, used for the
+   screen, the picker thumbnails, the mockups and the PNG download, so what
+   the seller sees is exactly what they get. Canvas, glyph by glyph, in the
+   brand's own face: the name is never handed to an image model.
+
+   Layouts (kit.logo.layout): straight, arch (the umbrella: name curved over an
+   emblem), circle (badge: name round the top, category round the bottom),
+   stacked (emblem over name), framed (name inside a shape).
+   Shapes (kit.logo.shape): the emblem round the monogram, and the frame for
+   "framed". Fill: outline (with a fine inner rule) or solid.             */
+const BM_PROBE = document.createElement("canvas").getContext("2d");
+
+function bmLogoFont(kit, size) {
+  const wm = kit.wordmark || {};
+  return `${wm.weight || 400} ${size}px "${bmFamily(wm.font)}", sans-serif`;
+}
+
+/* Glyph positions with tracking. `space` adds extra room after each word
+   space: on a curve the gap between words visibly closes up, so arcs ask
+   for a little more of it. */
+function bmTracked(c, text, size, track, space = 0) {
+  const chars = [...text];
+  let spaces = 0;
+  const xs = chars.map((ch, i) => {
+    const x = c.measureText(chars.slice(0, i).join("")).width + track * size * i + spaces * space * size;
+    if (ch === " ") spaces++;
+    return x;
+  });
+  const ws = chars.map((ch) => c.measureText(ch).width);
+  const w = c.measureText(text).width + track * size * Math.max(0, chars.length - 1) + spaces * space * size;
+  return { chars, xs, ws, w };
+}
+
+/* "knockout" cuts the shape away instead of painting, so a solid emblem in a
+   downloaded PNG shows whatever it is placed on through its letters. */
+function bmUse(c, colour) {
+  if (colour === "knockout") { c.globalCompositeOperation = "destination-out"; c.fillStyle = c.strokeStyle = "#000"; }
+  else { c.globalCompositeOperation = "source-over"; c.fillStyle = c.strokeStyle = colour; }
+}
+
+function bmTextLine(c, text, cx, cy, size, track) {
+  const t = bmTracked(c, text, size, track);
+  const x0 = cx - t.w / 2;
+  t.chars.forEach((ch, i) => c.fillText(ch, x0 + t.xs[i], cy));
+}
+
+/* Text along a circle of radius r. top: reads left to right over the top;
+   otherwise along the bottom, still upright. Returns the angle it spans. */
+const BM_ARC_SPACE = 0.22;
+function bmTextArc(c, text, cx, cy, r, size, track, top) {
+  const t = bmTracked(c, text, size, track, BM_ARC_SPACE);
+  const total = t.w / r;
+  t.chars.forEach((ch, i) => {
+    const mid = (t.xs[i] + t.ws[i] / 2) / r;
+    const a = top ? -Math.PI / 2 - total / 2 + mid : Math.PI / 2 + total / 2 - mid;
+    c.save();
+    c.translate(cx + r * Math.cos(a), cy + r * Math.sin(a));
+    c.rotate(top ? a + Math.PI / 2 : a - Math.PI / 2);
+    c.fillText(ch, -t.ws[i] / 2, 0);
+    c.restore();
+  });
+  return total;
+}
+
+function bmShapePath(c, shape, cx, cy, w, h) {
+  const x = cx - w / 2, y = cy - h / 2;
+  c.beginPath();
+  if (shape === "circle") c.arc(cx, cy, Math.min(w, h) / 2, 0, Math.PI * 2);
+  else if (shape === "oval") c.ellipse(cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2);
+  else if (shape === "square") c.rect(x, y, w, h);
+  else if (shape === "rounded") {
+    const r = Math.min(w, h) * 0.24;
+    c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  } else if (shape === "arch") {
+    const r = w / 2;
+    c.moveTo(x, y + h); c.lineTo(x, y + r); c.arc(cx, y + r, r, Math.PI, 0); c.lineTo(x + w, y + h); c.closePath();
+  } else if (shape === "shield") {
+    c.moveTo(x, y); c.lineTo(x + w, y); c.lineTo(x + w, y + h * 0.5);
+    c.bezierCurveTo(x + w, y + h * 0.8, cx + w * 0.14, y + h * 0.92, cx, y + h);
+    c.bezierCurveTo(cx - w * 0.14, y + h * 0.92, x, y + h * 0.8, x, y + h * 0.5); c.closePath();
+  } else if (shape === "diamond") {
+    c.moveTo(cx, y); c.lineTo(x + w, cy); c.lineTo(cx, y + h); c.lineTo(x, cy); c.closePath();
+  } else if (shape === "hexagon") {
+    c.moveTo(x + w * 0.25, y); c.lineTo(x + w * 0.75, y); c.lineTo(x + w, cy);
+    c.lineTo(x + w * 0.75, y + h); c.lineTo(x + w * 0.25, y + h); c.lineTo(x, cy); c.closePath();
+  } else if (shape === "scallop") {
+    const R = Math.min(w, h) / 2, n = 18;
+    for (let i = 0; i <= 720; i++) {
+      const a = (i / 720) * Math.PI * 2;
+      const r = R * (0.9 + 0.1 * Math.abs(Math.cos((a * n) / 2)));
+      const px = cx + r * Math.cos(a), py = cy + r * Math.sin(a);
+      if (i) c.lineTo(px, py); else c.moveTo(px, py);
+    }
+    c.closePath();
+  } else return false;
+  return true;
+}
+
+/* A shape filled, or outlined with a fine second rule inside it. */
+function bmPaintShape(c, shape, fill, cx, cy, w, h, col, lw) {
+  if (!bmShapePath(c, shape, cx, cy, w, h)) return;
+  bmUse(c, col);
+  if (fill === "solid") { c.fill(); return; }
+  c.lineWidth = lw; c.stroke();
+  const k = lw * 3.4;
+  if (w - 2 * k > lw * 6 && h - 2 * k > lw * 6) {
+    const dy = shape === "arch" ? k * 0.4 : shape === "shield" ? -k * 0.25 : 0;
+    bmShapePath(c, shape, cx, cy + dy, w - 2 * k, h - 2 * k - (shape === "shield" ? k * 0.6 : 0));
+    c.lineWidth = lw * 0.5; c.stroke();
+  }
+}
+
+const bmEmblemBox = (shape, size) => ({ w: size, h: size * ({ oval: 1.28, arch: 1.22, shield: 1.16 }[shape] || 1) });
+
+function bmCategoryLabel(kit) {
+  const c = ((_bm && _bm.library.categories) || []).find((x) => x.id === kit.category);
+  return c ? c.label : "";
+}
+
+/* The geometry of a logo in its own units: { w, h, draw(ctx, colour, on) }.
+   part "emblem" is the monogram in its shape on its own (avatars, tags). */
+function bmLogoGeom(kit, part, over = {}) {
+  const c = BM_PROBE;
+  const F = 100;
+  const wm = kit.wordmark || {};
+  const lg = { layout: "straight", shape: "none", fill: "outline", ...(kit.logo || {}), ...over };
+  const name = bmCased(kit.name || "Your brand", wm, kit.keep_case);
+  const mono = (_bmDesc && _bmDesc.monogram) || name.slice(0, 1).toUpperCase();
+  const track = Number(wm.track) || 0;
+  c.font = bmLogoFont(kit, F);
+  const tw = Math.max(F, bmTracked(c, name, F, track).w);
+  const twArc = Math.max(F, bmTracked(c, name, F, track, BM_ARC_SPACE).w);
+  const lw = F * 0.045;
+  const solid = lg.fill === "solid" && lg.shape !== "none";
+
+  const emblem = (ctx, cx, cy, size, col, on) => {
+    const b = bmEmblemBox(lg.shape, size);
+    if (lg.shape !== "none") bmPaintShape(ctx, lg.shape, lg.fill, cx, cy, b.w, b.h, col, lw);
+    const dy = lg.shape === "arch" ? b.h * 0.1 : lg.shape === "shield" ? -b.h * 0.06 : 0;
+    const ms = size * (mono.length > 1 ? 0.34 : 0.46) * (lg.shape === "diamond" ? 0.8 : 1);
+    ctx.font = bmLogoFont(kit, ms);
+    bmUse(ctx, solid ? on : col);
+    bmTextLine(ctx, mono, cx, cy + dy, ms, Math.min(track, 0.06));
+    bmUse(ctx, col);
+  };
+  const nameAt = (ctx, cx, cy, col) => { ctx.font = bmLogoFont(kit, F); bmUse(ctx, col); bmTextLine(ctx, name, cx, cy, F, track); };
+
+  if (part === "emblem") {
+    const b = bmEmblemBox(lg.shape, F * 3);
+    const p = F * 0.3;
+    return { w: b.w + 2 * p, h: b.h + 2 * p, draw: (ctx, col, on) => emblem(ctx, b.w / 2 + p, b.h / 2 + p, F * 3, col, on) };
+  }
+  if (lg.layout === "arch") {
+    // a gentle canopy, never more than ~100 degrees, so the end letters
+    // lean a little instead of falling over
+    const R = Math.max(twArc / (Math.PI * 0.56), F * 2.6);
+    const total = twArc / R;
+    const b = bmEmblemBox(lg.shape, R * (lg.shape === "none" ? 0.7 : 0.92));
+    const cy = F * 0.85 + R;
+    // chord of the arc, plus room for the end letters, which lean outwards
+    const w = Math.max(2 * (R + F * 0.6) * Math.sin(Math.min(total, Math.PI) / 2) + F * 2.2, b.w + F);
+    const h = cy + b.h / 2 + F * 0.35;
+    return { w, h, draw: (ctx, col, on) => {
+      ctx.font = bmLogoFont(kit, F); bmUse(ctx, col);
+      bmTextArc(ctx, name, w / 2, cy, R, F, track, true);
+      emblem(ctx, w / 2, cy, b.w, col, on);
+    } };
+  }
+  if (lg.layout === "circle") {
+    const R = Math.max(twArc / (Math.PI * 0.8), F * 2.4);
+    const Ro = R + F * 0.8, Ri = R - F * 0.8;
+    const label = bmCased(bmCategoryLabel(kit), { case: "upper" }, false);
+    const size = 2 * Ro + lw * 2 + F * 0.3;
+    const cx = size / 2;
+    return { w: size, h: size, draw: (ctx, col, on) => {
+      const ink = solid ? on : col;
+      if (solid) { bmShapePath(ctx, "circle", cx, cx, Ro * 2, Ro * 2); bmUse(ctx, col); ctx.fill(); }
+      else { bmShapePath(ctx, "circle", cx, cx, Ro * 2, Ro * 2); bmUse(ctx, col); ctx.lineWidth = lw; ctx.stroke(); }
+      bmUse(ctx, ink);
+      bmShapePath(ctx, "circle", cx, cx, Ri * 2, Ri * 2); ctx.lineWidth = lw * 0.6; ctx.stroke();
+      ctx.font = bmLogoFont(kit, F);
+      bmTextArc(ctx, name, cx, cx, R, F, track, true);
+      if (label) { ctx.font = bmLogoFont(kit, F * 0.6); bmTextArc(ctx, label, cx, cx, R, F * 0.6, 0.22, false); }
+      [Math.PI, 0].forEach((a) => { ctx.beginPath(); ctx.arc(cx + R * Math.cos(a), cx + R * Math.sin(a), F * 0.1, 0, Math.PI * 2); ctx.fill(); });
+      // the centre: the monogram, in its own shape when one is chosen
+      const inner = { ...kit, logo: { ...lg, fill: "outline" } };
+      const g = bmLogoGeom(inner, "emblem");
+      const s = (Ri * 1.25) / Math.max(g.w, g.h);
+      ctx.save(); ctx.translate(cx - (g.w * s) / 2, cx - (g.h * s) / 2); ctx.scale(s, s);
+      g.draw(ctx, ink, solid ? col : on);
+      ctx.restore();
+    } };
+  }
+  if (lg.layout === "stacked") {
+    const b = bmEmblemBox(lg.shape, F * 2.6);
+    const gap = F * 0.5, p = F * 0.3;
+    const w = Math.max(b.w, tw) + p * 2, h = p + b.h + gap + F * 1.2 + p;
+    return { w, h, draw: (ctx, col, on) => {
+      emblem(ctx, w / 2, p + b.h / 2, F * 2.6, col, on);
+      nameAt(ctx, w / 2, p + b.h + gap + F * 0.6, col);
+    } };
+  }
+  if (lg.layout === "framed" && lg.shape !== "none") {
+    const s = lg.shape;
+    // In a round or pointed shape a long name shrinks to nothing on one line,
+    // so a name of two or more words is set on two balanced lines there.
+    const round = ["circle", "scallop", "hexagon", "diamond", "shield", "arch"].includes(s);
+    const words = name.split(/\s+/).filter(Boolean);
+    let lines = [name];
+    if (round && words.length > 1) {
+      let best = null;
+      for (let i = 1; i < words.length; i++) {
+        const a = words.slice(0, i).join(" "), b = words.slice(i).join(" ");
+        const wa = bmTracked(c, a, F, track).w, wb = bmTracked(c, b, F, track).w;
+        if (!best || Math.max(wa, wb) < best.w) best = { w: Math.max(wa, wb), lines: [a, b] };
+      }
+      lines = best.lines;
+    }
+    const lwid = Math.max(...lines.map((l) => bmTracked(c, l, F, track).w));
+    const lh = F * 1.15;
+    const tall = (lines.length - 1) * lh;
+    let bw, bh, ty = 0.5;
+    if (s === "square" || s === "rounded") { bw = lwid + F * 1.5; bh = F * 2.3 + tall; }
+    else if (s === "oval") { bw = lwid * 1.16 + F * 1.6; bh = F * 2.7 + tall; }
+    else if (s === "diamond") { bw = bh = lwid * 1.45 + F * 1.6 + tall * 1.4; }
+    else if (s === "arch") { bw = lwid + F * 1.6; bh = Math.max(bw * 1.15, F * 3 + tall); ty = 0.62; }
+    else if (s === "shield") { bw = lwid + F * 1.6; bh = Math.max(bw * 1.12, F * 2.6 + tall * 1.3); ty = 0.42; }
+    else { bw = bh = Math.max(lwid * 1.1 + F * 1.3, F * 2.2 + tall * 1.25); }
+    const p = lw * 3;
+    const w = bw + p * 2, h = bh + p * 2;
+    return { w, h, draw: (ctx, col, on) => {
+      bmPaintShape(ctx, s, lg.fill, w / 2, h / 2, bw, bh, col, lw);
+      ctx.font = bmLogoFont(kit, F);
+      bmUse(ctx, solid ? on : col);
+      const y0 = p + bh * ty - tall / 2;
+      lines.forEach((l, i) => bmTextLine(ctx, l, w / 2, y0 + i * lh, F, track));
+      bmUse(ctx, col);
+    } };
+  }
+  const p = F * 0.35;
+  return { w: tw + p * 2, h: F * 1.3 + p, draw: (ctx, col) => nameAt(ctx, tw / 2 + p, (F * 1.3 + p) / 2, col) };
+}
+
+/* Paint a logo into a canvas, centred and scaled to fit. */
+function bmPaintLogo(canvas, kit, o = {}) {
+  const g = bmLogoGeom(kit, o.part, o.over || {});
+  const cssW = o.w || canvas.clientWidth || 300;
+  const cssH = o.h || canvas.clientHeight || 150;
+  const dpr = o.dpr || Math.min(3, window.devicePixelRatio || 1);
+  canvas.width = Math.max(1, Math.round(cssW * dpr));
+  canvas.height = Math.max(1, Math.round(cssH * dpr));
+  const c = canvas.getContext("2d");
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, canvas.width, canvas.height);
+  const m = o.margin === undefined ? 0.1 : o.margin;
+  const s = Math.min((canvas.width * (1 - 2 * m)) / g.w, (canvas.height * (1 - 2 * m)) / g.h);
+  c.setTransform(s, 0, 0, s, (canvas.width - g.w * s) / 2, (canvas.height - g.h * s) / 2);
+  c.textBaseline = "middle";
+  c.textAlign = "left";
+  g.draw(c, o.colour, o.on);
+  c.globalCompositeOperation = "source-over";
+  return g;
+}
+
+/* Every <canvas data-ld> on the page: data-ld is "logo" or "emblem",
+   data-col / data-on name kit colours (or "on_accent"), data-layout /
+   data-shape / data-fill override the kit for picker thumbnails. */
+function bmColour(key) {
+  if (key === "on_accent") return bmOnAccent(_bmKit.colours);
+  return (_bmKit.colours || {})[key] || "#111111";
+}
+function bmDrawLogos(root) {
+  (root || document).querySelectorAll("canvas[data-ld]").forEach((cv) => {
+    if (!cv.clientWidth) return;
+    const over = {};
+    ["layout", "shape", "fill"].forEach((k) => { if (cv.dataset[k]) over[k] = cv.dataset[k]; });
+    bmPaintLogo(cv, _bmKit, { part: cv.dataset.ld === "emblem" ? "emblem" : "logo", over,
+      colour: bmColour(cv.dataset.col || "ink"), on: bmColour(cv.dataset.on || "ground"),
+      margin: cv.dataset.margin !== undefined ? parseFloat(cv.dataset.margin) : 0.1 });
+  });
+}
+/* Canvas does not repaint when a web font arrives, so wait for the exact
+   face and weight, then draw again. */
+function bmDrawLogosSoon(root) {
+  bmDrawLogos(root);
+  const wm = _bmKit.wordmark || {};
+  if (document.fonts && wm.font) {
+    document.fonts.load(`${wm.weight || 400} 60px "${bmFamily(wm.font)}"`).then(() => bmDrawLogos(root)).catch(() => {});
+    document.fonts.ready.then(() => bmDrawLogos(root));
+  }
+}
+const bmLogoCanvas = (ld, col, on, cls = "", extra = "") =>
+  `<canvas class="bm-lc ${cls}" data-ld="${ld}" data-col="${col}" data-on="${on}" ${extra} aria-hidden="true"></canvas>`;
+let _bmResizeT = null;
+window.addEventListener("resize", () => {
+  clearTimeout(_bmResizeT);
+  _bmResizeT = setTimeout(() => { if ($("bmBook")) bmDrawLogos($("bmBook")); }, 150);
+});
+
+/* Shared images for the direction, by key. Photographic backgrounds (hero,
+   post-bg, story-bg) were made in the direction's FIRST palette, so they
+   only appear while that palette is untouched. Moods and packaging are
+   photography examples and show with any palette. Pattern and motif are
+   stencils, painted in the seller's own colours, so they always fit. */
+function bmImg(key) {
+  const did = _bmKit.direction;
+  const url = bmAsset(did, key);
+  if (!url) return "";
+  if (["hero", "post-bg", "story-bg"].includes(key) && !bmPhotosAllowed()) return "";
+  return url;
+}
+function bmAssetVars() {
+  const did = _bmKit.direction;
+  const tex = bmAsset(did, "texture");
+  const pat = bmAsset(did, "pattern");
+  const mot = bmAsset(did, "motif");
+  return [
+    `--b-tex:${tex ? `url('${tex}')` : "none"}`,
+    // no pattern made for this direction: a fine dot in the same role
+    `--b-pat:${pat ? `url('${pat}')` : "radial-gradient(circle, #000 0 22%, transparent 26%)"}`,
+    `--b-pat-size:${pat ? "300px" : "18px"}`,
+    `--b-motif:${mot ? `url('${mot}')` : "none"}`,
+  ].join(";");
 }
 
 function bmPaletteChips() {
@@ -510,13 +833,14 @@ const BM_SECTIONS = {
   cover() {
     const d = bmDir(_bmKit.direction);
     const latin = !_bmDesc || _bmDesc.latin;
+    const hero = bmImg("hero");
     return `
-    <div class="bm-cover">
+    <div class="bm-cover ${hero ? "has-img" : "bm-tex"}" ${hero ? `style="background-image:url('${esc(hero)}')"` : ""}>
       <div class="bm-cover-top"><span class="bm-eyebrow">Brand book</span><span class="bm-eyebrow">${esc(d ? d.name : "")}</span></div>
-      <div class="bm-cover-mark"><span class="bm-wm" data-fit="0.9" data-text="name">${esc(_bmKit.name)}</span></div>
+      <div class="bm-cover-mark">${bmLogoCanvas("logo", "ink", "ground", "bm-lc-cover", 'data-margin="0.04"')}</div>
       <div class="bm-cover-foot">
         <p class="bm-cover-tag" data-text="tagline">${esc(_bmKit.text.tagline)}</p>
-        ${bmFrameHtml("bm-cover-mono")}
+        ${bmLogoCanvas("emblem", "ink", "ground", "bm-lc-mini", 'data-margin="0"')}
       </div>
     </div>
     <div class="bm-palette-row">${bmPaletteChips()}</div>
@@ -560,33 +884,49 @@ const BM_SECTIONS = {
   logo() {
     const k = _bmKit;
     const wm = k.wordmark;
+    const lg = k.logo || {};
     const lib = _bm.library;
-    const opts = lib.wordmark_fonts.map((id) => `<option value="${id}" ${wm.font === id ? "selected" : ""}>${esc((bmFontRow(id) || {}).label || id)}</option>`).join("");
-    const tile = (cls, label) => `<div class="bm-ltile ${cls}"><span class="bm-wm" data-fit="0.82" data-text="name">${esc(k.name)}</span><span class="bm-ltile-l">${esc(label)}</span></div>`;
-    return bmSecHead("Logo", "Your name, set in type. This is how H&M, Zara and Gucci do it: a wordmark, not a picture. It stays sharp at every size.",
-      k.edited.wordmark ? `<button type="button" class="btn ghost xs" data-resetvis="wordmark">${sic("undo")}Use the direction's</button>` : "")
+    const fontOpts = lib.wordmark_fonts.map((id) => `<option value="${id}" ${wm.font === id ? "selected" : ""}>${esc((bmFontRow(id) || {}).label || id)}</option>`).join("");
+    const tile = (cls, col, on, label) => `<div class="bm-ltile ${cls}">${bmLogoCanvas("logo", col, on, "bm-lc-tile")}<span class="bm-ltile-l">${esc(label)}</span></div>`;
+    const layouts = (lib.logo_layouts || []).map((l) => `
+      <button type="button" class="bm-pick-b ${lg.layout === l.id ? "on" : ""}" data-layout-pick="${l.id}" aria-pressed="${lg.layout === l.id}">
+        ${bmLogoCanvas("logo", "ink", "ground", "bm-lc-pick", `data-layout="${l.id}" data-margin="0.08"`)}<span>${esc(l.label)}</span></button>`).join("");
+    const shapes = (lib.logo_shapes || []).map((sh) => `
+      <button type="button" class="bm-pick-b sm ${lg.shape === sh.id ? "on" : ""}" data-shape-pick="${sh.id}" aria-pressed="${lg.shape === sh.id}">
+        ${bmLogoCanvas("emblem", "ink", "ground", "bm-lc-pick", `data-shape="${sh.id}" data-margin="0.1"`)}<span>${esc(sh.label)}</span></button>`).join("");
+    const fills = (lib.logo_fills || []).map((f) => `<button type="button" class="bm-seg-b ${lg.fill === f.id ? "on" : ""}" data-fill-pick="${f.id}" aria-pressed="${lg.fill === f.id}">${esc(f.label)}</button>`).join("");
+    return bmSecHead("Logo", "Your name, set in type and shaped the way you want: straight, arched like an umbrella, round as a badge, stacked, or inside a shape. Drawn letter by letter, so it stays sharp at every size.",
+      (k.edited.wordmark || k.edited.logo) ? `<button type="button" class="btn ghost xs" data-resetvis="logo">${sic("undo")}Use the direction's</button>` : "")
       + `<div class="bm-ltiles">
-          ${tile("on-ground", "On your background")}
-          ${tile("on-ink", "Reversed")}
-          ${tile("on-accent", "On your accent")}
-          <div class="bm-ltile on-surface">${bmFrameHtml("bm-mono-lg")}<span class="bm-ltile-l">Monogram, for small spaces</span></div>
+          ${tile("on-ground bm-tex", "ink", "ground", "On your background")}
+          ${tile("on-ink", "ground", "ink", "Reversed")}
+          ${tile("on-accent", "on_accent", "accent", "On your accent")}
+          <div class="bm-ltile on-surface">${bmLogoCanvas("emblem", "ink", "surface", "bm-lc-tile")}<span class="bm-ltile-l">Emblem, for small spaces</span></div>
+        </div>
+        <div class="bm-pick">
+          <div class="bm-pick-h"><b>Shape of the name</b></div>
+          <div class="bm-pick-row">${layouts}</div>
+        </div>
+        <div class="bm-pick">
+          <div class="bm-pick-h"><b>Emblem shape</b><span class="bm-seg" role="group" aria-label="Fill">${fills}</span></div>
+          <div class="bm-pick-row shapes">${shapes}</div>
+          <p class="muted tiny" style="margin:6px 0 0;">The emblem holds your initials. It sits under the arch, inside the badge and above the stacked name, and it is your Instagram picture and tag. "In a shape" puts your whole name inside it.</p>
         </div>
         <div class="bm-controls">
-          <label>Face<select data-wm="font">${opts}</select></label>
+          <label>Face<select data-wm="font">${fontOpts}</select></label>
           <label>Capitals<select data-wm="case">
             <option value="upper" ${wm.case === "upper" ? "selected" : ""}>ALL CAPITALS</option>
             <option value="none" ${wm.case === "none" ? "selected" : ""}>As written</option>
             <option value="lower" ${wm.case === "lower" ? "selected" : ""}>all lowercase</option></select></label>
           <label>Letter spacing<input type="range" data-wm="track" min="-0.05" max="0.4" step="0.01" value="${wm.track}" /></label>
           <label>Weight<select data-wm="weight">${[300, 400, 500, 600, 700, 800].map((w) => `<option ${+wm.weight === w ? "selected" : ""}>${w}</option>`).join("")}</select></label>
-          <label>Monogram frame<select data-frame>${lib.frames.map((f) => `<option value="${f}" ${k.frame === f ? "selected" : ""}>${esc({ none: "None", circle: "Circle line", square: "Square line", "circle-solid": "Solid circle", "square-solid": "Solid square" }[f])}</option>`).join("")}</select></label>
         </div>
         <div class="bm-dl">
-          <span class="muted tiny">Download your logo (transparent PNG):</span>
-          <button type="button" class="btn ghost sm" data-logo="ink" data-w="3000">${sic("download")}Dark, 3000 px</button>
-          <button type="button" class="btn ghost sm" data-logo="reversed" data-w="3000">${sic("download")}Light, 3000 px</button>
-          <button type="button" class="btn ghost sm" data-logo="ink" data-w="1000">${sic("download")}Dark, 1000 px</button>
-          <span class="muted tiny">3000 px prints sharp on labels up to about 25 cm wide.</span>
+          <span class="muted tiny">Download (transparent PNG):</span>
+          <button type="button" class="btn ghost sm" data-logo="ink" data-w="3000">${sic("download")}Logo, dark</button>
+          <button type="button" class="btn ghost sm" data-logo="reversed" data-w="3000">${sic("download")}Logo, light</button>
+          <button type="button" class="btn ghost sm" data-logo="ink" data-w="2000" data-part="emblem">${sic("download")}Emblem</button>
+          <span class="muted tiny">3000 px wide: sharp on labels and boxes up to about 25 cm.</span>
         </div>`;
   },
 
@@ -639,16 +979,23 @@ const BM_SECTIONS = {
 
   photo() {
     const k = _bmKit;
-    const did = k.direction;
-    const usePhotos = bmPhotosAllowed();
-    const mood = usePhotos ? bmAsset(did, `mood-${k.category}`) : "";
-    const pack = usePhotos ? bmAsset(did, "packaging") : "";
-    const tiles = [mood, pack].filter(Boolean).map((u) => `<div class="bm-mood-img" style="background-image:url('${esc(u)}')"></div>`).join("")
-      || `<div class="bm-mood-art a"></div><div class="bm-mood-art b"></div><div class="bm-mood-art c"></div>`;
-    return bmSecHead("Photography", "Rules for every product photo and post. Product Studio follows your own photos first; these keep everything else consistent.")
-      + `<div class="bm-photo"><ol class="bm-rules">${((_bmDesc && _bmDesc.imagery) || []).map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
-        <div class="bm-moods">${tiles}</div></div>
-        ${usePhotos && (mood || pack) ? `<p class="muted tiny">Example images are shared backgrounds for this direction, not your own photos.</p>` : ""}`;
+    const cats = ["jewellery", "clothing", "fragrance", "home_decor"];
+    const mine = bmImg(`mood-${k.category}`);
+    const others = cats.filter((c) => c !== k.category).map((c) => bmImg(`mood-${c}`)).filter(Boolean);
+    const pack = bmImg("packaging");
+    const label = (t) => `<span class="bm-mb-l">${esc(t)}</span>`;
+    const board = mine || others.length || pack
+      ? `<div class="bm-mb">
+          ${mine ? `<div class="bm-mb-a" style="background-image:url('${esc(mine)}')">${label("Your category")}</div>` : `<div class="bm-mb-a bm-mood-art a"></div>`}
+          ${others.slice(0, 2).map((u) => `<div style="background-image:url('${esc(u)}')"></div>`).join("")}
+          ${pack ? `<div style="background-image:url('${esc(pack)}')">${label("Packaging")}</div>` : ""}
+          <div class="bm-mb-tex bm-tex">${label("Surface")}</div>
+          <div class="bm-mb-pat"><i class="bm-pat-layer"></i>${label("Pattern")}</div>
+        </div>`
+      : `<div class="bm-moods"><div class="bm-mood-art a"></div><div class="bm-mood-art b"></div><div class="bm-mood-art c"></div></div>`;
+    return bmSecHead("Photography", "How every photo and post should look. Product Studio follows your own photos first; these keep everything else in the same world.")
+      + `<div class="bm-photo"><ol class="bm-rules">${((_bmDesc && _bmDesc.imagery) || []).map((s) => `<li>${esc(s)}</li>`).join("")}</ol>${board}</div>
+        <p class="muted tiny">Example images for this direction, shared with other sellers who pick it. Shoot your own in the same light and on the same surfaces.</p>`;
   },
 
   use() {
@@ -669,41 +1016,44 @@ function bmMockupsHtml() {
   const k = _bmKit;
   const t = k.text;
   const photos = _bm.photos || [];
-  const allow = bmPhotosAllowed();
-  const postBg = allow ? bmAsset(k.direction, "post-bg") : "";
-  const storyBg = allow ? bmAsset(k.direction, "story-bg") : "";
-  const pattern = bmAsset(k.direction, "pattern");
-  const product = (i, cls) => photos[i]
-    ? `<div class="bm-post ${cls}" style="background-image:url('${esc(photos[i])}')"><span class="bm-wm bm-post-mark">${esc(k.name)}</span></div>`
-    : `<div class="bm-post ${cls} bm-still"><i></i><i></i><span class="bm-wm bm-post-mark">${esc(k.name)}</span></div>`;
+  const postBg = bmImg("post-bg");
+  const storyBg = bmImg("story-bg");
+  const mood = bmImg(`mood-${k.category}`);
+  const pack = bmImg("packaging");
+  const hasMotif = !!bmAsset(k.direction, "motif");
+  // The seller's own products first; then this direction's example shots.
+  const shots = [...photos, mood, pack].filter(Boolean);
+  const product = (i) => shots[i]
+    ? `<div class="bm-post" style="background-image:url('${esc(shots[i])}')"><span class="bm-wm bm-post-mark">${esc(k.name)}</span></div>`
+    : `<div class="bm-post bm-still"><i></i><i></i><span class="bm-wm bm-post-mark">${esc(k.name)}</span></div>`;
   const cap = (i) => esc((t.captions || [])[i] || t.tagline);
   const grid = [
-    product(0, ""),
-    `<div class="bm-post on-accent"><span class="bm-post-q">${esc(t.tagline)}</span><span class="bm-wm bm-post-sig">${esc(k.name)}</span></div>`,
-    `<div class="bm-post on-surface ${postBg ? "has-img" : ""}" ${postBg ? `style="background-image:url('${esc(postBg)}')"` : ""}><span class="bm-post-band"><span class="bm-eyebrow">New in</span><span class="bm-post-h">${cap(0)}</span></span></div>`,
-    `<div class="bm-post on-ink"><span class="bm-wm" data-fit="0.8">${esc(k.name)}</span></div>`,
-    product(1, ""),
-    `<div class="bm-post on-ground bm-patterned" ${pattern ? `style="--b-pattern:url('${esc(pattern)}')"` : ""}><span class="bm-post-h">${cap(2)}</span></div>`,
+    product(0),
+    `<div class="bm-post on-accent">${hasMotif ? `<i class="bm-motif bm-motif-bg"></i>` : ""}<span class="bm-post-q">${esc(t.tagline)}</span><span class="bm-wm bm-post-sig">${esc(k.name)}</span></div>`,
+    `<div class="bm-post on-surface ${postBg ? "has-img" : "bm-tex"}" ${postBg ? `style="background-image:url('${esc(postBg)}')"` : ""}><span class="bm-post-band"><span class="bm-eyebrow">New in</span><span class="bm-post-h">${cap(0)}</span></span></div>`,
+    `<div class="bm-post on-ink">${bmLogoCanvas("logo", "ground", "ink", "bm-lc-post")}</div>`,
+    product(1),
+    `<div class="bm-post on-ground"><i class="bm-pat-layer"></i><span class="bm-post-h bm-post-card">${cap(2)}</span></div>`,
   ].join("");
   return `
   <div class="bm-use">
     <div class="bm-ig">
       <div class="bm-ig-head">
-        <span class="bm-ig-av">${esc(bmText("monogram"))}</span>
+        <span class="bm-ig-av">${bmLogoCanvas("emblem", "on_accent", "accent", "bm-lc-av", 'data-margin="0.16"')}</span>
         <div><b>${esc(k.name)}</b><p data-text="bio">${esc(t.bio)}</p></div>
         <span class="bm-ig-follow">Follow</span>
       </div>
       <div class="bm-ig-grid">${grid}</div>
     </div>
-    <div class="bm-story ${storyBg ? "has-img" : ""}" ${storyBg ? `style="background-image:url('${esc(storyBg)}')"` : ""}>
-      <span class="bm-wm bm-story-mark" data-fit="0.8">${esc(k.name)}</span>
+    <div class="bm-story ${storyBg ? "has-img" : "bm-tex"}" ${storyBg ? `style="background-image:url('${esc(storyBg)}')"` : ""}>
+      <span class="bm-story-mark">${bmLogoCanvas("logo", "ink", "ground", "bm-lc-story", 'data-margin="0.02"')}</span>
       <span class="bm-story-band"><span class="bm-eyebrow">New in</span><span class="bm-post-h">${cap(1)}</span>
       <span class="bm-story-btn">Shop now</span></span>
     </div>
     <div class="bm-pack">
-      <div class="bm-box bm-patterned" ${pattern ? `style="--b-pattern:url('${esc(pattern)}')"` : ""}><div class="bm-box-lid"><span class="bm-wm" data-fit="0.7">${esc(k.name)}</span></div></div>
-      <div class="bm-tag"><span class="bm-tag-hole"></span>${bmFrameHtml("bm-mono-tag")}<span class="bm-tag-line">${esc(t.tagline)}</span></div>
-      <div class="bm-ty"><span class="bm-ty-h">Thank you</span><p>${esc(t.promise)}</p><span class="bm-wm bm-ty-mark">${esc(k.name)}</span></div>
+      <div class="bm-box bm-tex"><i class="bm-pat-layer soft"></i><div class="bm-box-lid">${bmLogoCanvas("logo", "ink", "ground", "bm-lc-lid", 'data-margin="0.06"')}</div></div>
+      <div class="bm-tag"><span class="bm-tag-hole"></span>${bmLogoCanvas("emblem", "on_accent", "accent", "bm-lc-tag", 'data-margin="0"')}<span class="bm-tag-line">${esc(t.tagline)}</span></div>
+      <div class="bm-ty">${hasMotif ? `<i class="bm-motif bm-motif-ty"></i>` : ""}<span class="bm-ty-h">Thank you</span><p>${esc(t.promise)}</p><span class="bm-wm bm-ty-mark">${esc(k.name)}</span></div>
     </div>
   </div>`;
 }
@@ -718,6 +1068,7 @@ function bmWireBook() {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   });
   bmFitSoon(book);
+  bmDrawLogosSoon(book);
 }
 
 function bmWireSection(sec) {
@@ -761,7 +1112,7 @@ function bmWireSection(sec) {
     k.edited = { ...k.edited, colours: false };
     const d = bmDir(k.direction);
     const p = d && d.palettes.find((x) => x.id === k.palette);
-    if (p) { k.colours = { ...p.colours }; bmSetVars($("bmBook")); }
+    if (p) { k.colours = { ...p.colours }; bmSetVars($("bmBook")); bmDrawLogos($("bmBook")); }
     bmQueue(0);
   });
   sec.querySelectorAll("[data-colour]").forEach((inp) => {
@@ -773,12 +1124,13 @@ function bmWireSection(sec) {
       const code = inp.closest(".bm-swatch").querySelector("code");
       if (code) code.textContent = inp.value.toUpperCase();
       bmSetVars($("bmBook"));
+      bmDrawLogos($("bmBook"));
       bmQueue(500);
     });
   });
   sec.querySelectorAll("[data-resetvis]").forEach((b) => b.onclick = () => {
     const what = b.dataset.resetvis;
-    k.edited = { ...k.edited, [what]: false };
+    k.edited = { ...k.edited, [what]: false, ...(what === "logo" ? { wordmark: false } : {}) };
     if (what === "colours") { const d = bmDir(k.direction); k.palette = d ? d.palettes[0].id : ""; }
     bmQueue(0);
   });
@@ -798,51 +1150,47 @@ function bmWireSection(sec) {
       if (s.dataset.wm === "font") bmLoadFonts([v]);
       bmSetVars($("bmBook"));
       bmFitSoon($("bmBook"));
+      bmDrawLogosSoon($("bmBook"));
       bmQueue(s.type === "range" ? 450 : 0);
     });
   });
-  sec.querySelectorAll("[data-frame]").forEach((s) => s.onchange = () => {
-    k.frame = s.value;
-    document.querySelectorAll("#bmBook .bm-mono").forEach((m) => { m.className = m.className.replace(/bm-frame-[a-z-]+/, "bm-frame-" + s.value); });
+  const pickLogo = (key, val) => {
+    k.logo = { ...(k.logo || {}), [key]: val };
+    k.edited = { ...k.edited, logo: true };
+    const book = $("bmBook");
+    book.querySelectorAll(`[data-${key}-pick]`).forEach((x) => {
+      const on = x.dataset[key + "Pick"] === val;
+      x.classList.toggle("on", on); x.setAttribute("aria-pressed", on);
+    });
+    bmDrawLogos(book);
     bmQueue(0);
-  });
-  sec.querySelectorAll("[data-logo]").forEach((b) => b.onclick = () => bmExportLogo(b.dataset.logo, +b.dataset.w));
+  };
+  sec.querySelectorAll("[data-layout-pick]").forEach((b) => b.onclick = () => pickLogo("layout", b.dataset.layoutPick));
+  sec.querySelectorAll("[data-shape-pick]").forEach((b) => b.onclick = () => pickLogo("shape", b.dataset.shapePick));
+  sec.querySelectorAll("[data-fill-pick]").forEach((b) => b.onclick = () => pickLogo("fill", b.dataset.fillPick));
+  sec.querySelectorAll("[data-logo]").forEach((b) => b.onclick = () => bmExportLogo(b.dataset.logo, +b.dataset.w, b.dataset.part || "logo"));
 }
 
 /* -------------------------------------------------------- logo export -- */
 /* Drawn glyph by glyph with the same face, weight, case and letter spacing
    as the screen. Canvas letterSpacing is missing in older Safari, so the
    spacing is placed by hand from prefix widths (which keep kerning). */
-async function bmExportLogo(variant, width) {
+async function bmExportLogo(variant, width, part = "logo") {
   const k = _bmKit;
   const wm = k.wordmark;
-  const fam = bmFamily(wm.font);
-  try { await document.fonts.load(`${wm.weight} 200px "${fam}"`); } catch (e) { /* draw with what we have */ }
-  const text = bmCased(k.name, wm, k.keep_case);
-  const fs = 400;
-  const probe = document.createElement("canvas").getContext("2d");
-  probe.font = `${wm.weight} ${fs}px "${fam}", sans-serif`;
-  const chars = [...text];
-  const track = (wm.track || 0) * fs;
-  const xs = chars.map((_, i) => probe.measureText(chars.slice(0, i).join("")).width + track * i);
-  const total = probe.measureText(text).width + track * (chars.length - 1);
-  const pad = fs * 0.2;
-  const scale = width / (total + pad * 2);
+  try { await document.fonts.load(`${wm.weight} 200px "${bmFamily(wm.font)}"`); } catch (e) { /* draw with what we have */ }
+  const g = bmLogoGeom(k, part);
   const c = document.createElement("canvas");
-  c.width = Math.round(width);
-  c.height = Math.round((fs * 1.35 + pad * 2) * scale);
-  const ctx = c.getContext("2d");
-  ctx.scale(scale, scale);
-  ctx.font = probe.font;
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = variant === "reversed" ? k.colours.ground : k.colours.ink;
-  const y = (c.height / scale) / 2;
-  chars.forEach((ch, i) => ctx.fillText(ch, pad + xs[i], y));
+  const rev = variant === "reversed";
+  // Solid shapes knock their letters out, so the PNG works on any surface.
+  bmPaintLogo(c, k, { part, w: width, h: Math.round((width * g.h) / g.w), dpr: 1, margin: 0.03,
+    colour: rev ? k.colours.ground : k.colours.ink, on: "knockout" });
   c.toBlob((blob) => {
     if (!blob) { toast("Could not make the image in this browser."); return; }
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `${(k.name || "logo").replace(/[^\w-]+/g, "-").toLowerCase()}-logo-${variant === "reversed" ? "light" : "dark"}-${width}px.png`;
+    const slug = (k.name || "logo").replace(/[^\w-]+/g, "-").toLowerCase();
+    a.download = `${slug}-${part === "emblem" ? "emblem" : "logo-" + ((k.logo || {}).layout || "straight")}-${rev ? "light" : "dark"}-${width}px.png`;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
